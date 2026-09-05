@@ -607,6 +607,51 @@ POST /api/migrate/jobs/{id}/cancel
 200 {"jobId":"uuid","cancelled":true}
 ```
 
+### 增量同步（按 ETag / size+mtime 比对，仅复制差异对象）
+
+```
+POST /api/migrate/sync
+```
+
+请求体：
+```json
+{
+  "sourceAccountId": "uuid",
+  "sourceBucket": "src-bucket",
+  "sourcePrefix": "",        // 可选；空=整桶
+  "targetAccountId": "uuid",
+  "targetBucket": "dst-bucket",
+  "targetPrefix": "",        // 可选
+  "mode": "etag"             // etag（默认）| size_mtime | always
+}
+```
+
+行为：
+- 列举源 prefix 全部对象（递归，硬上限 100k 防卡死）；
+- 列举目标 prefix 全部元数据；
+- 按 mode 比对源/目标：相等则跳过（计入 `skipped`），不等或目标缺失则复制（计入 `copied`）；
+- 实际复制复用 `MigrateKeys`（同/异端点自动适配 CopyObject / StreamCopy）。
+
+响应：
+```json
+200 {
+  "scanned": 100,           // 源侧扫描数
+  "skipped": 60,            // 因 equal 跳过
+  "copied": 38,             // 实际复制数
+  "failed": 2,              // 复制失败数
+  "failedKeys": ["bad.txt"] // 上限 200
+}
+```
+
+### API 契约（OpenAPI 3.0）
+
+```
+GET /api/openapi.json
+```
+
+OpenAPI 3.0 规范，作为 67 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
+前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
+
 ## 静态资源
 
 - 非 `/api` 路径由 Go 托管 `web/dist`；未命中的页面路由（无扩展名）回退到 `index.html`（SPA），带扩展名的缺失资源返回 404。

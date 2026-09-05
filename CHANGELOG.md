@@ -15,6 +15,13 @@
 - **migrate SSE 写超时**：复用 `streamIdleTimeout`（每次成功写出后刷新），慢客户端不会让连接无限挂着。
 - **store 失败回滚**：`EncryptedStore.Update` 持久化失败回滚内存；`SQLiteStore.Update` 显式传播 `Exec` 错误；`JSON Store.Update` 补测。
 
+### 工程化（v1.0.0-rc1 评估 P1/P2 路线落地）
+- **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），67 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
+- **Playwright 浏览器 E2E 基建**：chromium + vite preview + `page.route()` 拦截 `/api/*` 回放 fixture；`smoke.spec.ts` 3 例 + `account-flow.spec.ts` 2 例；新增 `.github/workflows/e2e-playwright.yml`（PR/dispatch + 每周三 02:00 UTC 冒烟）；`pnpm e2e:install` 安装 chromium 与系统依赖；vitest exclude `e2e/**` 避免冲突。
+- **增量同步**：`POST /api/migrate/sync`（withStreamLimit 保护），按 `etag`（默认）/ `size_mtime` / `always` 三种 mode 比对源/目标，仅复制差异对象，跳过完全一致的对象；internal/service.SyncKeys 复用 MigrateKeys 完成实际复制；`s3wrap.Client.Endpoint()` 访问器供 SameEndpoint 比对。
+- **桶策略可视化编辑器**：web/src/bucketPolicy.ts + BucketPolicyVisualEditor.vue：Statement（Effect/Principal/Actions/Resources/Sid）表单式编辑，4 个常用模板（公共读 / 公共读写 / 拒绝 List / 清空），实时 JSON 预览 + validateDoc 校验；不支持的结构（NotPrincipal/嵌套）自动回退原始 JSON 模式，避免覆盖用户已写的高级策略。
+- **对象元数据批量编辑**：web/src/batchMetadata.ts 4 路有界并发 worker-pool（BATCH_META_CONCURRENCY=4 与 copy/migrate 同上限）；BatchMetadataDialog：ACL 下拉 / 标签替换或清空 / 存储类型输入，3 个 fieldset 独立勾选；运行中进度 + 失败明细可滚动展示；ObjectToolbar 新增「批量改元数据」按钮。
+
 ### 工程化
 - **CI 工具链对齐**：所有 workflow 的 pnpm 统一为 11；`desktop-build` 拆为「先装 tauri-cli（CI 缓存）→ 再 tauri build」，去掉 `|| true` 静默失败。
 - **Trivy 镜像扫描**：CI 在 Docker 构建后跑 `aquasecurity/trivy:0.58.1`，CRITICAL/HIGH 漏洞硬失败；新增 `.trivyignore` 与 `--ignorefile` 集中收纳可忽略的 CVE。
