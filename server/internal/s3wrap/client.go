@@ -32,6 +32,15 @@ type Client struct {
 	presign *s3.PresignClient
 }
 
+// Endpoint 返回该客户端配置的 endpoint（含 scheme；空表示未配置）。
+// 用于跨账号 endpoint 比对（service.SameEndpoint）。
+func (c *Client) Endpoint() string {
+	if c.acc == nil {
+		return ""
+	}
+	return c.acc.Endpoint
+}
+
 // New 根据账号构建 S3 客户端与预签名客户端。
 func New(acc *model.Account) (*Client, error) {
 	if acc == nil {

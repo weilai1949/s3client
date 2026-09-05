@@ -80,6 +80,7 @@ func (h *Handler) Routes() http.Handler {
 	// 跨账号迁移
 	mux.HandleFunc("POST /api/migrate", h.withStreamLimit(h.migrate))
 	mux.HandleFunc("POST /api/migrate/async", h.migrateAsync)
+	mux.HandleFunc("POST /api/migrate/sync", h.withStreamLimit(h.syncHandler))
 	mux.HandleFunc("GET /api/migrate/jobs/{id}", h.migrateJobStatus)
 	mux.HandleFunc("POST /api/migrate/jobs/{id}/cancel", h.migrateJobCancel)
 	mux.HandleFunc("GET /api/migrate/jobs/{id}/events", h.migrateJobEvents)

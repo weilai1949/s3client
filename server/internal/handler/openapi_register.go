@@ -761,6 +761,26 @@ func registerMigrate(r *openapi.Registry) {
 		Request: &migrateReq,
 		Responses: map[string]openapi.Response{"200": {Description: "含 jobId", JSON: openapi.Obj()}},
 	})
+	r.Operation("POST", "/api/migrate/sync", openapi.Op{
+		Tags: []string{"migrate"}, Summary: "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）", OperationID: "migrateSync",
+		Request: &openapi.Request{
+			Required: true,
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"sourceAccountId": openapi.Str(),
+				"sourceBucket":    openapi.Str(),
+				"sourcePrefix":    openapi.Str(),
+				"targetAccountId": openapi.Str(),
+				"targetBucket":    openapi.Str(),
+				"targetPrefix":    openapi.Str(),
+				"mode":            openapi.EnumStr(string("etag"), string("size_mtime"), string("always")),
+			})},
+		},
+		Responses: map[string]openapi.Response{
+			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError", JSON: openapi.Obj()},
+			"400": {Description: "mode 非法 / 账号缺配置", JSON: openapi.Obj()},
+			"404": {Description: "账号不存在", JSON: openapi.Obj()},
+		},
+	})
 	r.Operation("GET", "/api/migrate/jobs/{id}", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "查询迁移任务状态", OperationID: "migrateJobStatus",
 		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},

@@ -541,6 +541,25 @@ export const s3api = {
       `/api/migrate/jobs/${encodeURIComponent(jobId)}/cancel`,
       { method: 'POST' },
     ),
+
+  /** 增量同步：按 ETag / size+mtime / always 比对，仅复制差异对象。 */
+  migrateSync: (body: {
+    sourceAccountId: string
+    sourceBucket?: string
+    sourcePrefix?: string
+    targetAccountId: string
+    targetBucket?: string
+    targetPrefix?: string
+    mode?: 'etag' | 'size_mtime' | 'always'
+  }) =>
+    request<{
+      scanned: number
+      skipped: number
+      copied: number
+      failed: number
+      failedKeys?: string[]
+      lastError?: string
+    }>('/api/migrate/sync', { method: 'POST', body: JSON.stringify(body) }),
 }
 
 export interface MigrateProgress {
