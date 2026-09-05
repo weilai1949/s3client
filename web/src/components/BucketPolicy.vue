@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import { s3api } from '../api'
 import { confirmDialog } from '../confirm'
 import { t, tf } from '../i18n'
 import { useBucketSetting } from '../composables/useBucketSetting'
+import BucketPolicyVisualEditor from './BucketPolicyVisualEditor.vue'
 
 const props = defineProps<{
   accountId: string
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 
 const configured = ref(false)
 const policy = ref('')
+const draft = ref('') // 可视化编辑器产出的最新 JSON；保存按钮按下时用它。
 
 const { loading, saving, save } = useBucketSetting({
   bucket: () => props.bucket,
@@ -27,17 +29,17 @@ const { loading, saving, save } = useBucketSetting({
     const r = await s3api.getBucketPolicy(props.accountId, props.bucket)
     configured.value = r.configured
     policy.value = r.policy || ''
+    draft.value = r.policy || ''
   },
 })
 
-function validate(): string | null {
-  try {
-    JSON.parse(policy.value || '{}')
-    return null
-  } catch {
-    return t('policy.invalidJson')
-  }
-}
+// 当父组件重置（切桶等），让 draft 跟着最新 policy 同步。
+watch(
+  () => policy.value,
+  (v) => {
+    draft.value = v
+  },
+)
 
 async function remove() {
   const ok = await confirmDialog({
@@ -49,15 +51,21 @@ async function remove() {
   if (!ok) return
   await save(async () => {
     await s3api.deleteBucketPolicy(props.accountId, props.bucket)
+    policy.value = ''
   }, t('policy.toastRemoved'))
 }
 
 async function savePolicy() {
   await save(async () => {
-    const v = validate()
-    if (v) throw new Error(v)
-    if (!policy.value.trim()) throw new Error(t('policy.emptyErr'))
-    await s3api.putBucketPolicy(props.accountId, { bucket: props.bucket, policy: policy.value })
+    const v = draft.value.trim()
+    if (!v) throw new Error(t('policy.emptyErr'))
+    try {
+      JSON.parse(v)
+    } catch {
+      throw new Error(t('policy.invalidJson'))
+    }
+    await s3api.putBucketPolicy(props.accountId, { bucket: props.bucket, policy: v })
+    policy.value = v
   }, t('policy.toastSaved'))
 }
 </script>
@@ -66,19 +74,19 @@ async function savePolicy() {
   <div v-if="loading" class="empty" style="padding:20px">{{ t('policy.loading') }}</div>
   <div v-else>
     <div class="badge" style="color:var(--muted)">{{ t('policy.hint') }}</div>
-    <textarea v-model="policy" class="mono policy-area" spellcheck="false" placeholder='{"Version":"2012-10-17","Statement":[...]}'></textarea>
+    <BucketPolicyVisualEditor
+      :bucket="bucket"
+      :raw="policy"
+      @update="draft = $event"
+      @error="(m) => emit('error', m)"
+    />
     <div class="row" style="margin-top:12px">
-      <button class="btn sm" :disabled="saving" @click="savePolicy">{{ saving ? t('common.saving') : t('common.save') }}</button>
-      <button class="btn danger sm" :disabled="saving" @click="remove">{{ t('policy.removeBtn') }}</button>
+      <button class="btn sm" :disabled="saving" @click="savePolicy">
+        {{ saving ? t('common.saving') : t('common.save') }}
+      </button>
+      <button class="btn danger sm" :disabled="saving" @click="remove">
+        {{ t('policy.removeBtn') }}
+      </button>
     </div>
   </div>
 </template>
-
-<style scoped>
-.policy-area {
-  width: 100%; min-height: 240px; margin-top: 10px;
-  padding: 10px; border: 1px solid var(--border); border-radius: var(--radius);
-  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
-  background: var(--panel-2); color: var(--text); resize: vertical;
-}
-</style>
