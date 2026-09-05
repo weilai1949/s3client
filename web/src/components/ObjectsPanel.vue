@@ -9,6 +9,7 @@ import HeadersDialog from './HeadersDialog.vue'
 import AclDialog from './AclDialog.vue'
 import TagsDialog from './TagsDialog.vue'
 import StorageClassDialog from './StorageClassDialog.vue'
+import BatchMetadataDialog from './BatchMetadataDialog.vue'
 import ObjectDetailDialog from './ObjectDetailDialog.vue'
 import CreateBucketDialog from './CreateBucketDialog.vue'
 import PreviewOverlay from './PreviewOverlay.vue'
@@ -161,6 +162,9 @@ const {
   ctxDetail,
   ctxAcl,
   ctxTags,
+  batchOpen,
+  openBatch,
+  onBatchDone,
   ctxVersions,
   ctxDelete,
 } = actions
@@ -236,6 +240,7 @@ const { preview, showPreview, ctxPreview } = previewComposable
         @copy-links="copySelectedLinks"
         @download-zip="downloadSelectedZip"
         @remove-selected="removeSelected"
+        @open-batch-edit="openBatch"
         @toggle-view="toggleView"
       />
 
@@ -380,6 +385,16 @@ const { preview, showPreview, ctxPreview } = previewComposable
       @close="storageClassOpen = false"
       @saved="onStorageClassSaved"
       @error="error = $event"
+    />
+
+    <!-- 批量改元数据（ACL / 标签 / 存储类型） -->
+    <BatchMetadataDialog
+      v-if="batchOpen"
+      :account-id="account?.id ?? ''"
+      :bucket="currentBucket"
+      :keys="Array.from(selected)"
+      @close="batchOpen = false"
+      @done="onBatchDone"
     />
 
     <!-- 桶属性（区域 / 创建时间 / 版本控制） -->

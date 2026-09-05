@@ -47,6 +47,7 @@ const emit = defineEmits<{
   (e: 'copy-links'): void
   (e: 'download-zip'): void
   (e: 'remove-selected'): void
+  (e: 'open-batch-edit'): void
   (e: 'toggle-view'): void
 }>()
 </script>
@@ -118,6 +119,7 @@ const emit = defineEmits<{
     <button class="btn secondary sm" :disabled="!selectedCount || zipLoading || opsBusy" @click="emit('download-zip')">
       {{ zipLoading ? t('toolbar.zipping') : t('toolbar.zipDownload') }}
     </button>
+    <button class="btn secondary sm" :disabled="!selectedCount || opsBusy" @click="emit('open-batch-edit')">{{ t('toolbar.batchEdit') }}</button>
     <button class="btn danger sm" :disabled="!selectedCount || opsBusy" @click="emit('remove-selected')">{{ t('common.delete') }}</button>
   </div>
 

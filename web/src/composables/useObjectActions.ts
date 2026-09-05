@@ -491,6 +491,17 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     if (e?.kind === 'file') openDest('move', 'file', e.key)
   }
 
+  /* ---- 批量改元数据（ACL / 标签 / 存储类型） ---- */
+  const batchOpen = ref(false)
+  function openBatch() {
+    if (ctx.selected.value.size === 0) return
+    batchOpen.value = true
+  }
+  async function onBatchDone() {
+    batchOpen.value = false
+    await ctx.load(true)
+  }
+
   return {
       detail,
     headersOpen,
@@ -554,5 +565,9 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     onDestSubmit,
     ctxCopyFile,
     ctxMoveFile,
+    // 批量改元数据
+    batchOpen,
+    openBatch,
+    onBatchDone,
   }
 }
