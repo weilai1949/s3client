@@ -177,7 +177,7 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if p == "/api/health" || p == "/api/metrics" {
+		if p == "/api/health" || p == "/api/metrics" || p == "/api/openapi.json" {
 			next.ServeHTTP(w, r)
 			return
 		}

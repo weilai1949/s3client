@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/weilai1949/s3clinet/server/internal/model"
+	"github.com/weilai1949/s3clinet/server/internal/openapi"
 	"github.com/weilai1949/s3clinet/server/internal/s3wrap"
 	"github.com/weilai1949/s3clinet/server/internal/service"
 	"github.com/weilai1949/s3clinet/server/internal/store"
@@ -27,17 +28,21 @@ type Handler struct {
 	clients       *clientCache
 	migrateJobs   *service.JobRegistry
 	limiter       *ipLimiter
+	openapi       *openapi.Registry // 路由旁登记；/api/openapi.json 直接复用
 }
 
 // New 构造 handler。token 支持逗号分隔多值（轮换/吊销：去掉旧 token 即可）。
 // exposeMetrics=false 时 /api/metrics 一律 404，避免公网暴露运行指标。
 func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins []string, token, version string, exposeMetrics bool) *Handler {
+	reg := openapi.New("s3clinet API", version)
+	registerOpenAPI(reg, version)
 	return &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,
 		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics,
 		clients:     newClientCache(),
 		migrateJobs: service.NewJobRegistry(),
 		limiter:     newIPLimiter(),
+		openapi:     reg,
 	}
 }
 

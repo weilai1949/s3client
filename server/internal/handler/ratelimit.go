@@ -78,7 +78,7 @@ func (h *Handler) withRateLimit(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/api/health" || p == "/api/metrics" || !strings.HasPrefix(p, "/api/") {
+		if p == "/api/health" || p == "/api/metrics" || p == "/api/openapi.json" || !strings.HasPrefix(p, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -13,6 +13,7 @@ func (h *Handler) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/health", h.health)
 	mux.HandleFunc("GET /api/metrics", h.metrics)
+	mux.HandleFunc("GET /api/openapi.json", h.openapiSpec)
 	mux.HandleFunc("GET /api/accounts", h.listAccounts)
 	mux.HandleFunc("POST /api/accounts", h.createAccount)
 	mux.HandleFunc("GET /api/accounts/{id}", h.getAccount)
