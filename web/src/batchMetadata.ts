@@ -40,11 +40,6 @@ export interface BatchMetaResult {
 }
 
 export async function batchSetMetadata(input: BatchMetaInput): Promise<BatchMetaResult> {
-  const accId = input.accountId
-  const errors: BatchMetaError[] = []
-  let ok = 0
-  let failed = 0
-
   // 预计算每个 key 的 steps，避免在循环里反复判断。
   const steps: Array<'acl' | 'tags' | 'storageClass'> = []
   if (input.acl !== undefined) steps.push('acl')
@@ -57,9 +52,10 @@ export async function batchSetMetadata(input: BatchMetaInput): Promise<BatchMeta
 
   // 简易 worker-pool（4 路并发）。
   const queue = input.keys.slice()
-  const inflight = new Set<Promise<void>>()
+  const allWorkers: Promise<BatchMetaResult>[] = [] // 收集所有 worker 以便聚合
+  const inflight = new Set<Promise<BatchMetaResult>>()
 
-  async function worker(key: string): Promise<void> {
+  async function worker(key: string): Promise<BatchMetaResult> {
     for (const step of steps) {
       try {
         const body: { bucket?: string; key: string; acl?: string; tags?: { key: string; value: string }[]; storageClass?: string } = {
@@ -71,26 +67,23 @@ export async function batchSetMetadata(input: BatchMetaInput): Promise<BatchMeta
         if (step === 'storageClass') body.storageClass = input.storageClass
         switch (step) {
           case 'acl':
-            await s3api.putObjectAcl(accId, body as { bucket?: string; key: string; acl: string })
+            await s3api.putObjectAcl(input.accountId, body as { bucket?: string; key: string; acl: string })
             break
           case 'tags':
-            await s3api.putObjectTags(accId, body as { bucket?: string; key: string; tags: { key: string; value: string }[] })
+            await s3api.putObjectTags(input.accountId, body as { bucket?: string; key: string; tags: { key: string; value: string }[] })
             break
           case 'storageClass':
-            await s3api.changeStorageClass(accId, body as { bucket?: string; key: string; storageClass: string })
+            await s3api.changeStorageClass(input.accountId, body as { bucket?: string; key: string; storageClass: string })
             break
         }
       } catch (e) {
-        failed++
-        errors.push({ key, step, message: toErrorMessage(e) })
-        // 单条失败立即中断后续 step（保持对象状态一致）。
-        return
+        return { ok: 0, failed: 1, errors: [{ key, step, message: toErrorMessage(e) }] }
       }
     }
-    ok++
+    return { ok: 1, failed: 0, errors: [] }
   }
 
-  async function spawn(): Promise<void> {
+  async function spawn(): Promise<BatchMetaResult> {
     while (queue.length > 0) {
       if (inflight.size >= BATCH_META_CONCURRENCY) {
         await Promise.race(inflight)
@@ -99,10 +92,21 @@ export async function batchSetMetadata(input: BatchMetaInput): Promise<BatchMeta
       const key = queue.shift()!
       const p = worker(key).finally(() => inflight.delete(p))
       inflight.add(p)
+      allWorkers.push(p)
     }
     await Promise.all(inflight)
+    // 聚合所有 worker 结果。
+    let ok = 0
+    let failed = 0
+    const errors: BatchMetaError[] = []
+    for (const p of allWorkers) {
+      const r = await p
+      ok += r.ok
+      failed += r.failed
+      errors.push(...r.errors)
+    }
+    return { ok, failed, errors }
   }
 
-  await spawn()
-  return { ok, failed, errors }
+  return await spawn()
 }

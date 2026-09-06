@@ -9,6 +9,32 @@ import (
 	"sync"
 )
 
+// cancelReader wraps r so that cancel(ctx) interrupts any blocking Read.
+// It registers a callback on ctx that closes r when the context is done;
+// this unblocks the syscall-level read inside the S3 SDK HTTP transport.
+// The next Read call then returns ctx.Err() immediately.
+type ctxCancelReader struct {
+	ctx context.Context
+	r   io.ReadCloser
+}
+
+func (c *ctxCancelReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
+func (c *ctxCancelReader) Close() error { return c.r.Close() }
+
+// newCancelReader wraps r with a context.AfterFunc callback that closes r
+// on cancel, unblocking any pending syscall-level read.
+func newCancelReader(ctx context.Context, r io.ReadCloser) *ctxCancelReader {
+	cr := &ctxCancelReader{ctx: ctx, r: r}
+	context.AfterFunc(ctx, func() { _ = r.Close() })
+	return cr
+}
+
 const zipFetchWorkers = 4
 
 type zipFetched struct {
@@ -103,8 +129,8 @@ func WriteObjectsZip(
 			failKeys = append(failKeys, item.key)
 			continue
 		}
-		// manifest 句柄：若 io.WriteString 失败需关闭。
-		_, copyErr := io.Copy(f, &ctxReader{ctx: ctx, r: item.body})
+		// ctxCancelReader：在 ctx 取消时关闭底层 body，中断阻塞式 syscall 读。
+		_, copyErr := io.Copy(f, newCancelReader(ctx, item.body))
 		_ = item.body.Close()
 		if copyErr != nil {
 			failKeys = append(failKeys, item.key)
