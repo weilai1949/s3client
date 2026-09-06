@@ -97,12 +97,18 @@ func WriteObjectsZip(
 		if !LikelyCompressed(name, item.ct) {
 			hdr.Method = zip.Deflate
 		}
-		// zip.Writer.CreateHeader 对任何 UTF-8 名字均不报错；省略防御性检查。
-		f, _ := zw.CreateHeader(hdr)
+		f, createErr := zw.CreateHeader(hdr)
+		if createErr != nil {
+			_ = item.body.Close()
+			failKeys = append(failKeys, item.key)
+			continue
+		}
+		// manifest 句柄：若 io.WriteString 失败需关闭。
 		_, copyErr := io.Copy(f, &ctxReader{ctx: ctx, r: item.body})
-		item.body.Close()
+		_ = item.body.Close()
 		if copyErr != nil {
 			failKeys = append(failKeys, item.key)
+			break
 		}
 	}
 

@@ -543,12 +543,13 @@ func TestWriteObjectsZipCancelDuringFetch(t *testing.T) {
 	defer cancel()
 	var ready sync.WaitGroup
 	ready.Add(2)
-	var releaseOnce sync.Once
 	release := make(chan struct{})
 
 	get := func(c context.Context, key string) (io.ReadCloser, string, error) {
 		ready.Done() // 标记「已进入 fetch」
-		// 等待测试主协程 cancel（同步点：避免 producer 抢在 cancel 前退出）。
+		// 等待测试主协程 cancel + close(release)。
+		// 注释（修复后）：用 ready.WaitGroup 同步两个 worker 进入 fetch，
+		// 再 cancel 上下文；release 仅作为 worker 从阻塞中唤醒的辅助信号。
 		select {
 		case <-release:
 		case <-c.Done():
@@ -560,18 +561,25 @@ func TestWriteObjectsZipCancelDuringFetch(t *testing.T) {
 		return io.NopCloser(strings.NewReader("x")), "text/plain", nil
 	}
 
-	done := make(chan struct{})
+	// 同步 goroutine：等两个 worker 进入 fetch → cancel → 放行。
 	go func() {
-		// 等两个 worker 都进入 fetch，再 cancel，确保两个 key 都进入 pipeline。
 		ready.Wait()
-		releaseOnce.Do(cancel)
-		close(done)
+		cancel()
+		close(release)
 	}()
 
-	failKeys, err := WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
-	<-done
-	if err != nil {
-		t.Fatalf("err = %v", err)
+	// WriteObjectsZip 在主 goroutine 执行，waitGroup 确保它完全返回后再检查结果。
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var failKeys []string
+	var zipErr error
+	go func() {
+		defer wg.Done()
+		failKeys, zipErr = WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
+	}()
+	wg.Wait()
+	if zipErr != nil {
+		t.Fatalf("err = %v", zipErr)
 	}
 	if len(failKeys) != 2 {
 		t.Fatalf("both keys should fail after cancel, got %v", failKeys)
@@ -599,18 +607,25 @@ func TestWriteObjectsZipPostGetCtxCheck(t *testing.T) {
 		return io.NopCloser(strings.NewReader("x")), "text/plain", nil
 	}
 
-	done := make(chan struct{})
+	// 同步 goroutine：等两个 worker 进入 fetch → cancel → 放行。
 	go func() {
 		ready.Wait()
-		cancel()        // 在 get 阻塞时取消；get 返回时 ctx 已取消
-		close(release)  // 放行两个 get
-		close(done)
+		cancel()
+		close(release)
 	}()
 
-	failKeys, err := WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
-	<-done
-	if err != nil {
-		t.Fatalf("err = %v", err)
+	// WriteObjectsZip 在主 goroutine 执行，wg.Wait 确保它完全返回后再检查结果。
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var failKeys []string
+	var zipErr error
+	go func() {
+		defer wg.Done()
+		failKeys, zipErr = WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
+	}()
+	wg.Wait()
+	if zipErr != nil {
+		t.Fatalf("err = %v", zipErr)
 	}
 	if len(failKeys) != 2 {
 		t.Fatalf("worker post-get ctx check broken: got %v, want 2 fail keys", failKeys)

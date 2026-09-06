@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 
 import { batchSetMetadata, type BatchMetaError } from '../batchMetadata'
 import { s3api } from '../api'
+import { toErrorMessage } from '../errors'
 import ModalDialog from './ModalDialog.vue'
 import { toast } from '../store'
 import { t, tf } from '../i18n'
@@ -69,13 +70,12 @@ async function onConfirm() {
     warnToast(t('batchEdit.needStep'))
     return
   }
-  // 校验：标签模式下若有 key 空值则拒绝执行。
+  // 校验：标签替换模式下至少有一个非空 key。
   if (applyTags.value && tagsMode.value === 'replace') {
-    for (const tg of tags.value) {
-      if (!tg.key) {
-        warnToast(t('objectDialogs.tagsEmptyKey'))
-        return
-      }
+    const filled = tags.value.filter((tg) => tg.key)
+    if (filled.length === 0) {
+      warnToast(t('batchEdit.tagsNeedKey'))
+      return
     }
   }
 
@@ -111,6 +111,12 @@ async function onConfirm() {
       toast(tf('batchEdit.done', { ok: out.ok, failed: out.failed }), 'err')
       emit('done', { ok: out.ok, failed: out.failed })
     }
+  } catch (e) {
+    const msg = toErrorMessage(e)
+    result.value = { ok: 0, failed: props.keys.length }
+    errors.value = [{ key: '*', step: 'acl', message: msg }]
+    toast(tf('batchEdit.fatalError', { msg }), 'err')
+    emit('done', { ok: 0, failed: props.keys.length })
   } finally {
     running.value = false
   }
@@ -133,7 +139,7 @@ void s3api
           {{ t('batchEdit.aclLabel') }}
         </label>
       </legend>
-      <select v-model="acl" :disabled="!applyAcl" class="full">
+      <select v-model="acl" :disabled="!applyAcl" class="full" aria-label="ACL">
         <option value="private">private</option>
         <option value="public-read">public-read</option>
         <option value="public-read-write">public-read-write</option>
@@ -147,7 +153,7 @@ void s3api
           {{ t('batchEdit.tagsLabel') }}
         </label>
       </legend>
-      <select v-model="tagsMode" :disabled="!applyTags" class="full">
+      <select v-model="tagsMode" :disabled="!applyTags" class="full" aria-label="Tag mode">
         <option value="none">{{ t('batchEdit.tagsNoChange') }}</option>
         <option value="replace">替换</option>
         <option value="clear">{{ t('batchEdit.tagsClear') }}</option>
@@ -169,10 +175,10 @@ void s3api
           {{ t('batchEdit.storageLabel') }}
         </label>
       </legend>
-      <input v-model="storageClass" :disabled="!applyStorage" type="text" class="full" />
+      <input v-model="storageClass" :disabled="!applyStorage" type="text" class="full" aria-label="Storage class" />
     </fieldset>
 
-    <div v-if="running || result" class="status">
+    <div v-if="running || result" class="status" aria-live="polite">
       <span v-if="running">{{ tf('batchEdit.running', { done: progress.done, total: progress.total }) }}</span>
       <span v-else-if="result">{{ tf('batchEdit.done', { ok: result.ok, failed: result.failed }) }}</span>
     </div>

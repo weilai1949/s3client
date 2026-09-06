@@ -73,7 +73,7 @@ describe('batchSetMetadata', () => {
     // 第一次 acl 抛错 → a.txt 标记失败但 b.txt 继续。
     const { s3api } = await import('./api')
     let n = 0
-    vi.mocked(s3api.putObjectAcl).mockImplementation((async () => {
+    vi.mocked(s3api.putObjectAcl).mockImplementation((async (_id, _body) => {
       n++
       if (n === 1) throw new Error('boom')
       return { acl: 'public-read' }

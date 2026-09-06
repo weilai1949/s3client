@@ -20,7 +20,7 @@ export interface BatchMetaInput {
   /** 待改的对象 key 列表 */
   keys: string[]
   /** ACL：'private' | 'public-read' | 'public-read-write'；undefined=跳过 */
-  acl?: string
+  acl?: 'private' | 'public-read' | 'public-read-write'
   /** 标签：数组形式；空数组=清空；undefined=跳过 */
   tags?: { key: string; value: string }[]
   /** 存储类型；undefined=跳过 */
