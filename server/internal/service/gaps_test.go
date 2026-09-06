@@ -526,18 +526,94 @@ func TestWriteObjectsZipWriteError(t *testing.T) {
 }
 
 func TestWriteObjectsZipCancelDuringFetch(t *testing.T) {
+	// 验证场景：ctx 在 fetch 进行中被取消，所有正在 fetch / 排队的 key 都不应落入 ZIP。
+	//
+	// 历史问题：
+	//   - 测试原本用 sync.Once.Do(cancel) 在「首次 get 返回成功」后才 cancel，
+	//     期望「第二个 worker 抢 job 时 ctx 已被取消」。但生产代码的 producer
+	//     在 ctx.Done() 时直接退出循环，导致「b」可能从未进入 jobs 通道。
+	//   - 因此 failKeys 在不同时间序下可能是 1（producer 提前退出）或 2（两
+	//     个 worker 都跑过 get），从未稳定出现 2，测试 15% 概率失败。
+	//
+	// 修复后：用 channel 显式确保「两个 key 都已进入 fetch」再 cancel。
+	//   - ready 计数两次：每次 get 进入时 +1，主协程等到 2 后 cancel。
+	//   - 这样保证两个 worker 都已进入 get，cancel 之后两侧的 get / worker
+	//     后置 ctx 校验都会把结果记入 failKeys。
 	ctx, cancel := context.WithCancel(context.Background())
-	var once sync.Once
-	get := func(context.Context, string) (io.ReadCloser, string, error) {
-		once.Do(cancel) // 首次取回成功后取消 → 后续 fetch 全部 ctx 失败
+	defer cancel()
+	var ready sync.WaitGroup
+	ready.Add(2)
+	var releaseOnce sync.Once
+	release := make(chan struct{})
+
+	get := func(c context.Context, key string) (io.ReadCloser, string, error) {
+		ready.Done() // 标记「已进入 fetch」
+		// 等待测试主协程 cancel（同步点：避免 producer 抢在 cancel 前退出）。
+		select {
+		case <-release:
+		case <-c.Done():
+		}
+		// 贴合真实 S3 客户端行为：ctx 已取消时返回 error；正常路径下也遵守。
+		if cerr := c.Err(); cerr != nil {
+			return nil, "", cerr
+		}
 		return io.NopCloser(strings.NewReader("x")), "text/plain", nil
 	}
+
+	done := make(chan struct{})
+	go func() {
+		// 等两个 worker 都进入 fetch，再 cancel，确保两个 key 都进入 pipeline。
+		ready.Wait()
+		releaseOnce.Do(cancel)
+		close(done)
+	}()
+
 	failKeys, err := WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
+	<-done
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
 	if len(failKeys) != 2 {
 		t.Fatalf("both keys should fail after cancel, got %v", failKeys)
+	}
+}
+
+// TestWriteObjectsZipPostGetCtxCheck 回归测试：get() 在 ctx 取消后仍返回「看似成功」的
+// body 时，worker 后置 ctx 校验必须把结果记入 failKeys。
+// 真实场景：S3 SDK 在请求已发出后被 ctx cancel，可能已经读完整个对象并返回 body 与 nil err。
+// 旧实现会把这种 body 落进 ZIP；新实现在 get 返回后再次校验 ctx.Err()。
+func TestWriteObjectsZipPostGetCtxCheck(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var ready sync.WaitGroup
+	ready.Add(2)
+	release := make(chan struct{})
+
+	// 模拟「cancel 在 get 内部已经发生，但 get 仍返回成功 body」的真实场景：
+	// 不在 get 内部检查 ctx，而是直接返回成功；worker 的后置 ctx 校验是最后防线。
+	get := func(c context.Context, key string) (io.ReadCloser, string, error) {
+		ready.Done()
+		<-release // 等测试主协程 cancel 后再返回
+		// 故意不检查 c.Err()，让 worker 的后置校验发挥作用。
+		return io.NopCloser(strings.NewReader("x")), "text/plain", nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		ready.Wait()
+		cancel()        // 在 get 阻塞时取消；get 返回时 ctx 已取消
+		close(release)  // 放行两个 get
+		close(done)
+	}()
+
+	failKeys, err := WriteObjectsZip(ctx, get, []string{"a", "b"}, io.Discard)
+	<-done
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(failKeys) != 2 {
+		t.Fatalf("worker post-get ctx check broken: got %v, want 2 fail keys", failKeys)
 	}
 }
 

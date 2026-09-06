@@ -49,11 +49,22 @@ func WriteObjectsZip(
 		go func() {
 			defer wg.Done()
 			for k := range jobs {
+				// 进入 fetch 前先检查 ctx：避免给已取消的 ctx 再发起网络/磁盘 I/O。
 				if ctx.Err() != nil {
 					results <- zipFetched{key: k, err: ctx.Err()}
 					continue
 				}
 				body, ct, gerr := get(ctx, k)
+				// fetch 返回后再次检查 ctx：get 内部可能因并发取消而返回了「看似成功」的结果
+				// （例如 S3 SDK 收到 ctx cancel 但已经读完了整个对象）。
+				// 此处把这种「已取消的请求」一律视为失败，避免把取消后写出的内容混入 ZIP。
+				if gerr == nil && ctx.Err() != nil {
+					if body != nil {
+						_ = body.Close()
+					}
+					results <- zipFetched{key: k, err: ctx.Err()}
+					continue
+				}
 				results <- zipFetched{key: k, body: body, ct: ct, err: gerr}
 			}
 		}()

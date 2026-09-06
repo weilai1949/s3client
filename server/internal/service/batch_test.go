@@ -143,9 +143,19 @@ func TestRunBatchProgressAndAggregate(t *testing.T) {
 	if final.Status != "done" || final.Done != 5 || final.Failed != 2 {
 		t.Fatalf("final progress = %+v", final)
 	}
-	// 失败键聚合与 LastError。
-	if out.FailKeys[0] != "k2" || out.LastError == "" {
-		t.Fatalf("fail aggregation broken: %+v", out)
+	// 失败键聚合：FailKeys 元素集合为 {k2, k4}，顺序由 worker 完成序决定，故只校验集合。
+	// 历史问题：测试原断言 FailKeys[0]=="k2"，但并发执行下两条失败的完成序非确定，
+	//          在 race detector 下约 5% 概率失败。
+	failSet := make(map[string]bool, len(out.FailKeys))
+	for _, k := range out.FailKeys {
+		failSet[k] = true
+	}
+	if !failSet["k2"] || !failSet["k4"] {
+		t.Fatalf("fail aggregation broken: %+v (want {k2, k4})", out)
+	}
+	// LastError 必非空，且来自某条失败键。
+	if out.LastError == "" {
+		t.Fatalf("last error empty: %+v", out)
 	}
 }
 
