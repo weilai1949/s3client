@@ -21,7 +21,7 @@
 | A-2 | LOW | `handler.go` | `Handler` 结构体 12 个字段，职责偏多。可考虑拆分为 `AccountHandler` / `ObjectHandler` / `MigrateHandler`。 |
 | A-3 | LOW | `s3wrap/client.go` | `sharedHTTPClient` 用 `sync.Once` 全局共享，所有账号共用同一 HTTP 客户端（含连接池）。跨账号隔离性差，但 Tauri 本地场景可接受。 |
 | A-4 | LOW | `service/sync.go` | `SyncKeys` 先列举源全部对象再过滤，内存占用 O(n)。大桶（>100k）可能 OOM，但硬上限 100k 已缓解。 |
-| A-5 | LOW | `service/batch.go` | `RunBatch` 的 `results` 通道全量缓冲（`buffer=total`），大批量任务可能内存占用高。 |
+| A-5 | LOW | `service/batch.go` | `results` 通道缓冲 `total`，大批量任务可能内存占用高。 |
 
 ---
 
@@ -38,11 +38,15 @@
 ### 问题
 | # | 严重度 | 文件 | 描述 |
 |---|--------|------|------|
-| S-1 | HIGH | `ratelimit.go:66-73` | `clientIP` 仅信任 `RemoteAddr`，未处理 `X-Forwarded-For`。Tauri 本地场景安全，但若未来部署到公网，IP 限速可被伪造绕过。 |
-| S-2 | MEDIUM | `middleware.go:180` | `/api/openapi.json` 不进鉴权层——契约端点暴露所有端点路径与参数，可能辅助攻击者枚举 API。 |
-| S-3 | MEDIUM | `bucketPolicy.ts` | `parsePolicy` 对 `NotPrincipal` / 嵌套 Principal 数组返回 null，UI 回退 JSON 模式。但用户可能误以为"已解析"而实际未生效。 |
-| S-4 | LOW | `handler.go:104` | `maxBody = 4MB` 对 `delete-objects`（最多 1000 key）和 `copy-objects` 可能不够。S3 原生 `DeleteObjects` 支持 1000 对象，每个对象元数据可能超 4MB。 |
-| S-5 | LOW | `openapi_register.go` | OpenAPI 端点暴露了所有 API 路径、参数、响应 schema，对攻击者信息泄露。需评估是否应在生产环境隐藏。 |
+| S-1 | **HIGH** | `store/store.go:189` / `sqlite.go:33` | **明文存储 SecretKey**。JSON 驱动和 SQLite 驱动均以明文持久化 `SecretKey`。仅 `encrypted` 驱动（AES-256-GCM + Argon2id）加密 secrets。文件系统访问 → 所有 S3 凭据泄露。 |
+| S-2 | HIGH | `ratelimit.go:66-73` | `clientIP` 仅信任 `RemoteAddr`，未处理 `X-Forwarded-For`。Tauri 本地场景安全，但若未来部署到公网，IP 限速可被伪造绕过。 |
+| S-3 | MEDIUM | `middleware.go:180` | `/api/openapi.json` 不进鉴权层——契约端点暴露所有端点路径与参数，可能辅助攻击者枚举 API。 |
+| S-4 | MEDIUM | `bucketPolicy.ts` | `parsePolicy` 对 `NotPrincipal` / 嵌套 Principal 数组返回 null，UI 回退 JSON 模式。但用户可能误以为"已解析"而实际未生效。 |
+| S-5 | MEDIUM | `batchMetadata.ts` | 无客户端/服务端 key 数量上限；100k keys → 100k 次独立 API 调用。服务端无 `maxBatchKeys` 强制限制。 |
+| S-6 | LOW | `openapi_register.go` | OpenAPI 端点暴露了所有 API 路径、参数、响应 schema，对攻击者信息泄露。需评估是否应在生产环境隐藏。 |
+| S-7 | LOW | `handler/accounts.go` | `testAccount` 返回 `s3UserMessage(err)` 在 JSON 体中，可能泄露 S3 后端内部信息。 |
+| S-8 | LOW | `proxy.go:29` | `key` 从查询参数直接传给 S3 API，无 `..` 路径遍历检查。 |
+| S-9 | LOW | `middleware.go:23` | CSP `connect-src 'self' http: https:` 允许任意 HTTP 连接；被攻陷的前端可外传数据。 |
 
 ---
 
@@ -56,11 +60,12 @@
 ### 问题
 | # | 严重度 | 文件 | 描述 |
 |---|--------|------|------|
-| P-1 | MEDIUM | `zip.go:160-170` | `ctxReader.Read` 仅在调用前检查 `ctx.Err()`，若底层 Read 在 syscall 级别阻塞（如 S3 SDK 的网络读），取消 ctx 无法中断阻塞。已用 `ctxCancelReader` + `context.AfterFunc` 修复。 |
-| P-2 | LOW | `batchMetadata.ts` | 原 `ok++`/`failed++` 在并发 worker 中非原子。已改为 per-worker 结果聚合，语义更清晰。 |
-| P-3 | LOW | `service/sync.go:35-90` | `SyncKeys` 两次列举（源+目标），网络往返 2 次。可优化为一次并行列举。 |
-| P-4 | LOW | `service/batch.go:49` | `results` 通道缓冲 `total`，大批量任务内存占用 O(n)。可改为无缓冲 + worker 信号量。 |
-| P-5 | LOW | `s3wrap/client.go:23-26` | `sharedHTTPOnce` 全局共享 HTTP 客户端，所有账号共用连接池。跨账号并发可能互相影响。 |
+| P-1 | **HIGH** | `s3wrap/client.go:63-67` | **`awsconfig.LoadDefaultConfig(context.Background(), …)` 不可取消**。配置加载在 handler 请求路径上运行，不可取消，在不可达 endpoint 上无限期阻塞 handler goroutine。 |
+| P-2 | HIGH | `service/migrate.go:43-46` | **`SameEndpoint` 空 endpoint 回退**：两端均为空时返回 false，强制使用 StreamCopy（跨端点慢路径），即使两侧是同一 S3 实例。静默性能退化。 |
+| P-3 | MEDIUM | `zip.go:133-138` | `io.Copy` 失败后 `break`，但 worker/goroutine 未清理；goroutine 泄漏（已修复）。 |
+| P-4 | LOW | `service/sync.go:51-57` | 列举 src/dst 之间无 `ctx.Err()` 检查；取消在列举中点时仍完成全部列举。 |
+| P-5 | LOW | `service/batch.go:49` | `results` 通道缓冲 `total`（最多 10k），大批量任务内存尖峰。 |
+| P-6 | LOW | `s3wrap/client.go:23-26` | `sharedHTTPOnce` 全局共享 HTTP 客户端，所有账号共用连接池。跨账号并发可能互相影响。 |
 
 ---
 
@@ -77,9 +82,11 @@
 |---|--------|------|------|
 | T-1 | MEDIUM | `gaps_test.go` | `TestWriteObjectsZipCancelDuringFetch` 修复后仍依赖 `ready.WaitGroup` 同步，若 `get` 函数内部不调用 `ready.Done()` 则死锁。测试与实现耦合紧。 |
 | T-2 | MEDIUM | `batchMetadata.test.ts` | mock 用 `vi.mocked(s3api.putObjectAcl)` 强制类型断言，若 API 签名变更则测试不报错但也不生效。 |
-| T-3 | LOW | `sync_test.go` | Fake S3 用全局变量 `s3FakeStore`/`s3FakeEtag`，测试间共享状态。若测试并行运行（`t.Parallel()`）会冲突。当前未并行，安全。 |
-| T-4 | LOW | `migrate_sync_test.go` | `syncStore` 全局变量，同 T-3 问题。 |
-| T-5 | LOW | `openapi_handler_test.go` | `quietLogger()` 用 `slog.NewTextHandler(io.Discard, LevelError)`，但 `slog.TextHandler` 的 `LevelError` 是 `slog.Level` 类型，应为 `slog.ErrorLevel`。需验证是否编译通过。 |
+| T-3 | HIGH | `sync_test.go` | `s3FakeStore`/`s3FakeSize`/`s3FakeEtag` 是包级全局变量，无并发安全保护。`go test -race` 会数据竞争。 |
+| T-4 | HIGH | `migrate_sync_test.go` | `syncStore` 同理是包级全局变量，测试修改后未在 defer 中清理。 |
+| T-5 | MEDIUM | `handler/migrate_sync_test.go` | 仅覆盖 SkipsEqualByETag 和 InvalidMode，缺少 CompareSizeTime 模式、prefix 过滤、跨端点同步测试。 |
+| T-6 | MEDIUM | `web/e2e/` | 仅 smoke(3 用例) + account-flow(2 用例)，缺少桶管理、对象操作、多部分上传、迁移、版本控制、回收站。 |
+| T-7 | LOW | `Makefile` | `test` 目标未包含 `-race` 或 `-cover`；`web-test` 未指定 `--coverage`。 |
 
 ---
 
@@ -89,7 +96,7 @@
 - **CHANGELOG / API.md** 已更新，记录 P1/P2 路线落地。
 - **code-review.md**：21 项评估文档。
 - **Playwright CI**：PR/dispatch + 每周三 02:00 UTC 冒烟。
-- ** Conventional Commits **：所有提交遵循规范。
+- **Conventional Commits**：所有提交遵循规范。
 
 ### 问题
 | # | 严重度 | 文件 | 描述 |
@@ -133,7 +140,7 @@
 
 ### 优势
 - **OpenAPI 3.0 契约**：67 个端点集中登记，与代码一一对应。
-- **统一响应格式**：`writeJSON`/`writeErr`/`writeInternalErr` 标准错误响应。
+- **统一响应格式**：`writeJSON`/`writeErr`/`writeInternalErr` 标准化错误响应。
 - **内容类型强制**：`readJSON` 要求 `application/json`，`DisallowUnknownFields` 防畸形请求。
 
 ### 问题
@@ -174,11 +181,13 @@
 ### 问题
 | # | 严重度 | 文件 | 描述 |
 |---|--------|------|------|
-| C-1 | MEDIUM | `zip.go:160-170` | `ctxReader` 无法中断阻塞式底层 Read。已用 `ctxCancelReader` + `context.AfterFunc` 修复。 |
-| C-2 | LOW | `batchMetadata.ts` | 原 `ok++`/`failed++` 非原子。已改为 per-worker 聚合。 |
-| C-3 | LOW | `service/sync.go:35-90` | `SyncKeys` 两次列举（源+目标），网络往返 2 次。 |
-| C-4 | LOW | `service/batch.go:49` | `results` 通道缓冲 `total`，大批量任务内存占用 O(n)。 |
-| C-5 | LOW | `s3wrap/client.go:23-26` | `sharedHTTPOnce` 全局共享 HTTP 客户端，所有账号共用连接池。 |
+| C-1 | HIGH | `zip.go:160-170` | `ctxReader` 无法中断阻塞式底层 Read。已用 `ctxCancelReader` + `context.AfterFunc` 修复。 |
+| C-2 | HIGH | `s3wrap/client.go:63-67` | `awsconfig.LoadDefaultConfig(context.Background(), …)` 不可取消。已用 10 秒 timeout context 修复。 |
+| C-3 | HIGH | `service/migrate.go:43-46` | `SameEndpoint` 空 endpoint 回退。已修复：两端均为空时返回 true。 |
+| C-4 | MEDIUM | `batchMetadata.ts` | 原 `ok++`/`failed++` 非原子。已改为 per-worker 结果聚合。 |
+| C-5 | LOW | `service/sync.go:51-57` | 列举 src/dst 之间无 `ctx.Err()` 检查。 |
+| C-6 | LOW | `service/batch.go:49` | `results` 通道缓冲 `total`，大批量任务内存占用 O(n)。 |
+| C-7 | LOW | `s3wrap/client.go:23-26` | `sharedHTTPOnce` 全局共享 HTTP 客户端，所有账号共用连接池。 |
 
 ---
 
@@ -203,27 +212,28 @@
 
 ## 总结
 
-| 维度 | 问题数 | 严重 | 中等 | 低级 |
-|------|--------|------|------|------|
-| 架构与设计 | 5 | 0 | 1 | 4 |
-| 安全性 | 5 | 1 | 2 | 2 |
-| 性能与并发 | 5 | 1 | 0 | 4 |
-| 测试质量 | 5 | 0 | 2 | 3 |
-| 文档与 DevOps | 4 | 0 | 1 | 3 |
-| 前端 UX | 14 | 3 | 5 | 6 |
-| API 设计 | 4 | 0 | 2 | 2 |
-| 错误处理 | 5 | 0 | 2 | 3 |
-| 并发与资源 | 5 | 1 | 0 | 4 |
-| 可维护性 | 6 | 0 | 2 | 4 |
-| **合计** | **58** | **6** | **17** | **35** |
+| 维度 | 问题数 | 严重 | 高 | 中等 | 低级 |
+|------|--------|------|-----|------|------|
+| 架构与设计 | 5 | 0 | 0 | 1 | 4 |
+| 安全性 | 9 | **1** | 1 | 3 | 4 |
+| 性能与并发 | 7 | **1** | 2 | 0 | 4 |
+| 测试质量 | 7 | 0 | 2 | 3 | 2 |
+| 文档与 DevOps | 4 | 0 | 0 | 1 | 3 |
+| 前端 UX | 14 | **3** | 3 | 5 | 6 |
+| API 设计 | 4 | 0 | 0 | 2 | 2 |
+| 错误处理 | 5 | 0 | 0 | 2 | 3 |
+| 并发与资源 | 7 | **1** | 3 | 0 | 3 |
+| 可维护性 | 6 | 0 | 0 | 2 | 4 |
+| **合计** | **58** | **6** | **11** | **19** | **35** |
 
 ### 最高优先级（立即修复）
-1. **S-1**：`clientIP` 未处理 `X-Forwarded-For`，IP 限速可被伪造
-2. **UX-1/UX-2/UX-3**：批量对话框和策略编辑器缺少 `<label>`，WCAG 违规
-3. **UX-4**：`BucketPolicyVisualEditor` watcher 级联可能丢失用户编辑
-4. **UX-7**：`copySelectedLinks` 顺序 `await`，一条失败则全部中止
-5. **P-1**：`ctxReader` 无法中断阻塞式底层 Read（已用 `ctxCancelReader` 修复）
-6. **C-1**：同 P-1
+1. **S-1（安全）**：明文存储 SecretKey（JSON/SQLite 驱动）。应加密存储或使 `encrypted` 驱动成为默认。
+2. **S-2（安全）**：`clientIP` 未处理 `X-Forwarded-For`，IP 限速可被伪造。
+3. **P-1（性能）**：`awsconfig.LoadDefaultConfig(context.Background(), …)` 不可取消，已用 10 秒 timeout 修复。
+4. **P-2（性能）**：`SameEndpoint` 空 endpoint 回退，已修复：两端均为空时返回 true。
+5. **UX-1/2/3（无障碍）**：批量对话框和策略编辑器缺少 `<label>`，WCAG 违规。
+6. **UX-4（状态丢失）**：`BucketPolicyVisualEditor` watcher 级联可能丢失用户编辑。
+7. **UX-7（体验）**：`copySelectedLinks` 顺序 `await`，一条失败则全部中止。
 
 ### 快速修复（低投入高回报）
 - 为所有无标签输入添加 `<label>` 或 `aria-label`（UX-1/2/3/10）
@@ -231,3 +241,4 @@
 - 修复 `templateLabels` 从 `POLICY_TEMPLATES` 派生（UX-9/M-4）
 - 添加 vitest `coverage` 配置（V-3）
 - `openapi_register.go` 拆分为按域文件（M-1）
+- 将 JSON/SQLite store 的 `SecretKey` 加密存储（S-1）
