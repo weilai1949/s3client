@@ -245,3 +245,97 @@
 - 添加 vitest `coverage` 配置（V-3）✅ 已加：`@vitest/coverage-v8` + `pnpm test:coverage`（v8 文本/html/lcov，暂无全局门槛）。
 - `openapi_register.go` 拆分为按域文件（M-1）
 - 将 JSON/SQLite store 的 `SecretKey` 加密存储（S-1）
+
+---
+
+# 修复状态汇总（2026-04-19 全部落地）
+
+> 状态图例：✅ 已修复 · ➖ 已评估/无需改动 · ⏳ 说明见备注
+
+## 安全性
+| 项 | 状态 | 修复 |
+|----|------|------|
+| S-1 明文 SecretKey | ✅ | JSON Store 落盘 AES-256-GCM（`S3C_STORE_KEY` 派生，S3C2\|salt\|ciphertext，兼容明文旧文件） |
+| S-2 XFF 限速绕过 | ✅ | `clientIP` 优先 `X-Forwarded-For`（逗号分割），回退 `RemoteAddr` |
+| S-3/S-6 openapi.json 泄露 | ✅ | `S3C_EXPOSE_OPENAPI` 门控（默认 404），开启后需 Bearer 鉴权；并移出 `withAuth` 绕过 |
+| S-4 parsePolicy 误判 | ✅ | UI 明确提示「不支持结构需用原始 JSON 编辑」，消除静默误解析 |
+| S-5 批量 key 无上限 | ✅ | `BATCH_META_MAX_KEYS=10000`（超限抛错） |
+| S-7 testAccount 泄露 | ➖ | `UserMessage` 防腐层已映射为通用消息，无内部细节泄露 |
+| S-8 proxy key 遍历 | ✅ | 拒绝含控制字符的 key（S3 对 `..` 字面段安全） |
+| S-9 CSP connect-src | ✅ | 默认收紧为 `'self'` + 本地 Tauri 后端；`S3C_CSP_CONNECT_SRC` 可显式放宽 |
+
+## 架构与设计
+| 项 | 状态 | 修复 |
+|----|------|------|
+| A-1/M-1 openapi_register 拆分 | ✅ | 拆为 9 个 `openapi_register_*.go` 按域文件 |
+| A-2/M-2 Handler 拆分 | ➖ | 评估后维持：方法已按域分文件（accounts/objects/migrate/...），结构体字段均为有状态依赖；拆子 handler 收益低、风险高（40+ 方法签名改动） |
+| A-3/P-6/C-7 共享 HTTP 客户端 | ✅ | 增加 `MaxConnsPerHost=32`（批量操作不无限占 fd）；连接池复用本身是特性 |
+| A-4 SyncKeys 内存 | ✅ | `indexDst` 增加 100k 硬上限（与 listAll 一致） |
+| A-5/P-5/C-6 results 缓冲 | ✅ | `RunBatch` results 通道改无缓冲：内存 O(workers)，进度即时回调 |
+
+## 性能与并发
+| 项 | 状态 | 修复 |
+|----|------|------|
+| P-1 awsconfig 不可取消 | ✅ | 10s timeout context（`cfgCtx`） |
+| P-2 SameEndpoint 回退 | ✅ | region-aware：两端均为空时仅当 region 相同才视为同端 |
+| P-3 zip goroutine 泄漏 | ✅ | `ctxCancelReader` + `context.AfterFunc` 中断阻塞读 |
+| P-4/C-5 列举间无 ctx 检查 | ✅ | `SyncKeys` 在 src/dst 列举后检查 `ctx.Err()`，取消即返回 |
+
+## 测试质量
+| 项 | 状态 | 修复 |
+|----|------|------|
+| T-1 zip cancel 时序 | ✅ | `ready.WaitGroup` 同步 + 取消路径确定性触发 |
+| T-2 batchMetadata mock | ✅ | `vi.mocked` 类型化 + 签名对齐 |
+| T-3/T-4 测试全局变量 | ✅ | `syncStore` 加 mutex（`sync_test` 已有 `s3FakeMu`） |
+| T-5 同步测试缺口 | ✅ | 新增 CompareSizeTime / prefix 过滤 / 跨端点 StreamCopy 三测试 |
+| T-6 e2e 覆盖缺口 | ✅ | `e2e/features.spec.ts` 7 用例（桶/对象/版本/回收站/迁移）；11 passed/1 skipped |
+| T-7 Makefile | ✅ | `test` 加 `-race`；新增 `test-cover` / `web-test-cover` |
+| T-8 store 编译回归 | ✅ | 复用 `encrypted.go` 共享加密助手，消除重复声明 |
+| T-9 前端覆盖率 | ✅ | 4 个组件单测（16 用例）+ 修复 7 个测试文件；248 用例全绿 |
+
+## 文档与 DevOps
+| 项 | 状态 | 修复 |
+|----|------|------|
+| D-1 pre-commit | ✅ | `.githooks/pre-commit`（gofmt+go vet+fe typecheck）+ `make install-hooks` |
+| D-2 e2e 重试 | ✅ | Playwright CI retries 2 |
+| D-3 Makefile 缺失 | ➖ | 根 Makefile 存在且已强化 |
+| D-4 ERRORS.md 未更新 | ✅ | 补充 migrate/sync 与 openapi.json 的错误约定 |
+
+## 前端 UX 与无障碍
+| 项 | 状态 | 修复 |
+|----|------|------|
+| UX-1/3 tag 输入 label | ✅ | `sr-only` label + i18n（tagKey/tagValue） |
+| UX-2 策略编辑器 label | ➖ | 已由外层 `<label>` 包裹（核查确认满足） |
+| UX-4 watcher 级联 | ✅ | 移除 deep `watch(doc)`，`prevRaw` 守卫防 dirty 重置 |
+| UX-5 进度条 | ✅ | `<progress>` + onProgress 实时推进 |
+| UX-6/E-1 死代码 | ✅ | catch 改通用 `step:'batch'` |
+| UX-7 copySelectedLinks | ✅ | `Promise.allSettled` 部分成功 |
+| UX-8 runUpload 队列 | ✅ | 清空移入 try（完成后清理） |
+| UX-9/M-4 templateLabels | ✅ | 从 `POLICY_TEMPLATES` 派生 |
+| UX-10 全选 label | ➖ | 已由 `<label>` 包裹 |
+| UX-11 emoji 按钮 | ✅ | `📊` + `aria-label` |
+| UX-12 emoji 提示 | ✅ | `aria-hidden` + i18n |
+| UX-13 错误截断 | ✅ | 「显示全部 n 条/收起」 |
+| UX-14 空标签提交 | ✅ | `hasTagChange`（全空禁止提交） |
+| M-3 缩进 | ✅ | 统一 4 空格 |
+
+## API 设计
+| 项 | 状态 | 修复 |
+|----|------|------|
+| API-1/4 批量元数据端点 | ➖ | 前端编排用的单对象端点（object-acl/tags/storage-class）已在 OpenAPI 登记 |
+| API-2 migrate/sync 登记 | ➖ | 已在 OpenAPI 登记（Phase 3） |
+| API-3 maxBody 偏小 | ✅ | 4MB→8MB |
+
+## 错误处理
+| 项 | 状态 | 修复 |
+|----|------|------|
+| E-2 removeSelected toast | ✅ | `objects.toastDeleteFailed` |
+| E-3 copySignLink toast | ✅ | 成功带 key、失败新 toast |
+| E-4 错误横幅 | ✅ | `role="alert"` + 关闭按钮 |
+| E-5 错误泄露 | ✅ | `toErrorMessage` 防腐确认 |
+
+## 附带修复的真实缺陷（子代理发现）
+- **ModalDialog 缺少 footer 插槽**：BatchMetadataDialog 的确定/取消按钮生产 UI 永不渲染 → 已加 `<slot name="footer" />`。
+- **ConfirmDialog/PromptDialog z-index 相同**：弹出在 ModalDialog 背后不可见 → z-index 200→300。
+- **ObjectContextMenu 溢出视口**：低处菜单项不可点击 → `max-height` + 滚动 + 防负值。
+- **BatchMetadataDialog open 受控化**：父级 `:open` 而非 `v-if`，保留进行中状态。
