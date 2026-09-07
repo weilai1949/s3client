@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProgressToast, toasts } from './store'
+import { createProgressToast, toasts, requestTab, tabRequest, requestAccountForm, accountFormRequest, currentAccount, selectAccount, rememberedAccountId, toast, updateToast, dismissToast, state } from './store'
+import type { Account } from './types'
 
 describe('createProgressToast（SSE 进度节流）', () => {
   beforeEach(() => vi.useFakeTimers())
@@ -45,5 +46,149 @@ describe('createProgressToast（SSE 进度节流）', () => {
     vi.advanceTimersByTime(100)
     progress('b')
     expect(toasts[0].text).toBe('b')
+  })
+})
+
+describe('requestTab', () => {
+  it('sets tab and increments seq', () => {
+    tabRequest.tab = ''
+    tabRequest.seq = 0
+    requestTab('accounts')
+    expect(tabRequest.tab).toBe('accounts')
+    expect(tabRequest.seq).toBe(1)
+  })
+})
+
+describe('requestAccountForm', () => {
+  it('increments seq', () => {
+    accountFormRequest.seq = 0
+    requestAccountForm()
+    expect(accountFormRequest.seq).toBe(1)
+  })
+})
+
+describe('currentAccount', () => {
+  it('finds account by id', () => {
+    state.accounts = [{ id: 'a1', name: 'A' } as Account, { id: 'a2', name: 'B' } as Account]
+    state.currentAccountId = 'a1'
+    expect(currentAccount()?.id).toBe('a1')
+    state.currentAccountId = 'a2'
+    expect(currentAccount()?.id).toBe('a2')
+    state.currentAccountId = 'missing'
+    expect(currentAccount()).toBeUndefined()
+  })
+})
+
+describe('selectAccount', () => {
+  it('sets currentAccountId and persists to localStorage', () => {
+    const mem = new Map<string, string>()
+    const ls = {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => mem.set(k, v),
+      removeItem: (k: string) => mem.delete(k),
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    selectAccount('acc1')
+    expect(state.currentAccountId).toBe('acc1')
+    expect(mem.get('s3c.currentAccountId')).toBe('acc1')
+  })
+
+  it('removes from localStorage when id is empty', () => {
+    const mem = new Map<string, string>()
+    const ls = {
+      getItem: (k: string) => mem.get(k) ?? null,
+      setItem: (k: string, v: string) => mem.set(k, v),
+      removeItem: (k: string) => mem.delete(k),
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    selectAccount('')
+    expect(state.currentAccountId).toBe('')
+  })
+})
+
+describe('rememberedAccountId', () => {
+  it('reads from localStorage', () => {
+    const mem = new Map<string, string>()
+    mem.set('s3c.currentAccountId', 'acc1')
+    const ls = {
+      getItem: (k: string) => mem.get(k) ?? null,
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    expect(rememberedAccountId()).toBe('acc1')
+  })
+
+  it('returns empty string when not found', () => {
+    const ls = {
+      getItem: () => null,
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    expect(rememberedAccountId()).toBe('')
+  })
+})
+
+describe('toast', () => {
+  beforeEach(() => {
+    toasts.splice(0, toasts.length)
+  })
+
+  it('adds toast', () => {
+    const id = toast('msg', 'ok')
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].text).toBe('msg')
+    expect(toasts[0].kind).toBe('ok')
+    expect(typeof id).toBe('number')
+  })
+
+  it('supports action button', () => {
+    const action = { label: 'View', onClick: vi.fn() }
+    toast('err', 'err', action)
+    expect(toasts[0].action).toStrictEqual(action)
+  })
+})
+
+describe('updateToast', () => {
+  beforeEach(() => {
+    toasts.splice(0, toasts.length)
+  })
+
+  it('updates text of existing toast', () => {
+    toasts.push({ id: 1, kind: 'ok', text: 'old' })
+    updateToast(1, 'new')
+    expect(toasts[0].text).toBe('new')
+  })
+
+  it('no-op for missing id', () => {
+    updateToast(999, 'new')
+    expect(toasts).toHaveLength(0)
+  })
+})
+
+describe('dismissToast', () => {
+  it('removes toast and clears timer', () => {
+    const timers = new Map<number, ReturnType<typeof setTimeout>>()
+    const origSetTimeout = setTimeout
+    const origClearTimeout = clearTimeout
+    // @ts-ignore
+    globalThis.setTimeout = ((fn: () => void) => {
+      const id = origSetTimeout(fn, 3600)
+      timers.set(id, id as any)
+      return id
+    }) as any
+    // @ts-ignore
+    globalThis.clearTimeout = ((id: number) => {
+      timers.delete(id)
+      origClearTimeout(id)
+    }) as any
+
+    toasts.splice(0, toasts.length)
+    const id = toast('msg')
+    dismissToast(id)
+    expect(toasts).toHaveLength(0)
+    expect(timers.has(id)).toBe(false)
+
+    // @ts-ignore
+    globalThis.setTimeout = origSetTimeout
+    // @ts-ignore
+    globalThis.clearTimeout = origClearTimeout
   })
 })
