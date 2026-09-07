@@ -16,7 +16,7 @@ import { s3api, directUpload } from './api'
 
 // Factory for mock XHR instances
 function createMockXHR() {
-  const handlers: Record<string, jest.Mock | null> = {
+  const handlers: Record<string, ((...args: any[]) => any) | null> = {
     onload: null,
     onerror: null,
     onabort: null,
@@ -138,8 +138,14 @@ describe('uploadObject', () => {
 
   it('small file uses presign + directUpload', async () => {
     const file = new File(['small'], 'small.txt', { type: 'text/plain' })
-    s3api.presign.mockResolvedValue({ url: 'https://presigned.url' })
-    directUpload.mockResolvedValue(undefined)
+    vi.mocked(s3api.presign).mockResolvedValue({
+      method: 'put',
+      bucket: 'mybucket',
+      key: 'small.txt',
+      url: 'https://presigned.url',
+      expiresIn: 3600,
+    })
+    vi.mocked(directUpload).mockResolvedValue(undefined)
     await uploadObject(file, { accId: 'acc1', key: 'small.txt' })
     expect(s3api.presign).toHaveBeenCalled()
     expect(directUpload).toHaveBeenCalled()
@@ -154,9 +160,9 @@ describe('uploadObject', () => {
         return (target as any)[prop]
       }
     }) as File
-    s3api.multipartInit.mockResolvedValue({ uploadId: 'up1', key: 'large.bin', bucket: 'mybucket' })
-    s3api.multipartPart.mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
-    s3api.multipartComplete.mockResolvedValue({ completed: 'ok' })
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'large.bin', bucket: 'mybucket' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
+    vi.mocked(s3api.multipartComplete).mockResolvedValue({ completed: 'ok' })
     await uploadObject(file, { accId: 'acc1', bucket: 'mybucket', key: 'large.bin' })
     expect(s3api.multipartInit).toHaveBeenCalled()
     expect(s3api.multipartComplete).toHaveBeenCalled()

@@ -92,8 +92,8 @@ describe('useObjectBrowser', () => {
   it('selectAll selects all when not all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', contentType: 'text/plain', isDir: false },
     ]
     browser.selectAll()
     expect(browser.selected.value.size).toBe(2)
@@ -102,7 +102,7 @@ describe('useObjectBrowser', () => {
   it('selectAll clears when all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
     ]
     browser.selected.value = new Set(['a.txt'])
     browser.selectAll()
@@ -124,7 +124,7 @@ describe('useObjectBrowser', () => {
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
     ]
     browser.selected.value = new Set(['a.txt'])
 
@@ -213,9 +213,9 @@ describe('useObjectBrowser', () => {
   it('toggleWithShift selects range', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', isDir: false },
-      { key: 'c.txt', size: 3, lastModified: '', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', contentType: 'text/plain', isDir: false },
+      { key: 'c.txt', size: 3, lastModified: '', etag: 'e3', contentType: 'text/plain', isDir: false },
     ]
     browser.toggleWithShift('a.txt', false)
     expect(browser.selected.value.has('a.txt')).toBe(true)

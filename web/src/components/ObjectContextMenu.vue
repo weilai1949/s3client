@@ -53,8 +53,9 @@ function menuStyle() {
   const m = props.menu
   if (!m) return {}
   return {
-    left: Math.min(m.x, window.innerWidth - 200) + 'px',
-    top: Math.min(m.y, window.innerHeight - 240) + 'px',
+    left: Math.max(8, Math.min(m.x, window.innerWidth - 200)) + 'px',
+    // 靠近底部时上移，保证菜单项在视口内；菜单自身另有 max-height + 滚动兜底。
+    top: Math.max(8, Math.min(m.y, window.innerHeight - 240)) + 'px',
   }
 }
 </script>
@@ -95,6 +96,8 @@ function menuStyle() {
 .ctx-menu {
   position: fixed; z-index: 150;
   min-width: 190px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   padding: 6px;
   background: var(--panel);
   border: 1px solid var(--border);

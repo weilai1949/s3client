@@ -39,7 +39,7 @@ async function loadApi() {
   return import('./api')
 }
 
-function stubFetch(impl: Parameters<typeof fetch>[1] extends Promise<infer R> ? (input: RequestInfo | URL, init?: RequestInit) => R : never) {
+function stubFetch(impl: (...args: any[]) => any) {
   return vi.stubGlobal('fetch', vi.fn(impl as any))
 }
 
@@ -209,7 +209,7 @@ describe('servers', () => {
   })
 
   it('activeServerId() 未知 id 回退到 list[0].id', async () => {
-    const { api } = await loadApi()
+    await loadApi()
     memLocal.setItem('s3c.activeServerId', 'nonexistent-id')
     // 重新加载以读取新的 localStorage
     const mod = await import('./api')
@@ -244,10 +244,8 @@ describe('servers', () => {
 
   it('deleteServer() 移除并回退默认', async () => {
     const { api } = await loadApi()
-    const list = api.listServers()
     // 先创建一个额外的 server
     const extra = api.upsertServer({ name: 'to-delete', base: 'http://x:9000', token: '' })
-    const list2 = api.listServers()
     api.deleteServer(extra.id)
     const list3 = api.listServers()
     expect(list3.find((s) => s.id === extra.id)).toBeUndefined()
@@ -286,7 +284,7 @@ describe('request / requestResponse', () => {
     stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
     const { api } = await loadApi()
     api.base = 'https://s3.example.com'
-    const result = await (api as any).request?.('/test')
+    await (api as any).request?.('/test')
     // request 是私有函数不导出；我们通过 s3api.listAccounts 间接覆盖
   })
 
@@ -317,7 +315,16 @@ describe('s3api', () => {
 
   it('createAccount', async () => {
     const { s3api } = await import('./api')
-    await s3api.createAccount({ name: 'a', endpoint: 'http://x' })
+    await s3api.createAccount({
+      name: 'a',
+      endpoint: 'http://x',
+      region: 'us-east-1',
+      accessKey: 'ak',
+      secretKey: 'sk',
+      bucket: 'b',
+      pathStyle: true,
+      useSSL: false,
+    })
     expect(fetch).toHaveBeenCalledWith('/api/accounts', expect.objectContaining({ method: 'POST' }))
   })
 
@@ -509,11 +516,11 @@ describe('s3api', () => {
 
   it('migrate / migrateAsync / migrateJobStatus / migrateJobCancel / migrateSync', async () => {
     const { s3api } = await import('./api')
-    await s3api.migrate({ sourceAccountId: 'a1', sourceKeys: ['k'] })
-    await s3api.migrateAsync({ sourceAccountId: 'a1', sourceKeys: ['k'] })
+    await s3api.migrate({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
+    await s3api.migrateAsync({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
     await s3api.migrateJobStatus('job1')
     await s3api.migrateJobCancel('job1')
-    await s3api.migrateSync({ sourceAccountId: 'a1', sourceKeys: ['k'] })
+    await s3api.migrateSync({ sourceAccountId: 'a1', sourcePrefix: 'p/', targetAccountId: 'a2' })
   })
 
   it('downloadZipToDisk blob fallback success', async () => {

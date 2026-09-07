@@ -121,11 +121,8 @@ describe('bucketPolicy', () => {
   })
 
   it('normalizeStringArray rejects non-string/array values (line 111)', () => {
-    // @ts-expect-error testing runtime behavior
     expect(normalizeStringArray(42)).toBeNull()
-    // @ts-expect-error testing runtime behavior
     expect(normalizeStringArray(true)).toBeNull()
-    // @ts-expect-error testing runtime behavior
     expect(normalizeStringArray({})).toBeNull()
   })
 

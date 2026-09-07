@@ -87,6 +87,9 @@ useKeydownStack(onKey, toRef(props, 'open'))
           <div class="dlg-body">
             <slot />
           </div>
+          <div v-if="$slots.footer" class="dlg-footer">
+            <slot name="footer" />
+          </div>
         </div>
       </div>
     </Transition>
@@ -127,6 +130,11 @@ useKeydownStack(onKey, toRef(props, 'open'))
 }
 .dlg-x:hover { background: var(--row-hover); color: var(--text); }
 .dlg-body { padding: 14px 18px 18px; overflow: auto; }
+.dlg-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+}
 
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity .16s ease; }
 .modal-fade-enter-active .dlg-card, .modal-fade-leave-active .dlg-card { transition: transform .16s ease; }

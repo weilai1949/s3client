@@ -144,7 +144,7 @@ describe('toast', () => {
   it('supports action button', () => {
     const action = { label: 'View', onClick: vi.fn() }
     toast('err', 'err', action)
-    expect(toasts.at(-1)!.action).toStrictEqual(action)
+    expect(toasts[toasts.length - 1].action).toStrictEqual(action)
   })
 })
 
@@ -156,7 +156,7 @@ describe('updateToast', () => {
   it('updates text of existing toast', () => {
     toasts.push({ id: 1, kind: 'ok', text: 'old' })
     updateToast(1, 'new')
-    expect(toasts.at(-1)!.text).toBe('new')
+    expect(toasts[toasts.length - 1].text).toBe('new')
   })
 
   it('no-op for missing id', () => {

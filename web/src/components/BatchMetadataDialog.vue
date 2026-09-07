@@ -12,6 +12,8 @@ const props = defineProps<{
   accountId: string
   bucket: string
   keys: string[]
+  /** 受控显隐：父级用 :open 而非 v-if 挂载，避免关闭时销毁组件丢失进行中状态。 */
+  open?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +21,7 @@ const emit = defineEmits<{
   (e: 'done', result: { ok: number; failed: number }): void
 }>()
 
-const open = ref(true)
+const open = computed(() => props.open ?? true)
 const running = ref(false)
 const progress = reactive({ done: 0, total: 0 })
 
@@ -55,7 +57,6 @@ const shownErrors = computed(() => (showAllErrors.value ? errors.value : errors.
 
 function close() {
   if (running.value) return
-  open.value = false
   emit('close')
 }
 

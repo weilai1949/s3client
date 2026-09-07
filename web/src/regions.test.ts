@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   PROVIDER_GROUPS,
-  PROVIDERS,
   providersInGroup,
   inferProvider,
   regionsFor,
@@ -116,13 +115,13 @@ describe('providerDesc', () => {
 describe('regionLabel', () => {
   it('returns zhLabel for zh-CN', async () => {
     const { locale } = await import('./i18n')
-    locale.mockReturnValue('zh-CN')
+    vi.mocked(locale).mockReturnValue('zh-CN')
     expect(regionLabel('oss-cn-hangzhou', '华东1（杭州）')).toBe('华东1（杭州）')
   })
 
   it('returns code for non-zh-CN', async () => {
     const { locale } = await import('./i18n')
-    locale.mockReturnValue('en-US')
+    vi.mocked(locale).mockReturnValue('en-US')
     expect(regionLabel('oss-cn-hangzhou', '华东1（杭州）')).toBe('oss-cn-hangzhou')
   })
 })

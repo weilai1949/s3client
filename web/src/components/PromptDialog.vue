@@ -61,7 +61,7 @@ watch(
 
 <style scoped>
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 200;
+  position: fixed; inset: 0; z-index: 300;
   background: rgba(8, 14, 11, .45);
   backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center;

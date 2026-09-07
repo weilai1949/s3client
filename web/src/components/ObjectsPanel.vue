@@ -395,7 +395,7 @@ function dismissError() {
 
     <!-- 批量改元数据（ACL / 标签 / 存储类型） -->
     <BatchMetadataDialog
-      v-if="batchOpen"
+      :open="batchOpen"
       :account-id="account?.id ?? ''"
       :bucket="currentBucket"
       :keys="Array.from(selected)"

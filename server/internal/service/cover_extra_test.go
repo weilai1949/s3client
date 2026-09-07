@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weilai1949/s3clinet/server/internal/model"
 	"github.com/weilai1949/s3clinet/server/internal/s3wrap"
 )
 
@@ -430,5 +432,96 @@ func TestWriteObjectsZipCreateHeaderError(t *testing.T) {
 	}
 	if len(fails) != 1 || fails[0] != longKey {
 		t.Fatalf("failKeys = %v, want [%q]", fails, longKey)
+	}
+}
+
+// ---- SyncKeys: ctx canceled after src listing (sync.go lines 56-58) ----
+
+func TestSync_CtxCanceledAfterSrcList(t *testing.T) {
+	s3FakeMu.Lock()
+	s3FakeStore = map[string][]string{"src-bucket": {"x.txt"}, "dst-bucket": {}}
+	s3FakeSize = map[string]int64{"src-bucket/x.txt": 5}
+	s3FakeEtag = map[string]uint64{"src-bucket/x.txt": 0x1234}
+	s3FakeMu.Unlock()
+	src, dst, closer := makeFakePair(t)
+	defer closer()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 取消后 listAll 快速失败，SyncKeys 直接返回已扫结果
+
+	out := SyncKeys(ctx, src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	if out.Scanned != 0 || out.Copied != 0 {
+		t.Fatalf("canceled ctx result = %+v, want Scanned=0 Copied=0", out)
+	}
+}
+
+// ---- SyncKeys: ctx canceled between src listing and dst index (sync.go lines 62-64) ----
+// 目标端列表服务器在第 2 个 list 请求（indexDst）时取消 ctx，模拟「列举完源后中止」。
+
+func TestSync_CtxCanceledDuringIndexDst(t *testing.T) {
+	var mu sync.Mutex
+	reqs := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		reqs++
+		n := reqs
+		mu.Unlock()
+		if n >= 2 {
+			cancel() // dst 列举被中止
+		}
+		bucket := firstSeg(r.URL.Path)
+		var sb strings.Builder
+		sb.WriteString(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">`)
+		for _, k := range s3FakeStore[bucket] {
+			fmt.Fprintf(&sb, `<Contents><Key>%s</Key><Size>1</Size><ETag>"x"</ETag><LastModified>2024-01-01T00:00:00Z</LastModified><StorageClass>STANDARD</StorageClass></Contents>`, k)
+		}
+		sb.WriteString(`<IsTruncated>false</IsTruncated></ListBucketResult>`)
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(sb.String()))
+	}))
+	t.Cleanup(srv.Close)
+
+	acc := &model.Account{Endpoint: srv.URL, AccessKey: "AK", SecretKey: "SK", Region: "us-east-1", Bucket: "src-bucket", PathStyle: true}
+	c1, err := s3wrap.New(acc)
+	if err != nil {
+		t.Fatalf("src client: %v", err)
+	}
+	acc2 := *acc
+	acc2.Bucket = "dst-bucket"
+	c2, err := s3wrap.New(&acc2)
+	if err != nil {
+		t.Fatalf("dst client: %v", err)
+	}
+
+	s3FakeMu.Lock()
+	s3FakeStore = map[string][]string{"src-bucket": {"x.txt"}, "dst-bucket": {}}
+	s3FakeMu.Unlock()
+
+	out := SyncKeys(ctx, c1, c2, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	if out.Scanned != 1 || out.Copied != 0 {
+		t.Fatalf("canceled-during-index result = %+v, want Scanned=1 Copied=0", out)
+	}
+}
+
+// ---- indexDst: hard cap (sync.go lines 135-136, 148-149) ----
+// 100001 keys + pageSize=100000 → 第 1 页填满后内层 break（148），
+// 第 2 页开头外层 cap 检查（135）再 break。
+
+func TestIndexDstHardCap(t *testing.T) {
+	const total = 100_000
+	f := newListFake(t)
+	keys := make([]string, total+1)
+	for i := range keys {
+		keys[i] = "obj" + strconv.Itoa(i)
+	}
+	f.keys[listFakeBucket] = keys
+	f.pageSize = total
+
+	idx := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	if len(idx) != total {
+		t.Fatalf("indexDst hard cap = %d, want %d", len(idx), total)
 	}
 }
