@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/weilai1949/s3clinet/server/internal/model"
@@ -62,6 +63,18 @@ func syncFakeS3(t *testing.T) *httptest.Server {
 			}
 			_ = syncPutObject(bucket, strings.TrimPrefix(r.URL.Path, "/"+bucket+"/"), syncEntry{size: 42, etag: "fake"})
 			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet:
+			// 普通 GET object：为 StreamCopy（跨端点复制读取源 body）提供支持。
+			key := strings.TrimPrefix(r.URL.Path, "/"+bucket+"/")
+			m, _ := syncBucketStore(bucket)
+			if e, ok := m[key]; ok && !e.deleted {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				w.Header().Set("Content-Length", fmt.Sprint(e.size))
+				w.Header().Set("ETag", `"`+e.etag+`"`)
+				_, _ = w.Write([]byte(strings.Repeat("x", int(e.size))))
+				return
+			}
+			http.NotFound(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -70,8 +83,9 @@ func syncFakeS3(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// 简化 fake 状态：每个 bucket 一个 map；测试不要求多实例并发安全。
+// 简化 fake 状态：每个 bucket 一个 map。加锁保证并行测试（t.Parallel）安全。
 var (
+	syncMu    sync.Mutex
 	syncStore = map[string]map[string]syncEntry{}
 )
 
@@ -82,6 +96,8 @@ type syncEntry struct {
 }
 
 func syncBucketStore(bucket string) (map[string]syncEntry, bool) {
+	syncMu.Lock()
+	defer syncMu.Unlock()
 	m, ok := syncStore[bucket]
 	if !ok {
 		m = map[string]syncEntry{}
@@ -92,6 +108,8 @@ func syncBucketStore(bucket string) (map[string]syncEntry, bool) {
 
 func syncPutObject(bucket, key string, e syncEntry) error {
 	m, _ := syncBucketStore(bucket)
+	syncMu.Lock()
+	defer syncMu.Unlock()
 	m[key] = e
 	return nil
 }
@@ -126,7 +144,7 @@ func TestMigrateSync_SkipsEqualByETag(t *testing.T) {
 		Region: "us-east-1", Bucket: "dst-bucket", PathStyle: true,
 	})
 
-	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false)
+	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, false)
 	srv := httptest.NewServer(h.Routes())
 	defer srv.Close()
 
@@ -148,10 +166,10 @@ func TestMigrateSync_SkipsEqualByETag(t *testing.T) {
 		t.Fatalf("status = %d", rr.StatusCode)
 	}
 	var resp struct {
-		Scanned int    `json:"scanned"`
-		Skipped int    `json:"skipped"`
-		Copied  int    `json:"copied"`
-		Failed  int    `json:"failed"`
+		Scanned int `json:"scanned"`
+		Skipped int `json:"skipped"`
+		Copied  int `json:"copied"`
+		Failed  int `json:"failed"`
 	}
 	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Scanned != 2 || resp.Skipped != 1 || resp.Copied != 1 || resp.Failed != 0 {
@@ -173,7 +191,7 @@ func TestMigrateSync_InvalidMode(t *testing.T) {
 		Name: "dst", Endpoint: "http://x", AccessKey: "ak", SecretKey: "sk",
 		Region: "us-east-1", Bucket: "dst", PathStyle: true,
 	})
-	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false)
+	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, false)
 	srv := httptest.NewServer(h.Routes())
 	defer srv.Close()
 	body, _ := json.Marshal(map[string]any{
@@ -186,5 +204,124 @@ func TestMigrateSync_InvalidMode(t *testing.T) {
 	rr, _ := srv.Client().Do(req)
 	if rr.StatusCode != 400 {
 		t.Errorf("invalid mode status = %d, want 400", rr.StatusCode)
+	}
+}
+
+// newSyncEnv 创建 store + handler server，返回 src/dst 账号 id 与 handler server URL。
+func newSyncEnv(t *testing.T, srcEp, dstEp string) (srcID, dstID, baseURL string) {
+	t.Helper()
+	st, _ := store.New(filepath.Join(t.TempDir(), "accounts.json"))
+	src, _ := st.Create(&model.Account{
+		Name: "src", Endpoint: srcEp, AccessKey: "ak", SecretKey: "sk",
+		Region: "us-east-1", Bucket: "src-bucket", PathStyle: true,
+	})
+	dst, _ := st.Create(&model.Account{
+		Name: "dst", Endpoint: dstEp, AccessKey: "ak", SecretKey: "sk",
+		Region: "us-east-1", Bucket: "dst-bucket", PathStyle: true,
+	})
+	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, false)
+	srv := httptest.NewServer(h.Routes())
+	t.Cleanup(srv.Close)
+	return src.ID, dst.ID, srv.URL
+}
+
+// doSync 发起 /api/migrate/sync 请求并解析响应 JSON。
+func doSync(t *testing.T, baseURL string, body any) map[string]any {
+	t.Helper()
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", baseURL+"/api/migrate/sync", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	rr, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer rr.Body.Close()
+	if rr.StatusCode != 200 {
+		t.Fatalf("status = %d, want 200", rr.StatusCode)
+	}
+	var m map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return m
+}
+
+// TestMigrateSync_CompareSizeTime 验证 size_mtime 模式：size 相同（mtime 相同）即跳过，
+// 不因 ETag 不同而复制（与 ETag 模式语义相反）。
+func TestMigrateSync_CompareSizeTime(t *testing.T) {
+	syncStore = map[string]map[string]syncEntry{
+		"src-bucket": {
+			"a.txt": {size: 10, etag: "src-a"},
+			"b.txt": {size: 20, etag: "src-b"},
+		},
+		"dst-bucket": {
+			"a.txt": {size: 10, etag: "dst-different"}}, // 同 size、不同 etag
+	}
+	endpoint := syncFakeS3(t).URL
+	srcID, dstID, base := newSyncEnv(t, endpoint, endpoint)
+
+	out := doSync(t, base, map[string]any{
+		"sourceAccountId": srcID, "sourceBucket": "src-bucket",
+		"targetAccountId": dstID, "targetBucket": "dst-bucket", "mode": "size_mtime",
+	})
+	if out["scanned"].(float64) != 2 || out["skipped"].(float64) != 1 || out["copied"].(float64) != 1 {
+		t.Errorf("size_mtime: %+v", out)
+	}
+	if _, ok := syncStore["dst-bucket"]["b.txt"]; !ok {
+		t.Errorf("b.txt missing in dst after size_mtime sync")
+	}
+}
+
+// TestMigrateSync_PrefixFilter 验证 sourcePrefix 过滤：仅同步 prefix 下的对象。
+func TestMigrateSync_PrefixFilter(t *testing.T) {
+	syncStore = map[string]map[string]syncEntry{
+		"src-bucket": {
+			"dir/a.txt":     {size: 10, etag: "a"},
+			"dir/sub/b.txt": {size: 20, etag: "b"},
+			"other.txt":     {size: 30, etag: "c"},
+		},
+		"dst-bucket": {},
+	}
+	endpoint := syncFakeS3(t).URL
+	srcID, dstID, base := newSyncEnv(t, endpoint, endpoint)
+
+	out := doSync(t, base, map[string]any{
+		"sourceAccountId": srcID, "sourceBucket": "src-bucket", "sourcePrefix": "dir/",
+		"targetAccountId": dstID, "targetBucket": "dst-bucket", "mode": "etag",
+	})
+	if out["scanned"].(float64) != 2 || out["copied"].(float64) != 2 {
+		t.Errorf("prefix: %+v", out)
+	}
+	for _, k := range []string{"dir/a.txt", "dir/sub/b.txt"} {
+		if _, ok := syncStore["dst-bucket"][k]; !ok {
+			t.Errorf("%s missing in dst after prefixed sync", k)
+		}
+	}
+	if _, ok := syncStore["dst-bucket"]["other.txt"]; ok {
+		t.Errorf("other.txt should NOT be synced (outside prefix)")
+	}
+}
+
+// TestMigrateSync_CrossEndpoint 验证异端点（不同 URL）时走 StreamCopy，仍能同步成功。
+func TestMigrateSync_CrossEndpoint(t *testing.T) {
+	syncStore = map[string]map[string]syncEntry{
+		"src-bucket": {"a.txt": {size: 10, etag: "a"}, "b.txt": {size: 20, etag: "b"}},
+		"dst-bucket": {},
+	}
+	srcEp := syncFakeS3(t).URL
+	dstEp := syncFakeS3(t).URL
+	srcID, dstID, base := newSyncEnv(t, srcEp, dstEp)
+
+	out := doSync(t, base, map[string]any{
+		"sourceAccountId": srcID, "sourceBucket": "src-bucket",
+		"targetAccountId": dstID, "targetBucket": "dst-bucket", "mode": "etag",
+	})
+	if out["failed"].(float64) != 0 || out["copied"].(float64) != 2 {
+		t.Errorf("cross-endpoint: %+v", out)
+	}
+	for _, k := range []string{"a.txt", "b.txt"} {
+		if _, ok := syncStore["dst-bucket"][k]; !ok {
+			t.Errorf("%s missing in dst after cross-endpoint sync", k)
+		}
 	}
 }

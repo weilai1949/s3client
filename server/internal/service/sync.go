@@ -52,9 +52,16 @@ func SyncKeys(
 	if onProgress != nil {
 		onProgress(Progress{Total: len(srcList), Done: 0, Failed: 0})
 	}
+	// 取消时不再列举目标、不复制：返回当前扫描结果即可。
+	if ctx.Err() != nil {
+		return SyncResult{Scanned: len(srcList)}
+	}
 
 	// 2. 列举目标 prefix 同名 key + 元数据。
 	dstMeta := indexDst(ctx, dst, dstBucket, dstPrefix)
+	if ctx.Err() != nil {
+		return SyncResult{Scanned: len(srcList)}
+	}
 
 	// 3. 过滤出「需要复制」的 key。
 	toCopy := make([]string, 0, len(srcList))
@@ -118,11 +125,16 @@ func listAll(ctx context.Context, c *s3wrap.Client, bucket, prefix string) []s3w
 }
 
 // indexDst 列举目标 prefix 全部对象元数据；返回 key → ObjectMeta（仅 ETag/Size/LastModified）。
+// 与 listAll 保持一致的硬上限 100k，防止大桶内存膨胀。
 func indexDst(ctx context.Context, c *s3wrap.Client, bucket, prefix string) map[string]*s3wrap.ObjectMeta {
 	out := map[string]*s3wrap.ObjectMeta{}
 	const maxKeys = 1000
+	const maxTotal = 100_000
 	token := ""
 	for {
+		if len(out) >= maxTotal {
+			break
+		}
 		p, err := c.ListObjectsPage(ctx, bucket, prefix, "", token, "", int32(maxKeys))
 		if err != nil || p == nil {
 			break
@@ -132,6 +144,9 @@ func indexDst(ctx context.Context, c *s3wrap.Client, bucket, prefix string) map[
 				Size:         o.Size,
 				ETag:         o.ETag,
 				LastModified: o.LastModified,
+			}
+			if len(out) >= maxTotal {
+				break
 			}
 		}
 		if !p.IsTruncated || p.NextToken == "" {

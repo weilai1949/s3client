@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   POLICY_TEMPLATES,
+  normalizeStringArray,
   parsePolicy,
   serializePolicy,
   validateDoc,
@@ -117,5 +118,22 @@ describe('bucketPolicy', () => {
     })
     const parsed = JSON.parse(raw)
     expect(parsed.Statement[0]).not.toHaveProperty('Sid')
+  })
+
+  it('normalizeStringArray rejects non-string/array values (line 111)', () => {
+    // @ts-expect-error testing runtime behavior
+    expect(normalizeStringArray(42)).toBeNull()
+    // @ts-expect-error testing runtime behavior
+    expect(normalizeStringArray(true)).toBeNull()
+    // @ts-expect-error testing runtime behavior
+    expect(normalizeStringArray({})).toBeNull()
+  })
+
+  it('clear template generates empty Statement', () => {
+    const clearTemplate = POLICY_TEMPLATES.find((t) => t.id === 'clear')
+    expect(clearTemplate).toBeDefined()
+    const doc = clearTemplate!.build('my-bucket')
+    expect(doc.Statement).toEqual([])
+    expect(validateDoc(doc)).toBeNull()
   })
 })

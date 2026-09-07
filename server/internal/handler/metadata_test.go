@@ -61,7 +61,7 @@ func TestObjectAcl(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
 	// 公开对象：public=true、含 AllUsers 授权、返回公开链接
 	rr := doJSON(t, h, "GET", "/api/accounts/"+acc.ID+"/object-acl?key=public.txt", "")
@@ -172,7 +172,7 @@ func TestObjectTags(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
 	// 读取标签
 	rr := doJSON(t, h, "GET", "/api/accounts/"+acc.ID+"/object-tags?key=tagged.txt", "")
@@ -267,7 +267,7 @@ func TestListObjectVersions(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
 	rr := doJSON(t, h, "GET", "/api/accounts/"+acc.ID+"/versions?bucket=b&prefix=a.txt", "")
 	if rr.Code != http.StatusOK {
@@ -348,7 +348,7 @@ func TestDeleteAndRestoreVersion(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
 	// 删除指定版本
 	rr := doJSON(t, h, "DELETE", "/api/accounts/"+acc.ID+"/version?key=a.txt&versionId=v1", "")
@@ -421,7 +421,7 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("create account: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
 	// 读取（带规则）
 	rr := doJSON(t, h, "GET", "/api/accounts/"+acc.ID+"/lifecycle?bucket=b", "")
@@ -478,7 +478,7 @@ func TestSetHeadersInvalidUserMetadata400(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 	_ = httptest.NewRecorder // 兼容 import 暂未使用
 
 	// 启动假 S3（仅兜底：所有测试都不应触达，但万一校验漏掉会回 500）

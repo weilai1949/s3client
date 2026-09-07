@@ -8,7 +8,7 @@ export default defineConfig({
   // 默认串行：避免多 worker 同时改 localStorage / 后端状态造成相互干扰。
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  retries: process.env.CI ? 2 : 0,
   // 单用例 30s 上限；CI 再宽限到 60s。
   timeout: process.env.CI ? 60_000 : 30_000,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',

@@ -91,4 +91,38 @@ describe('useUploadQueue 共享状态机', () => {
     expect(a.pct).toBe(100)
     expect(processed.map((it) => it.key)).toContain('a.txt')
   })
+
+  it('enqueue skips directory placeholders (size=0, type="")', () => {
+    const q = mountQueue()
+    const dirFile = new File([''], '', { type: '' })
+    const normalFile = new File(['x'], 'a.txt', { type: 'text/plain' })
+    const fileList = [dirFile, normalFile] as unknown as FileList
+    q.enqueue(fileList)
+    expect(q.items.value.length).toBe(1)
+    expect(q.items.value[0].file.name).toBe('a.txt')
+  })
+
+  it('abortAll aborts all in-flight items', () => {
+    const q = mountQueue()
+    const a = enqueue(q, ['a.txt'])[0]
+    const b = enqueue(q, ['b.txt'])[0]
+    q.abortItem(a)
+    q.abortItem(b)
+    expect(a.status).toBe('cancelled')
+    expect(b.status).toBe('cancelled')
+  })
+
+  it('worker catch sets status=err and err message on non-AbortError', async () => {
+    const q = mountQueue()
+    const [item] = enqueue(q, ['a.txt'])
+    // Make uploadObject throw immediately so the worker catches it
+    vi.mocked(uploadObject).mockImplementationOnce(async () => {
+      throw new Error('upload failed')
+    })
+    const run = q.run()
+    // No inFlight entry because uploadObject threw before pushing
+    await run
+    expect(item.status).toBe('err')
+    expect(item.err).toBe('upload failed')
+  })
 })

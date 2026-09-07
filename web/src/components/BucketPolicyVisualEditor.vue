@@ -29,23 +29,34 @@ const doc = ref<PolicyDoc>({ Version: '2012-10-17', Statement: [] })
 const parseError = ref(false)
 const dirty = ref(false)
 
+// 上次外部 raw 值：仅当 raw 真正变化时才重置 dirty / 重解析 doc，
+// 避免父组件用等价内容回显或重渲染时把「未保存」标记冲掉。
+let prevRaw = ''
+
 watch(
   () => props.raw,
   (raw) => {
+    const rawChanged = raw !== prevRaw
+    prevRaw = raw
+    if (!rawChanged) return
+
     const parsed = parsePolicy(raw)
     if (parsed) {
-      doc.value = parsed
+      // 仅当解析结果与当前 doc 不同步（内容真正不同）时才重解析。
+      if (serializePolicy(doc.value) !== serializePolicy(parsed)) doc.value = parsed
       parseError.value = false
       dirty.value = false
     } else if (raw.trim() === '') {
       // 空 -> 清空 doc；不报错。
-      doc.value = { Version: '2012-10-17', Statement: [] }
+      const empty: PolicyDoc = { Version: '2012-10-17', Statement: [] }
+      if (serializePolicy(doc.value) !== serializePolicy(empty)) doc.value = empty
       parseError.value = false
       dirty.value = false
     } else {
       // 父组件已加载的 JSON 含可视化不支持的结构（NotPrincipal / 嵌套）。
       parseError.value = true
       mode.value = 'json'
+      dirty.value = false
     }
   },
   { immediate: true },
@@ -60,25 +71,24 @@ const previewJSON = computed(() => {
   }
 })
 
-watch(
-  doc,
-  () => {
-    dirty.value = true
-    emit('update', previewJSON.value)
-  },
-  { deep: true },
-)
-
-function applyTemplate(id: string) {
-  const tpl = POLICY_TEMPLATES.find((x) => x.id === id)
-  if (!tpl) return
-  doc.value = tpl.build(props.bucket)
+/**
+ * 单向同步核心：doc 变化（用户编辑）→ 设 dirty + emit update。
+ * 与 raw watcher（外部 raw → 解析 doc 并清 dirty）互不覆盖，避免 watcher 级联。
+ */
+function commitEdit(next: PolicyDoc) {
+  doc.value = next
   dirty.value = true
   emit('update', previewJSON.value)
 }
 
+function applyTemplate(id: string) {
+  const tpl = POLICY_TEMPLATES.find((x) => x.id === id)
+  if (!tpl) return
+  commitEdit(tpl.build(props.bucket))
+}
+
 function addStatement() {
-  doc.value = {
+  commitEdit({
     ...doc.value,
     Statement: [
       ...doc.value.Statement,
@@ -90,13 +100,13 @@ function addStatement() {
         resources: [`arn:aws:s3:::${props.bucket}/*`],
       },
     ],
-  }
+  })
 }
 
 function removeStatement(idx: number) {
   const next = [...doc.value.Statement]
   next.splice(idx, 1)
-  doc.value = { ...doc.value, Statement: next }
+  commitEdit({ ...doc.value, Statement: next })
 }
 
 function toLines(arr: string[]): string {
@@ -113,13 +123,13 @@ function parseLines(s: string): string[] {
 function onActionsChange(idx: number, v: string) {
   const next = [...doc.value.Statement]
   next[idx] = { ...next[idx], actions: parseLines(v) }
-  doc.value = { ...doc.value, Statement: next }
+  commitEdit({ ...doc.value, Statement: next })
 }
 
 function onResourcesChange(idx: number, v: string) {
   const next = [...doc.value.Statement]
   next[idx] = { ...next[idx], resources: parseLines(v) }
-  doc.value = { ...doc.value, Statement: next }
+  commitEdit({ ...doc.value, Statement: next })
 }
 
 function onField<K extends keyof PolicyStatement>(
@@ -129,14 +139,12 @@ function onField<K extends keyof PolicyStatement>(
 ) {
   const next = [...doc.value.Statement]
   next[idx] = { ...next[idx], [field]: value }
-  doc.value = { ...doc.value, Statement: next }
+  commitEdit({ ...doc.value, Statement: next })
 }
 
-const templateLabels: Record<string, string> = {
-  'public-read': 'policy.tplPublicRead',
-  'public-read-write': 'policy.tplPublicReadWrite',
-  'deny-list': 'policy.tplDenyList',
-  clear: 'policy.tplClear',
+/** 模板标签直接由来 POLICY_TEMPLATES（label 为 i18n 键），经 t() 翻译，不维护硬编码映射。 */
+function templateLabel(tpl: { label: string }): string {
+  return t(tpl.label)
 }
 </script>
 
@@ -162,11 +170,12 @@ const templateLabels: Record<string, string> = {
       <span v-if="dirty" class="badge dirty">{{ t('policy.dirty') }}</span>
     </div>
 
+    <!-- 复杂的结构提示独立于模式显示：切到原始 JSON 后用户仍能清楚看到原因。 -->
+    <div v-if="parseError" class="badge error">
+      {{ t('policy.parsedFail') }}
+    </div>
+
     <div v-if="mode === 'visual'">
-      <div v-if="parseError" class="badge error">
-        {{ t('policy.parsedFail') }}
-      </div>
-      <template v-else>
         <div class="badge" style="color:var(--muted)">
           {{ tf('policy.parsedOk', { n: doc.Statement.length }) }}
         </div>
@@ -180,7 +189,7 @@ const templateLabels: Record<string, string> = {
             type="button"
             @click="applyTemplate(tpl.id)"
           >
-            {{ t(templateLabels[tpl.id]) }}
+            {{ templateLabel(tpl) }}
           </button>
         </fieldset>
 
@@ -255,18 +264,18 @@ const templateLabels: Record<string, string> = {
           <summary>{{ t('policy.preview') }}</summary>
           <pre class="mono preview">{{ previewJSON }}</pre>
         </details>
-      </template>
     </div>
 
-    <label for="policy-json-area" class="sr-only">{{ t('policy.jsonMode') }}</label>
-    <textarea
-      v-else
-      id="policy-json-area"
-      class="mono policy-area"
-      :value="raw"
-      spellcheck="false"
-      @input="emit('update', ($event.target as HTMLTextAreaElement).value); dirty = true"
-    ></textarea>
+    <template v-else>
+      <label for="policy-json-area" class="sr-only">{{ t('policy.jsonMode') }}</label>
+      <textarea
+        id="policy-json-area"
+        class="mono policy-area"
+        :value="raw"
+        spellcheck="false"
+        @input="emit('update', ($event.target as HTMLTextAreaElement).value); dirty = true"
+      ></textarea>
+    </template>
   </div>
 </template>
 

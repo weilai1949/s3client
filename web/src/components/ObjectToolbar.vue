@@ -128,8 +128,8 @@ const emit = defineEmits<{
     <span class="badge">📊 {{ tf('toolbar.fileStats', { n: fileCount, size: fmtSize(loadedSize) }) }}</span>
     <span v-if="selectedCount" class="badge" style="color:var(--primary)">{{ tf('toolbar.selectedFiles', { n: selectedCount, size: fmtSize(selectedSize) }) }}</span>
     <span class="spacer" />
-    <button class="btn secondary sm" @click="emit('toggle-view')">
-      {{ bucketView === 'list' ? t('toolbar.gridView') : t('toolbar.listView') }}
+    <button class="btn secondary sm" :aria-label="t('toolbar.toggleViewHint')" @click="emit('toggle-view')">
+      📊 {{ bucketView === 'list' ? t('toolbar.gridView') : t('toolbar.listView') }}
     </button>
   </div>
 </template>

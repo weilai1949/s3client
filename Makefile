@@ -39,13 +39,21 @@ desktop-build:
 	cd web && pnpm install && pnpm build
 	cd desktop && pnpm install && pnpm tauri build
 
-# 后端测试
+# 后端测试（含 -race，检测数据竞争；CI 亦复用此目标）
 test:
-	cd server && go test ./...
+	cd server && go test -race -count=1 -timeout 600s ./...
+
+# 后端测试 + 覆盖率报告
+test-cover:
+	cd server && go test -race -count=1 -timeout 600s -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
 
 # 前端单元测试
 web-test:
 	cd web && pnpm install && pnpm test
+
+# 前端单元测试 + 覆盖率（vitest v8）
+web-test-cover:
+	cd web && pnpm install && pnpm test:coverage
 
 # 后端 + 前端单测
 test-all: test web-test
@@ -53,6 +61,11 @@ test-all: test web-test
 # 后端静态检查
 vet:
 	cd server && go vet ./...
+
+# 安装 git pre-commit hook（静态检查：gofmt / go vet / 前端 typecheck）
+install-hooks:
+	git config core.hooksPath .githooks
+	@echo "pre-commit hook 已安装（gofmt + go vet + frontend typecheck）"
 
 # 构建 Docker 镜像（注入版本号）
 docker:

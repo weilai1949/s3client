@@ -24,7 +24,7 @@ func TestOpenAPI_ExposesAllRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false)
+	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, true)
 
 	// 真实路由数：routes.go 中 mux.HandleFunc 共 68 行；其中 1 行为 SPA fallback `/`。
 	const wantAPIRoutes = 67
@@ -95,23 +95,50 @@ func TestOpenAPI_ExposesAllRoutes(t *testing.T) {
 	}
 }
 
-// TestOpenAPI_PublicEndpoint 验证 /api/openapi.json 在配置 token 时也不被鉴权层挡住。
-func TestOpenAPI_PublicEndpoint(t *testing.T) {
+// TestOpenAPI_GateAndAuth 验证 openapi.json 默认 404（S3C_EXPOSE_OPENAPI 未开）；
+// 显式开启后需 Bearer 鉴权（配置 token 时），否则 401。
+func TestOpenAPI_GateAndAuth(t *testing.T) {
 	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
 	if err != nil {
 		t.Fatalf("store.New: %v", err)
 	}
-	h := New(st, quietLogger(), t.TempDir(), nil, "supersecrettokenmustbelongenough", "test", false)
+
+	// 1) 默认（未开启）：一律 404，不泄露端点信息。
+	hHidden := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, false)
+	srvHidden := httptest.NewServer(hHidden.Routes())
+	defer srvHidden.Close()
+	resp, err := srvHidden.Client().Get(srvHidden.URL + "/api/openapi.json")
+	if err != nil {
+		t.Fatalf("GET openapi.json: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 404 {
+		t.Errorf("hidden openapi.json status = %d, want 404", resp.StatusCode)
+	}
+
+	// 2) 显式开启 + 配置 token：未带 token 应 401，带 token 应 200。
+	h := New(st, quietLogger(), t.TempDir(), nil, "supersecrettokenmustbelongenough", "test", false, true)
 	srv := httptest.NewServer(h.Routes())
 	defer srv.Close()
 
 	req, _ := http.NewRequest("GET", srv.URL+"/api/openapi.json", nil)
-	resp, err := srv.Client().Do(req)
+	resp, err = srv.Client().Do(req)
 	if err != nil {
 		t.Fatalf("GET openapi.json unauthed: %v", err)
 	}
-	defer resp.Body.Close()
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Errorf("unauthed openapi.json status = %d, want 401", resp.StatusCode)
+	}
+
+	req, _ = http.NewRequest("GET", srv.URL+"/api/openapi.json", nil)
+	req.Header.Set("Authorization", "Bearer supersecrettokenmustbelongenough")
+	resp, err = srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET openapi.json authed: %v", err)
+	}
+	resp.Body.Close()
 	if resp.StatusCode != 200 {
-		t.Errorf("unauthed openapi.json status = %d, want 200", resp.StatusCode)
+		t.Errorf("authed openapi.json status = %d, want 200", resp.StatusCode)
 	}
 }

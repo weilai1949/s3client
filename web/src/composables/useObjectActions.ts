@@ -144,7 +144,9 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       ctx.selected.value = new Set()
       await ctx.load(true)
     } catch (e) {
-      ctx.error.value = toErrorMessage(e)
+      const msg = toErrorMessage(e)
+      ctx.error.value = msg
+      toast(tf('objects.toastDeleteFailed', { msg }), 'err')
     }
   }
 
@@ -184,9 +186,11 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
         bucket: ctx.currentBucket.value,
         expiresIn: 3600,
       })
-      copyTextAndToast(res.url)
+      copyTextAndToast(res.url, tf('objects.copySignLinkOk', { key: o.key }))
     } catch (e) {
-      ctx.error.value = toErrorMessage(e)
+      const msg = toErrorMessage(e)
+      ctx.error.value = msg
+      toast(tf('objects.copySignLinkFail', { key: o.key, msg }), 'err')
     }
   }
 
@@ -344,8 +348,9 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       const failed = uploadQueue.value.filter((it) => it.status === 'err').length
       if (failed) toast(tf('upload.toastPartial', { ok: uploadQueue.value.length - failed, fail: failed }), 'err')
       else toast(tf('objects.toastUploadOkDir', { n: uploadQueue.value.length }))
-    } finally {
+      // 仅在 queue.run() 正常完成后清空队列，避免丢弃仍在运行/新入队的条目。
       uploadQueue.value = []
+    } finally {
       uploading.value = false
       await ctx.load(true)
     }
@@ -514,7 +519,7 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
   }
 
   return {
-      detail,
+    detail,
     headersOpen,
     headersKey,
     openHeadersDialog,

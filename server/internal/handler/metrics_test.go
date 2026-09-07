@@ -19,7 +19,7 @@ func TestMetricsEndpointExposed(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// 显式开启 metrics 暴露。
-	h := New(st, logger, t.TempDir(), nil, "", "test", true).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", true, false).Routes()
 	// 触发一次请求以累计计数
 	rr0 := httptest.NewRecorder()
 	h.ServeHTTP(rr0, httptest.NewRequest(http.MethodGet, "/api/health", nil))
@@ -47,7 +47,7 @@ func TestMetricsEndpointHiddenByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := New(st, logger, t.TempDir(), nil, "", "test", false).Routes()
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
 	if rr.Code != http.StatusNotFound {

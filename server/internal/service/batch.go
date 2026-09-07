@@ -46,7 +46,8 @@ func RunBatch[I any](
 		err error
 	}
 	jobs := make(chan I)
-	results := make(chan itemRes, total) // 全量缓冲：worker 永不阻塞
+	// 无缓冲：worker 提交结果即与消费者同步，进度即时回调，内存固定 O(workers)。
+	results := make(chan itemRes)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
 		wg.Add(1)

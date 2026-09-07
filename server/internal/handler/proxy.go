@@ -31,6 +31,14 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "key is required")
 		return
 	}
+	// S3 对象 key 允许包含 ".." 字面段（S3 不解析路径），但禁止控制字符：
+	// 空字节/换行会破坏 S3 XML 或 header 编码，属畸形输入，直接拒绝。
+	for _, r := range key {
+		if r < 0x20 || r == 0x7f {
+			h.writeErr(w, http.StatusBadRequest, "key contains control characters")
+			return
+		}
+	}
 	mode := q.Get("mode")
 	if mode == "" {
 		mode = "download"

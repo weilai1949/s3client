@@ -1,0 +1,31 @@
+#!/bin/sh
+# pre-commit：快速静态检查（gofmt / go vet / 前端 typecheck）。
+# 完整测试（go test -race / pnpm test）在 CI 与本机 make test-all 执行，
+# 这里只做秒级检查，避免拖慢每次提交。
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+fail() { echo "pre-commit: $1"; exit 1; }
+
+cd "$ROOT"
+
+# 1) Go：gofmt 格式检查（仅暂存区 .go 文件）
+GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+if [ -n "$GO_FILES" ]; then
+    UNFMT=$(gofmt -l $GO_FILES || true)
+    if [ -n "$UNFMT" ]; then
+        echo "pre-commit: gofmt 需要格式化以下文件:"
+        echo "$UNFMT"
+        exit 1
+    fi
+fi
+
+# 2) Go：vet（增量编译，通常 <5s）
+if [ -n "$GO_FILES" ]; then
+    (cd server && go vet ./...) || fail "go vet 失败"
+fi
+
+# 3) 前端：typecheck（仅 web 文件变更时）
+WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^web/' || true)
+if [ -n "$WEB_FILES" ] && [ -f web/package.json ]; then
+    (cd web && pnpm exec vue-tsc --noEmit >/dev/null 2>&1) || fail "前端 typecheck 失败（vue-tsc --noEmit）"
+fi

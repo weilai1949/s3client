@@ -496,6 +496,7 @@ export function useObjectBrowser(bindings: KeyBindings) {
     openCtxFromButton,
     closeCtx,
     onKey,
+    panelActive,
     account,
     fileObjects,
     allSelected,

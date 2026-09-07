@@ -25,6 +25,8 @@ type Handler struct {
 	tokens        []string // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
 	version       string   // 服务端版本号（ldflags 注入），用于 /api/health 上报
 	exposeMetrics bool     // 是否暴露 /api/metrics（默认 false：404 假装不存在）
+	exposeOpenAPI bool     // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
+	cspConnectSrc string   // CSP connect-src 白名单
 	clients       *clientCache
 	migrateJobs   *service.JobRegistry
 	limiter       *ipLimiter
@@ -32,17 +34,19 @@ type Handler struct {
 }
 
 // New 构造 handler。token 支持逗号分隔多值（轮换/吊销：去掉旧 token 即可）。
-// exposeMetrics=false 时 /api/metrics 一律 404，避免公网暴露运行指标。
-func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins []string, token, version string, exposeMetrics bool) *Handler {
+// exposeMetrics=false 时 /api/metrics 一律 404；exposeOpenAPI=false 时 /api/openapi.json 一律 404，
+// 均避免公网暴露运行指标 / API 契约信息。cspConnectSrc 默认仅同源 + 本地 Tauri 后端。
+func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins []string, token, version string, exposeMetrics, exposeOpenAPI bool) *Handler {
 	reg := openapi.New("s3clinet API", version)
 	registerOpenAPI(reg, version)
 	return &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,
-		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics,
-		clients:     newClientCache(),
-		migrateJobs: service.NewJobRegistry(),
-		limiter:     newIPLimiter(),
-		openapi:     reg,
+		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics, exposeOpenAPI: exposeOpenAPI,
+		cspConnectSrc: "'self' http://127.0.0.1:* http://localhost:*",
+		clients:       newClientCache(),
+		migrateJobs:   service.NewJobRegistry(),
+		limiter:       newIPLimiter(),
+		openapi:       reg,
 	}
 }
 
@@ -59,6 +63,14 @@ func splitTokens(s string) []string {
 		}
 	}
 	return out
+}
+
+// SetCSPConnectSrc 覆盖 CSP connect-src 白名单（默认仅同源 + 本地 Tauri 后端）。
+// 用于支持自定义多后端/远程后端地址；调用方需在 Routes() 前设置。
+func (h *Handler) SetCSPConnectSrc(src string) {
+	if src != "" {
+		h.cspConnectSrc = src
+	}
 }
 
 // Shutdown 取消进行中的异步迁移并停止 reap 循环。
@@ -101,7 +113,7 @@ func fromS3Object(o s3wrap.ObjectItem) objectItem {
 
 // ---- helpers ----
 
-const maxBody = 4 << 20 // 4MB request body cap
+const maxBody = 8 << 20 // 8MB request body cap（批量删除/复制可含大量长 key）
 
 // maxZipKeys 限制单次打包的对象数，防止一次请求无界流式输出。
 const maxZipKeys = 1000

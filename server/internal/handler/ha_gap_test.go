@@ -57,7 +57,7 @@ func (m *miniStore) Delete(id string) error {
 
 func newHandlerWithStore(t *testing.T, st store.AccountStore) http.Handler {
 	t.Helper()
-	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), t.TempDir(), nil, "", "test", false)
+	h := New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), t.TempDir(), nil, "", "test", false, false)
 	return h.Routes()
 }
 

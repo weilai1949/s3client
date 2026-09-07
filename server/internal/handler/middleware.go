@@ -18,9 +18,14 @@ func (h *Handler) withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		// 纵深防御：脚本仅允许同源（杜绝注入脚本执行）；内联样式给 Vue 用；
-		// connect 放行任意 http(s) 以支持多服务端后端地址（Tauri/远程）。
+		// connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
+		// 自定义后端/远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
+		connect := h.cspConnectSrc
+		if connect == "" {
+			connect = "'self' http://127.0.0.1:* http://localhost:*"
+		}
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; form-action 'self'")
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src "+connect+"; object-src 'none'; base-uri 'self'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -161,6 +166,18 @@ func (h *Handler) withMetricsGate(next http.Handler) http.Handler {
 	})
 }
 
+// withOpenAPIGate 在未开启 S3C_EXPOSE_OPENAPI 时，对 /api/openapi.json 返回 404，
+// 让外部看不出 API 契约（避免辅助攻击者枚举端点/参数）。
+func (h *Handler) withOpenAPIGate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.exposeOpenAPI && r.URL.Path == "/api/openapi.json" {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // withAuth 在配置了 S3C_TOKEN 时，对 /api/* 强制 Bearer 鉴权。
 // 支持逗号分隔多 token（轮换）；跳过 OPTIONS 预检与 /api/health。
 func (h *Handler) withAuth(next http.Handler) http.Handler {
@@ -177,7 +194,7 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if p == "/api/health" || p == "/api/metrics" || p == "/api/openapi.json" {
+		if p == "/api/health" || p == "/api/metrics" {
 			next.ServeHTTP(w, r)
 			return
 		}

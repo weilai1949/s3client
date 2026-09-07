@@ -106,6 +106,15 @@ describe('api token 存储', () => {
     expect(memSession.getItem('s3c.token')).toBe('legacy-token-1234567890')
   })
 
+  it('tokenPersistent() localStorage 抛异常时返回 false', async () => {
+    // 使 localStorage.getItem 抛异常
+    const orig = memLocal.getItem
+    memLocal.getItem = (() => { throw new Error('boom') }) as any
+    const { api } = await loadApi()
+    expect(api.isTokenPersistent).toBe(false)
+    memLocal.getItem = orig
+  })
+
   it('清空 token 字符串时 sessionStorage 与 localStorage 都被清空', async () => {
     const { api } = await loadApi()
     api.setTokenPersistent(true)
@@ -578,6 +587,56 @@ describe('subscribeMigrateEvents', () => {
     // abort 后不应调用 onError
     expect(onError).not.toHaveBeenCalled()
   })
+
+  it('SSE 解析循环：接收 data 事件并回调 onProgress', async () => {
+    let readCount = 0
+    stubFetch((url: string) => {
+      if (String(url).includes('/events')) {
+        // SSE 流：第一次 read 返回数据，第二次返回 done
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => {
+                readCount++
+                if (readCount === 1) {
+                  return Promise.resolve({
+                    done: false,
+                    value: new TextEncoder().encode(
+                      'event: progress\ndata: {"done":0,"total":10}\n\n'
+                    ),
+                  })
+                }
+                return Promise.resolve({ done: true, value: new Uint8Array(0) })
+              },
+              cancel: vi.fn(),
+            }),
+          },
+        } as any)
+      }
+      // job status 回读
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ done: true, progress: { status: 'done' } }),
+        blob: () => Promise.resolve(new Blob(['ok'])),
+        headers: new Map<string, string>(),
+        body: null,
+      } as any)
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job1', onProgress, onError)
+    // 等待 SSE 解析和后续处理
+    await new Promise((r) => setTimeout(r, 100))
+    abort()
+    expect(onProgress).toHaveBeenCalled()
+  })
 })
 
 // ── directUpload ────────────────────────────────────────────────────────────
@@ -684,5 +743,21 @@ describe('directUpload', () => {
     expect(onProgress).toHaveBeenCalledWith(50)
     inst._fire('load', {})
     await promise
+  })
+
+  it('signal listener 在非 abort 信号时注册', async () => {
+    const XHRMock = createXhrMockClass()
+    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    const { directUpload } = await import('./api')
+    const controller = new AbortController()
+    // 捕获 signal.addEventListener 调用
+    const signalAddEventListener = vi.fn()
+    controller.signal.addEventListener = signalAddEventListener as any
+    const promise = directUpload('https://x', new Blob(['a'] as any) as any, undefined, controller.signal)
+    const inst = XHRMock.getInstances()[0]
+    inst._fire('load', {})
+    await promise
+    // 信号未 abort，监听器应被注册到 signal 上
+    expect(signalAddEventListener).toHaveBeenCalledWith('abort', expect.any(Function), { once: true })
   })
 })

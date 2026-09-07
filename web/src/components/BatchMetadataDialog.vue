@@ -38,8 +38,20 @@ const storageClass = ref('STANDARD_IA')
 
 const errors = ref<BatchMetaError[]>([])
 const result = ref<{ ok: number; failed: number } | null>(null)
+const showAllErrors = ref(false)
 
-const noChange = computed(() => !applyAcl.value && !(applyTags.value && tagsMode.value !== 'none') && !applyStorage.value)
+// 是否实际发生了标签修改：clear 恒为改；replace 需至少有一行非空（key 或 value 有内容）。
+const hasTagChange = computed(() => {
+  if (!applyTags.value) return false
+  if (tagsMode.value === 'clear') return true
+  if (tagsMode.value === 'replace') return tags.value.some((tg) => tg.key || tg.value)
+  return false
+})
+
+const noChange = computed(() => !applyAcl.value && !hasTagChange.value && !applyStorage.value)
+
+// 错误明细：默认只展示前 50 条，可展开显示全部。
+const shownErrors = computed(() => (showAllErrors.value ? errors.value : errors.value.slice(0, 50)))
 
 function close() {
   if (running.value) return
@@ -82,6 +94,7 @@ async function onConfirm() {
   running.value = true
   errors.value = []
   result.value = null
+  showAllErrors.value = false
   progress.done = 0
   progress.total = props.keys.length
 
@@ -100,9 +113,13 @@ async function onConfirm() {
       acl: applyAcl.value ? acl.value : undefined,
       tags: tagsArg,
       storageClass: applyStorage.value ? storageClass.value : undefined,
+      onProgress: (done, total) => {
+        progress.done = done
+        progress.total = total
+      },
     })
     result.value = { ok: out.ok, failed: out.failed }
-    errors.value = out.errors.slice(0, 50)
+    errors.value = out.errors
     progress.done = props.keys.length
     if (out.failed === 0) {
       toast(tf('batchEdit.done', { ok: out.ok, failed: 0 }), 'ok')
@@ -112,9 +129,11 @@ async function onConfirm() {
       emit('done', { ok: out.ok, failed: out.failed })
     }
   } catch (e) {
+    // batchSetMetadata 只会对 per-key 错误返回部分结果；此处 catch 覆盖真正的 throw
+    // （如 key 超限等输入量级错误 / 网络层异常）。step 用通用 'batch'，不再硬编码 'acl'。
     const msg = toErrorMessage(e)
     result.value = { ok: 0, failed: props.keys.length }
-    errors.value = [{ key: '*', step: 'acl', message: msg }]
+    errors.value = [{ key: '*', step: 'batch', message: msg }]
     toast(tf('batchEdit.fatalError', { msg }), 'err')
     emit('done', { ok: 0, failed: props.keys.length })
   } finally {
@@ -183,15 +202,19 @@ void s3api
     <div v-if="running || result" class="status" aria-live="polite">
       <span v-if="running">{{ tf('batchEdit.running', { done: progress.done, total: progress.total }) }}</span>
       <span v-else-if="result">{{ tf('batchEdit.done', { ok: result.ok, failed: result.failed }) }}</span>
+      <progress v-if="running" class="progress bar" :max="progress.total || 1" :value="progress.done"></progress>
     </div>
 
     <div v-if="errors.length" class="errors">
-      <strong>{{ tf('batchEdit.errors', { n: errors.length }) }}</strong>
+      <strong>{{ tf('batchEdit.errors', { n: shownErrors.length }) }}</strong>
       <ul>
-        <li v-for="(e, i) in errors" :key="i">
+        <li v-for="(e, i) in shownErrors" :key="i">
           <code>{{ e.key }}</code> · {{ e.step }} · {{ e.message }}
         </li>
       </ul>
+      <button v-if="errors.length > 50" class="link" type="button" @click="showAllErrors = !showAllErrors">
+        {{ showAllErrors ? t('batchEdit.showLess') : tf('batchEdit.showMore', { n: errors.length }) }}
+      </button>
     </div>
 
     <template #footer>
@@ -253,6 +276,11 @@ legend {
   margin: 8px 0;
   color: var(--brand);
   font-size: 13px;
+}
+.progress.bar {
+  width: 100%;
+  margin-top: 4px;
+  height: 6px;
 }
 .errors {
   margin: 8px 0;

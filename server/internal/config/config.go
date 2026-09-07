@@ -60,6 +60,8 @@ type Config struct {
 	StoreKey           string   // encrypted 模式必填；Argon2id+盐派生（仅 S3C2）
 	ShutdownTimeoutSec int      // SIGTERM 后等待活跃连接结束的最长时间（秒）
 	ExposeMetrics      bool     // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
+	ExposeOpenAPI      bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
+	CSPConnectSrc      string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
 }
 
 func envOr(key, def string) string {
@@ -97,6 +99,8 @@ func FromEnv() Config {
 		StoreKey:           os.Getenv("S3C_STORE_KEY"),
 		ShutdownTimeoutSec: envOrInt("S3C_SHUTDOWN_TIMEOUT", 30),
 		ExposeMetrics:      envTruthy("S3C_EXPOSE_METRICS"),
+		ExposeOpenAPI:      envTruthy("S3C_EXPOSE_OPENAPI"),
+		CSPConnectSrc:      envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
 	}
 }
 

@@ -26,7 +26,8 @@ export function resolvedTheme(): 'light' | 'dark' {
 
 /** 应用主题到 <html data-theme>，供 styles.css 的 [data-theme=...] 选择器使用。 */
 export function applyTheme(t: Theme = readTheme()) {
-  document.documentElement.dataset.theme = resolvedTheme()
+  const resolved = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t
+  document.documentElement.dataset.theme = resolved
   localStorage.setItem(LS_THEME, t)
 }
 

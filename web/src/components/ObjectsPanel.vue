@@ -170,6 +170,11 @@ const {
 } = actions
 
 const { preview, showPreview, ctxPreview } = previewComposable
+
+/** 错误横幅手动关闭（E-4：瞬态错误可不依赖自动消失）。 */
+function dismissError() {
+  error.value = ''
+}
 </script>
 
 <template>
@@ -252,7 +257,7 @@ const { preview, showPreview, ctxPreview } = previewComposable
 
       <!-- 快捷键提示条（可关闭） -->
       <div v-if="!hintsHidden" class="hints-bar">
-        <span>⌨️ {{ t('objects.hintsLabel') }}</span>
+        <span aria-hidden="true">⌨️</span> <span>{{ t('objects.hintsLabel') }}</span>
         <kbd>Enter</kbd> {{ t('objects.hintEnter') }}
         <kbd>F2</kbd> {{ t('objects.hintRename') }}
         <kbd>Delete</kbd> {{ t('objects.hintDelete') }}
@@ -261,8 +266,9 @@ const { preview, showPreview, ctxPreview } = previewComposable
         <button class="link" @click="hideHints">{{ t('objects.hintsDismiss') }}</button>
       </div>
 
-      <div v-if="error" class="msg err" style="margin-bottom:10px">
+      <div v-if="error" class="msg err" style="margin-bottom:10px" role="alert">
         <span style="flex:1">{{ error }}</span>
+        <button class="link" style="flex:none" @click="dismissError">{{ t('common.close') }}</button>
         <button class="link" style="flex:none" @click="refreshAll">{{ t('common.retry') }}</button>
       </div>
 

@@ -65,7 +65,8 @@ func runServer(ctx context.Context) int {
 	}
 	defer func() { _ = st.Close() }()
 
-	h := handler.New(st, logger, cfg.StaticDir, cfg.CORSOrigins, cfg.Token, version, cfg.ExposeMetrics)
+	h := handler.New(st, logger, cfg.StaticDir, cfg.CORSOrigins, cfg.Token, version, cfg.ExposeMetrics, cfg.ExposeOpenAPI)
+	h.SetCSPConnectSrc(cfg.CSPConnectSrc)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

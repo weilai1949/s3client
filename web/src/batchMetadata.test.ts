@@ -98,4 +98,25 @@ describe('batchSetMetadata', () => {
     const body = callsPutObjectTags[0].body as { tags: unknown[] }
     expect(body.tags).toEqual([])
   })
+
+  it('concurrent batch: more keys than BATCH_META_CONCURRENCY triggers Promise.race (lines 89-90)', async () => {
+    const { s3api } = await import('./api')
+    // Slow ACL calls so the 4th key has to wait (inflight.size >= 4 → Promise.race)
+    let callCount = 0
+    vi.mocked(s3api.putObjectAcl).mockImplementation((async () => {
+      callCount++
+      await new Promise<void>((resolve) => setTimeout(resolve, 50))
+      return { acl: 'private' }
+    }) as typeof s3api.putObjectAcl)
+
+    const keys = Array.from({ length: 8 }, (_, i) => `key${i}.txt`)
+    const out = await batchSetMetadata({
+      accountId: 'acc-1',
+      keys,
+      acl: 'private',
+    })
+    expect(out.ok).toBe(8)
+    expect(out.failed).toBe(0)
+    expect(callCount).toBe(8)
+  })
 })

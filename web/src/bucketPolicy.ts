@@ -4,6 +4,10 @@
  * 设计取舍：把 Statement 拆为 Effect / Principal / Action[] / Resource[] / Condition?
  * 不支持嵌套 NotPrincipal / NotAction（国内云厂商控制台一般也不暴露），保持 UX 简单。
  * Sid 可选；同名 Sid 在 S3 后端会被去重/拒绝，编辑时会自动补 UUID。
+ *
+ * 回退行为：当策略含 NotPrincipal / 嵌套 / 数组 Principal 等可视化不支持的复杂结构时，
+ * parsePolicy 返回 null，UI 会切换到「原始 JSON」模式并明确提示该结构需用原始 JSON 编辑，
+ * 避免用户误以为已解析为可视化结构。
  */
 export interface PolicyStatement {
   /** 可选 sid（AWS 标识）；留空时编辑器自动生成。 */
@@ -101,7 +105,7 @@ function principalToJSON(p: string): Record<string, string> | string {
   return p === '*' ? '*' : { AWS: p }
 }
 
-function normalizeStringArray(v: unknown): string[] | null {
+export function normalizeStringArray(v: unknown): string[] | null {
   if (v == null) return null
   if (typeof v === 'string') return [v]
   if (Array.isArray(v)) {
@@ -111,7 +115,7 @@ function normalizeStringArray(v: unknown): string[] | null {
   return null
 }
 
-/** 常用桶策略模板（控制台习惯：单键应用）。 */
+/** 常用桶策略模板（控制台习惯：单键应用）。label 为 i18n 键，展示时经 t() 翻译。 */
 export interface PolicyTemplate {
   id: string
   label: string
@@ -121,7 +125,7 @@ export interface PolicyTemplate {
 export const POLICY_TEMPLATES: PolicyTemplate[] = [
   {
     id: 'public-read',
-    label: '公共读（GetObject）',
+    label: 'policy.tplPublicRead',
     build: (bucket) => ({
       Version: '2012-10-17',
       Statement: [
@@ -137,7 +141,7 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
   },
   {
     id: 'public-read-write',
-    label: '公共读写',
+    label: 'policy.tplPublicReadWrite',
     build: (bucket) => ({
       Version: '2012-10-17',
       Statement: [
@@ -153,7 +157,7 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
   },
   {
     id: 'deny-list',
-    label: '拒绝 List（仅写允许）',
+    label: 'policy.tplDenyList',
     build: (bucket) => ({
       Version: '2012-10-17',
       Statement: [
@@ -169,7 +173,7 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
   },
   {
     id: 'clear',
-    label: '清空策略',
+    label: 'policy.tplClear',
     build: () => ({ Version: '2012-10-17', Statement: [] }),
   },
 ]

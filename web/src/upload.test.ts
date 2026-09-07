@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./api', () => ({
   s3api: {
@@ -13,6 +13,32 @@ vi.mock('./api', () => ({
 
 import { MULTIPART_THRESHOLD, calcMultipartParts, shouldUseMultipart, withRetries, uploadObject } from './upload'
 import { s3api, directUpload } from './api'
+
+// Factory for mock XHR instances
+function createMockXHR() {
+  const handlers: Record<string, jest.Mock | null> = {
+    onload: null,
+    onerror: null,
+    onabort: null,
+  }
+  return {
+    open: vi.fn(),
+    send: vi.fn(() => {
+      handlers.onload?.()
+    }),
+    setRequestHeader: vi.fn(),
+    upload: { onprogress: null },
+    status: 200,
+    getResponseHeader: vi.fn(() => 'etag-1'),
+    get onload() { return handlers.onload },
+    set onload(fn) { handlers.onload = fn },
+    get onerror() { return handlers.onerror },
+    set onerror(fn) { handlers.onerror = fn },
+    get onabort() { return handlers.onabort },
+    set onabort(fn) { handlers.onabort = fn },
+    abort: vi.fn(() => { handlers.onabort?.() }),
+  }
+}
 
 describe('upload multipart helpers', () => {
   it('calcMultipartParts rounds up', () => {
@@ -102,6 +128,14 @@ describe('withRetries', () => {
 })
 
 describe('uploadObject', () => {
+  beforeEach(() => {
+    vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('small file uses presign + directUpload', async () => {
     const file = new File(['small'], 'small.txt', { type: 'text/plain' })
     s3api.presign.mockResolvedValue({ url: 'https://presigned.url' })
@@ -112,7 +146,14 @@ describe('uploadObject', () => {
   })
 
   it('large file uses multipart upload', async () => {
-    const file = new File([new ArrayBuffer(MULTIPART_THRESHOLD)], 'large.bin', { type: 'application/octet-stream' })
+    // Use a proxy object to avoid allocating 100MB for the file
+    const realFile = new File(['small'], 'large.bin', { type: 'application/octet-stream' })
+    const file = new Proxy(realFile, {
+      get(target, prop) {
+        if (prop === 'size') return MULTIPART_THRESHOLD
+        return (target as any)[prop]
+      }
+    }) as File
     s3api.multipartInit.mockResolvedValue({ uploadId: 'up1', key: 'large.bin', bucket: 'mybucket' })
     s3api.multipartPart.mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     s3api.multipartComplete.mockResolvedValue({ completed: 'ok' })

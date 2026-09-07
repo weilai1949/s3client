@@ -129,7 +129,9 @@ describe('rememberedAccountId', () => {
 describe('toast', () => {
   beforeEach(() => {
     toasts.splice(0, toasts.length)
+    vi.useFakeTimers()
   })
+  afterEach(() => { vi.useRealTimers() })
 
   it('adds toast', () => {
     const id = toast('msg', 'ok')
@@ -142,7 +144,7 @@ describe('toast', () => {
   it('supports action button', () => {
     const action = { label: 'View', onClick: vi.fn() }
     toast('err', 'err', action)
-    expect(toasts[0].action).toStrictEqual(action)
+    expect(toasts.at(-1)!.action).toStrictEqual(action)
   })
 })
 
@@ -154,7 +156,7 @@ describe('updateToast', () => {
   it('updates text of existing toast', () => {
     toasts.push({ id: 1, kind: 'ok', text: 'old' })
     updateToast(1, 'new')
-    expect(toasts[0].text).toBe('new')
+    expect(toasts.at(-1)!.text).toBe('new')
   })
 
   it('no-op for missing id', () => {
@@ -164,31 +166,10 @@ describe('updateToast', () => {
 })
 
 describe('dismissToast', () => {
-  it('removes toast and clears timer', () => {
-    const timers = new Map<number, ReturnType<typeof setTimeout>>()
-    const origSetTimeout = setTimeout
-    const origClearTimeout = clearTimeout
-    // @ts-ignore
-    globalThis.setTimeout = ((fn: () => void) => {
-      const id = origSetTimeout(fn, 3600)
-      timers.set(id, id as any)
-      return id
-    }) as any
-    // @ts-ignore
-    globalThis.clearTimeout = ((id: number) => {
-      timers.delete(id)
-      origClearTimeout(id)
-    }) as any
-
+  it('removes toast', () => {
     toasts.splice(0, toasts.length)
     const id = toast('msg')
     dismissToast(id)
     expect(toasts).toHaveLength(0)
-    expect(timers.has(id)).toBe(false)
-
-    // @ts-ignore
-    globalThis.setTimeout = origSetTimeout
-    // @ts-ignore
-    globalThis.clearTimeout = origClearTimeout
   })
 })

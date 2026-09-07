@@ -89,7 +89,8 @@ func (h *Handler) Routes() http.Handler {
 	spa := http.FileServer(http.Dir(h.staticDir))
 	mux.Handle("/", h.spaHandler(spa))
 
-	return h.withLogging(h.withSecurityHeaders(h.withCORS(h.withAuth(h.withMetricsGate(h.withRateLimit(mux))))))
+	// withOpenAPIGate 在 auth 外层：未开启时 openapi.json 直接 404（不暴露端点信息）。
+	return h.withLogging(h.withSecurityHeaders(h.withCORS(h.withOpenAPIGate(h.withAuth(h.withMetricsGate(h.withRateLimit(mux)))))))
 }
 
 func (h *Handler) spaHandler(fs http.Handler) http.Handler {

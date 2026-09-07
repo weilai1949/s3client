@@ -28,6 +28,8 @@
 - `writeInternalErr`：可识别 S3 错误 → `s3HTTPStatus` + `s3UserMessage`；否则 500 + 通用文案。
 - 批量操作：`lastError` / `failedKeys` 使用 `failed at {key}: {UserMessage}`。
 - 响应 JSON：`{"error":"..."}`（见 `docs/API.md`）。
+- `POST /api/migrate/sync`：`mode` 非法 → 400 `mode must be etag, size_mtime or always`；账号不存在 → 404；账号配置无效 → 400 `invalid ... account configuration`；成功返回 `scanned/skipped/copied/failed/failedKeys/lastError`（见 `API.md`）。
+- `GET /api/openapi.json`：默认（未设置 `S3C_EXPOSE_OPENAPI=1`）→ 404（不暴露 API 契约）；开启后配置了 `S3C_TOKEN` 时需 Bearer 鉴权，否则 401 `unauthorized`。
 
 ## 前端
 
