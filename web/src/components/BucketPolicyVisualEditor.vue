@@ -258,8 +258,10 @@ const templateLabels: Record<string, string> = {
       </template>
     </div>
 
+    <label for="policy-json-area" class="sr-only">{{ t('policy.jsonMode') }}</label>
     <textarea
       v-else
+      id="policy-json-area"
       class="mono policy-area"
       :value="raw"
       spellcheck="false"
@@ -269,6 +271,17 @@ const templateLabels: Record<string, string> = {
 </template>
 
 <style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .tpl-row {
   border: 1px dashed var(--border);
   border-radius: var(--radius);

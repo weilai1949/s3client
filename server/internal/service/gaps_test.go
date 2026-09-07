@@ -366,11 +366,20 @@ func TestMigrateKeysDifferentEndpointStreamsAndAggregates(t *testing.T) {
 }
 
 func TestSameEndpointNormalizeEdges(t *testing.T) {
-	if !SameEndpoint(" http://A.com/ ", "a.com") {
-		t.Fatal("normalize should match scheme/host case/trailing slash")
+	if !SameEndpoint(" http://A.com/ ", "us-east-1", "a.com", "eu-west-1") {
+		t.Fatal("normalize should match scheme/host case/trailing slash (region irrelevant once endpoint set)")
 	}
-	if SameEndpoint("", "x") || SameEndpoint("  ", "  ") {
-		t.Fatal("empty endpoints never equal")
+	if SameEndpoint("", "us-east-1", "x", "us-east-1") {
+		t.Fatal("empty vs explicit endpoint must never be equal")
+	}
+	if SameEndpoint("", "us-east-1", "", "eu-west-1") {
+		t.Fatal("both default endpoints with different regions must not be equal")
+	}
+	if !SameEndpoint("", "us-east-1", "", "us-east-1") {
+		t.Fatal("both default endpoints in same region must be equal")
+	}
+	if !SameEndpoint("  ", "  ", "  ", "  ") {
+		t.Fatal("both blank endpoint+region should normalize to default and be equal")
 	}
 }
 

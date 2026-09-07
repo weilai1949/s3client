@@ -160,8 +160,10 @@ void s3api
       </select>
       <div v-if="applyTags && tagsMode === 'replace'" style="margin-top:8px">
         <div v-for="(tg, i) in tags" :key="i" class="tag-row">
-          <input v-model="tg.key" type="text" placeholder="key" />
-          <input v-model="tg.value" type="text" placeholder="value" />
+          <label class="sr-only" :for="'batch-tag-key-' + i">{{ t('batchEdit.tagKey') }}</label>
+          <input :id="'batch-tag-key-' + i" v-model="tg.key" type="text" :placeholder="t('batchEdit.tagKey')" />
+          <label class="sr-only" :for="'batch-tag-val-' + i">{{ t('batchEdit.tagValue') }}</label>
+          <input :id="'batch-tag-val-' + i" v-model="tg.value" type="text" :placeholder="t('batchEdit.tagValue')" />
           <button class="btn sm danger" type="button" @click="removeTagRow(i)">×</button>
         </div>
         <button class="btn sm" type="button" @click="addTagRow">+</button>
@@ -202,6 +204,17 @@ void s3api
 </template>
 
 <style scoped>
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 fieldset {
   border: 1px solid var(--border);
   border-radius: var(--radius);

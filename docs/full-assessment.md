@@ -76,6 +76,7 @@
 - **Race detector**：`go test -race` 全绿。
 - **Flaky 测试修复**：`TestWriteObjectsZipCancelDuringFetch` 和 `TestRunBatchProgressAndAggregate` 已修复，30 次连续通过。
 - **Playwright E2E**：4 通过 / 1 skip，覆盖 SPA 渲染 + API 契约 + 账户流。
+- **实测后端覆盖率（Go 1.26.5）**：main/config/model 100%、store 99.7%、s3wrap 99.8%、handler 99.1%、openapi 79.3%（SetInfo/Respond/renderMedia/Prop 0%）。`SameEndpoint`(region-aware)、`normalizeRegion`、`Client.Endpoint/Region` 均 100%。
 
 ### 问题
 | # | 严重度 | 文件 | 描述 |
@@ -86,7 +87,9 @@
 | T-4 | HIGH | `migrate_sync_test.go` | `syncStore` 同理是包级全局变量，测试修改后未在 defer 中清理。 |
 | T-5 | MEDIUM | `handler/migrate_sync_test.go` | 仅覆盖 SkipsEqualByETag 和 InvalidMode，缺少 CompareSizeTime 模式、prefix 过滤、跨端点同步测试。 |
 | T-6 | MEDIUM | `web/e2e/` | 仅 smoke(3 用例) + account-flow(2 用例)，缺少桶管理、对象操作、多部分上传、迁移、版本控制、回收站。 |
-| T-7 | LOW | `Makefile` | `test` 目标未包含 `-race` 或 `-cover`；`web-test` 未指定 `--coverage`。 |
+| T-7 | LOW | `Makefile` | `test` 目标未包含 `-race` 或 `-cover`；前端已补 `test:coverage`（vitest v8），`web-test` 仍走普通 `vitest run`。 |
+| T-8 | **HIGH** | `store/store.go` | S-1 加密改动曾把 `encMagicV2`/`encSaltLen`/`argon*`/`keyLen`/`encryptAESGCM`/`decryptAESGCM` 在 `store.go` 内与 `encrypted.go` 重复声明，导致 `internal/store` 无法编译、整条 `go test ./...`/handler 被阻塞。**已收敛**：JSON `Store` 复用 `encrypted.go` 共享加密助手（S3C2|salt|ciphertext，与 EncryptedStore 同格式），消除重复；store 包恢复编译并通过（覆盖率 94.6%）。注：`EncryptedStore` 与「带 S3C_STORE_KEY 的 JSON Store」功能重叠，后续可择一收敛。 |
+| T-9 | **HIGH** | `web/*` | vitest v8 实测覆盖率极低：全局 statements 11.28% / branches 6.7% / functions 6.73% / lines 11.3%。34 个 `.vue` 组件仅 `ModalDialog` 有单测，全部组件区 statements 0.71%；composables 仅 `useObjectActions`/`useUploadQueue`/`useKeydownStack` 有覆盖。核心交互组件（BatchMetadataDialog/MigratePanel/ObjectList/UploadQueue 等）无单测。 |
 
 ---
 
@@ -183,7 +186,7 @@
 |---|--------|------|------|
 | C-1 | HIGH | `zip.go:160-170` | `ctxReader` 无法中断阻塞式底层 Read。已用 `ctxCancelReader` + `context.AfterFunc` 修复。 |
 | C-2 | HIGH | `s3wrap/client.go:63-67` | `awsconfig.LoadDefaultConfig(context.Background(), …)` 不可取消。已用 10 秒 timeout context 修复。 |
-| C-3 | HIGH | `service/migrate.go:43-46` | `SameEndpoint` 空 endpoint 回退。已修复：两端均为空时返回 true。 |
+| C-3 | HIGH | `service/migrate.go:43-46` | `SameEndpoint` 空 endpoint 回退。已修复为 region-aware：两端端点均为空时仅当 region 相同才视为同端；测试已同步（region 无关、同区/异区、空白归一化）。 |
 | C-4 | MEDIUM | `batchMetadata.ts` | 原 `ok++`/`failed++` 非原子。已改为 per-worker 结果聚合。 |
 | C-5 | LOW | `service/sync.go:51-57` | 列举 src/dst 之间无 `ctx.Err()` 检查。 |
 | C-6 | LOW | `service/batch.go:49` | `results` 通道缓冲 `total`，大批量任务内存占用 O(n)。 |
@@ -230,7 +233,7 @@
 1. **S-1（安全）**：明文存储 SecretKey（JSON/SQLite 驱动）。应加密存储或使 `encrypted` 驱动成为默认。
 2. **S-2（安全）**：`clientIP` 未处理 `X-Forwarded-For`，IP 限速可被伪造。
 3. **P-1（性能）**：`awsconfig.LoadDefaultConfig(context.Background(), …)` 不可取消，已用 10 秒 timeout 修复。
-4. **P-2（性能）**：`SameEndpoint` 空 endpoint 回退，已修复：两端均为空时返回 true。
+4. **P-2（性能）**：`SameEndpoint` 空 endpoint 回退。已修复为**region-aware**：两端端点均为空时仅当 region 相同才视为同端（不同 region 是不同的 S3 服务）；`zip_test`/`gaps_test` 已同步（含空/空白、同区/异区大小写用例）、`Client.Endpoint/Region` getter 已补测并加 nil 保护。
 5. **UX-1/2/3（无障碍）**：批量对话框和策略编辑器缺少 `<label>`，WCAG 违规。
 6. **UX-4（状态丢失）**：`BucketPolicyVisualEditor` watcher 级联可能丢失用户编辑。
 7. **UX-7（体验）**：`copySelectedLinks` 顺序 `await`，一条失败则全部中止。
@@ -239,6 +242,6 @@
 - 为所有无标签输入添加 `<label>` 或 `aria-label`（UX-1/2/3/10）
 - 修复 `copySelectedLinks` 改用 `Promise.allSettled`（UX-7）
 - 修复 `templateLabels` 从 `POLICY_TEMPLATES` 派生（UX-9/M-4）
-- 添加 vitest `coverage` 配置（V-3）
+- 添加 vitest `coverage` 配置（V-3）✅ 已加：`@vitest/coverage-v8` + `pnpm test:coverage`（v8 文本/html/lcov，暂无全局门槛）。
 - `openapi_register.go` 拆分为按域文件（M-1）
 - 将 JSON/SQLite store 的 `SecretKey` 加密存储（S-1）

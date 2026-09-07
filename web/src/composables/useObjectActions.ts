@@ -351,22 +351,33 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     }
   }
 
-  /** 批量复制所选文件的 1 小时签名链接（每行一个）。 */
+  /** 批量复制所选文件的 1 小时签名链接（每行一个）。失败项不中断其余项。 */
   async function copySelectedLinks() {
     const keys = ctx.fileObjects.value.filter((o) => ctx.selected.value.has(o.key))
     if (!keys.length) return
     try {
+      const results = await Promise.allSettled(
+        keys.map((o) =>
+          s3api.presign(requireAccId(), {
+            method: 'get',
+            key: o.key,
+            bucket: ctx.currentBucket.value,
+            expiresIn: 3600,
+          }),
+        ),
+      )
       const urls: string[] = []
-      for (const o of keys) {
-        const res = await s3api.presign(requireAccId(), {
-          method: 'get',
-          key: o.key,
-          bucket: ctx.currentBucket.value,
-          expiresIn: 3600,
-        })
-        urls.push(res.url)
+      const failed: string[] = []
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i]
+        if (r.status === 'fulfilled') {
+          urls.push(r.value.url)
+        } else {
+          failed.push(keys[i].key)
+        }
       }
-      copyTextAndToast(urls.join('\n'), tf('objects.toastCopiedLinks', { n: urls.length }))
+      if (urls.length) copyTextAndToast(urls.join('\n'), tf('objects.toastCopiedLinks', { n: urls.length }))
+      if (failed.length) ctx.error.value = tf('objects.toastCopyFailed', { n: failed.join(', ') })
     } catch (err) {
       ctx.error.value = toErrorMessage(err)
     }

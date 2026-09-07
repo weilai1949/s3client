@@ -39,10 +39,24 @@ func MigrateKeys(
 		onProgress)
 }
 
-// SameEndpoint 比较两个 endpoint（保留 scheme，去尾斜杠，缺省补 http://）。
-func SameEndpoint(a, b string) bool {
-	na, nb := normalizeEndpoint(a), normalizeEndpoint(b)
-	return na != "" && nb != "" && na == nb
+// SameEndpoint 判断两个 S3 配置是否指向同一服务端：
+//   - 端点均显式配置：比较端点（去尾斜杠、补全 scheme、忽略大小写），等则视为同端。
+//   - 端点均为空（使用 S3 默认端点）：仅当 region 相同才视为同端（不同 region 是不同的 S3 服务）。
+//   - 其余情况视为异端。
+func SameEndpoint(aEndpoint, aRegion, bEndpoint, bRegion string) bool {
+	na, nb := normalizeEndpoint(aEndpoint), normalizeEndpoint(bEndpoint)
+	if na != "" && nb != "" {
+		return na == nb
+	}
+	if na == "" && nb == "" {
+		return normalizeRegion(aRegion) == normalizeRegion(bRegion)
+	}
+	return false
+}
+
+// normalizeRegion 归一化 region 用于比较（trim + 忽略大小写）。
+func normalizeRegion(r string) string {
+	return strings.ToLower(strings.TrimSpace(r))
 }
 
 func normalizeEndpoint(ep string) string {

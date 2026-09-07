@@ -35,10 +35,18 @@ type Client struct {
 // Endpoint 返回该客户端配置的 endpoint（含 scheme；空表示未配置）。
 // 用于跨账号 endpoint 比对（service.SameEndpoint）。
 func (c *Client) Endpoint() string {
-	if c.acc == nil {
+	if c == nil || c.acc == nil {
 		return ""
 	}
 	return c.acc.Endpoint
+}
+
+// Region 返回该客户端配置的 region。用于对「均使用默认端点」的账号做同/异端判定。
+func (c *Client) Region() string {
+	if c == nil || c.acc == nil {
+		return ""
+	}
+	return c.acc.Region
 }
 
 // New 根据账号构建 S3 客户端与预签名客户端。
@@ -60,7 +68,10 @@ func New(acc *model.Account) (*Client, error) {
 	if region == "" {
 		region = "us-east-1"
 	}
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
+	// 配置加载使用 10 秒超时，防止不可达 endpoint 永久阻塞 handler goroutine。
+	cfgCtx, cfgCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cfgCancel()
+	cfg, err := awsconfig.LoadDefaultConfig(cfgCtx,
 		awsconfig.WithRegion(region),
 		awsconfig.WithCredentialsProvider(creds),
 		awsconfig.WithHTTPClient(sharedHTTPClient()),

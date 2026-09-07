@@ -2,6 +2,7 @@ package s3wrap
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,16 @@ func TestValidateUserMetadata(t *testing.T) {
 		{"non-printable key", map[string]string{"a\x01b": "v"}, true},
 		{"invalid utf8 value", map[string]string{"k": string([]byte{0xff, 0xfe, 0xfd})}, true},
 		{"total too big", map[string]string{"k1": mk(1000), "k2": mk(1000), "k3": mk(200)}, true},
+		// Each pair is individually valid (value ≤ 256), but the sum of all
+		// key+value lengths exceeds MaxUserMetaTotalLen, exercising the total-size
+		// branch (the prior "total too big" case trips the per-value length limit first).
+		{"total too big via many pairs", func() map[string]string {
+			m := map[string]string{}
+			for i := 0; i < 30; i++ {
+				m[fmt.Sprintf("key%d", i)] = mk(100)
+			}
+			return m
+		}(), true},
 		{"total under limit", map[string]string{"k1": mk(100), "k2": mk(100)}, false},
 	}
 	for _, c := range cases {

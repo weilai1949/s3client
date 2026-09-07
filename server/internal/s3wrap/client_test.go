@@ -158,3 +158,25 @@ func TestPresignedPutURLContainsSigV4Parameters(t *testing.T) {
 		t.Fatal("X-Amz-Signature should be present")
 	}
 }
+
+// TestClientEndpointRegionGetter 覆盖 Endpoint()/Region() 读取路径（用于 service.SameEndpoint 同/异端判定）。
+func TestClientEndpointRegionGetter(t *testing.T) {
+	c, _ := newFakeS3Account(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}), func(a *model.Account) {
+		a.Endpoint = "http://minio:9000"
+		a.Region = "eu-west-1"
+	})
+	if got := c.Endpoint(); got != "http://minio:9000" {
+		t.Fatalf("Endpoint() = %q, want http://minio:9000", got)
+	}
+	if got := c.Region(); got != "eu-west-1" {
+		t.Fatalf("Region() = %q, want eu-west-1", got)
+	}
+	// nil 安全：空客户端返回空串，不 panic。
+	var nilClient *Client
+	if got := nilClient.Endpoint(); got != "" {
+		t.Fatalf("nil Endpoint() = %q, want empty", got)
+	}
+	if got := nilClient.Region(); got != "" {
+		t.Fatalf("nil Region() = %q, want empty", got)
+	}
+}

@@ -64,7 +64,14 @@ func (l *ipLimiter) reapLocked(now time.Time) {
 }
 
 func clientIP(r *http.Request) string {
-	// 仅信任直连 RemoteAddr（本服务通常置于 nginx 后；XFF 可伪造，生产应在边缘限速）。
+	// 优先 X-Forwarded-For（需信任反向代理），回退 RemoteAddr。
+	// 生产环境应仅信任已知代理 IP，避免 XFF 伪造。
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.Index(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

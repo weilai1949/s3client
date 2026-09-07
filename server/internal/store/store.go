@@ -1,15 +1,19 @@
 package store
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/argon2"
+
 	"github.com/weilai1949/s3clinet/server/internal/model"
 )
 
@@ -18,26 +22,44 @@ var (
 )
 
 // Store 基于 JSON 文件持久化的账号存储，进程内带读写锁保护。
+// 当 S3C_STORE_KEY 非空时，SecretKey 在落盘时 AES-256-GCM 加密。
 type Store struct {
 	mu       sync.RWMutex
 	path     string
+	key      []byte // nil = 不加密（兼容无 S3C_STORE_KEY 的旧文件）
 	accounts map[string]*model.Account
 	order    []string // 保持创建顺序，便于列表展示稳定
 }
 
 // New 创建 store 并从 path 加载已有数据。
+// 若环境变量 S3C_STORE_KEY 非空，SecretKey 落盘时加密。
 func New(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
+	key := keyFromEnv()
 	s := &Store{
 		path:     path,
+		key:      key,
 		accounts: make(map[string]*model.Account),
 	}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// keyFromEnv 从 S3C_STORE_KEY 派生 AES-256 密钥（Argon2id，与 EncryptedStore 一致）。
+func keyFromEnv() []byte {
+	pw := os.Getenv("S3C_STORE_KEY")
+	if pw == "" {
+		return nil
+	}
+	salt := make([]byte, encSaltLen)
+	// 盐用固定派生值（非随机），确保同一密钥始终得到同一 AES 密钥。
+	// 安全假设：S3C_STORE_KEY 本身是强密钥。
+	dk := argon2.IDKey([]byte(pw), salt, argonTime, argonMemory, argonThreads, keyLen)
+	return dk
 }
 
 func (s *Store) load() error {
@@ -50,6 +72,20 @@ func (s *Store) load() error {
 	}
 	if len(data) == 0 {
 		return nil
+	}
+	// 支持加密文件（S3C2 魔数头）与明文文件（向后兼容）。
+	if s.key != nil && strings.HasPrefix(string(data), string(encMagicV2)) {
+		if len(data) < 4+encSaltLen {
+			return fmt.Errorf("encrypted account file too short")
+		}
+		salt := make([]byte, encSaltLen)
+		copy(salt, data[4:4+encSaltLen])
+		key := argon2.IDKey([]byte(os.Getenv("S3C_STORE_KEY")), salt, argonTime, argonMemory, argonThreads, keyLen)
+		plain, derr := decryptAESGCM(key, data[4+encSaltLen:])
+		if derr != nil {
+			return fmt.Errorf("decrypt account file: %w", derr)
+		}
+		data = plain
 	}
 	var list []*model.Account
 	if err := json.Unmarshal(data, &list); err != nil {
@@ -187,5 +223,22 @@ func (s *Store) persistLocked() error {
 	}
 	// model.Account 字段全部为基本类型/时间，MarshalIndent 不会失败。
 	data, _ := json.MarshalIndent(list, "", "  ")
+	if s.key != nil {
+		// 加密落盘：AES-256-GCM，格式 S3C2|salt|ciphertext。
+		salt := make([]byte, encSaltLen)
+		if _, err := rand.Read(salt); err != nil {
+			return err
+		}
+		key := argon2.IDKey([]byte(os.Getenv("S3C_STORE_KEY")), salt, argonTime, argonMemory, argonThreads, keyLen)
+		enc, err := encryptAESGCM(key, data)
+		if err != nil {
+			return err
+		}
+		out := make([]byte, 0, 4+encSaltLen+len(enc))
+		out = append(out, []byte(encMagicV2)...)
+		out = append(out, salt...)
+		out = append(out, enc...)
+		data = out
+	}
 	return atomicWriteFile(s.path, data)
 }

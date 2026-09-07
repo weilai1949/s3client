@@ -86,19 +86,25 @@ func TestWriteObjectsZipParallel(t *testing.T) {
 
 func TestSameEndpoint(t *testing.T) {
 	cases := []struct {
-		a, b string
-		want bool
+		name               string
+		aEndpoint, aRegion string
+		bEndpoint, bRegion string
+		want               bool
 	}{
-		{"http://minio:9000", "http://minio:9000/", true},
-		{"https://a.com", "http://a.com", false},
-		{"https://a.com", "https://a.com/", true},
-		{"http://a.com", "http://b.com", false},
-		{"", "http://localhost:9000", false},
-		{"", "", false},
+		{"explicit equal, trailing slash", "http://minio:9000", "us-east-1", "http://minio:9000/", "us-east-1", true},
+		{"scheme differs", "https://a.com", "us-east-1", "http://a.com", "us-east-1", false},
+		{"https trailing slash", "https://a.com", "us-east-1", "https://a.com/", "us-east-1", true},
+		{"different hosts", "http://a.com", "us-east-1", "http://b.com", "us-east-1", false},
+		{"empty vs explicit", "", "us-east-1", "http://localhost:9000", "us-east-1", false},
+		{"both blank default", "  ", "  ", "  ", "  ", true},
+		{"both empty same region", "", "us-east-1", "", "us-east-1", true},
+		{"both empty different region", "", "us-east-1", "", "eu-west-1", false},
+		{"both empty region case/trim", "", " eu-west-1 ", "", "EU-WEST-1", true},
+		{"explicit same endpoint ignores region", "http://a.com", "us-east-1", "http://a.com", "eu-west-1", true},
 	}
 	for _, c := range cases {
-		if got := SameEndpoint(c.a, c.b); got != c.want {
-			t.Errorf("SameEndpoint(%q,%q)=%v want %v", c.a, c.b, got, c.want)
+		if got := SameEndpoint(c.aEndpoint, c.aRegion, c.bEndpoint, c.bRegion); got != c.want {
+			t.Errorf("%s: SameEndpoint(%q,%q,%q,%q)=%v want %v", c.name, c.aEndpoint, c.aRegion, c.bEndpoint, c.bRegion, got, c.want)
 		}
 	}
 }

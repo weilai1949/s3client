@@ -20,10 +20,10 @@ const (
 
 // SyncResult 增量同步结果。
 type SyncResult struct {
-	Scanned int    `json:"scanned"` // 源侧扫描数
-	Skipped int    `json:"skipped"` // 因 equal 跳过
-	Copied  int    `json:"copied"`  // 实际复制数
-	Failed  int    `json:"failed"`  // 复制失败数
+	Scanned   int      `json:"scanned"` // 源侧扫描数
+	Skipped   int      `json:"skipped"` // 因 equal 跳过
+	Copied    int      `json:"copied"`  // 实际复制数
+	Failed    int      `json:"failed"`  // 复制失败数
 	FailKeys  []string `json:"failedKeys,omitempty"`
 	LastError string   `json:"lastError,omitempty"`
 }
@@ -77,7 +77,7 @@ func SyncKeys(
 	}
 
 	// 4. 复用 MigrateKeys 完成复制。
-	sameEP := SameEndpoint(src.Endpoint(), dst.Endpoint())
+	sameEP := SameEndpoint(src.Endpoint(), src.Region(), dst.Endpoint(), dst.Region())
 	out := MigrateKeys(ctx, src, dst, srcBucket, dstBucket, toCopy, dstPrefix, sameEP, workers, onProgress)
 	return SyncResult{
 		Scanned:   len(srcList),
