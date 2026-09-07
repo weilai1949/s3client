@@ -34,6 +34,15 @@ describe('promptDialog', () => {
     expect(promptState.confirmText).toBe('Save')
     settlePrompt(false)
   })
+
+  it('new dialog settles the old one with null', async () => {
+    const p1 = promptDialog({ title: 'first' })
+    const p2 = promptDialog({ title: 'second' })
+    expect(promptState.title).toBe('second')
+    await expect(p1).resolves.toBeNull()
+    settlePrompt(false)
+    await expect(p2).resolves.toBeNull()
+  })
 })
 
 describe('settlePrompt', () => {

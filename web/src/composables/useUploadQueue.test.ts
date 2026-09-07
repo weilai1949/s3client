@@ -102,14 +102,21 @@ describe('useUploadQueue 共享状态机', () => {
     expect(q.items.value[0].file.name).toBe('a.txt')
   })
 
-  it('abortAll aborts all in-flight items', () => {
+  it('abortAll aborts all in-flight items', async () => {
     const q = mountQueue()
-    const a = enqueue(q, ['a.txt'])[0]
-    const b = enqueue(q, ['b.txt'])[0]
-    q.abortItem(a)
-    q.abortItem(b)
+    const [a] = enqueue(q, ['a.txt'])
+    const [b] = enqueue(q, ['b.txt'])
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(2))
+    q.abortAll()
+    await run
     expect(a.status).toBe('cancelled')
     expect(b.status).toBe('cancelled')
+  })
+
+  it('abortAll on empty queue is a no-op', () => {
+    const q = mountQueue()
+    expect(() => q.abortAll()).not.toThrow()
   })
 
   it('worker catch sets status=err and err message on non-AbortError', async () => {

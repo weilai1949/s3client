@@ -44,6 +44,16 @@ describe('pushKeydown / isTopKeydown', () => {
     pop2()
     pop1()
   })
+
+  it('real window keydown dispatches to the topmost handler', () => {
+    const h = vi.fn()
+    const pop = pushKeydown(h)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(h).toHaveBeenCalledTimes(1)
+    pop()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(h).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('useKeydownStack', () => {

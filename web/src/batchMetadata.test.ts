@@ -120,3 +120,12 @@ describe('batchSetMetadata', () => {
     expect(callCount).toBe(8)
   })
 })
+
+describe('batchSetMetadata key cap', () => {
+  it('throws when key count exceeds BATCH_META_MAX_KEYS', async () => {
+    const keys = Array.from({ length: 10001 }, (_, i) => `k${i}.txt`)
+    await expect(
+      batchSetMetadata({ accountId: 'acc-1', bucket: 'b1', keys, acl: 'private' }),
+    ).rejects.toThrow(/too many keys: 10001 > 10000/)
+  })
+})

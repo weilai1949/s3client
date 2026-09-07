@@ -74,6 +74,10 @@ describe('regionsFor', () => {
     expect(regionsFor('s3')).toEqual([])
     expect(regionsFor('rustfs')).toEqual([])
   })
+
+  it('returns empty for unknown provider', () => {
+    expect(regionsFor('bogus' as never)).toEqual([])
+  })
 })
 
 describe('syncsPublicEndpoint', () => {
