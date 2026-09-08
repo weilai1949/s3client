@@ -72,7 +72,7 @@ describe('BucketEncryption', () => {
       algorithm: undefined,
       kmsKeyId: undefined,
       bucketKeyEnabled: false,
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.getBucketEncryption>>)
     const w = mountEncryption()
     await flushPromises()
     // algorithm 回退 AES256 → KMS 输入框不显示
@@ -87,7 +87,7 @@ describe('BucketEncryption', () => {
       algorithm: 'aws:kms',
       kmsKeyId: 'arn:aws:kms:us-east-1:123:key/abc',
       bucketKeyEnabled: false,
-    } as any)
+    })
     const w = mountEncryption()
     await flushPromises()
     expect((w.find('select').element as HTMLSelectElement).value).toBe('aws:kms')
@@ -124,7 +124,7 @@ describe('BucketEncryption', () => {
       algorithm: 'aws:kms',
       kmsKeyId: 'key/1',
       bucketKeyEnabled: true,
-    } as any)
+    })
     const w = mountEncryption()
     await flushPromises()
     await disableBtn(w).trigger('click')
@@ -156,7 +156,7 @@ describe('BucketEncryption', () => {
   it('put 失败 → emit error 且不 toast', async () => {
     vi.mocked(s3api.getBucketEncryption).mockResolvedValue({
       bucket: 'b1', configured: false, algorithm: 'AES256', kmsKeyId: '', bucketKeyEnabled: true,
-    } as any)
+    })
     vi.mocked(s3api.putBucketEncryption).mockRejectedValue(new Error('put fail'))
     const w = mountEncryption()
     await flushPromises()

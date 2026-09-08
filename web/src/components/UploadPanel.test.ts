@@ -74,7 +74,7 @@ function mountPanel(account: Account | null = acc) {
   // 用 ref 承载账号：让 computed(currentAccount) 像真实 store 一样可失效
   const accState = ref<Account | undefined>(account ?? undefined)
   vi.mocked(currentAccount).mockImplementation(() => accState.value)
-  vi.mocked(useUploadQueue).mockReturnValue(q as any)
+  vi.mocked(useUploadQueue).mockReturnValue(q as unknown as ReturnType<typeof useUploadQueue>)
   mounted = mount(UploadPanel)
   return { w: mounted, q, accState }
 }
@@ -199,7 +199,7 @@ describe('UploadPanel', () => {
     vi.mocked(q.run).mockResolvedValueOnce([
       { ...item({ id: 1, key: 'a.txt' }), status: 'done' },
       { ...item({ id: 2, key: 'b.txt' }), status: 'done' },
-    ] as any)
+    ])
     await findButton(w, 'upload.start').trigger('click')
     await flushPromises()
     expect(q.run).toHaveBeenCalledTimes(1)
@@ -216,7 +216,7 @@ describe('UploadPanel', () => {
     vi.mocked(q.run).mockResolvedValueOnce([
       { ...item({ id: 3, key: 'c.txt' }), status: 'done' },
       { ...item({ id: 4, key: 'd.txt' }), status: 'err', err: 'x' },
-    ] as any)
+    ])
     await findButton(w, 'upload.start').trigger('click')
     await flushPromises()
     expect(toast).toHaveBeenLastCalledWith('upload.toastPartial', 'err', expect.anything())
@@ -294,7 +294,7 @@ describe('UploadPanel', () => {
     const done = item({ id: 1, key: 'a.txt', status: 'done', pct: 100 })
     q.items.value = [done]
     await nextTick()
-    vi.mocked(s3api.presign).mockResolvedValueOnce({ url: 'http://signed/1' } as any)
+    vi.mocked(s3api.presign).mockResolvedValueOnce({ url: 'http://signed/1' } as unknown as Awaited<ReturnType<typeof s3api.presign>>)
     await findButton(w, 'upload.copyLink').trigger('click')
     await flushPromises()
     expect(s3api.presign).toHaveBeenCalledWith('acc-1', { method: 'get', key: 'a.txt', expiresIn: 3600 })
@@ -322,20 +322,26 @@ describe('UploadPanel', () => {
 describe('UploadPanel keyFor', () => {
   it('keyFor: bare filename with empty prefix, prefixed after input', async () => {
     const { w } = mountPanel()
-    expect((w.vm as any).keyFor('a.txt')).toBe('a.txt')
+    expect((w.vm as unknown as { keyFor: (filename: string) => string }).keyFor('a.txt')).toBe('a.txt')
     const prefixInput = w.find('input[placeholder="upload.prefixPlaceholder"]')
     await prefixInput.setValue('dir/')
-    expect((w.vm as any).keyFor('a.txt')).toBe('dir/a.txt')
+    expect((w.vm as unknown as { keyFor: (filename: string) => string }).keyFor('a.txt')).toBe('dir/a.txt')
   })
 })
+
+type QueueOptionsProbe = {
+  onItemStart: (it: { id: number; file: File; key: string }) => void
+  target: (it: { id: number; file: File; key: string }) => { accId: string; bucket?: string; key: string }
+  selectBatch: (items: Array<{ status: string }>) => Array<{ status: string }>
+}
 
 describe('UploadPanel queue option callbacks', () => {
   it('drives target/onItemStart/selectBatch callbacks passed to useUploadQueue', async () => {
     const q = makeQueue()
-    let opts: any
-    vi.mocked(useUploadQueue).mockImplementation((o: any) => {
-      opts = o
-      return q as any
+    let opts!: QueueOptionsProbe
+    vi.mocked(useUploadQueue).mockImplementation((o) => {
+      opts = o as unknown as QueueOptionsProbe
+      return q as unknown as ReturnType<typeof useUploadQueue>
     })
     const accState = ref<Account | undefined>(acc)
     vi.mocked(currentAccount).mockImplementation(() => accState.value)

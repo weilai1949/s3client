@@ -209,7 +209,7 @@ describe('ServerPanel', () => {
     expect(w.find('.modal-stub').exists()).toBe(true)
     const dlg = w.findComponent({ name: 'ModalDialog' })
     expect(dlg.exists()).toBe(true)
-    ;(dlg.vm as any).$emit('close')
+    dlg.vm.$emit('close')
     await nextTick()
     expect(w.find('.modal-stub').exists()).toBe(false)
   })

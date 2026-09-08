@@ -2,10 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, KeepAlive, ref as vueRef } from 'vue'
 import { useObjectBrowser } from './useObjectBrowser'
-import type { Entry } from '../types'
+import type { Account, BucketItem, Entry, ObjectItem } from '../types'
 import { s3api } from '../api'
 import { confirmDialog } from '../confirm'
 import { currentAccount, selectAccount, toast } from '../store'
+
+/** 被测 API 的真实返回类型：用于给 mock 数据做类型断言（保持运行时数据不变）。 */
+type ListBucketsResult = Awaited<ReturnType<typeof s3api.listBuckets>>
+type ListObjectsResult = Awaited<ReturnType<typeof s3api.listObjects>>
+type DeleteBucketResult = Awaited<ReturnType<typeof s3api.deleteBucket>>
 
 vi.mock('../api', () => ({
   s3api: {
@@ -74,7 +79,7 @@ describe('useObjectBrowser', () => {
   it('openCtx / closeCtx sets ctxMenu', () => {
     const browser = useObjectBrowser(makeBindings())
     const entry = { kind: 'file', key: 'a.txt' }
-    browser.openCtx(new MouseEvent('click'), entry as any)
+    browser.openCtx(new MouseEvent('click'), entry as unknown as Entry)
     expect(browser.ctxMenu.value).toEqual({ x: 0, y: 0, entry })
     browser.closeCtx()
     expect(browser.ctxMenu.value).toBeNull()
@@ -82,7 +87,7 @@ describe('useObjectBrowser', () => {
 
   it('onKey closes ctx on Escape', () => {
     const browser = useObjectBrowser(makeBindings())
-    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as any)
+    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as unknown as Entry)
     expect(browser.ctxMenu.value).not.toBeNull()
     browser.onKey(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(browser.ctxMenu.value).toBeNull()
@@ -273,7 +278,7 @@ describe('useObjectBrowser', () => {
 
     // removeBucket with confirm ok: 当前桶等于被删桶时应重置
     browser.currentBucket.value = 'old-bucket'
-    await browser.removeBucket({ name: 'old-bucket' } as any)
+    await browser.removeBucket({ name: 'old-bucket' } as unknown as BucketItem)
     expect(browser.currentBucket.value).toBe('')
   })
 
@@ -298,9 +303,9 @@ describe('useObjectBrowser gaps', () => {
   }
 
   it('loadBuckets resets stale currentBucket and auto-enters default bucket', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b9' }] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b9' }] } as unknown as ListBucketsResult)
     const browser = useObjectBrowser(makeBindings())
-    browser.buckets.value = [{ name: 'b9', createdAt: '' }] as any
+    browser.buckets.value = [{ name: 'b9', createdAt: '' }] as unknown as BucketItem[]
     browser.currentBucket.value = 'stale'
     await browser.loadBuckets()
     // stale(currentBucket) 失效被重置，随即自动进入 acc.bucket（line 140/143 同轮触发）
@@ -317,7 +322,7 @@ describe('useObjectBrowser gaps', () => {
   it('load reads nextToken/isTruncated and clears selected on reset', async () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: [{ key: 'a.txt' }], commonPrefixes: [], nextToken: 'tok1', isTruncated: true,
-    } as any)
+    } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     browser.selected.value = new Set(['old'])
@@ -330,19 +335,19 @@ describe('useObjectBrowser gaps', () => {
   it('loadMore appends objects without clearing selection', async () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: [{ key: 'b.txt' }], commonPrefixes: [], nextToken: '', isTruncated: false,
-    } as any)
+    } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     browser.selected.value = new Set(['a.txt'])
     await browser.loadMore()
-    expect(browser.objects.value.map((o: any) => o.key)).toEqual(['a.txt', 'b.txt'])
+    expect(browser.objects.value.map((o) => o.key)).toEqual(['a.txt', 'b.txt'])
     expect(browser.selected.value.has('a.txt')).toBe(true)
   })
 
   it('refreshAll reloads buckets then objects', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     await browser.refreshAll()
@@ -360,7 +365,7 @@ describe('useObjectBrowser gaps', () => {
   it('openCtxFromButton anchors below the button', () => {
     const browser = useObjectBrowser(makeBindings())
     const fakeTarget = { getBoundingClientRect: () => ({ right: 200, bottom: 100, left: 0, top: 0, width: 0, height: 0 }) }
-    const ev = { currentTarget: fakeTarget } as any
+    const ev = { currentTarget: fakeTarget } as unknown as MouseEvent
     browser.openCtxFromButton(ev, { kind: 'file', key: 'a.txt' } as Entry)
     expect(browser.ctxMenu.value).not.toBeNull()
     expect(browser.ctxMenu.value?.entry.key).toBe('a.txt')
@@ -372,7 +377,7 @@ describe('useObjectBrowser gaps', () => {
     browser.objects.value = [
       { key: 'zz.txt', size: 10, lastModified: '2024-02-01', isDir: false },
       { key: 'aa.txt', size: 2, lastModified: '2024-01-01', isDir: false },
-    ] as any
+    ] as unknown as ObjectItem[]
     // default sort name asc
     let entries = browser.visibleEntries.value
     expect(entries[0].key).toBe('dir/') // dirs first
@@ -387,8 +392,8 @@ describe('useObjectBrowser gaps', () => {
   })
 
   it('account switch watch clears prefix and reloads', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     let browser!: ReturnType<typeof useObjectBrowser>
     const Host = defineComponent({
       setup() {
@@ -406,8 +411,8 @@ describe('useObjectBrowser gaps', () => {
   })
 
   it('mounted host registers window listeners and unmount cleans up', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     let browser!: ReturnType<typeof useObjectBrowser>
     const Host = defineComponent({
       setup() {
@@ -431,7 +436,7 @@ describe('useObjectBrowser remaining', () => {
     vi.mocked(s3api.deleteBucket).mockRejectedValue(new Error('delete failed'))
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
-    await browser.removeBucket({ name: 'b1' } as any)
+    await browser.removeBucket({ name: 'b1' } as unknown as BucketItem)
     expect(browser.error.value).toBe('delete failed')
   })
 
@@ -458,7 +463,7 @@ describe('useObjectBrowser remaining', () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: [{ key: 'x.txt', size: 1, lastModified: '', isDir: false }],
       commonPrefixes: [], nextToken: 'tok', isTruncated: true,
-    } as any)
+    } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     browser.nextToken.value = 'tok1'
@@ -483,8 +488,8 @@ describe('useObjectBrowser KeepAlive lifecycle', () => {
   }
 
   it('onActivated/onDeactivated toggle panelActive', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     let browser!: ReturnType<typeof useObjectBrowser>
     const Host = defineComponent({
       setup() {
@@ -540,9 +545,9 @@ describe('useObjectBrowser loadAll error / path toggle', () => {
 describe('useObjectBrowser final branches', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
-    vi.mocked(currentAccount).mockReturnValue({ id: 'acc-1', bucket: 'b1' } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
+    vi.mocked(currentAccount).mockReturnValue({ id: 'acc-1', bucket: 'b1' } as unknown as Account)
     vi.mocked(confirmDialog).mockResolvedValue(true)
   })
 
@@ -553,7 +558,7 @@ describe('useObjectBrowser final branches', () => {
   it('multiple folders sort by name; filter active narrows entries', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.commonPrefixes.value = ['b/', 'a/']
-    browser.objects.value = [{ key: 'z.txt', size: 5, lastModified: '2024-01-01', isDir: false } as any]
+    browser.objects.value = [{ key: 'z.txt', size: 5, lastModified: '2024-01-01', isDir: false } as unknown as ObjectItem]
     let entries = browser.visibleEntries.value
     expect(entries[0].key).toBe('a/') // 两个 folder 触发 sorts comparator
     browser.filter.value = 'z'
@@ -564,31 +569,31 @@ describe('useObjectBrowser final branches', () => {
   })
 
   it('loadBuckets with no account returns early', async () => {
-    vi.mocked(currentAccount).mockReturnValueOnce(undefined as any)
+    vi.mocked(currentAccount).mockReturnValueOnce(undefined)
     const browser = useObjectBrowser(makeBindings())
     await browser.loadBuckets()
     expect(s3api.listBuckets).not.toHaveBeenCalled()
   })
 
   it('stale loadBuckets response is dropped (seq guard)', async () => {
-    let resolveFirst!: (v: any) => void
-    let resolveSecond!: (v: any) => void
+    let resolveFirst!: (v: ListBucketsResult) => void
+    let resolveSecond!: (v: ListBucketsResult) => void
     vi.mocked(s3api.listBuckets)
       .mockImplementationOnce(() => new Promise((r) => { resolveFirst = r }))
       .mockImplementationOnce(() => new Promise((r) => { resolveSecond = r }))
     const browser = useObjectBrowser(makeBindings())
     const p1 = browser.loadBuckets()
     const p2 = browser.loadBuckets()
-    resolveFirst({ buckets: [{ name: 'first' }] } as any)
-    resolveSecond({ buckets: [{ name: 'second' }] } as any)
+    resolveFirst({ buckets: [{ name: 'first' }] } as unknown as ListBucketsResult)
+    resolveSecond({ buckets: [{ name: 'second' }] } as unknown as ListBucketsResult)
     await Promise.all([p1, p2])
-    expect(browser.buckets.value.map((b: any) => b.name)).toEqual(['second'])
+    expect(browser.buckets.value.map((b) => b.name)).toEqual(['second'])
   })
 
   it('removeBucket returns early when confirm is cancelled', async () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const browser = useObjectBrowser(makeBindings())
-    await browser.removeBucket({ name: 'b1' } as any)
+    await browser.removeBucket({ name: 'b1' } as unknown as BucketItem)
     expect(s3api.deleteBucket).not.toHaveBeenCalled()
   })
 
@@ -597,7 +602,7 @@ describe('useObjectBrowser final branches', () => {
     browser.objects.value = [
       { key: 'a.txt', size: 10, lastModified: '', isDir: false },
       { key: 'b.txt', size: 25, lastModified: '', isDir: false },
-    ] as any
+    ] as unknown as ObjectItem[]
     browser.selected.value = new Set(['a.txt'])
     expect(browser.loadedSize.value).toBe(35)
     expect(browser.selectedSize.value).toBe(10)
@@ -605,7 +610,7 @@ describe('useObjectBrowser final branches', () => {
 
   it('onGlobalKey bails when account or bucket missing', () => {
     const bindings = makeBindings()
-    vi.mocked(currentAccount).mockReturnValueOnce(undefined as any)
+    vi.mocked(currentAccount).mockReturnValueOnce(undefined)
     const browser = useObjectBrowser(bindings)
     browser.panelActive.value = true
     browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Enter' }))
@@ -635,7 +640,7 @@ describe('useObjectBrowser loadAll guards + keepalive reactivation', () => {
     // 加载期间导航递增 loadSeq（goRoot 为公开方法，内部 ++loadSeq）
     vi.mocked(s3api.listObjects).mockImplementation(async () => {
       browser.goRoot()
-      return { objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any
+      return { objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult
     })
     // 恢复 nextToken 使 loadAll 的 while 循环进入（第一次 listObjects 已完成）
     browser.nextToken.value = 't'
@@ -649,7 +654,7 @@ describe('useObjectBrowser loadAll guards + keepalive reactivation', () => {
     // 先完成一次正常加载，确保 loading=false 并留下 nextToken='t' 供 loadAll 分页
     vi.mocked(s3api.listObjects).mockImplementation(async () => ({
       objects: [], commonPrefixes: [], nextToken: 't', isTruncated: true,
-    } as any))
+    } as unknown as ListObjectsResult))
     await browser.load(true)
     expect(browser.nextToken.value).toBe('t')
     // loadAll 的每次 listObjects 内模拟「导航」：goRoot 递增 loadSeq（仅第一次，避免递归）
@@ -659,15 +664,15 @@ describe('useObjectBrowser loadAll guards + keepalive reactivation', () => {
         bumped = true
         browser.goRoot()
       }
-      return { objects: [], commonPrefixes: [], nextToken: 't', isTruncated: true } as any
+      return { objects: [], commonPrefixes: [], nextToken: 't', isTruncated: true } as unknown as ListObjectsResult
     })
     await browser.loadAll()
     expect(browser.loadingAll.value).toBe(false)
   })
 
   it('KeepAlive reactivation with changed account reloads', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     let browser!: ReturnType<typeof useObjectBrowser>
     const Host = defineComponent({
       setup() {
@@ -701,10 +706,10 @@ describe('useObjectBrowser loadAll guards + keepalive reactivation', () => {
 describe('useObjectBrowser 100% branch completion', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as any)
-    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
-    vi.mocked(s3api.deleteBucket).mockResolvedValue({} as any)
-    vi.mocked(currentAccount).mockReturnValue({ id: 'acc-1', bucket: 'b1' } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
+    vi.mocked(s3api.deleteBucket).mockResolvedValue({} as unknown as DeleteBucketResult)
+    vi.mocked(currentAccount).mockReturnValue({ id: 'acc-1', bucket: 'b1' } as unknown as Account)
     vi.mocked(confirmDialog).mockResolvedValue(true)
   })
 
@@ -722,7 +727,7 @@ describe('useObjectBrowser 100% branch completion', () => {
 
   it('onKey 非 Escape 键不关闭右键菜单', () => {
     const browser = useObjectBrowser(makeBindings())
-    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as any)
+    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as unknown as Entry)
     browser.onKey(new KeyboardEvent('keydown', { key: 'F5' }))
     expect(browser.ctxMenu.value).not.toBeNull()
   })
@@ -732,9 +737,9 @@ describe('useObjectBrowser 100% branch completion', () => {
     browser.objects.value = [
       { key: 'a.txt', lastModified: '2024-01-01', isDir: false },
       { key: 'b.txt', lastModified: '2024-01-01', isDir: false },
-    ] as any
+    ] as unknown as ObjectItem[]
     browser.sortKey.value = 'size'
-    expect(browser.visibleEntries.value.map((e: any) => e.key)).toEqual(['a.txt', 'b.txt'])
+    expect(browser.visibleEntries.value.map((e) => e.key)).toEqual(['a.txt', 'b.txt'])
   })
 
   it('time 排序下 lastModified 缺失回退空串（a/b 两侧 ?? 的缺失侧）', () => {
@@ -742,15 +747,15 @@ describe('useObjectBrowser 100% branch completion', () => {
     browser.objects.value = [
       { key: 'a.txt', size: 1, isDir: false },
       { key: 'b.txt', size: 2, isDir: false },
-    ] as any
+    ] as unknown as ObjectItem[]
     browser.sortKey.value = 'time'
-    expect(browser.visibleEntries.value.map((e: any) => e.key)).toEqual(['a.txt', 'b.txt'])
+    expect(browser.visibleEntries.value.map((e) => e.key)).toEqual(['a.txt', 'b.txt'])
   })
 
   it('relName：key 不在当前 prefix 下时原样返回（startsWith 的 false 侧）', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.prefix.value = 'dir/'
-    browser.objects.value = [{ key: 'elsewhere.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'elsewhere.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     expect(browser.entries.value[0].name).toBe('elsewhere.txt')
   })
 
@@ -765,7 +770,7 @@ describe('useObjectBrowser 100% branch completion', () => {
   })
 
   it('loadBuckets 响应缺 buckets 字段时回退空数组', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({} as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({} as unknown as ListBucketsResult)
     const browser = useObjectBrowser(makeBindings())
     await browser.loadBuckets()
     expect(browser.buckets.value).toEqual([])
@@ -783,7 +788,7 @@ describe('useObjectBrowser 100% branch completion', () => {
     let rejectFirst!: (e: unknown) => void
     vi.mocked(s3api.listBuckets)
       .mockImplementationOnce(() => new Promise((_, rej) => { rejectFirst = rej }))
-      .mockResolvedValueOnce({ buckets: [{ name: 'b1' }] } as any)
+      .mockResolvedValueOnce({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
     const browser = useObjectBrowser(makeBindings())
     const p1 = browser.loadBuckets()
     const p2 = browser.loadBuckets()
@@ -798,8 +803,8 @@ describe('useObjectBrowser 100% branch completion', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'keep'
     // loadBuckets 只返回 'keep'：currentBucket 仍有效，不会被重置
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'keep' }] } as any)
-    await browser.removeBucket({ name: 'other' } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'keep' }] } as unknown as ListBucketsResult)
+    await browser.removeBucket({ name: 'other' } as unknown as BucketItem)
     expect(browser.currentBucket.value).toBe('keep')
   })
 
@@ -812,7 +817,7 @@ describe('useObjectBrowser 100% branch completion', () => {
   })
 
   it('reset 加载缺 objects/commonPrefixes 字段时回退空数组', async () => {
-    vi.mocked(s3api.listObjects).mockResolvedValue({} as any)
+    vi.mocked(s3api.listObjects).mockResolvedValue({} as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     await browser.load(true)
@@ -821,13 +826,13 @@ describe('useObjectBrowser 100% branch completion', () => {
   })
 
   it('loadMore 响应缺 objects/commonPrefixes 字段时原样累积', async () => {
-    vi.mocked(s3api.listObjects).mockResolvedValue({} as any)
+    vi.mocked(s3api.listObjects).mockResolvedValue({} as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     browser.commonPrefixes.value = ['keep/']
     await browser.loadMore()
-    expect(browser.objects.value.map((o: any) => o.key)).toEqual(['a.txt'])
+    expect(browser.objects.value.map((o) => o.key)).toEqual(['a.txt'])
     expect(browser.commonPrefixes.value).toEqual(['keep/'])
   })
 
@@ -843,7 +848,7 @@ describe('useObjectBrowser 100% branch completion', () => {
     let rejectFirst!: (e: unknown) => void
     vi.mocked(s3api.listObjects)
       .mockImplementationOnce(() => new Promise((_, rej) => { rejectFirst = rej }))
-      .mockResolvedValueOnce({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as any)
+      .mockResolvedValueOnce({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     const p1 = browser.load(true)
@@ -868,7 +873,7 @@ describe('useObjectBrowser 100% branch completion', () => {
     const browser = useObjectBrowser(bindings)
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     browser.selected.value = new Set(['a.txt'])
     const fire = (el: HTMLElement | null, key = 'Enter') => {
       const ev = new KeyboardEvent('keydown', { key })
@@ -892,7 +897,7 @@ describe('useObjectBrowser 100% branch completion', () => {
     const browser = useObjectBrowser(bindings)
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     browser.selected.value = new Set()
     browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Enter' }))
     browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'F2' }))
@@ -907,7 +912,7 @@ describe('useObjectBrowser 100% branch completion', () => {
     const browser = useObjectBrowser(bindings)
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as any
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
     browser.selected.value = new Set()
     browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'a', metaKey: true }))
     expect(browser.selected.value.size).toBe(1)
@@ -936,7 +941,7 @@ describe('useObjectBrowser 100% branch completion', () => {
   })
 
   it('onMounted 无账号时跳过加载（account 的 false 侧）', async () => {
-    vi.mocked(currentAccount).mockReturnValueOnce(undefined as any)
+    vi.mocked(currentAccount).mockReturnValueOnce(undefined)
     let browser!: ReturnType<typeof useObjectBrowser>
     const Host = defineComponent({
       setup() {

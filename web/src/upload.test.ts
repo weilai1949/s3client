@@ -16,21 +16,42 @@ import { s3api, directUpload } from './api'
 
 // Auto-fire mock XHR: send() completes immediately (default 'load'), tests can
 // pre-configure the next instance via nextXHRConfig (status/error/etag).
-const XHR_INSTANCES: any[] = []
-let nextXHRConfig: (inst: any) => void = () => {}
+type XhrAutofire = 'load' | 'error' | 'abort' | 'none'
+type XhrHandler = () => void
+interface MockProgressEvent { lengthComputable: boolean; loaded: number; total: number }
+interface MockXhr {
+  open: (...args: unknown[]) => unknown
+  send: (...args: unknown[]) => unknown
+  setRequestHeader: (...args: unknown[]) => unknown
+  upload: { onprogress: ((e: MockProgressEvent) => void) | null }
+  status: number
+  getResponseHeader: (name: string) => string | null
+  onload: XhrHandler | null
+  onerror: XhrHandler | null
+  onabort: XhrHandler | null
+  abort: (...args: unknown[]) => unknown
+  _autofire?: XhrAutofire
+}
+const XHR_INSTANCES: MockXhr[] = []
+let nextXHRConfig: (inst: MockXhr) => void = () => {}
 function createMockXHR() {
-  const handlers: Record<string, ((...args: any[]) => any) | null> = {
+  const handlers: Record<'onload' | 'onerror' | 'onabort', XhrHandler | null> = {
     onload: null,
     onerror: null,
     onabort: null,
   }
-  const inst: any = {
+  const inst: MockXhr = {
     open: vi.fn(),
     send: vi.fn(() => {
       inst.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
-      const map = ({ load: 'onload', error: 'onerror', abort: 'onabort' } as const) as any
+      const map: Record<XhrAutofire, 'onload' | 'onerror' | 'onabort' | null> = {
+        load: 'onload',
+        error: 'onerror',
+        abort: 'onabort',
+        none: null,
+      }
       const key = map[inst._autofire ?? 'load']
-      handlers[key]?.()
+      if (key) handlers[key]?.()
     }),
     setRequestHeader: vi.fn(),
     upload: { onprogress: null },
@@ -56,7 +77,7 @@ function largeFile(): File {
   return new Proxy(real, {
     get(target, prop) {
       if (prop === 'size') return MULTIPART_THRESHOLD
-      return (target as any)[prop]
+      return Reflect.get(target, prop)
     },
   }) as File
 }
@@ -67,16 +88,16 @@ function largeFileNoType(): File {
   return new Proxy(real, {
     get(target, prop) {
       if (prop === 'size') return MULTIPART_THRESHOLD
-      return (target as any)[prop]
+      return Reflect.get(target, prop)
     },
   }) as File
 }
 
 function mockMultipartParts() {
-  vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-  vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
-  vi.mocked(s3api.multipartComplete).mockResolvedValue({ completed: 'ok' } as any)
-  vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as any)
+  vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+  vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
+  vi.mocked(s3api.multipartComplete).mockResolvedValue({ completed: 'ok' })
+  vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof s3api.multipartAbort>>)
 }
 
 describe('upload multipart helpers', () => {
@@ -187,7 +208,7 @@ describe('uploadObject', () => {
   beforeEach(() => {
     XHR_INSTANCES.length = 0
     nextXHRConfig = () => {}
-    vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as any)
+    vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof s3api.multipartAbort>>)
     vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
   })
 
@@ -223,8 +244,8 @@ describe('uploadObject', () => {
 
   it('part PUT non-2xx → partHttpError after retries, abort session', async () => {
     vi.useFakeTimers()
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     nextXHRConfig = (inst) => { inst.status = 500 }
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' })
     const rejection = expect(p).rejects.toThrow(/分段上传失败/) // 先挂 handler 再推进
@@ -237,8 +258,8 @@ describe('uploadObject', () => {
 
   it('part PUT network error → partNetworkError after retries', async () => {
     vi.useFakeTimers()
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     nextXHRConfig = (inst) => { inst._autofire = 'error' }
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' })
     const rejection = expect(p).rejects.toThrow(/分段上传网络错误/)
@@ -249,8 +270,8 @@ describe('uploadObject', () => {
   })
 
   it('part PUT abort → AbortError, session aborted', async () => {
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     nextXHRConfig = (inst) => { inst._autofire = 'abort' }
     await expect(uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }))
       .rejects.toMatchObject({ name: 'AbortError' })
@@ -260,8 +281,8 @@ describe('uploadObject', () => {
   it('signal aborted during part PUT → xhr.abort() + AbortError', async () => {
     const ctrl = new AbortController()
     nextXHRConfig = (inst) => { inst._autofire = 'none' } // send 后保持 pending，不发完成回调
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
     // 10MB 分段 + 4 并发 worker：每个 worker 的首个分段 PUT 挂起（无 autofire），
     // 因此恰好 4 个 XHR 创建并已 send（send 前监听器已注册）。
@@ -275,7 +296,7 @@ describe('uploadObject', () => {
 
   it('signal aborted after multipart init aborts session', async () => {
     const ctrl = new AbortController()
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
     await vi.waitFor(() => expect(s3api.multipartInit).toHaveBeenCalled())
     ctrl.abort()
@@ -285,7 +306,7 @@ describe('uploadObject', () => {
 
   it('signal aborted right after init → immediate abort branch', async () => {
     const ctrl = new AbortController()
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
     ctrl.abort() // line 162 的 signal.aborted 分支：abort 后直接抛
     await expect(p).rejects.toMatchObject({ name: 'AbortError' })
@@ -343,7 +364,7 @@ describe('uploadObject', () => {
 
   it('signal aborted right after init 且 abort 请求失败 → catch 回调吞掉', async () => {
     const ctrl = new AbortController()
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
     vi.mocked(s3api.multipartAbort).mockRejectedValue(new Error('abort failed'))
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
     ctrl.abort()
@@ -354,8 +375,8 @@ describe('uploadObject', () => {
   it('signal 中止引发 abort() 且 abort 请求失败 → catch 回调吞掉', async () => {
     const ctrl = new AbortController()
     nextXHRConfig = (inst) => { inst._autofire = 'none' }
-    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' } as any)
-    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 } as any)
+    vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })
+    vi.mocked(s3api.multipartPart).mockResolvedValue({ partNumber: 1, url: 'https://part.url', expiresIn: 3600 })
     vi.mocked(s3api.multipartAbort).mockRejectedValue(new Error('abort failed'))
     const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
     await vi.waitFor(() => expect(XHR_INSTANCES.length).toBe(4))
@@ -370,7 +391,7 @@ describe('upload final branches', () => {
     vi.clearAllMocks()
     XHR_INSTANCES.length = 0
     nextXHRConfig = () => {}
-    vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as any)
+    vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof s3api.multipartAbort>>)
     vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
   })
   afterEach(() => {
@@ -388,7 +409,7 @@ describe('upload final branches', () => {
 
   it('uploadObject small file: abort between presign and directUpload', async () => {
     const ctrl = new AbortController()
-    vi.mocked(s3api.presign).mockResolvedValue({ method: 'put', bucket: 'b', key: 'k.txt', url: 'https://p', expiresIn: 3600 } as any)
+    vi.mocked(s3api.presign).mockResolvedValue({ method: 'put', bucket: 'b', key: 'k.txt', url: 'https://p', expiresIn: 3600 })
     vi.mocked(directUpload).mockResolvedValue(undefined)
     const file = new File(['x'], 'k.txt')
     const p = uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.txt' }, undefined, ctrl.signal)

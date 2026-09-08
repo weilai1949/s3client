@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { usePreview } from './usePreview'
+import type { PreviewCtx } from './usePreview'
+import type { ObjectItem } from '../types'
 
 vi.mock('../preview', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../preview')>()
@@ -26,8 +28,8 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download: vi.fn(),
     }
-    const result = usePreview(ctx as any)
-    const o = { key: 'test.txt' } as any
+    const result = usePreview(ctx as unknown as PreviewCtx)
+    const o = { key: 'test.txt' } as unknown as ObjectItem
     result.showPreview(o)
     expect(result.preview.value).not.toBeNull()
     expect(result.preview.value!.key).toBe('test.txt')
@@ -43,8 +45,8 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download: vi.fn(),
     }
-    const result = usePreview(ctx as any)
-    const o = { key: 'unknown.xyz' } as any
+    const result = usePreview(ctx as unknown as PreviewCtx)
+    const o = { key: 'unknown.xyz' } as unknown as ObjectItem
     result.showPreview(o)
     expect(result.preview.value!.url).toBe('')
   })
@@ -60,8 +62,8 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download,
     }
-    const result = usePreview(ctx as any)
-    result.previewOrDownload({ key: 'unknown.xyz' } as any)
+    const result = usePreview(ctx as unknown as PreviewCtx)
+    result.previewOrDownload({ key: 'unknown.xyz' } as unknown as ObjectItem)
     expect(download).toHaveBeenCalled()
   })
 
@@ -76,8 +78,8 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download,
     }
-    const result = usePreview(ctx as any)
-    result.previewOrDownload({ key: 'test.txt' } as any)
+    const result = usePreview(ctx as unknown as PreviewCtx)
+    result.previewOrDownload({ key: 'test.txt' } as unknown as ObjectItem)
     expect(download).not.toHaveBeenCalled()
     expect(result.preview.value).not.toBeNull()
   })
@@ -90,7 +92,7 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download: vi.fn(),
     }
-    const result = usePreview(ctx as any)
+    const result = usePreview(ctx as unknown as PreviewCtx)
     result.ctxPreview()
     expect(ctx.closeCtx).toHaveBeenCalled()
   })
@@ -103,7 +105,7 @@ describe('usePreview', () => {
       closeCtx: vi.fn(),
       download: vi.fn(),
     }
-    const result = usePreview(ctx as any)
+    const result = usePreview(ctx as unknown as PreviewCtx)
     result.ctxPreview()
     expect(ctx.closeCtx).toHaveBeenCalled()
   })

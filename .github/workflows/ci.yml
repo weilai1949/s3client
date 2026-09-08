@@ -90,9 +90,20 @@ jobs:
         working-directory: web
         run: pnpm typecheck
 
-      - name: Test
+      # 覆盖率 100% 门禁：阈值在 web/vite.config.ts 中配置（istanbul，statements/functions/branches/lines 均为 100%），
+      # 低于 100% 时 pnpm test:coverage 以非零码退出，作为覆盖率回归守卫。
+      - name: Test + coverage (100% gate)
         working-directory: web
-        run: pnpm test
+        run: pnpm test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: web-coverage
+          path: web/coverage
+          retention-days: 7
+          include-hidden-files: false
 
       - name: Build
         working-directory: web

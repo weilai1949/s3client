@@ -60,7 +60,7 @@ describe('BucketWebsite', () => {
       indexDocument: 'index.html',
       errorDocument: '404.html',
       redirectAllRequestsTo: 'https://example.com',
-    } as any)
+    })
     const w = mountWebsite()
     expect(w.text()).toContain('website.loading')
     await flushPromises()
@@ -139,7 +139,7 @@ describe('BucketWebsite', () => {
   it('put 失败 → emit error 且不 toast', async () => {
     vi.mocked(s3api.getBucketWebsite).mockResolvedValue({
       bucket: 'b1', configured: false, indexDocument: '', errorDocument: '', redirectAllRequestsTo: '',
-    } as any)
+    })
     vi.mocked(s3api.putBucketWebsite).mockRejectedValue(new Error('put fail'))
     const w = mountWebsite()
     await flushPromises()

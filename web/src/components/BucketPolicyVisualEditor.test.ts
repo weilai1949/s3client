@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import BucketPolicyVisualEditor from './BucketPolicyVisualEditor.vue'
-import { POLICY_TEMPLATES, serializePolicy } from '../bucketPolicy'
+import { POLICY_TEMPLATES, serializePolicy, type PolicyDoc } from '../bucketPolicy'
 
 vi.mock('../i18n', () => ({
   t: (k: string) => k,
@@ -23,6 +23,16 @@ const validRaw = JSON.stringify({
 function lastUpdate(w: ReturnType<typeof mount>): string {
   const events = w.emitted('update')!
   return events[events.length - 1][0] as string
+}
+
+type VisualEditorVm = {
+  doc: PolicyDoc
+  previewJSON: string
+  applyTemplate: (id: string) => void
+}
+
+function editorVm(w: { vm: unknown }): VisualEditorVm {
+  return w.vm as unknown as VisualEditorVm
 }
 
 describe('BucketPolicyVisualEditor', () => {
@@ -163,7 +173,7 @@ describe('BucketPolicyVisualEditor extra branches', () => {
 
   it('等价内容（序列化相同）不重解析 doc', async () => {
     const w = mount(BucketPolicyVisualEditor, { props: { raw: validRaw, bucket: 'my-bucket' } })
-    const docBefore = (w.vm as any).doc
+    const docBefore = editorVm(w).doc
     // 同一语义、不同文本：键序与空白变化
     const equivalent = JSON.stringify(
       {
@@ -177,25 +187,25 @@ describe('BucketPolicyVisualEditor extra branches', () => {
     )
     await w.setProps({ raw: equivalent })
     // 序列化结果相同 → doc 未被重新赋值（同一引用）
-    expect((w.vm as any).doc).toBe(docBefore)
+    expect(editorVm(w).doc).toBe(docBefore)
     expect(w.emitted('update') ?? []).toHaveLength(0)
   })
 
   it('预览 JSON 失败回退错误消息', async () => {
     const w = mount(BucketPolicyVisualEditor, { props: { raw: '', bucket: 'b' } })
     // 正常 doc 序列化成功
-    expect((w.vm as any).previewJSON).toBeTypeOf('string')
+    expect(editorVm(w).previewJSON).toBeTypeOf('string')
     // 构造循环引用使 serializePolicy → JSON.stringify 抛 TypeError → catch 回退错误消息
     const circular: Record<string, unknown> = {}
     circular.self = circular
-    ;(w.vm as any).doc = {
+    editorVm(w).doc = {
       Version: '2012-10-17',
       Statement: [
         { sid: circular, effect: 'Allow', principal: '*', actions: ['s3:GetObject'], resources: ['arn:aws:s3:::b/*'] },
       ],
-    }
-    expect((w.vm as any).previewJSON).toBeTypeOf('string')
-    expect(String((w.vm as any).previewJSON)).toMatch(/circular/i)
+    } as unknown as PolicyDoc
+    expect(editorVm(w).previewJSON).toBeTypeOf('string')
+    expect(String(editorVm(w).previewJSON)).toMatch(/circular/i)
   })
 
   it('未知模板 id 时 applyTemplate 走守卫直接返回（不 emit update）', () => {
@@ -210,7 +220,7 @@ describe('BucketPolicyVisualEditor extra branches', () => {
     })
     const w = mount(BucketPolicyVisualEditor, { props: { raw: '', bucket: 'b' } })
     // (e as Error)?.message 短路 + ?? e 右分支 → String(undefined)
-    expect((w.vm as any).previewJSON).toBe('undefined')
+    expect(editorVm(w).previewJSON).toBe('undefined')
   })
 
   it('Sid 缺失的语句渲染空输入的 ?? 分支', () => {

@@ -6,6 +6,8 @@ import { state, toast, selectAccount, rememberedAccountId } from '../store'
 import { confirmDialog } from '../confirm'
 import type { Account } from '../types'
 
+type ListTrashResult = Awaited<ReturnType<typeof s3api.listTrash>>
+
 vi.mock('../api', () => ({
   s3api: {
     listBuckets: vi.fn(async () => ({ buckets: [] })),
@@ -18,7 +20,7 @@ vi.mock('../api', () => ({
 vi.mock('../store', async () => {
   const { reactive } = await import('vue')
   return {
-    state: reactive({ accounts: [] as any[], currentAccountId: '' }),
+    state: reactive({ accounts: [] as Account[], currentAccountId: '' }),
     selectAccount: vi.fn(),
     rememberedAccountId: vi.fn(() => ''),
     toast: vi.fn(),
@@ -84,10 +86,10 @@ beforeEach(() => {
   // 必须 resetAllMocks：clearAllMocks 不会清空 mockResolvedValueOnce 队列，
   // 上一个用例未消费的 Once 会污染后续用例（listTrash 数据错位）。
   vi.resetAllMocks()
-  vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] } as any)
-  vi.mocked(s3api.listTrash).mockResolvedValue({ deleteMarkers: [], isTruncated: false, nextKeyMarker: '', nextVersionIdMarker: '' } as any)
-  vi.mocked(s3api.restoreDeleteMarker).mockResolvedValue({ restored: 'k1', versionId: 'v1' } as any)
-  vi.mocked(s3api.purgeTrashObject).mockResolvedValue({ deleted: 1 } as any)
+  vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] })
+  vi.mocked(s3api.listTrash).mockResolvedValue({ deleteMarkers: [], isTruncated: false, nextKeyMarker: '', nextVersionIdMarker: '' })
+  vi.mocked(s3api.restoreDeleteMarker).mockResolvedValue({ restored: 'k1', versionId: 'v1' })
+  vi.mocked(s3api.purgeTrashObject).mockResolvedValue({ deleted: 1 } as Awaited<ReturnType<typeof s3api.purgeTrashObject>>)
   vi.mocked(confirmDialog).mockResolvedValue(true)
   vi.mocked(rememberedAccountId).mockReturnValue('')
   state.accounts = [acc1]
@@ -124,7 +126,7 @@ describe('RecycleBinPanel', () => {
 
   it('加载桶与回收站标记并渲染表格；从未被选桶自动选中', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1]))
     const w = mountPanel()
     await flushPromises()
@@ -167,7 +169,7 @@ describe('RecycleBinPanel', () => {
 
   it('恢复：取消不调用 API；成功移除标记并提示', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1, m2]))
     vi.mocked(confirmDialog).mockResolvedValueOnce(false)
     const w = mountPanel()
@@ -190,7 +192,7 @@ describe('RecycleBinPanel', () => {
 
   it('恢复失败：展示错误信息', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1]))
     vi.mocked(s3api.restoreDeleteMarker).mockRejectedValueOnce(new Error('restore boom'))
     const w = mountPanel()
@@ -202,9 +204,9 @@ describe('RecycleBinPanel', () => {
 
   it('清空：取消不调用 API；成功移除并按 key 过滤', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1, m2]))
-    vi.mocked(s3api.purgeTrashObject).mockResolvedValueOnce({ deleted: 2 } as any)
+    vi.mocked(s3api.purgeTrashObject).mockResolvedValueOnce({ deleted: 2 } as Awaited<ReturnType<typeof s3api.purgeTrashObject>>)
     vi.mocked(confirmDialog).mockResolvedValueOnce(false)
     const w = mountPanel()
     await flushPromises()
@@ -224,7 +226,7 @@ describe('RecycleBinPanel', () => {
 
   it('清空失败：展示错误信息', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1]))
     vi.mocked(s3api.purgeTrashObject).mockRejectedValueOnce(new Error('purge boom'))
     const w = mountPanel()
@@ -236,7 +238,7 @@ describe('RecycleBinPanel', () => {
 
   it('加载更多：传递游标并追加标记，页尾禁用 more', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash)
       .mockResolvedValueOnce(page([m1], true, 'k1', 'v1'))
       .mockResolvedValueOnce(page([m2], false))
@@ -254,8 +256,8 @@ describe('RecycleBinPanel', () => {
 
   it('空页自动翻页跳过（reset 跳过 2 页；loadMore 跳过 3 页）', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
-    vi.mocked(s3api.listTrash).mockResolvedValue(page([], true, '', '') as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    vi.mocked(s3api.listTrash).mockResolvedValue(page([], true, '', ''))
     const w = mountPanel()
     await flushPromises()
     expect(s3api.listTrash).toHaveBeenCalledTimes(3)
@@ -267,9 +269,9 @@ describe('RecycleBinPanel', () => {
 
   it('快速切换桶：过期请求静默终止，不污染标记列表', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] } as any)
-    let ra!: (v: any) => void
-    let rb!: (v: any) => void
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] })
+    let ra!: (v: ListTrashResult) => void
+    let rb!: (v: ListTrashResult) => void
     vi.mocked(s3api.listTrash)
       .mockImplementationOnce(() => new Promise((r) => { ra = r }))
       .mockImplementationOnce(() => new Promise((r) => { rb = r }))
@@ -294,9 +296,9 @@ describe('RecycleBinPanel', () => {
 
   it('过期请求失败：catch 中 seq 不匹配 → 不显示错误', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] })
     let raj!: (e: unknown) => void
-    let rb!: (v: any) => void
+    let rb!: (v: ListTrashResult) => void
     vi.mocked(s3api.listTrash)
       .mockImplementationOnce(() => new Promise((_res, rej) => { raj = rej }))
       .mockImplementationOnce(() => new Promise((res) => { rb = res }))
@@ -318,7 +320,7 @@ describe('RecycleBinPanel', () => {
 
   it('标记加载失败显示错误；重试重新拉取', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash)
       .mockRejectedValueOnce(new Error('trash boom'))
       .mockResolvedValueOnce(page([m1]))
@@ -346,7 +348,7 @@ describe('RecycleBinPanel', () => {
 
   it('刷新按钮重新加载标记（reset 语义）', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash)
       .mockResolvedValueOnce(page([m1]))
       .mockResolvedValueOnce(page([m1, m2]))
@@ -362,7 +364,7 @@ describe('RecycleBinPanel', () => {
 
   it('busy 中 restore/purge 直接返回：不弹确认、不发请求', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
     vi.mocked(s3api.listTrash).mockResolvedValueOnce(page([m1]))
     const w = mountPanel()
     await flushPromises()

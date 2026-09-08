@@ -36,7 +36,7 @@ describe('copyText', () => {
   })
 
   it('falls back when navigator.clipboard is absent', async () => {
-    const origClipboard = (navigator as any).clipboard
+    const origClipboard: Clipboard | undefined = navigator.clipboard
     Object.defineProperty(navigator, 'clipboard', {
       value: undefined,
       configurable: true,

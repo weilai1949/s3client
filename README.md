@@ -164,6 +164,7 @@ Web 端直接访问 `http://127.0.0.1:8080`（同源）即可。桌面端打开�
 ```bash
 cd server && go test ./...        # 后端单元测试
 cd web && pnpm test                 # 前端单元测试（Vitest）
+cd web && pnpm test:coverage       # 带覆盖率运行：四指标（statements/functions/branches/lines）门槛均为 100%，生成 HTML 报告 web/coverage/index.html 与 lcov.info（已 gitignore，CI 中作为 100% 回归护栏）
 cd web && pnpm typecheck          # 前端类型检查（vue-tsc）
 ```
 

@@ -78,7 +78,7 @@ describe('BucketCors', () => {
   })
 
   it('渲染已有规则（joinList 回显）', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules })
     const w = mountCors()
     await flushPromises()
     const box = ruleBox(w)
@@ -93,7 +93,7 @@ describe('BucketCors', () => {
   })
 
   it('toggle 方法：取消 GET、勾选 HEAD → 保存 payload', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules })
     const w = mountCors()
     await flushPromises()
     await chip(w, 0, 'GET').setValue(false)
@@ -109,7 +109,7 @@ describe('BucketCors', () => {
   })
 
   it('列表输入 split/join、maxAge 数字绑定 → 保存 payload', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] })
     const w = mountCors()
     await flushPromises()
     const box = ruleBox(w)
@@ -134,7 +134,7 @@ describe('BucketCors', () => {
   })
 
   it('规则 id 与 allowedHeaders 输入 v-model 绑定 → 保存 payload', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] })
     const w = mountCors()
     await flushPromises()
     const box = ruleBox(w)
@@ -149,7 +149,7 @@ describe('BucketCors', () => {
   })
 
   it('add / remove 规则', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] })
     const w = mountCors()
     await flushPromises()
     await w.findAll('button').find((x) => x.text() === 'cors.addRule')!.trigger('click')
@@ -162,7 +162,7 @@ describe('BucketCors', () => {
   })
 
   it('clear：delete → toast → 重置为默认规则 → changed', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: sampleRules })
     const w = mountCors()
     await flushPromises()
     await clearBtn(w).trigger('click')
@@ -181,7 +181,7 @@ describe('BucketCors', () => {
   })
 
   it('put 失败 → emit error 且不 toast', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1', rules: [] })
     vi.mocked(s3api.putBucketCors).mockRejectedValue(new Error('put fail'))
     const w = mountCors()
     await flushPromises()
@@ -192,7 +192,7 @@ describe('BucketCors', () => {
   })
 
   it('load 响应缺 rules 键 → 默认补一条规则', async () => {
-    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1' } as any)
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({ bucket: 'b1' } as unknown as Awaited<ReturnType<typeof s3api.getBucketCors>>)
     const w = mountCors()
     await flushPromises()
     expect(w.findAll('.cors-rule')).toHaveLength(1)
@@ -202,7 +202,7 @@ describe('BucketCors', () => {
     vi.mocked(s3api.getBucketCors).mockResolvedValue({
       bucket: 'b1',
       rules: [{ id: 'r1' }],
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.getBucketCors>>)
     const w = mountCors()
     await flushPromises()
     const box = ruleBox(w)
@@ -213,6 +213,6 @@ describe('BucketCors', () => {
 
   it('joinList 对 undefined 回退为空串', () => {
     const w = mountCors()
-    expect((w.vm as any).joinList(undefined)).toBe('')
+    expect((w.vm as unknown as { joinList: (a?: string[]) => string }).joinList(undefined)).toBe('')
   })
 })

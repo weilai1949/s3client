@@ -6,7 +6,7 @@ import ModalDialog from './ModalDialog.vue'
 import { s3api } from '../api'
 import { state, toast, selectAccount, requestAccountForm } from '../store'
 import { confirmDialog } from '../confirm'
-import type { Account } from '../types'
+import type { Account, AccountInput } from '../types'
 
 vi.mock('../api', () => ({
   s3api: {
@@ -24,7 +24,7 @@ vi.mock('../store', async () => {
   const { reactive } = await import('vue')
   const accountFormRequest = reactive({ seq: 0 })
   return {
-    state: reactive({ accounts: [] as any[], currentAccountId: '' }),
+    state: reactive({ accounts: [] as Account[], currentAccountId: '' }),
     toast: vi.fn(),
     selectAccount: vi.fn(),
     accountFormRequest,
@@ -102,7 +102,7 @@ beforeEach(() => {
 
 describe('AccountsPanel', () => {
   it('加载账号并渲染表格：选中态、默认桶、未测试健康状态', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] })
     const w = mountPanel()
     await flushPromises()
     expect(w.text()).toContain('MyAcc')
@@ -119,7 +119,7 @@ describe('AccountsPanel', () => {
   })
 
   it('空态提示 + 添加按钮打开新增表单（s3 默认值）', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     const w = mountPanel()
     await flushPromises()
     expect(w.find('.empty').text()).toContain('accounts.empty')
@@ -139,7 +139,7 @@ describe('AccountsPanel', () => {
   })
 
   it('切换服务商应用预设；区域变更自动填 Endpoint（公共云同步公网地址）', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     const w = mountPanel()
     await flushPromises()
     await findButton(w, 'accounts.add').trigger('click')
@@ -175,13 +175,13 @@ describe('AccountsPanel', () => {
   })
 
   it('新建流程：拉取桶自动填充 + 提交创建', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
-    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b9', creationDate: 'x' }] } as any)
-    let created!: any
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
+    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b9', creationDate: 'x' }] })
+    let created!: AccountInput
     // submit 成功后 resetForm() 会原地清空 reactive form，故在调用时浅拷贝捕获
-    vi.mocked(s3api.createAccount).mockImplementationOnce(async (f: any) => {
+    vi.mocked(s3api.createAccount).mockImplementationOnce(async (f: AccountInput) => {
       created = { ...f }
-      return { id: 'new-1' } as any
+      return { id: 'new-1' } as Awaited<ReturnType<typeof s3api.createAccount>>
     })
     const w = mountPanel()
     await flushPromises()
@@ -209,12 +209,12 @@ describe('AccountsPanel', () => {
   })
 
   it('编辑流程：预填表单 + listBuckets + 提交更新', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] } as any)
-    vi.mocked(s3api.listBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b1', creationDate: 'x' }, { name: 'b2', creationDate: 'y' }] } as any)
-    let updated!: any
-    vi.mocked(s3api.updateAccount).mockImplementationOnce(async (_id: string, f: any) => {
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] })
+    vi.mocked(s3api.listBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b1', creationDate: 'x' }, { name: 'b2', creationDate: 'y' }] })
+    let updated!: Partial<AccountInput>
+    vi.mocked(s3api.updateAccount).mockImplementationOnce(async (_id: string, f: Partial<AccountInput>) => {
       updated = { ...f }
-      return { id: 'acc-1' } as any
+      return { id: 'acc-1' } as Awaited<ReturnType<typeof s3api.updateAccount>>
     })
     const w = mountPanel()
     await flushPromises()
@@ -244,7 +244,7 @@ describe('AccountsPanel', () => {
   })
 
   it('拉取桶失败显示错误；缺少凭据提示 needCreds', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     vi.mocked(s3api.previewBuckets).mockRejectedValueOnce(new Error('preview boom'))
     const w = mountPanel()
     await flushPromises()
@@ -267,8 +267,8 @@ describe('AccountsPanel', () => {
   })
 
   it('拉取桶返回空 buckets 字段时兜底为空列表', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
-    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({} as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
+    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({} as Awaited<ReturnType<typeof s3api.previewBuckets>>)
     const w = mountPanel()
     await flushPromises()
     await findButton(w, 'accounts.add').trigger('click')
@@ -282,13 +282,13 @@ describe('AccountsPanel', () => {
   })
 
   it('健康检查：checking / ok / fail(带错误) / 异常', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] } as any)
-    let resolveTest!: (v: any) => void
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] })
+    let resolveTest!: (v: Awaited<ReturnType<typeof s3api.testAccount>>) => void
     vi.mocked(s3api.testAccount)
       .mockImplementationOnce(() => new Promise((r) => { resolveTest = r }))
-      .mockResolvedValueOnce({ ok: false, bucket: '', error: 'conn refused' } as any)
+      .mockResolvedValueOnce({ ok: false, bucket: '', error: 'conn refused' })
       .mockRejectedValueOnce(new Error('net down'))
-      .mockResolvedValueOnce({ ok: true, bucket: 'b1' } as any)
+      .mockResolvedValueOnce({ ok: true, bucket: 'b1' })
     const w = mountPanel()
     await flushPromises()
 
@@ -318,7 +318,7 @@ describe('AccountsPanel', () => {
   })
 
   it('删除：确认取消不删除；确认后删除并清空当前账号', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] })
     vi.mocked(confirmDialog).mockResolvedValueOnce(false)
     const w = mountPanel()
     await flushPromises()
@@ -337,9 +337,9 @@ describe('AccountsPanel', () => {
   })
 
   it('删除当前账号之外的账号不切换选中；删除失败展示错误', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] })
     vi.mocked(s3api.deleteAccount)
-      .mockResolvedValueOnce({ deleted: 'acc-2' } as any)
+      .mockResolvedValueOnce({ deleted: 'acc-2' })
       .mockRejectedValueOnce(new Error('rm fail'))
     const w = mountPanel()
     await flushPromises()
@@ -356,7 +356,7 @@ describe('AccountsPanel', () => {
   })
 
   it('单选账号触发 selectAccount', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] })
     const w = mountPanel()
     await flushPromises()
     await w.findAll('input[name="acc"]')[1].setValue()
@@ -364,7 +364,7 @@ describe('AccountsPanel', () => {
   })
 
   it('requestAccountForm 自动打开新增表单', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     const w = mountPanel()
     await flushPromises()
     requestAccountForm()
@@ -373,7 +373,7 @@ describe('AccountsPanel', () => {
   })
 
   it('提交失败展示错误且表单保持打开', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     vi.mocked(s3api.createAccount).mockRejectedValueOnce(new Error('400 bad request'))
     const w = mountPanel()
     await flushPromises()
@@ -386,8 +386,8 @@ describe('AccountsPanel', () => {
   })
 
   it('编辑无 publicEndpoint 的账号：回退为空字符串', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc2] } as any)
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc2] })
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] })
     const w = mountPanel()
     await flushPromises()
     await findButton(w, 'common.edit').trigger('click')
@@ -396,12 +396,12 @@ describe('AccountsPanel', () => {
   })
 
   it('表单字段绑定：publicEndpoint / 桶选择 + 手动输入 / pathStyle / useSSL；ModalDialog close 关闭', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as any)
-    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b9', creationDate: 'x' }] } as any)
-    let created!: any
-    vi.mocked(s3api.createAccount).mockImplementationOnce(async (f: any) => {
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
+    vi.mocked(s3api.previewBuckets).mockResolvedValueOnce({ buckets: [{ name: 'b9', creationDate: 'x' }] })
+    let created!: AccountInput
+    vi.mocked(s3api.createAccount).mockImplementationOnce(async (f: AccountInput) => {
       created = { ...f }
-      return { id: 'new-1' } as any
+      return { id: 'new-1' } as Awaited<ReturnType<typeof s3api.createAccount>>
     })
     const w = mountPanel()
     await flushPromises()

@@ -8,7 +8,7 @@ import { useObjectBrowser } from '../composables/useObjectBrowser'
 import { useObjectActions } from '../composables/useObjectActions'
 import { usePreview } from '../composables/usePreview'
 import { requestAccountForm } from '../store'
-import type { Account, Entry } from '../types'
+import type { Account, Entry, ObjectItem, ObjectMeta } from '../types'
 
 vi.mock('../composables/useObjectBrowser', () => ({ useObjectBrowser: vi.fn() }))
 vi.mock('../composables/useObjectActions', () => ({ useObjectActions: vi.fn() }))
@@ -22,6 +22,18 @@ vi.mock('../i18n', () => ({
   t: (k: string) => k,
   tf: (k: string) => k,
 }))
+
+type BrowserApi = ReturnType<typeof useObjectBrowser>
+type ActionsApi = ReturnType<typeof useObjectActions>
+
+function makePreview(): ReturnType<typeof usePreview> {
+  return {
+    preview: ref(null),
+    showPreview: vi.fn(),
+    previewOrDownload: vi.fn(),
+    ctxPreview: vi.fn(),
+  } as unknown as ReturnType<typeof usePreview>
+}
 
 const account: Account = {
   id: 'acc-1',
@@ -40,7 +52,7 @@ const sampleEntries: Entry[] = [
   { kind: 'folder', key: 'dir/', name: 'dir' },
 ]
 
-function makeBrowser(overrides: Record<string, unknown> = {}) {
+function makeBrowser(overrides: Record<string, unknown> = {}): BrowserApi {
   return {
     accSel: ref('acc-1'),
     account: ref<Account | null>(account),
@@ -98,10 +110,10 @@ function makeBrowser(overrides: Record<string, unknown> = {}) {
     onCreateBucket: vi.fn(),
     hideHints: vi.fn(),
     ...overrides,
-  }
+  } as unknown as BrowserApi
 }
 
-function makeActions(overrides: Record<string, unknown> = {}) {
+function makeActions(overrides: Record<string, unknown> = {}): ActionsApi {
   return {
     uploading: ref(false),
     zipLoading: ref(false),
@@ -160,7 +172,7 @@ function makeActions(overrides: Record<string, unknown> = {}) {
     ctxVersions: vi.fn(),
     ctxDelete: vi.fn(),
     ...overrides,
-  }
+  } as unknown as ActionsApi
 }
 
 const toolbarStub = {
@@ -183,9 +195,9 @@ function shallowPanel() {
 }
 
 function mountPanel() {
-  vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser() as any)
-  vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
-  vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+  vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser())
+  vi.mocked(useObjectActions).mockReturnValue(makeActions())
+  vi.mocked(usePreview).mockReturnValue(makePreview())
   return shallowPanel()
 }
 
@@ -208,10 +220,10 @@ describe('ObjectsPanel', () => {
 
   it('错误横幅渲染错误信息，点击关闭按钮可清空', async () => {
     vi.mocked(useObjectBrowser).mockReturnValue(
-      makeBrowser({ error: ref('upload failed: 403') }) as any,
+      makeBrowser({ error: ref('upload failed: 403') }),
     )
-    vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectActions).mockReturnValue(makeActions())
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
 
     const banner = w.find('.msg.err')
@@ -226,10 +238,10 @@ describe('ObjectsPanel', () => {
 
   it('无账号时显示空态，可引导创建账号', async () => {
     vi.mocked(useObjectBrowser).mockReturnValue(
-      makeBrowser({ account: ref<Account | null>(null) }) as any,
+      makeBrowser({ account: ref<Account | null>(null) }),
     )
-    vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectActions).mockReturnValue(makeActions())
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
 
     expect(w.find('.empty').exists()).toBe(true)
@@ -247,19 +259,19 @@ describe('ObjectsPanel', () => {
 
 describe('ObjectsPanel wiring', () => {
   it('bucket-list view renders when no currentBucket and forwards bucket events', async () => {
-    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ currentBucket: ref('') }) as any)
-    vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ currentBucket: ref('') }))
+    vi.mocked(useObjectActions).mockReturnValue(makeActions())
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
     const list = w.findComponent({ name: 'BucketList' })
     expect(list.exists()).toBe(true)
-    ;(list.vm as any).$emit('enter', 'b2')
+    ;list.vm.$emit('enter', 'b2')
     expect(vi.mocked(useObjectBrowser).mock.results[0].value.enterBucket).toHaveBeenCalledWith('b2')
-    ;(list.vm as any).$emit('create', { name: 'nb' })
+    ;list.vm.$emit('create', { name: 'nb' })
     expect(vi.mocked(useObjectBrowser).mock.results[0].value.openCreateBucket).toHaveBeenCalled()
-    ;(list.vm as any).$emit('remove', { name: 'b2' })
+    ;list.vm.$emit('remove', { name: 'b2' })
     expect(vi.mocked(useObjectBrowser).mock.results[0].value.removeBucket).toHaveBeenCalled()
-    ;(list.vm as any).$emit('lifecycle', 'b2')
+    ;list.vm.$emit('lifecycle', 'b2')
     expect(vi.mocked(useObjectActions).mock.results[0].value.openLifecycle).toHaveBeenCalled()
   })
 
@@ -315,10 +327,10 @@ describe('ObjectsPanel wiring', () => {
   })
 
   it('upload queue, hints bar, error retry and dialogs wiring', async () => {
-    const actions = makeActions({ uploadQueue: ref([{ id: 1, key: 'a.txt', pct: 10, status: 'uploading' }] as any) })
-    vi.mocked(useObjectActions).mockReturnValue(actions as any)
-    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ error: ref('x'), hintsHidden: ref(false) }) as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    const actions = makeActions({ uploadQueue: ref([{ id: 1, key: 'a.txt', pct: 10, status: 'uploading' }]) })
+    vi.mocked(useObjectActions).mockReturnValue(actions)
+    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ error: ref('x'), hintsHidden: ref(false) }))
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
 
     const q = w.findComponent({ name: 'UploadQueue' })
@@ -342,11 +354,11 @@ describe('ObjectsPanel wiring', () => {
       headersOpen: ref(true), tagsOpen: ref(true), lifecycleOpen: ref(true),
       aclOpen: ref(true), storageClassOpen: ref(true), destOpen: ref(true),
       batchOpen: ref(true), versionsOpen: ref(true), bucketInfoOpen: ref(true),
-      detail: ref({ key: 'a.txt', size: 1 } as any),
+      detail: ref({ key: 'a.txt', size: 1 }),
     })
-    vi.mocked(useObjectActions).mockReturnValue(actions as any)
-    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ creatingBucket: ref(true) }) as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectActions).mockReturnValue(actions)
+    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ creatingBucket: ref(true) }))
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
 
     for (const name of ['ObjectDetailDialog', 'HeadersDialog', 'TagsDialog', 'LifecycleDialog', 'DestDialog', 'AclDialog', 'StorageClassDialog', 'BatchMetadataDialog', 'CreateBucketDialog']) {
@@ -370,48 +382,48 @@ describe('ObjectsPanel wiring', () => {
   })
 
   it('hintsHidden=true 时快捷键提示条不渲染', () => {
-    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ hintsHidden: ref(true) }) as any)
-    vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser({ hintsHidden: ref(true) }))
+    vi.mocked(useObjectActions).mockReturnValue(makeActions())
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
     expect(w.find('.hints-bar').exists()).toBe(false)
   })
 
   it('getCtxEntry 读取右键菜单 entry（usePreview 注入的闭包）', () => {
     const browser = makeBrowser({ ctxMenu: ref(null) })
-    vi.mocked(useObjectBrowser).mockReturnValue(browser as any)
-    vi.mocked(useObjectActions).mockReturnValue(makeActions() as any)
+    vi.mocked(useObjectBrowser).mockReturnValue(browser)
+    vi.mocked(useObjectActions).mockReturnValue(makeActions())
     let cfg: { getCtxEntry: () => unknown } | undefined
-    vi.mocked(usePreview).mockImplementation((c: any) => {
+    vi.mocked(usePreview).mockImplementation((c: Parameters<typeof usePreview>[0]) => {
       cfg = c
-      return { preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any
+      return makePreview()
     })
     shallowPanel()
     expect(cfg).toBeDefined()
     // 无右键菜单 → undefined
     expect(cfg!.getCtxEntry()).toBeUndefined()
     // 有右键菜单 → 返回 entry
-    const entry = { kind: 'file', key: 'a.txt', name: 'a.txt', object: { key: 'a.txt' } }
-    ;(browser.ctxMenu as any).value = { x: 1, y: 1, entry }
+    const entry: Entry = { kind: 'file', key: 'a.txt', name: 'a.txt', object: { key: 'a.txt' } as ObjectItem }
+    browser.ctxMenu.value = { x: 1, y: 1, entry }
     expect(cfg!.getCtxEntry()).toEqual(entry)
   })
 
   it('dialogs close/error 事件回写面板状态（全部弹窗 + 预览 overlay）', async () => {
     const browser = makeBrowser({ creatingBucket: ref(true) })
     const actions = makeActions({
-      detail: ref({ key: 'a.txt', size: 1, storageClass: 'STANDARD' } as any),
+      detail: ref({ key: 'a.txt', size: 1, storageClass: 'STANDARD' }),
       headersOpen: ref(true), headersKey: ref('a.txt'),
       tagsOpen: ref(true), tagsKey: ref('a.txt'),
       lifecycleOpen: ref(true), lifecycleBucket: ref('b1'),
-      destOpen: ref(true), destCtx: ref({ kind: 'file', mode: 'copy', key: 'a.txt' } as any),
+      destOpen: ref(true), destCtx: ref({ kind: 'file', mode: 'copy', key: 'a.txt' }),
       aclOpen: ref(true), aclKey: ref('a.txt'),
       storageClassOpen: ref(true), storageClassKey: ref('a.txt'),
       batchOpen: ref(true), versionsOpen: ref(true), versionsKey: ref('a.txt'), bucketInfoOpen: ref(true),
     })
-    vi.mocked(useObjectActions).mockReturnValue(actions as any)
-    vi.mocked(useObjectBrowser).mockReturnValue(browser as any)
+    vi.mocked(useObjectActions).mockReturnValue(actions)
+    vi.mocked(useObjectBrowser).mockReturnValue(browser)
     const preview = ref<unknown>({ key: 'a.txt', kind: 'text' })
-    vi.mocked(usePreview).mockReturnValue({ preview, showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(usePreview).mockReturnValue({ preview, showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as unknown as ReturnType<typeof usePreview>)
     const w = shallowPanel()
 
     const detail = w.findComponent({ name: 'ObjectDetailDialog' })
@@ -475,7 +487,7 @@ describe('ObjectsPanel wiring', () => {
     expect(storage.props('objectKey')).toBe('a.txt')
     expect(storage.props('currentClass')).toBe('STANDARD')
     // detail 无 storageClass 时 currentClass 回退为空串（ObjectMeta.storageClass 可选）
-    actions.detail.value = { key: 'a.txt', size: 1 } as any
+    actions.detail.value = { key: 'a.txt', size: 1 } as ObjectMeta
     await nextTick()
     expect(storage.props('currentClass')).toBe('')
     storage.vm.$emit('close')
@@ -517,7 +529,7 @@ describe('ObjectsPanel wiring', () => {
 
 describe('ObjectsPanel account select + upload input', () => {
   it('renders account options and updates accSel on select', async () => {
-    const store = (await import('../store')) as { state: { accounts: any[]; currentAccountId: string } }
+    const store = (await import('../store')) as { state: { accounts: Account[]; currentAccountId: string } }
     store.state.accounts = [account, { id: 'acc-2', name: 'other' } as Account]
     const w = mountPanel()
     const sel = w.find('select.acc-select')
@@ -532,9 +544,9 @@ describe('ObjectsPanel account select + upload input', () => {
 
   it('hidden file input change delegates to onPickUpload', () => {
     const actions = makeActions()
-    vi.mocked(useObjectActions).mockReturnValue(actions as any)
-    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser() as any)
-    vi.mocked(usePreview).mockReturnValue({ preview: ref(null), showPreview: vi.fn(), previewOrDownload: vi.fn(), ctxPreview: vi.fn() } as any)
+    vi.mocked(useObjectActions).mockReturnValue(actions)
+    vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser())
+    vi.mocked(usePreview).mockReturnValue(makePreview())
     const w = shallowPanel()
     const input = w.find('input[type="file"]')
     expect(input.exists()).toBe(true)

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import BatchMetadataDialog from './BatchMetadataDialog.vue'
-import { batchSetMetadata, type BatchMetaResult } from '../batchMetadata'
+import { batchSetMetadata, type BatchMetaError, type BatchMetaInput, type BatchMetaResult } from '../batchMetadata'
 import { toast } from '../store'
 
 vi.mock('../batchMetadata', () => ({
@@ -128,7 +128,7 @@ describe('BatchMetadataDialog extra branches', () => {
   it('done with failures → err toast + done with failed count', async () => {
     vi.mocked(batchSetMetadata).mockResolvedValue({
       ok: 1, failed: 1, errors: [{ key: 'k2', step: 'acl', message: 'denied' }],
-    } as any)
+    })
     const w = mountDialog(['k1', 'k2'])
     await w.find('[data-testid="batch-edit-acl-toggle"]').setValue(true)
     await confirmBtn(w).trigger('click')
@@ -139,7 +139,7 @@ describe('BatchMetadataDialog extra branches', () => {
   })
 
   it('tags clear → 传空 tags；replace → 过滤带 key 的行', async () => {
-    const input: any[] = []
+    const input: BatchMetaInput[] = []
     vi.mocked(batchSetMetadata).mockImplementation(async (i) => {
       input.push(i)
       return { ok: 2, failed: 0, errors: [] }
@@ -181,13 +181,13 @@ describe('BatchMetadataDialog extra branches', () => {
   it('noChange（未勾选任何修改，防御分支）→ 提示需要选择', async () => {
     const w = mountDialog(['k1'])
     // UI 上按钮 disabled；防御分支直接用 vm 触发
-    await (w.vm as any).onConfirm()
+    await (w.vm as unknown as { onConfirm: () => Promise<void> }).onConfirm()
     expect(toast).toHaveBeenCalledWith('batchEdit.needStep', 'err')
     expect(batchSetMetadata).not.toHaveBeenCalled()
   })
 
   it('removeTagRow 删除行 + 关闭时 running 守卫', async () => {
-    let resolveFn!: (v: any) => void
+    let resolveFn!: (v: BatchMetaResult) => void
     vi.mocked(batchSetMetadata).mockImplementation(async () => new Promise((resolve) => { resolveFn = resolve }))
     const w = mountDialog(['k1'])
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
@@ -204,17 +204,17 @@ describe('BatchMetadataDialog extra branches', () => {
     await confirmBtn(w).trigger('click')
     await nextTick()
     // running 中 close 无效（防御分支走 vm）
-    ;(w.vm as any).close()
+    ;(w.vm as unknown as { close: () => void }).close()
     expect(w.emitted('close')).toBeUndefined()
     resolveFn({ ok: 1, failed: 0, errors: [] })
     await flushPromises()
-    ;(w.vm as any).close()
+    ;(w.vm as unknown as { close: () => void }).close()
     expect(w.emitted('close')).toBeTruthy()
   })
 
   it('错误超过 50 条可展开', async () => {
-    const errors = Array.from({ length: 60 }, (_, i) => ({ key: `k${i}`, step: 'acl', message: `m${i}` }))
-    vi.mocked(batchSetMetadata).mockResolvedValue({ ok: 0, failed: 60, errors } as any)
+    const errors: BatchMetaError[] = Array.from({ length: 60 }, (_, i) => ({ key: `k${i}`, step: 'acl', message: `m${i}` }))
+    vi.mocked(batchSetMetadata).mockResolvedValue({ ok: 0, failed: 60, errors })
     const w = mountDialog(Array.from({ length: 60 }, (_, i) => `k${i}`))
     await w.find('[data-testid="batch-edit-acl-toggle"]').setValue(true)
     await confirmBtn(w).trigger('click')
@@ -227,7 +227,7 @@ describe('BatchMetadataDialog extra branches', () => {
   })
 
   it('ACL select 与 storageClass 输入 v-model 绑定进入提交 payload', async () => {
-    const inputs: any[] = []
+    const inputs: BatchMetaInput[] = []
     vi.mocked(batchSetMetadata).mockImplementation(async (i) => {
       inputs.push(i)
       return { ok: 1, failed: 0, errors: [] }
@@ -265,10 +265,10 @@ describe('BatchMetadataDialog extra branches', () => {
 
   it('open 显式传 undefined 时 computed 回退为 true', () => {
     const w = mount(BatchMetadataDialog, {
-      props: { accountId: 'acc-1', bucket: 'b1', keys: ['k'], open: undefined as any },
+      props: { accountId: 'acc-1', bucket: 'b1', keys: ['k'], open: undefined },
       global: { stubs: { ModalDialog: ModalDialogStub } },
     })
-    expect((w.vm as any).open).toBe(true)
+    expect((w.vm as unknown as { open: boolean }).open).toBe(true)
   })
 
   it('open 显式传 false 时 computed 不回退为 true', () => {
@@ -276,11 +276,11 @@ describe('BatchMetadataDialog extra branches', () => {
       props: { accountId: 'acc-1', bucket: 'b1', keys: ['k'], open: false },
       global: { stubs: { ModalDialog: ModalDialogStub } },
     })
-    expect((w.vm as any).open).toBe(false)
+    expect((w.vm as unknown as { open: boolean }).open).toBe(false)
   })
 
   it('tags 勾选但模式为 none 时不传 tags 参数', async () => {
-    const input: any[] = []
+    const input: BatchMetaInput[] = []
     vi.mocked(batchSetMetadata).mockImplementation(async (i) => {
       input.push(i)
       return { ok: 1, failed: 0, errors: [] }
@@ -302,7 +302,7 @@ describe('BatchMetadataDialog extra branches', () => {
     await confirmBtn(w).trigger('click')
     await nextTick()
     // 强制 total=0 渲染：progress.total || 1 → max=1
-    ;(w.vm as any).progress.total = 0
+    ;(w.vm as unknown as { progress: { total: number } }).progress.total = 0
     await nextTick()
     expect(w.find('progress.progress.bar').attributes('max')).toBe('1')
     resolveFn({ ok: 1, failed: 0, errors: [] })

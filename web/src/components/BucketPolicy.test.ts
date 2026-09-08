@@ -61,7 +61,7 @@ describe('BucketPolicy', () => {
       bucket: 'b1',
       configured: true,
       policy: validJson,
-    } as any)
+    })
     const w = mountPolicy()
     expect(w.text()).toContain('policy.loading')
     await flushPromises()
@@ -144,9 +144,9 @@ describe('BucketPolicy', () => {
   })
 
   it('save 进行中：按钮禁用并显示 saving', async () => {
-    let resolvePut!: (v: unknown) => void
+    let resolvePut!: (v: Awaited<ReturnType<typeof s3api.putBucketPolicy>>) => void
     vi.mocked(s3api.putBucketPolicy).mockImplementationOnce(
-      () => new Promise((r) => { resolvePut = r }) as any,
+      () => new Promise((r) => { resolvePut = r }),
     )
     const w = mountPolicy()
     await flushPromises()
@@ -171,7 +171,7 @@ describe('BucketPolicy', () => {
   it('put 失败 → emit error 且不 toast', async () => {
     vi.mocked(s3api.getBucketPolicy).mockResolvedValue({
       bucket: 'b1', configured: false, policy: '',
-    } as any)
+    })
     vi.mocked(s3api.putBucketPolicy).mockRejectedValue(new Error('put fail'))
     const w = mountPolicy()
     await flushPromises()

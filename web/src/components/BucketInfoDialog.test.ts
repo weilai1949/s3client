@@ -56,9 +56,9 @@ beforeEach(() => {
 
 describe('BucketInfoDialog', () => {
   it('open=true 触发加载：loading → 字段渲染', async () => {
-    let resolveInfo!: (v: unknown) => void
+    let resolveInfo!: (v: Awaited<ReturnType<typeof s3api.getBucketInfo>>) => void
     vi.mocked(s3api.getBucketInfo).mockImplementationOnce(
-      () => new Promise((r) => { resolveInfo = r }) as any,
+      () => new Promise((r) => { resolveInfo = r }),
     )
     const w = mountDialog()
     // 关闭状态不渲染内容
@@ -144,7 +144,7 @@ describe('BucketInfoDialog', () => {
       region: '',
       createdAt: '',
       versioning: 'Suspended',
-    } as any)
+    })
     const w = mountDialog()
     await w.setProps({ open: true })
     await flushPromises()
@@ -163,7 +163,7 @@ describe('BucketInfoDialog', () => {
   it('put 失败 → emit error 且 saving 复位', async () => {
     vi.mocked(s3api.getBucketInfo).mockResolvedValue({
       bucket: 'b1', region: 'us-east-1', createdAt: '', versioning: '',
-    } as any)
+    })
     vi.mocked(s3api.putBucketVersioning).mockRejectedValue(new Error('put fail'))
     const w = mountDialog()
     await w.setProps({ open: true })
@@ -187,9 +187,9 @@ describe('BucketInfoDialog', () => {
   })
 
   it('saving 期间按钮禁用并防重复提交', async () => {
-    let resolvePut!: (v: unknown) => void
+    let resolvePut!: (v: Awaited<ReturnType<typeof s3api.putBucketVersioning>>) => void
     vi.mocked(s3api.putBucketVersioning).mockImplementationOnce(
-      () => new Promise((r) => { resolvePut = r }) as any,
+      () => new Promise((r) => { resolvePut = r }),
     )
     const w = mountDialog()
     await w.setProps({ open: true })

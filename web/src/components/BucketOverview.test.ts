@@ -35,13 +35,13 @@ beforeEach(() => {
 
 describe('BucketOverview', () => {
   it('loading → 渲染区域/创建时间/版本控制状态', async () => {
-    let resolveInfo!: (v: unknown) => void
+    let resolveInfo!: (v: Awaited<ReturnType<typeof s3api.getBucketInfo>>) => void
     vi.mocked(s3api.getBucketInfo).mockImplementationOnce(
-      () => new Promise((r) => { resolveInfo = r }) as any,
+      () => new Promise((r) => { resolveInfo = r }),
     )
     const w = mountOverview()
     expect(w.text()).toContain('overview.loading')
-    resolveInfo({ region: 'us-east-1', createdAt: '2024-01-02T00:00:00Z', versioning: '' })
+    resolveInfo({ region: 'us-east-1', createdAt: '2024-01-02T00:00:00Z', versioning: '' } as unknown as Awaited<ReturnType<typeof s3api.getBucketInfo>>)
     await flushPromises()
     const text = w.text()
     expect(text).toContain('b1')
@@ -65,7 +65,7 @@ describe('BucketOverview', () => {
     vi.mocked(s3api.getBucketInfo).mockImplementation(async () =>
       (n++ === 0
         ? { region: 'us-east-1', createdAt: '', versioning: '' }
-        : { region: 'us-east-1', createdAt: '', versioning: 'Enabled' }) as any,
+        : { region: 'us-east-1', createdAt: '', versioning: 'Enabled' }) as unknown as Awaited<ReturnType<typeof s3api.getBucketInfo>>,
     )
     const w = mountOverview()
     await flushPromises()
@@ -90,7 +90,7 @@ describe('BucketOverview', () => {
       region: 'us-east-1',
       createdAt: '2024-01-02T00:00:00Z',
       versioning: 'Enabled',
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.getBucketInfo>>)
     const w = mountOverview()
     await flushPromises()
     const btn = w.findAll('button').find((b) => b.text() === 'overview.suspend')!
@@ -126,7 +126,7 @@ describe('BucketOverview', () => {
   it('put 失败 → emit error 且 toggling 复位', async () => {
     vi.mocked(s3api.getBucketInfo).mockResolvedValue({
       region: '', createdAt: '', versioning: '',
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.getBucketInfo>>)
     vi.mocked(s3api.putBucketVersioning).mockRejectedValue(new Error('put fail'))
     const w = mountOverview()
     await flushPromises()
@@ -141,7 +141,7 @@ describe('BucketOverview', () => {
   it('put 以非 Error 抛错(字符串)→ String(err) 兜底', async () => {
     vi.mocked(s3api.getBucketInfo).mockResolvedValue({
       region: '', createdAt: '', versioning: 'Enabled',
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.getBucketInfo>>)
     vi.mocked(s3api.putBucketVersioning).mockRejectedValue('boom-string')
     const w = mountOverview()
     await flushPromises()
@@ -155,7 +155,7 @@ describe('BucketOverview toggle busy guard (vm)', () => {
   it('toggle while already toggling returns early (UI-disabled 守卫)', async () => {
     const w = mountOverview()
     await flushPromises()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as { toggling: boolean; toggleVersioning: () => Promise<void> }
     vm.toggling = true
     await expect(vm.toggleVersioning()).resolves.toBeUndefined()
     expect(s3api.putBucketVersioning).not.toHaveBeenCalled()

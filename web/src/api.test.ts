@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MigrateProgress } from './api'
 
 // happy-dom 默认不提供 localStorage/sessionStorage；用简单 Map 替身补齐。
 class MemStorage implements Storage {
@@ -39,11 +40,14 @@ async function loadApi() {
   return import('./api')
 }
 
-function stubFetch(impl: (...args: any[]) => any) {
-  return vi.stubGlobal('fetch', vi.fn(impl as any))
+function stubFetch(impl: (input: RequestInfo | URL, init?: RequestInit) => unknown) {
+  return vi.stubGlobal('fetch', vi.fn(impl))
 }
 
-function makeBlobResponse(data: any, status = 200, statusText = 'OK') {
+/** XHR 事件处理器替身：测试用普通对象字面量驱动，故参数取 unknown。 */
+type XhrHandler = (e: unknown) => void
+
+function makeBlobResponse(data: unknown, status = 200, statusText = 'OK'): Response {
   return {
     ok: true,
     status,
@@ -52,10 +56,10 @@ function makeBlobResponse(data: any, status = 200, statusText = 'OK') {
     blob: () => Promise.resolve(new Blob([JSON.stringify(data)])),
     headers: new Map<string, string>(),
     body: null,
-  } as any
+  } as unknown as Response
 }
 
-function makeErrorResponse(status = 400, statusText = 'Bad Request', error?: string) {
+function makeErrorResponse(status = 400, statusText = 'Bad Request', error?: string): Response {
   const body = error ? JSON.stringify({ error }) : ''
   return {
     ok: false,
@@ -65,7 +69,7 @@ function makeErrorResponse(status = 400, statusText = 'Bad Request', error?: str
     text: () => Promise.resolve(body),
     headers: new Map<string, string>(),
     body: null,
-  } as any
+  } as unknown as Response
 }
 
 // ── api token 存储 ─────────────────────────────────────────────────────────
@@ -109,7 +113,7 @@ describe('api token 存储', () => {
   it('tokenPersistent() localStorage 抛异常时返回 false', async () => {
     // 使 localStorage.getItem 抛异常
     const orig = memLocal.getItem
-    memLocal.getItem = (() => { throw new Error('boom') }) as any
+    memLocal.getItem = () => { throw new Error('boom') }
     const { api } = await loadApi()
     expect(api.isTokenPersistent).toBe(false)
     memLocal.getItem = orig
@@ -120,7 +124,7 @@ describe('api token 存储', () => {
     memLocal.getItem = ((k: string) => {
       if (k === 's3c.token') throw new Error('boom')
       return orig.call(memLocal, k)
-    }) as any
+    })
     const { api } = await loadApi()
     // session 为空 + 非持久化 → 进入一次性迁移分支，getItem 抛异常 → catch 返回 ''
     expect(api.token).toBe('')
@@ -296,7 +300,7 @@ describe('request / requestResponse', () => {
     stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
     const { api } = await loadApi()
     api.base = 'https://s3.example.com'
-    await (api as any).request?.('/test')
+    await (api as { request?: (path: string) => Promise<unknown> }).request?.('/test')
     // request 是私有函数不导出；我们通过 s3api.listAccounts 间接覆盖
   })
 
@@ -582,7 +586,7 @@ describe('s3api', () => {
         headers: new Map<string, string>([['Content-Length', '1000']]),
         blob: () => Promise.resolve(new Blob(['zip'])),
         body: null,
-      } as any)
+      })
     )
     const { downloadZipToDisk } = await import('./api')
     await downloadZipToDisk('id1', { keys: ['a.txt'] })
@@ -597,7 +601,7 @@ describe('s3api', () => {
         statusText: 'OK',
         headers: new Map<string, string>(),
         body: null,
-      } as any)
+      })
     )
     const { downloadZipToDisk } = await import('./api')
     const keys = Array.from({ length: 51 }, (_, i) => `key-${i}.txt`)
@@ -612,7 +616,7 @@ describe('s3api', () => {
         statusText: 'OK',
         headers: new Map<string, string>([['Content-Length', '600000000']]),
         body: null,
-      } as any)
+      })
     )
     const { downloadZipToDisk } = await import('./api')
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow()
@@ -627,7 +631,7 @@ describe('s3api', () => {
         headers: new Map<string, string>([['Content-Length', '1000']]),
         blob: () => Promise.resolve(new Blob(['zip'])),
         body: null,
-      } as any)
+      })
     )
     const { api, downloadZipToDisk } = await loadApi()
     api.token = 'tok-123'
@@ -644,7 +648,7 @@ describe('s3api', () => {
 // ── subscribeMigrateEvents ──────────────────────────────────────────────────
 describe('subscribeMigrateEvents', () => {
   it('错误路径：fetch 返回非 ok', async () => {
-    stubFetch(() => Promise.resolve({ ok: false, status: 500, statusText: 'err', body: null } as any))
+    stubFetch(() => Promise.resolve({ ok: false, status: 500, statusText: 'err', body: null }))
     const { subscribeMigrateEvents } = await import('./api')
     const onProgress = vi.fn()
     const onError = vi.fn()
@@ -669,8 +673,8 @@ describe('subscribeMigrateEvents', () => {
 
   it('SSE 解析循环：接收 data 事件并回调 onProgress', async () => {
     let readCount = 0
-    stubFetch((url: string) => {
-      if (String(url).includes('/events')) {
+    stubFetch((input: RequestInfo | URL) => {
+      if (String(input).includes('/events')) {
         // SSE 流：第一次 read 返回数据，第二次返回 done
         return Promise.resolve({
           ok: true,
@@ -694,7 +698,7 @@ describe('subscribeMigrateEvents', () => {
               cancel: vi.fn(),
             }),
           },
-        } as any)
+        })
       }
       // job status 回读
       return Promise.resolve({
@@ -705,7 +709,7 @@ describe('subscribeMigrateEvents', () => {
         blob: () => Promise.resolve(new Blob(['ok'])),
         headers: new Map<string, string>(),
         body: null,
-      } as any)
+      })
     })
     const { subscribeMigrateEvents } = await import('./api')
     const onProgress = vi.fn()
@@ -721,31 +725,31 @@ describe('subscribeMigrateEvents', () => {
 // ── directUpload ────────────────────────────────────────────────────────────
 describe('directUpload', () => {
   function createXhrMockClass() {
-    const instances: any[] = []
+    const instances: InstanceType<typeof XHRMock>[] = []
     class XHRMock {
       open = vi.fn()
       setRequestHeader = vi.fn()
       send = vi.fn()
       abort = vi.fn()
       status = 200
-      upload = { onprogress: null as ((e: any) => void) | null }
-      onload: ((e: any) => void) | null = null
-      onerror: ((e: any) => void) | null = null
-      onabort: ((e: any) => void) | null = null
-      private _listeners: Record<string, Array<(e: any) => void>> = {}
-      addEventListener = vi.fn((evt: string, fn: any) => {
+      upload = { onprogress: null as XhrHandler | null }
+      onload: XhrHandler | null = null
+      onerror: XhrHandler | null = null
+      onabort: XhrHandler | null = null
+      private _listeners: Record<string, XhrHandler[]> = {}
+      addEventListener = vi.fn((evt: string, fn: XhrHandler) => {
         ;(this._listeners[evt] ||= []).push(fn)
       })
-      removeEventListener = vi.fn((evt: string, fn: any) => {
+      removeEventListener = vi.fn((evt: string, fn: XhrHandler) => {
         const arr = this._listeners[evt]
         if (arr) {
           const i = arr.indexOf(fn)
           if (i >= 0) arr.splice(i, 1)
         }
       })
-      _fire(event: string, e: any) {
+      _fire(event: string, e: unknown) {
         // Call on* property handler (xml standard behavior)
-        const handler = (this as any)[`on${event}`]
+        const handler = (this as unknown as Record<string, XhrHandler | null | undefined>)[`on${event}`]
         if (handler) handler(e)
         ;(this._listeners[event] || []).forEach((fn) => fn(e))
       }
@@ -760,9 +764,9 @@ describe('directUpload', () => {
 
   it('上传成功 2xx', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const promise = directUpload('https://x', new Blob(['a']) as File)
     const inst = XHRMock.getInstances()[0]
     expect(inst.open).toHaveBeenCalledWith('PUT', 'https://x')
     expect(inst.send).toHaveBeenCalled()
@@ -772,9 +776,9 @@ describe('directUpload', () => {
 
   it('网络错误', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const promise = directUpload('https://x', new Blob(['a']) as File)
     const inst = XHRMock.getInstances()[0]
     inst._fire('error', {})
     await expect(promise).rejects.toThrow('upload network error')
@@ -782,9 +786,9 @@ describe('directUpload', () => {
 
   it('被 abort', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const promise = directUpload('https://x', new Blob(['a']) as File)
     const inst = XHRMock.getInstances()[0]
     inst._fire('abort', {})
     await expect(promise).rejects.toThrow('Aborted')
@@ -792,18 +796,18 @@ describe('directUpload', () => {
 
   it('signal 已 abort 提前拒绝', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
     const controller = new AbortController()
     controller.abort()
-    await expect(directUpload('https://x', new Blob(['a'] as any) as any, undefined, controller.signal)).rejects.toThrow('Aborted')
+    await expect(directUpload('https://x', new Blob(['a']) as File, undefined, controller.signal)).rejects.toThrow('Aborted')
   })
 
   it('非 2xx 状态码', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const promise = directUpload('https://x', new Blob(['a']) as File)
     const inst = XHRMock.getInstances()[0]
     inst.status = 403
     inst._fire('load', {})
@@ -812,10 +816,10 @@ describe('directUpload', () => {
 
   it('上传进度回调', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
     const onProgress = vi.fn()
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any, onProgress)
+    const promise = directUpload('https://x', new Blob(['a']) as File, onProgress)
     const inst = XHRMock.getInstances()[0]
     // fire upload progress
     inst.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 })
@@ -826,13 +830,13 @@ describe('directUpload', () => {
 
   it('signal listener 在非 abort 信号时注册', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
     const controller = new AbortController()
     // 捕获 signal.addEventListener 调用
     const signalAddEventListener = vi.fn()
-    controller.signal.addEventListener = signalAddEventListener as any
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any, undefined, controller.signal)
+    controller.signal.addEventListener = signalAddEventListener
+    const promise = directUpload('https://x', new Blob(['a']) as File, undefined, controller.signal)
     const inst = XHRMock.getInstances()[0]
     inst._fire('load', {})
     await promise
@@ -869,7 +873,7 @@ describe('api gaps', () => {
     stubFetch(() => Promise.resolve({
       ok: true, status: 200, body,
       headers: new Map<string, string>(),
-    } as any))
+    }))
     const picker = vi.fn().mockResolvedValue({ createWritable: async () => ({ abort: vi.fn() }) })
     Object.defineProperty(window, 'showSaveFilePicker', { value: picker, configurable: true })
     const { downloadZipToDisk, api } = await loadApi()
@@ -877,7 +881,7 @@ describe('api gaps', () => {
     await downloadZipToDisk('id1', { keys: ['a.txt'] })
     expect(picker).toHaveBeenCalled()
     expect(body.pipeTo).toHaveBeenCalled()
-    delete (window as any).showSaveFilePicker
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker
   })
 
   it('downloadZipToDisk FSA 失败 → cancel body 并抛错', async () => {
@@ -886,13 +890,13 @@ describe('api gaps', () => {
     stubFetch(() => Promise.resolve({
       ok: true, status: 200, body,
       headers: new Map<string, string>(),
-    } as any))
+    }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
     const { downloadZipToDisk, api } = await loadApi()
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
     expect(cancel).toHaveBeenCalled()
-    delete (window as any).showSaveFilePicker
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker
   })
 
   it('streamBodyToFile 失败时 abort writable', async () => {
@@ -901,13 +905,13 @@ describe('api gaps', () => {
     stubFetch(() => Promise.resolve({
       ok: true, status: 200, body,
       headers: new Map<string, string>(),
-    } as any))
+    }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockResolvedValue({ createWritable: async () => ({ abort }) }), configurable: true })
     const { downloadZipToDisk, api } = await loadApi()
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('pipe broke')
     expect(abort).toHaveBeenCalled()
-    delete (window as any).showSaveFilePicker
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker
   })
 
   it('s3api.downloadZipToDisk 包装函数转发', async () => {
@@ -958,7 +962,7 @@ describe('api edge branches', () => {
     memLocal.getItem = ((k: string) => {
       if (k === 's3c.token') throw new Error('boom')
       return orig.call(memLocal, k)
-    }) as any
+    })
     const { api: api2 } = await loadApi()
     expect(api2.token).toBe('')
     memLocal.getItem = orig
@@ -986,8 +990,9 @@ describe('api final branches', () => {
     api.setTokenPersistent(false)
     api.token = 'tok-123'
     await s3api.listAccounts()
-    const init = (fetch as any).mock.calls.at(-1)[1] ?? {}
-    expect(init.headers?.['Authorization']).toBe('Bearer tok-123')
+    const calls = vi.mocked(fetch).mock.calls
+    const init: RequestInit = calls[calls.length - 1]![1] ?? {}
+    expect((init.headers as Record<string, string> | undefined)?.['Authorization']).toBe('Bearer tok-123')
   })
 
   it('selectServer unknown id returns undefined', async () => {
@@ -1000,7 +1005,8 @@ describe('api final branches', () => {
     const { s3api, api } = await loadApi()
     api.base = 'https://s3.example.com'
     await s3api.listVersions('id1', { bucket: 'b', prefix: 'p/', keyMarker: 'km', versionIdMarker: 'vm' })
-    const url = String((fetch as any).mock.calls.at(-1)[0])
+    const calls = vi.mocked(fetch).mock.calls
+    const url = String(calls[calls.length - 1]![0])
     expect(url).toContain('prefix=p%2F')
     expect(url).toContain('keyMarker=km')
     expect(url).toContain('versionIdMarker=vm')
@@ -1011,7 +1017,8 @@ describe('api final branches', () => {
     const { s3api, api } = await loadApi()
     api.base = 'https://s3.example.com'
     await s3api.listTrash('id1', { bucket: 'b', prefix: 'p/', keyMarker: 'km', versionIdMarker: 'vm', maxKeys: 999 })
-    const url = String((fetch as any).mock.calls.at(-1)[0])
+    const calls = vi.mocked(fetch).mock.calls
+    const url = String(calls[calls.length - 1]![0])
     expect(url).toContain('maxKeys=999')
     expect(url).toContain('keyMarker=km')
   })
@@ -1027,10 +1034,10 @@ describe('api final branches', () => {
       },
     })
     const statusResp = { done: true, progress: { migrated: 1, done: 1, total: 1, status: '' } }
-    stubFetch((input: any) => {
+    stubFetch((input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, body: stream, json: async () => ({}) } as any)
+        return Promise.resolve({ ok: true, status: 200, body: stream, json: async () => ({}) })
       }
       return Promise.resolve(makeBlobResponse(statusResp))
     })
@@ -1039,10 +1046,10 @@ describe('api final branches', () => {
     api.setTokenPersistent(false)
     api.token = 'tok-sse'
     const onProgress = vi.fn()
-    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    const off = subscribeMigrateEvents('job-1', onProgress, vi.fn())
     await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(2))
     // EOF 回读：最后一次回调为 migrateJobStatus 的 done
-    const last = (onProgress as any).mock.calls.at(-1)[0]
+    const last = onProgress.mock.calls[onProgress.mock.calls.length - 1]![0]
     expect(last.status).toBe('done')
     off()
   })
@@ -1166,7 +1173,7 @@ describe('api gaps: s3api bucket 可选参数', () => {
     await s3api.getBucketTags('id1')
     await s3api.deleteBucketTags('id1')
     await s3api.getLifecycle('id1')
-    const urls = (fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
     expect(urls.length).toBe(12)
     for (const u of urls) expect(u).toContain('bucket=')
     for (const u of urls) expect(u).not.toContain('bucket=undefined')
@@ -1179,7 +1186,7 @@ describe('api gaps: s3api bucket 可选参数', () => {
     await s3api.listVersions('id1', { prefix: 'p' })
     await s3api.deleteObjectVersion('id1', { key: 'k', versionId: 'v' })
     await s3api.listTrash('id1', { prefix: 'p' })
-    const urls = (fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
     expect(urls.length).toBe(5)
     for (const u of urls) expect(u).not.toContain('bucket=')
   })
@@ -1200,13 +1207,13 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
     stubFetch(() => Promise.resolve({
       ok: true, status: 200, body,
       headers: new Map<string, string>(),
-    } as any))
+    }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
     const { downloadZipToDisk, api } = await loadApi()
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
     expect(cancel).toHaveBeenCalledTimes(1)
-    delete (window as any).showSaveFilePicker
+    delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker
   })
 
   it('超限且 body 存在 → res.body?.cancel() 执行且其失败被吞（line 346 函数）', async () => {
@@ -1215,7 +1222,7 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
       ok: true, status: 200, statusText: 'OK',
       headers: new Map<string, string>([['Content-Length', '600000000']]),
       body: { cancel },
-    } as any))
+    }))
     const { downloadZipToDisk } = await import('./api')
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('api.zipTooLarge')
     expect(cancel).toHaveBeenCalledTimes(1)
@@ -1232,17 +1239,17 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
         c.close()
       },
     })
-    stubFetch((input: any) => {
+    stubFetch((input: RequestInfo | URL) => {
       if (String(input).includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+        return Promise.resolve({ ok: true, status: 200, body: stream })
       }
       return Promise.resolve(makeBlobResponse({ done: true, progress: { status: 'done' } }))
     })
     const { subscribeMigrateEvents } = await import('./api')
-    const onProgress = vi.fn()
-    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    const onProgress = vi.fn<(p: MigrateProgress) => void>()
+    const off = subscribeMigrateEvents('job-1', onProgress, vi.fn())
     await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
-    expect((onProgress as any).mock.calls.at(-1)[0].status).toBe('done')
+    expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]![0].status).toBe('done')
     await new Promise((r) => setTimeout(r, 20))
     expect(fetch).toHaveBeenCalledTimes(1) // EOF 后 lastStatus==='done' → 不回读
     off()
@@ -1250,33 +1257,33 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
 
   it('回读时 progress 无 status 且任务完成 → status 取 done（line 632 三元真支）', async () => {
     const stream = new ReadableStream({ start(c) { c.close() } })
-    stubFetch((input: any) => {
+    stubFetch((input: RequestInfo | URL) => {
       if (String(input).includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+        return Promise.resolve({ ok: true, status: 200, body: stream })
       }
       return Promise.resolve(makeBlobResponse({ done: true, progress: {} }))
     })
     const { subscribeMigrateEvents } = await import('./api')
-    const onProgress = vi.fn()
-    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    const onProgress = vi.fn<(p: MigrateProgress) => void>()
+    const off = subscribeMigrateEvents('job-1', onProgress, vi.fn())
     await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
-    expect((onProgress as any).mock.calls.at(-1)[0].status).toBe('done')
+    expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]![0].status).toBe('done')
     off()
   })
 
   it('回读时 progress 无 status 且任务未完成 → status 为 undefined（line 632 三元假支）', async () => {
     const stream = new ReadableStream({ start(c) { c.close() } })
-    stubFetch((input: any) => {
+    stubFetch((input: RequestInfo | URL) => {
       if (String(input).includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+        return Promise.resolve({ ok: true, status: 200, body: stream })
       }
       return Promise.resolve(makeBlobResponse({ done: false, progress: {} }))
     })
     const { subscribeMigrateEvents } = await import('./api')
     const onProgress = vi.fn()
-    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    const off = subscribeMigrateEvents('job-1', onProgress, vi.fn())
     await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
-    expect((onProgress as any).mock.calls.at(-1)[0].status).toBeUndefined()
+    expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]![0].status).toBeUndefined()
     off()
   })
 
@@ -1284,18 +1291,18 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     stubFetch(() => Promise.reject('plain failure'))
     const { subscribeMigrateEvents } = await import('./api')
     const onError = vi.fn()
-    const off = subscribeMigrateEvents('job-1', vi.fn() as any, onError)
+    const off = subscribeMigrateEvents('job-1', vi.fn(), onError)
     await vi.waitFor(() => expect(onError).toHaveBeenCalled())
-    expect((onError as any).mock.calls[0][0]).toBeInstanceOf(Error)
+    expect(onError.mock.calls[0][0]).toBeInstanceOf(Error)
     off()
   })
 
   it('abort 后 fetch 仍 reject → 不回调 onError（line 641 假分支）', async () => {
-    let rejectFetch: (e: any) => void = () => {}
+    let rejectFetch: (e: unknown) => void = () => {}
     stubFetch(() => new Promise((_, rej) => { rejectFetch = rej }))
     const { subscribeMigrateEvents } = await import('./api')
     const onError = vi.fn()
-    const off = subscribeMigrateEvents('job-1', vi.fn() as any, onError)
+    const off = subscribeMigrateEvents('job-1', vi.fn(), onError)
     await new Promise((r) => setTimeout(r, 10))
     off()
     rejectFetch(new Error('network down'))
@@ -1304,18 +1311,18 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
   })
 
   it('abort 后流才 EOF → 跳过回读且无回调（line 627 abort 项）', async () => {
-    let resolveRead: (v: any) => void = () => {}
-    const pending = new Promise<any>((res) => { resolveRead = res })
-    stubFetch((input: any) => {
+    let resolveRead: (v: unknown) => void = () => {}
+    const pending = new Promise<unknown>((res) => { resolveRead = res })
+    stubFetch((input: unknown) => {
       if (String(input).includes('/events')) {
-        return Promise.resolve({ ok: true, status: 200, body: { getReader: () => ({ read: () => pending, cancel: vi.fn() }) } } as any)
+        return Promise.resolve({ ok: true, status: 200, body: { getReader: () => ({ read: () => pending, cancel: vi.fn() }) } })
       }
       return Promise.resolve(makeBlobResponse({ done: true, progress: { status: 'done' } }))
     })
     const { subscribeMigrateEvents } = await import('./api')
     const onProgress = vi.fn()
     const onError = vi.fn()
-    const off = subscribeMigrateEvents('job-1', onProgress as any, onError)
+    const off = subscribeMigrateEvents('job-1', onProgress, onError)
     await new Promise((r) => setTimeout(r, 20))
     off()
     resolveRead({ done: true, value: new Uint8Array(0) })
@@ -1329,17 +1336,17 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
 // ── api.ts 覆盖率补全：directUpload 进度分支 ────────────────────────────────
 describe('api gaps: directUpload 进度分支', () => {
   function createXhrMockClass() {
-    const instances: any[] = []
+    const instances: InstanceType<typeof XHRMock>[] = []
     class XHRMock {
       open = vi.fn()
       setRequestHeader = vi.fn()
       send = vi.fn()
       abort = vi.fn()
       status = 200
-      upload = { onprogress: null as ((e: any) => void) | null }
-      onload: ((e: any) => void) | null = null
-      onerror: ((e: any) => void) | null = null
-      onabort: ((e: any) => void) | null = null
+      upload = { onprogress: null as XhrHandler | null }
+      onload: XhrHandler | null = null
+      onerror: XhrHandler | null = null
+      onabort: XhrHandler | null = null
       constructor() {
         instances.push(this)
       }
@@ -1351,10 +1358,10 @@ describe('api gaps: directUpload 进度分支', () => {
 
   it('进度事件 lengthComputable=false → 不回调 onProgress（line 673 假分支）', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
     const onProgress = vi.fn()
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any, onProgress)
+    const promise = directUpload('https://x', new Blob(['a']) as File, onProgress)
     const inst = XHRMock.getInstances()[0]
     inst.upload.onprogress?.({ lengthComputable: false, loaded: 50, total: 100 })
     expect(onProgress).not.toHaveBeenCalled()
@@ -1364,9 +1371,9 @@ describe('api gaps: directUpload 进度分支', () => {
 
   it('未提供 onProgress 时进度事件正常触发不报错', async () => {
     const XHRMock = createXhrMockClass()
-    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')
-    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const promise = directUpload('https://x', new Blob(['a']) as File)
     const inst = XHRMock.getInstances()[0]
     inst.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
     inst.onload?.({})

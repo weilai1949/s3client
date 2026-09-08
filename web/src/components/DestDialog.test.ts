@@ -399,7 +399,7 @@ describe('DestDialog', () => {
   })
 
   it('listBuckets 响应缺 buckets 键 → 桶列表为空', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({} as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({} as unknown as Awaited<ReturnType<typeof s3api.listBuckets>>)
     const w = mountDest()
     await w.setProps({ open: true })
     await flushPromises()

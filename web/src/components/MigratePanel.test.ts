@@ -8,6 +8,22 @@ import { currentAccount, requestTab, selectAccount, state, toast } from '../stor
 import { tf } from '../i18n'
 import type { Account, ListObjectsResponse, ObjectItem } from '../types'
 
+/** MigratePanel 通过 defineExpose 暴露给测试的成员（组件 setup 状态无公开类型）。 */
+interface MigrateVm {
+  loadAllSourceObjects: () => Promise<void>
+  loadSourceBuckets?: () => Promise<void> | void
+  migrate: () => Promise<void>
+  cancelMigrate?: () => Promise<void>
+  cancelling: boolean
+  ensureTargetAccount: () => void
+  targetAccountId: string | undefined
+  error: unknown
+  selected?: Set<string>
+  onListScroll: () => void
+  measureViewport: () => void
+  viewportH: number
+}
+
 vi.mock('../api', () => ({
   s3api: {
     listBuckets: vi.fn(),
@@ -81,10 +97,10 @@ beforeEach(() => {
   vi.mocked(currentAccount).mockImplementation(() =>
     state.accounts.find((a) => a.id === state.currentAccountId),
   )
-  vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] } as any)
+  vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] })
   vi.mocked(s3api.listObjects).mockResolvedValue({
     objects: [objA, objB, objDir], commonPrefixes: [], isTruncated: false, nextToken: '',
-  } as any)
+  })
 })
 
 describe('MigratePanel', () => {
@@ -194,13 +210,13 @@ describe('MigratePanel', () => {
     vi.mocked(s3api.listBuckets).mockRejectedValueOnce(new Error('src boom'))
     const w = mountPanel()
     await flushPromises()
-    let srcSel = w.findAll('select')[0]
+    const srcSel = w.findAll('select')[0]
     expect(srcSel.findAll('option')).toHaveLength(1) // 仅默认
 
     // 重新挂载：源成功、目标失败 → targetBuckets 被清空
     w.unmount()
     vi.mocked(s3api.listBuckets)
-      .mockResolvedValueOnce({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] } as any)
+      .mockResolvedValueOnce({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] })
       .mockRejectedValueOnce(new Error('dst boom'))
     const w2 = mountPanel()
     await flushPromises()
@@ -213,8 +229,8 @@ describe('MigratePanel', () => {
     await flushPromises()
     vi.mocked(s3api.listObjects).mockReset()
     vi.mocked(s3api.listObjects)
-      .mockResolvedValueOnce({ objects: [objA], commonPrefixes: [], isTruncated: true, nextToken: 't1' } as any)
-      .mockResolvedValueOnce({ objects: [objB], commonPrefixes: [], isTruncated: false, nextToken: '' } as any)
+      .mockResolvedValueOnce({ objects: [objA], commonPrefixes: [], isTruncated: true, nextToken: 't1' })
+      .mockResolvedValueOnce({ objects: [objB], commonPrefixes: [], isTruncated: false, nextToken: '' })
     await findButton(w, 'migrate.listAll').trigger('click')
     await flushPromises()
     expect(vi.mocked(s3api.listObjects).mock.calls[0][1]).toEqual({
@@ -233,7 +249,7 @@ describe('MigratePanel', () => {
     let page = 0
     vi.mocked(s3api.listObjects).mockImplementation(async () => ({
       objects: [{ ...objA, key: `f${page++}.dat` }], commonPrefixes: [], isTruncated: true, nextToken: 't',
-    } as any))
+    }))
     await findButton(w, 'migrate.listAll').trigger('click')
     await flushPromises()
     expect(toast).toHaveBeenCalledWith('migrate.listedCap', 'err')
@@ -244,11 +260,11 @@ describe('MigratePanel', () => {
   it('migrate runs progress, opens result dialog and goto targets', async () => {
     let progressCb!: (p: MigrateProgress) => void
     const unsub = vi.fn()
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j1' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j1' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done', done: 2, total: 2, migrated: 1, failed: 1 },
       result: { migrated: 1, failed: 1, failedKeys: ['k1', 'k2', 'k3'], lastError: 'boom' },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return unsub
@@ -294,10 +310,10 @@ describe('MigratePanel', () => {
 
   it('migrate success without failures toasts toastOk', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j2' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j2' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done' }, result: { migrated: 2, failed: 0 },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -315,11 +331,11 @@ describe('MigratePanel', () => {
   it('cancel in-flight migration requests cancel and toasts cancelled on completion', async () => {
     let progressCb!: (p: MigrateProgress) => void
     const unsub = vi.fn()
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j3' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j3' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'cancelled' }, result: { migrated: 0, failed: 0 },
-    } as any)
-    vi.mocked(s3api.migrateJobCancel).mockResolvedValue({} as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(s3api.migrateJobCancel).mockResolvedValue({} as Awaited<ReturnType<typeof s3api.migrateJobCancel>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return unsub
@@ -343,9 +359,9 @@ describe('MigratePanel', () => {
 
   it('cancelMigrate surfaces cancel errors', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j4' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j4' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobCancel).mockRejectedValueOnce(new Error('cancel failed'))
-    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 0, failed: 0 } } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 0, failed: 0 } } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -377,7 +393,7 @@ describe('MigratePanel', () => {
 
   it('SSE onError rejects migration and surfaces the error', async () => {
     let errorCb!: (e: Error) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j5' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j5' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, _onP, onErr) => {
       errorCb = onErr
       return () => {}
@@ -394,7 +410,7 @@ describe('MigratePanel', () => {
 
   it('unmount during in-flight migration disconnects subscription', async () => {
     const unsub = vi.fn()
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j6' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j6' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(subscribeMigrateEvents).mockReturnValue(unsub)
     const w = mountPanel()
     await flushPromises()
@@ -425,8 +441,8 @@ describe('MigratePanel', () => {
     const w = mountPanel()
     await flushPromises()
     await w.find('.toolbar input[type="checkbox"]').setValue(true)
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j7' } as any)
-    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 1, failed: 0 } } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j7' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 1, failed: 0 } } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     let progressCb!: (p: MigrateProgress) => void
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
@@ -453,10 +469,10 @@ describe('MigratePanel', () => {
 
   it('goto targets with missing account skips selectAccount and requests tab', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j8' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j8' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -483,7 +499,7 @@ describe('MigratePanel', () => {
     vi.mocked(s3api.listObjects).mockReset()
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: many, commonPrefixes: [], isTruncated: false, nextToken: '',
-    } as any)
+    })
     const w = mountPanel()
     await flushPromises()
     expect(w.findAll('.v-row')).toHaveLength(37)
@@ -505,7 +521,7 @@ describe('MigratePanel defensive guards (vm direct)', () => {
   it('migrate 无账号源时提前返回（!src 守卫）', async () => {
     const w = mountPanel()
     await flushPromises()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as MigrateVm
     await expect(vm.migrate()).resolves.toBeUndefined()
   })
 })
@@ -518,7 +534,7 @@ describe('MigratePanel selectTarget defensive guard', () => {
     await flushPromises()
     await w.findAll('.v-row input[type="checkbox"]')[0].setValue(true)
     await nextTick()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as MigrateVm
     // ensureTargetAccount 会自动填充；显式清空以命中防御守卫
     vm.targetAccountId = ''
     await vm.migrate()
@@ -543,10 +559,10 @@ describe('MigratePanel virtual list scroll', () => {
 
 describe('MigratePanel bucket/prefix v-model wiring', () => {
   it('binds source/target bucket selects, target prefix and result dialog close', async () => {
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j9' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j9' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     let progressCb!: (p: MigrateProgress) => void
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
@@ -579,7 +595,7 @@ describe('MigratePanel bucket/prefix v-model wiring', () => {
     expect(dlg.props('open')).toBe(true)
     expect(dlg.props('title')).toBe('migrate.resultTitle')
     // ModalDialog @close 事件路径：关闭结果弹窗
-    ;(dlg.vm as any).$emit('close')
+    ;dlg.vm.$emit('close')
     await nextTick()
     expect(dlg.props('open')).toBe(false)
   })
@@ -592,7 +608,7 @@ describe('MigratePanel final branches', () => {
     const w = mountPanel()
     await flushPromises()
     expect(s3api.listBuckets).not.toHaveBeenCalled()
-    await (w.vm as any).loadSourceBuckets?.()
+    await (w.vm as unknown as MigrateVm).loadSourceBuckets?.()
     expect(s3api.listBuckets).not.toHaveBeenCalled()
     state.accounts = [acc1]
     state.currentAccountId = 'acc-1'
@@ -606,16 +622,16 @@ describe('MigratePanel final branches', () => {
     const cb = w.findAll('.v-row input[type="checkbox"]')[0]
     await cb.setValue(true) // 勾选 → 选中
     await nextTick()
-    expect((w.vm as any).selected?.has?.('a.txt')).toBe(true)
+    expect((w.vm as unknown as MigrateVm).selected?.has?.('a.txt')).toBe(true)
     await cb.setValue(false) // 取消 → 反选
     await nextTick()
-    expect((w.vm as any).selected?.has?.('a.txt')).toBe(false)
+    expect((w.vm as unknown as MigrateVm).selected?.has?.('a.txt')).toBe(false)
   })
 
   it('cancelMigrate without job or while cancelling is a no-op', async () => {
     const w = mountPanel()
     await flushPromises()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as MigrateVm
     await expect(vm.cancelMigrate?.()).resolves.toBeUndefined()
     vm.cancelling = true
     await expect(vm.cancelMigrate?.()).resolves.toBeUndefined()
@@ -624,7 +640,7 @@ describe('MigratePanel final branches', () => {
   it('ensureTargetAccount is idempotent', async () => {
     const w = mountPanel()
     await flushPromises()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as MigrateVm
     vm.ensureTargetAccount()
     const before = vm.targetAccountId
     vm.ensureTargetAccount() // 已有 target → 不改变
@@ -634,7 +650,7 @@ describe('MigratePanel final branches', () => {
 
 describe('MigratePanel remaining branches', () => {
   it('桶列表响应缺 buckets 键时源/目标桶列表均回退为空', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({} as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({} as Awaited<ReturnType<typeof s3api.listBuckets>>)
     const w = mountPanel()
     await flushPromises()
     // 源桶下拉：仅默认选项（res.buckets ?? []）
@@ -644,19 +660,19 @@ describe('MigratePanel remaining branches', () => {
   })
 
   it('ensureTargetAccount 回退 state.accounts[0].id（源账号不存在且无其他账号）', async () => {
-    state.accounts = [{ ...acc1, id: undefined }] as any
+    state.accounts = [{ ...acc1, id: undefined }] as unknown as Account[]
     state.currentAccountId = 'zz-missing'
     vi.mocked(currentAccount).mockReturnValue(undefined)
     const w = mountPanel()
     await flushPromises()
     // other?.id 与 srcId 均空 → state.accounts[0].id（undefined 值执行该分支）
-    expect((w.vm as any).targetAccountId).toBeUndefined()
+    expect((w.vm as unknown as MigrateVm).targetAccountId).toBeUndefined()
   })
 
   it('migrateJobStatus 响应缺 result 键时回退 0/0 并 toastOk', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j10' } as any)
-    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' } } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j10' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' } } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -681,11 +697,11 @@ describe('MigratePanel remaining branches', () => {
 
   it('结果弹窗：有失败但无 lastError 时不渲染 firstError', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j11' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j11' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done' },
       result: { migrated: 0, failed: 1, failedKeys: ['k-bad'], lastError: '' },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -703,11 +719,11 @@ describe('MigratePanel remaining branches', () => {
 
   it('进度 total 为 0 时 progressPct 回退 0', async () => {
     let progressCb!: (p: MigrateProgress) => void
-    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j12' } as any)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j12' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
       progress: { status: 'done' },
       result: { migrated: 1, failed: 0 },
-    } as any)
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
     vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
       progressCb = onP
       return () => {}
@@ -727,7 +743,7 @@ describe('MigratePanel remaining branches', () => {
 
   it('scrollEl 未绑定时 onListScroll/measureViewport 空安全，绑定后按 clientHeight 测量', async () => {
     const w = mountPanel()
-    const vm = w.vm as any
+    const vm = w.vm as unknown as MigrateVm
     // 列表尚未渲染（scrollEl 为 null）→ 守卫直接跳过
     vm.onListScroll()
     vm.measureViewport()

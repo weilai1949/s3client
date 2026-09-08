@@ -61,7 +61,7 @@ describe('BucketTags', () => {
         { key: 'env', value: 'prod' },
         { key: 'team', value: 'platform' },
       ],
-    } as any)
+    })
     const w = mountTags()
     expect(w.text()).toContain('bucketTags.loading')
     await flushPromises()
@@ -86,7 +86,7 @@ describe('BucketTags', () => {
     vi.mocked(s3api.getBucketTags).mockResolvedValue({
       bucket: 'b1',
       tags: [{ key: 'env', value: 'prod' }],
-    } as any)
+    })
     const w = mountTags()
     await flushPromises()
     await rowInputs(w, 0).key.setValue('  env  ')
@@ -102,7 +102,7 @@ describe('BucketTags', () => {
   })
 
   it('全空 key 行：提交空 tags 并成功', async () => {
-    vi.mocked(s3api.getBucketTags).mockResolvedValue({ bucket: 'b1', tags: [] } as any)
+    vi.mocked(s3api.getBucketTags).mockResolvedValue({ bucket: 'b1', tags: [] })
     const w = mountTags()
     await flushPromises()
     await addBtn(w).trigger('click')
@@ -142,7 +142,7 @@ describe('BucketTags', () => {
   })
 
   it('tags 缺省(null/undefined)→ `(r.tags ?? [])` 兜底渲染空表', async () => {
-    vi.mocked(s3api.getBucketTags).mockResolvedValue({ bucket: 'b1' } as any)
+    vi.mocked(s3api.getBucketTags).mockResolvedValue({ bucket: 'b1' } as unknown as Awaited<ReturnType<typeof s3api.getBucketTags>>)
     const w = mountTags()
     await flushPromises()
     expect(w.emitted('error')).toBeUndefined()
@@ -154,7 +154,7 @@ describe('BucketTags', () => {
     vi.mocked(s3api.getBucketTags).mockResolvedValue({
       bucket: 'b1',
       tags: [{ key: 'env', value: 'prod' }],
-    } as any)
+    })
     vi.mocked(s3api.putBucketTags).mockRejectedValue(new Error('put fail'))
     const w = mountTags()
     await flushPromises()

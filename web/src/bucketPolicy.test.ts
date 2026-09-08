@@ -5,6 +5,7 @@ import {
   parsePolicy,
   serializePolicy,
   validateDoc,
+  type PolicyDoc,
 } from './bucketPolicy'
 
 describe('bucketPolicy', () => {
@@ -202,13 +203,16 @@ describe('validateDoc error branches', () => {
     Statement: [{ sid: 'S', effect: 'Allow' as const, principal: '*', actions: ['s3:GetObject'], resources: ['b/*'] }],
   })
 
+  /** validateDoc 接受 PolicyDoc，但这里要故意传入非法结构，故用 unknown 桥接。 */
+  const validateRaw = (doc: unknown): string | null => validateDoc(doc as PolicyDoc)
+
   it('rejects bad Version/Statement', () => {
-    expect(validateDoc({ Version: '2006-03-01' as any, Statement: [] })).toMatch(/Version/)
-    expect(validateDoc({ Version: '2012-10-17', Statement: {} as any })).toMatch(/Statement/)
+    expect(validateRaw({ Version: '2006-03-01', Statement: [] })).toMatch(/Version/)
+    expect(validateRaw({ Version: '2012-10-17', Statement: {} })).toMatch(/Statement/)
   })
 
   it('rejects illegal Effect/empty principal/actions/resources', () => {
-    expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], effect: 'Bogus' as any }] })).toMatch(/Effect/)
+    expect(validateRaw({ ...good(), Statement: [{ ...good().Statement[0], effect: 'Bogus' }] })).toMatch(/Effect/)
     expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], principal: '' }] })).toMatch(/Principal/)
     expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], actions: [] }] })).toMatch(/Action/)
     expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], resources: [] }] })).toMatch(/Resource/)

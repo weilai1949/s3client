@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { reactive, ref, nextTick } from 'vue'
 import App from './App.vue'
+import type { Account } from './types'
 
 vi.mock('./api', () => ({
   s3api: {
@@ -16,7 +17,7 @@ vi.mock('./api', () => ({
 vi.mock('./store', async () => {
   const { reactive } = await import('vue')
   return {
-    state: reactive({ accounts: [] as any[], currentAccountId: '' }),
+    state: reactive({ accounts: [] as Account[], currentAccountId: '' }),
     rememberedAccountId: vi.fn(() => ''),
     selectAccount: vi.fn(),
     tabRequest: reactive({ tab: '', seq: 0 }),
@@ -44,7 +45,7 @@ vi.mock('./router', () => ({
 }))
 
 import { api, s3api } from './api'
-import { onTabHashChange, setTabHash, tabFromHash } from './router'
+import { onTabHashChange, setTabHash, tabFromHash, type TabKey } from './router'
 import { state, tabRequest, accountFormRequest, selectAccount, rememberedAccountId } from './store'
 import { cycleTheme, resolvedTheme } from './theme'
 import { cycleLocale, i18nState } from './i18n'
@@ -75,14 +76,14 @@ describe('App', () => {
     tabRequest.tab = ''
     tabRequest.seq = 0
     accountFormRequest.seq = 0
-    ;(api as any).isTauri = false
+    ;(api as unknown as { isTauri: boolean }).isTauri = false
     ;(i18nState as unknown as { locale: string }).locale = 'zh-CN'
     vi.clearAllMocks()
     vi.mocked(tabFromHash).mockReturnValue(null)
   })
 
   it('loads accounts, routes to objects when accounts exist, stays on accounts when empty', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [{ id: 'a1', name: 'A' }] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [{ id: 'a1', name: 'A' }] } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
     const w = mountApp()
     await flushPromises()
     expect(w.text()).toContain('nav.accounts')
@@ -94,7 +95,7 @@ describe('App', () => {
   it('restores the remembered account when it still exists', async () => {
     vi.mocked(s3api.listAccounts).mockResolvedValueOnce({
       accounts: [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }],
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
     vi.mocked(rememberedAccountId).mockReturnValue('a2')
     const w = mountApp()
     await flushPromises()
@@ -116,7 +117,7 @@ describe('App', () => {
   })
 
   it('tab switches via nav, hash listener, tabRequest and accountFormRequest', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     const navBtns = w.findAll('.tabs button')
@@ -138,7 +139,7 @@ describe('App', () => {
   })
 
   it('theme cycle updates icon and locale cycle calls cycleLocale', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     await w.find('.tabs button').trigger('click') // ensure mounted
@@ -152,12 +153,12 @@ describe('App', () => {
   })
 
   it('unmount unsubscribes hash listener and keeps tab on hash change', async () => {
-    let handler: ((t: string | null) => void) | null = null
-    vi.mocked(onTabHashChange).mockImplementationOnce(((cb: (t: string | null) => void) => {
+    let handler: ((t: TabKey | null) => void) | null = null
+    vi.mocked(onTabHashChange).mockImplementationOnce((cb: (t: TabKey | null) => void) => {
       handler = cb
       return () => {}
-    }) as any)
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    })
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     expect(handler).toBeTruthy()
@@ -170,7 +171,7 @@ describe('App', () => {
   it('列表仍含当前账号时保持当前（else-if keep-current 分支不重选）', async () => {
     vi.mocked(s3api.listAccounts).mockResolvedValueOnce({
       accounts: [{ id: 'a1', name: 'A' }, { id: 'a2', name: 'B' }],
-    } as any)
+    } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
     vi.mocked(rememberedAccountId).mockReturnValue('zz-gone')
     state.currentAccountId = 'a2'
     const w = mountApp()
@@ -181,10 +182,10 @@ describe('App', () => {
   })
 
   it('dark 主题渲染 moon 图标、Tauri 桌面徽章、英文 locale 标签', async () => {
-    ;(api as any).isTauri = true
+    ;(api as unknown as { isTauri: boolean }).isTauri = true
     vi.mocked(resolvedTheme).mockReturnValueOnce('dark')
     ;(i18nState as unknown as { locale: string }).locale = 'en'
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     expect(w.text()).toContain('Desktop')
@@ -193,14 +194,14 @@ describe('App', () => {
     expect(themeBtn.html()).toContain('M21.752')
     // localeLabel 英文分支（locale 按钮）
     expect(w.findAll('.theme-btn')[0].attributes('aria-label')).toBe('locale.en')
-    ;(api as any).isTauri = false
+    ;(api as unknown as { isTauri: boolean }).isTauri = false
     ;(i18nState as unknown as { locale: string }).locale = 'zh-CN'
     w.unmount()
   })
 
   it('hash 指向有效 tab 时首次路由直接进入且不再写 hash', async () => {
     vi.mocked(tabFromHash).mockReturnValue('buckets')
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     expect(w.find('buckets-panel-stub').exists()).toBe(true)
@@ -210,12 +211,12 @@ describe('App', () => {
   })
 
   it('hash 监听收到空值时保持当前 tab', async () => {
-    let handler: ((t: string | null) => void) | null = null
-    vi.mocked(onTabHashChange).mockImplementationOnce(((cb: (t: string | null) => void) => {
+    let handler: ((t: TabKey | null) => void) | null = null
+    vi.mocked(onTabHashChange).mockImplementationOnce((cb: (t: TabKey | null) => void) => {
       handler = cb
       return () => {}
-    }) as any)
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    })
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     handler!(null)
@@ -225,7 +226,7 @@ describe('App', () => {
   })
 
   it('tabRequest 无目标 tab 时不切换', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     tabRequest.seq++ // tabRequest.tab 仍为空 → 守卫跳过
@@ -235,12 +236,12 @@ describe('App', () => {
   })
 
   it('账号变更后再次加载不再重路由（首次路由只执行一次）', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     const before = vi.mocked(setTabHash).mock.calls.length
     // 直接二次调用 loadAccounts（等价 @changed 触发）
-    await (w.vm as any).loadAccounts()
+    await (w.vm as unknown as { loadAccounts: () => Promise<void> }).loadAccounts()
     await flushPromises()
     // first=false → 跳过重路由、不再写 hash
     expect(vi.mocked(setTabHash).mock.calls.length).toBe(before)
@@ -249,7 +250,7 @@ describe('App', () => {
   })
 
   it('nav 点击 migrate 切换到 MigratePanel', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
     const migrateBtn = w.findAll('.tabs button').find((b) => b.text().includes('nav.migrate'))!
@@ -259,10 +260,10 @@ describe('App', () => {
   })
 
   it('未知 tab 值不渲染任何面板（server else-if 假分支）', async () => {
-    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as any)
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
     const w = mountApp()
     await flushPromises()
-    ;(w.vm as any).tab = 'zz-unknown'
+    ;(w.vm as unknown as { tab: string }).tab = 'zz-unknown'
     await nextTick()
     expect(w.find('accounts-panel-stub').exists()).toBe(false)
     expect(w.find('server-panel-stub').exists()).toBe(false)

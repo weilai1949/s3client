@@ -107,7 +107,7 @@ describe('AclDialog', () => {
   it('owner 缺省(null/undefined)→ `r.owner ?? \'\'` 兜底为空', async () => {
     const w = mountDialog()
     try {
-      vi.mocked(s3api.getObjectAcl).mockResolvedValue({ ...ACL_RESULT, owner: undefined } as any)
+      vi.mocked(s3api.getObjectAcl).mockResolvedValue({ ...ACL_RESULT, owner: undefined })
       await w.setProps({ open: true })
       await flushPromises()
       // aclOwner 为空 → 页面显示 owner 行(名称回退为占位符文案由 i18n 决定)

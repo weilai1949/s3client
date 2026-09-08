@@ -2,8 +2,8 @@ import { computed, defineComponent, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useObjectActions, type ObjectBrowserCtx } from './useObjectActions'
-import { uploadObject } from '../upload'
-import { s3api, subscribeMigrateEvents } from '../api'
+import { uploadObject, type UploadTarget } from '../upload'
+import { s3api, subscribeMigrateEvents, type MigrateProgress } from '../api'
 import { toast, createProgressToast } from '../store'
 import { confirmDialog } from '../confirm'
 import { promptDialog } from '../prompt'
@@ -39,7 +39,7 @@ vi.mock('../proxy', () => ({ proxyUrl: vi.fn(() => 'https://p') }))
 vi.mock('../i18n', () => ({ t: (k: string) => k, tf: (k: string) => k }))
 
 /** 默认上传实现：挂起直到手动推进（inFlight）。 */
-type UploadImpl = (file: File, target: any, onProgress?: (p: number) => void, signal?: AbortSignal) => Promise<void>
+type UploadImpl = (file: File, target: UploadTarget, onProgress?: (p: number) => void, signal?: AbortSignal) => Promise<void>
 const defaultUploadImpl: UploadImpl = (_file, _target, _p, signal) => {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
@@ -383,7 +383,7 @@ describe('下载', () => {
       const el = origCreate(tag)
       if (tag === 'a') created = el as HTMLAnchorElement
       return el
-    }) as any)
+    }) as unknown as typeof document.createElement)
     try {
       actions.download(fileObj('dir/'))
       expect(created).toBeTruthy()
@@ -690,7 +690,7 @@ describe('上传入口', () => {
   it('pickUploadFiles：上传中不发点击；空闲点击输入框', () => {
     const actions = makeActions()
     const click = vi.fn()
-    actions.uploadInput.value = { click } as any
+    actions.uploadInput.value = { click } as unknown as HTMLInputElement
     actions.uploading.value = true
     actions.pickUploadFiles()
     expect(click).not.toHaveBeenCalled()
@@ -704,7 +704,7 @@ describe('上传入口', () => {
     const file = new File(['x'], 'a.txt')
     const input = document.createElement('input')
     Object.defineProperty(input, 'files', { value: [file] })
-    const ev = new Event('change') as any
+    const ev = new Event('change')
     Object.defineProperty(ev, 'target', { value: input })
 
     actions.onPickUpload(ev)
@@ -801,7 +801,7 @@ describe('批量签名链接', () => {
       selected: ref(new Set(['a.txt', 'b.txt'])),
     })
     vi.mocked(s3api.presign).mockImplementation((_id, body) =>
-      body.key === 'b.txt' ? Promise.reject(new Error('no')) : Promise.resolve({ url: 'u1' } as any),
+      body.key === 'b.txt' ? Promise.reject(new Error('no')) : Promise.resolve({ url: 'u1' } as Awaited<ReturnType<typeof s3api.presign>>),
     )
     await actions.copySelectedLinks()
     await flushPromises()
@@ -925,11 +925,11 @@ describe('删除文件夹（异步任务 + SSE 进度）', () => {
   })
 
   it('成功：进度事件更新 toast，done 后汇总 + 刷新', async () => {
-    let onProgress: ((p: any) => void) | undefined
+    let onProgress: ((p: Partial<MigrateProgress>) => void) | undefined
     let onError: ((err: Error) => void) | undefined
     const stop = vi.fn()
     vi.mocked(subscribeMigrateEvents).mockImplementation((_jobId, p, e) => {
-      onProgress = p
+      onProgress = p as (p: Partial<MigrateProgress>) => void
       onError = e
       return stop
     })
@@ -961,9 +961,9 @@ describe('删除文件夹（异步任务 + SSE 进度）', () => {
   })
 
   it('cancelled 终态：按删除数量 toast（非 truncated）', async () => {
-    let onProgress: ((p: any) => void) | undefined
+    let onProgress: ((p: Partial<MigrateProgress>) => void) | undefined
     vi.mocked(subscribeMigrateEvents).mockImplementation((_jobId, p) => {
-      onProgress = p
+      onProgress = p as (p: Partial<MigrateProgress>) => void
       return () => {}
     })
     vi.mocked(s3api.deletePrefixAsync).mockResolvedValueOnce({ jobId: 'j2', total: 3 })

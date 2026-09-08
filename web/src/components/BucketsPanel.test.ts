@@ -69,6 +69,13 @@ const buckets: BucketItem[] = [
 
 let wrappers: { unmount: () => void }[] = []
 
+/** VTU 对动态组件 id 的 findComponent 只推断到 WrapperLike，这里补出测试用到的 API。 */
+type ComponentStub = {
+  exists: () => boolean
+  props: (name: string) => unknown
+  vm: { $emit: (event: string, ...args: unknown[]) => void }
+}
+
 function mountPanel() {
   const w = shallowMount(BucketsPanel)
   wrappers.push(w)
@@ -109,7 +116,7 @@ describe('BucketsPanel', () => {
 
   it('记住的账号生效：accSel=remembered，加载并自动打开首个桶', async () => {
     vi.mocked(rememberedAccountId).mockReturnValue('acc-2')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     expect(selectAccount).toHaveBeenCalledWith('acc-2')
@@ -120,7 +127,7 @@ describe('BucketsPanel', () => {
   })
 
   it('默认账号：加载并渲染桶详情，backList → 表格 → manage 回详情', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     expect(selectAccount).toHaveBeenCalledWith('acc-1')
@@ -138,9 +145,9 @@ describe('BucketsPanel', () => {
   })
 
   it('加载中显示 loading 状态', async () => {
-    let resolveList!: (v: unknown) => void
+    let resolveList!: (v: Awaited<ReturnType<typeof s3api.listBuckets>>) => void
     vi.mocked(s3api.listBuckets).mockImplementationOnce(
-      () => new Promise((r) => { resolveList = r }) as any,
+      () => new Promise((r) => { resolveList = r }),
     )
     const w = mountPanel()
     await nextTick()
@@ -151,7 +158,7 @@ describe('BucketsPanel', () => {
   })
 
   it('空桶列表显示 empty 状态', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [] })
     const w = mountPanel()
     await flushPromises()
     expect(w.text()).toContain('buckets.empty')
@@ -160,7 +167,7 @@ describe('BucketsPanel', () => {
   it('加载失败显示错误与重试', async () => {
     vi.mocked(s3api.listBuckets)
       .mockRejectedValueOnce(new Error('list failed'))
-      .mockResolvedValueOnce({ buckets } as any)
+      .mockResolvedValueOnce({ buckets })
     const w = mountPanel()
     await flushPromises()
     expect(w.find('.msg.err').text()).toContain('list failed')
@@ -171,7 +178,7 @@ describe('BucketsPanel', () => {
   })
 
   it('页签切换渲染对应设置组件并转发 error，lifecycle 打开对话框', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     const tabs: [string, Component][] = [
@@ -186,7 +193,7 @@ describe('BucketsPanel', () => {
       await btnByText(w, label).trigger('click')
       await nextTick()
       // VTU 对动态组件 id 的 findComponent 类型不精确，此处以 any 使用 stub API
-      const stub: any = w.findComponent(comp as never)
+      const stub = w.findComponent(comp as never) as unknown as ComponentStub
       expect(stub.exists(), `tab ${label}`).toBe(true)
       // 每个设置组件收到当前账号/桶 props，且 @error 事件上浮为错误横幅
       expect(stub.props('accountId'), `${label} accountId`).toBe('acc-1')
@@ -210,7 +217,7 @@ describe('BucketsPanel', () => {
   })
 
   it('创建桶：按钮弹窗 → created → toast + 重新加载 → error 上浮 → close 关闭', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     await btnByText(w, 'buckets.createBtn').trigger('click')
@@ -230,7 +237,7 @@ describe('BucketsPanel', () => {
   })
 
   it('确认删除桶：delete → toast → 重新加载', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     await btnByText(w, 'buckets.backList').trigger('click')
@@ -248,7 +255,7 @@ describe('BucketsPanel', () => {
 
   it('删除确认取消：不调用 delete', async () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     await btnByText(w, 'buckets.backList').trigger('click')
@@ -257,7 +264,7 @@ describe('BucketsPanel', () => {
   })
 
   it('删除失败：错误上浮', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     vi.mocked(s3api.deleteBucket).mockRejectedValue(new Error('del fail'))
     const w = mountPanel()
     await flushPromises()
@@ -268,7 +275,7 @@ describe('BucketsPanel', () => {
   })
 
   it('账号切换：accSel watch 重新加载并清空选中', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     expect(vi.mocked(s3api.listBuckets).mock.calls[0][0]).toBe('acc-1')
@@ -281,7 +288,7 @@ describe('BucketsPanel', () => {
   })
 
   it('账号列表变化：失效的 accSel 被重置', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     state.accounts = []
@@ -291,7 +298,7 @@ describe('BucketsPanel', () => {
   })
 
   it('账号列表变化：accSel 为空时 watch 短路；accSel 失效时重置为列表首个账号', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     // 场景 1：初始无账号（accSel=''），随后列表出现 → watch 短路，不重复 selectAccount
     state.accounts = []
     const w = mountPanel()
@@ -310,11 +317,11 @@ describe('BucketsPanel', () => {
   })
 
   it('子页签 changed：重新加载并在列表变化时重新选中', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     // 当前选中 alpha（在列表中）→ 列表变化为仅 beta → 自动切到 beta
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [buckets[1]] } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [buckets[1]] })
     w.findComponent(BucketOverview).vm.$emit('changed')
     await flushPromises()
     // mount 时两次 + changed 后一次
@@ -323,7 +330,7 @@ describe('BucketsPanel', () => {
   })
 
   it('子页签 error 事件显示错误横幅', async () => {
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets } as any)
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets })
     const w = mountPanel()
     await flushPromises()
     w.findComponent(BucketOverview).vm.$emit('error', 'boom')

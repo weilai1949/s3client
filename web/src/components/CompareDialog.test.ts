@@ -149,8 +149,8 @@ describe('CompareDialog', () => {
     sel(0, '0') // base → v2
     sel(1, '1') // target → v1
     await flushPromises()
-    expect((w.vm as any).baseIdx).toBe(0)
-    expect((w.vm as any).targetIdx).toBe(1)
+    expect((w.vm as unknown as { baseIdx: number }).baseIdx).toBe(0)
+    expect((w.vm as unknown as { targetIdx: number }).targetIdx).toBe(1)
     expect((selects[0] as HTMLSelectElement).selectedIndex).toBe(0)
     expect((selects[1] as HTMLSelectElement).selectedIndex).toBe(1)
   })
@@ -295,9 +295,9 @@ describe('CompareDialog', () => {
 
   it('versions 长度非常规时 baseIdx 走三元假分支（回退 0）', async () => {
     // NaN.length：< 2 比较为 false，> 1 也为 false → baseIdx = 0
-    const w = mountDialog(NaN as any)
+    const w = mountDialog(NaN as unknown as CompareVersion[])
     await openDialog(w)
-    expect((w.vm as any).baseIdx).toBe(0)
+    expect((w.vm as unknown as { baseIdx: number }).baseIdx).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
