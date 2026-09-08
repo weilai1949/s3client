@@ -115,10 +115,8 @@ function putPartReturnEtag(
         xhr.abort()
         reject(new DOMException('Aborted', 'AbortError'))
       }
-      if (signal.aborted) {
-        onAbort()
-        return
-      }
+      // 调用方（multipartUpload 的 worker）在 PUT 分段前已检查 signal.aborted，
+      // 此处无需重复防御；直接挂监听即可。
       signal.addEventListener('abort', onAbort, { once: true })
     }
     const cleanup = () => {

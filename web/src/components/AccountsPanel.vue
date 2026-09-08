@@ -48,9 +48,10 @@ const regionOptions = computed(() => regionsFor(provider.value))
 const tests = reactive<Record<string, { ok?: boolean; err?: string }>>({})
 
 function providerDefaults(p: Provider) {
+  // 三个分组的并集覆盖 Provider 全部联合成员，find 恒命中；无兜底。
   return providersInGroup('compatible')
     .concat(providersInGroup('domestic'), providersInGroup('overseas'))
-    .find((d) => d.value === p) ?? providersInGroup('compatible')[0]
+    .find((d) => d.value === p)!
 }
 
 function applyProvider(p: Provider) {

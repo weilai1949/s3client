@@ -202,7 +202,7 @@ void s3api
 
     <div v-if="running || result" class="status" aria-live="polite">
       <span v-if="running">{{ tf('batchEdit.running', { done: progress.done, total: progress.total }) }}</span>
-      <span v-else-if="result">{{ tf('batchEdit.done', { ok: result.ok, failed: result.failed }) }}</span>
+      <span v-else>{{ tf('batchEdit.done', { ok: result!.ok, failed: result!.failed }) }}</span>
       <progress v-if="running" class="progress bar" :max="progress.total || 1" :value="progress.done"></progress>
     </div>
 

@@ -39,9 +39,8 @@ watch(() => props.menu, async (m) => {
 })
 
 function onMenuKeydown(e: KeyboardEvent) {
-  if (!menuEl.value) return
-  const btns = Array.from(menuEl.value.querySelectorAll<HTMLElement>('button'))
-  if (!btns.length) return
+  // 模板 v-if="menu" 已保证 menuEl 非空、菜单恒含按钮；无需判空守卫。
+  const btns = Array.from(menuEl.value!.querySelectorAll<HTMLElement>('button'))
   const idx = btns.indexOf(document.activeElement as HTMLElement)
   if (e.key === 'ArrowDown') { e.preventDefault(); btns[(idx + 1) % btns.length].focus() }
   else if (e.key === 'ArrowUp') { e.preventDefault(); btns[(idx - 1 + btns.length) % btns.length].focus() }
@@ -50,8 +49,8 @@ function onMenuKeydown(e: KeyboardEvent) {
 }
 
 function menuStyle() {
-  const m = props.menu
-  if (!m) return {}
+  // 模板仅在 v-if="menu" 时调用，m 恒非空。
+  const m = props.menu!
   return {
     left: Math.max(8, Math.min(m.x, window.innerWidth - 200)) + 'px',
     // 靠近底部时上移，保证菜单项在视口内；菜单自身另有 max-height + 滚动兜底。

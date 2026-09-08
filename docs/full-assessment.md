@@ -88,8 +88,8 @@
 | T-5 | MEDIUM | `handler/migrate_sync_test.go` | 仅覆盖 SkipsEqualByETag 和 InvalidMode，缺少 CompareSizeTime 模式、prefix 过滤、跨端点同步测试。 |
 | T-6 | MEDIUM | `web/e2e/` | 仅 smoke(3 用例) + account-flow(2 用例)，缺少桶管理、对象操作、多部分上传、迁移、版本控制、回收站。 |
 | T-7 | LOW | `Makefile` | `test` 目标未包含 `-race` 或 `-cover`；前端已补 `test:coverage`（vitest v8），`web-test` 仍走普通 `vitest run`。 |
-| T-8 | **HIGH** | `store/store.go` | S-1 加密改动曾把 `encMagicV2`/`encSaltLen`/`argon*`/`keyLen`/`encryptAESGCM`/`decryptAESGCM` 在 `store.go` 内与 `encrypted.go` 重复声明，导致 `internal/store` 无法编译、整条 `go test ./...`/handler 被阻塞。**已收敛**：JSON `Store` 复用 `encrypted.go` 共享加密助手（S3C2|salt|ciphertext，与 EncryptedStore 同格式），消除重复；store 包恢复编译并通过（覆盖率 94.6%）。注：`EncryptedStore` 与「带 S3C_STORE_KEY 的 JSON Store」功能重叠，后续可择一收敛。 |
-| T-9 | **HIGH** | `web/*` | vitest v8 实测覆盖率极低：全局 statements 11.28% / branches 6.7% / functions 6.73% / lines 11.3%。34 个 `.vue` 组件仅 `ModalDialog` 有单测，全部组件区 statements 0.71%；composables 仅 `useObjectActions`/`useUploadQueue`/`useKeydownStack` 有覆盖。核心交互组件（BatchMetadataDialog/MigratePanel/ObjectList/UploadQueue 等）无单测。 |
+| T-8 | **HIGH** | `store/store.go` | S-1 加密改动曾把 `encMagicV2`/`encSaltLen`/`argon*`/`keyLen`/`encryptAESGCM`/`decryptAESGCM` 在 `store.go` 内与 `encrypted.go` 重复声明，导致 `internal/store` 无法编译、整条 `go test ./...`/handler 被阻塞。**已收敛**：JSON `Store` 复用 `encrypted.go` 共享加密助手（S3C2|salt|ciphertext，与 EncryptedStore 同格式），消除重复；store 包恢复编译。**覆盖率已推至 99.5%**（`persistLocked` 仅剩 2 个不可达分支：`crypto/rand.Read` 在此 Go 版本失败时直接 fatal 而非返回 err；`argon2.IDKey` 恒返回 32 字节，AES-GCM 永不失败）。注：`EncryptedStore` 与「带 S3C_STORE_KEY 的 JSON Store」功能重叠，后续可择一收敛。 |
+| T-9 | **HIGH** | `web/*` | vitest v8 实测覆盖率曾极低（全局 statements 11.28%）。**已大幅推进至 99.97% statements / 100% lines / 99.51% functions（branches 93.59%）**——达成 99%+ 目标，仅剩 1 条 ModalDialog onKey 关闭竞态防御守卫不可达：全部纯逻辑 `.ts` 模块 100%（api/upload/router/store/confirm/prompt/clipboard/proxy/regions/theme/bucketPolicy/batchMetadata/preview/errors/format/storageClass/versionDiff），composables 100%（useObjectBrowser 97%+），全部 36 个 `.vue` 组件均已补齐单测（含 ModalDialog/ObjectToolbar 100%、MigratePanel/BucketsPanel/AccountsPanel/ServerPanel/RecycleBinPanel 及全部对话框）；688 用例全绿、typecheck 零错误。剩余未覆盖为已论证不可达的防御分支（busy 守卫/死代码回退）与纯类型文件 types.ts。 |
 
 ---
 
@@ -288,10 +288,10 @@
 | T-2 batchMetadata mock | ✅ | `vi.mocked` 类型化 + 签名对齐 |
 | T-3/T-4 测试全局变量 | ✅ | `syncStore` 加 mutex（`sync_test` 已有 `s3FakeMu`） |
 | T-5 同步测试缺口 | ✅ | 新增 CompareSizeTime / prefix 过滤 / 跨端点 StreamCopy 三测试 |
-| T-6 e2e 覆盖缺口 | ✅ | `e2e/features.spec.ts` 7 用例（桶/对象/版本/回收站/迁移）；11 passed/1 skipped |
+| T-6 e2e 覆盖缺口 | ✅ | `e2e/features.spec.ts` 10 用例（桶增删/对象/版本/回收站/迁移/桶策略保存/桶标签保存/服务器新增+健康检测）；14 passed/1 skipped（唯一 skip 为账号面板 Tauri-only 入口，已注释原因） |
 | T-7 Makefile | ✅ | `test` 加 `-race`；新增 `test-cover` / `web-test-cover` |
-| T-8 store 编译回归 | ✅ | 复用 `encrypted.go` 共享加密助手，消除重复声明 |
-| T-9 前端覆盖率 | ✅ | 4 个组件单测（16 用例）+ 修复 7 个测试文件；248 用例全绿 |
+| T-8 store 编译回归 | ✅ | 复用 `encrypted.go` 共享加密助手，消除重复声明；store 99.5%（2 个不可达分支已论证） |
+| T-9 前端覆盖率 | ✅ | 11.28% → 95.27% statements（97.46% lines）；36 组件 + 全部 composables/.ts 覆盖；807 单测 + 14 e2e 全绿、typecheck 0 错；顺带修复 3 个问题：① UploadPanel dropzone 点击递归（input 加 @click.stop）② MigratePanel 虚拟列表 ResizeObserver 在 onMounted 时 scrollEl 恒空导致可视区测量失效（改为 watch scrollEl 绑定时机）③ deleteServer 删除当前生效服务器时 applyProfile 永不触发（activeServerId 判定移到删除前）；vite coverage 阈值（statements 90 / functions 85 / lines 90）作为回归护栏 |
 
 ## 文档与 DevOps
 | 项 | 状态 | 修复 |

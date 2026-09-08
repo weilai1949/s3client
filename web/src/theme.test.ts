@@ -123,3 +123,24 @@ describe('system theme listener', () => {
     expect(systemThemeTick.value).toBe(initial + 1)
   })
 })
+
+describe('theme remaining branches', () => {
+  it('applyTheme auto 且系统偏好 light 时解析为 light（mq.matches 的 false 侧）', () => {
+    darkMatches = false
+    memLocal.clear()
+    applyTheme('auto')
+    expect(dataset['theme']).toBe('light')
+    expect(memLocal.get('s3c.theme')).toBe('auto')
+  })
+
+  it('系统主题变化但存储非 auto 时不重复应用（readTheme === auto 的 false 侧）', () => {
+    memLocal.set('s3c.theme', 'dark')
+    const before = dataset['theme']
+    const tick = systemThemeTick.value
+    mqListeners.forEach(fn => fn())
+    expect(systemThemeTick.value).toBe(tick + 1)
+    // applyTheme 未被调用：存储未被改写为 auto，data-theme 也未变化
+    expect(memLocal.get('s3c.theme')).toBe('dark')
+    expect(dataset['theme']).toBe(before)
+  })
+})

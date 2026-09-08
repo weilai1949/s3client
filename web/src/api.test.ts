@@ -115,6 +115,18 @@ describe('api token 存储', () => {
     memLocal.getItem = orig
   })
 
+  it('token 迁移读取 localStorage 抛异常时回退空串（line 58 catch）', async () => {
+    const orig = memLocal.getItem
+    memLocal.getItem = ((k: string) => {
+      if (k === 's3c.token') throw new Error('boom')
+      return orig.call(memLocal, k)
+    }) as any
+    const { api } = await loadApi()
+    // session 为空 + 非持久化 → 进入一次性迁移分支，getItem 抛异常 → catch 返回 ''
+    expect(api.token).toBe('')
+    memLocal.getItem = orig
+  })
+
   it('清空 token 字符串时 sessionStorage 与 localStorage 都被清空', async () => {
     const { api } = await loadApi()
     api.setTokenPersistent(true)
@@ -294,6 +306,26 @@ describe('request / requestResponse', () => {
     api.base = 'https://s3.example.com'
   })
 
+  it('requestResponse 不带 opts：默认参数 `= {}` 生效，无 Content-Type', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
+    const { requestResponse, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    const res = await requestResponse('/test')
+    expect(res.ok).toBe(true)
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith('https://s3.example.com/test', expect.objectContaining({ headers: {} }))
+  })
+
+  it('requestResponse 带 opts 但无 body：不设置 Content-Type', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
+    const { requestResponse, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await requestResponse('/test', { method: 'GET' })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      'https://s3.example.com/test',
+      expect.objectContaining({ method: 'GET', headers: {} }),
+    )
+  })
+
   it('request 失败抛错并解析 error 字段', async () => {
     stubFetch(() => Promise.resolve(makeErrorResponse(403, 'Forbidden', 'bad token')))
     const { api } = await loadApi()
@@ -350,6 +382,24 @@ describe('s3api', () => {
     const { s3api } = await import('./api')
     await s3api.listBuckets('id1')
     expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/buckets', expect.anything())
+  })
+
+  it('createBucket', async () => {
+    const { s3api } = await import('./api')
+    await s3api.createBucket('id1', { name: 'nb', region: 'us-east-1', acl: 'private' })
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/accounts/id1/bucket',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ name: 'nb', region: 'us-east-1', acl: 'private' }) }),
+    )
+  })
+
+  it('deleteBucket encodes name query', async () => {
+    const { s3api } = await import('./api')
+    await s3api.deleteBucket('id1', 'b name/ç')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/accounts/id1/bucket?name=b%20name%2F%C3%A7',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
   })
 
   it('listObjects', async () => {
@@ -567,6 +617,28 @@ describe('s3api', () => {
     const { downloadZipToDisk } = await import('./api')
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow()
   })
+
+  it('requestResponse 携带 Authorization（api.token 存在时）', async () => {
+    stubFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Map<string, string>([['Content-Length', '1000']]),
+        blob: () => Promise.resolve(new Blob(['zip'])),
+        body: null,
+      } as any)
+    )
+    const { api, downloadZipToDisk } = await loadApi()
+    api.token = 'tok-123'
+    await downloadZipToDisk('id1', { keys: ['a.txt'] })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/accounts/id1/download-zip'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }),
+      }),
+    )
+  })
 })
 
 // ── subscribeMigrateEvents ──────────────────────────────────────────────────
@@ -766,5 +838,538 @@ describe('directUpload', () => {
     await promise
     // 信号未 abort，监听器应被注册到 signal 上
     expect(signalAddEventListener).toHaveBeenCalledWith('abort', expect.any(Function), { once: true })
+  })
+})
+
+// ── api.ts 剩余分支：request 错误、FSA ZIP、token 迁移、deleteServer 回退 ──
+describe('api gaps', () => {
+  it('request 解析 JSON error 并抛 403', async () => {
+    stubFetch(() => Promise.resolve(makeErrorResponse(403, 'Forbidden', 'bad token')))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(s3api.listAccounts()).rejects.toThrow('403 bad token')
+  })
+
+  it('request 非 JSON 错误体回退 statusText', async () => {
+    stubFetch(() => Promise.resolve(makeErrorResponse(502, 'Bad Gateway')))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(s3api.listAccounts()).rejects.toThrow('502 Bad Gateway')
+  })
+
+  it('requestResponse 非 ok 解析 JSON error', async () => {
+    stubFetch(() => Promise.resolve(makeErrorResponse(401, 'Unauthorized', 'expired')))
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('401 expired')
+  })
+
+  it('downloadZipToDisk FSA 成功流式落盘', async () => {
+    const body = { pipeTo: vi.fn().mockResolvedValue(undefined), cancel: vi.fn().mockResolvedValue(undefined) }
+    stubFetch(() => Promise.resolve({
+      ok: true, status: 200, body,
+      headers: new Map<string, string>(),
+    } as any))
+    const picker = vi.fn().mockResolvedValue({ createWritable: async () => ({ abort: vi.fn() }) })
+    Object.defineProperty(window, 'showSaveFilePicker', { value: picker, configurable: true })
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await downloadZipToDisk('id1', { keys: ['a.txt'] })
+    expect(picker).toHaveBeenCalled()
+    expect(body.pipeTo).toHaveBeenCalled()
+    delete (window as any).showSaveFilePicker
+  })
+
+  it('downloadZipToDisk FSA 失败 → cancel body 并抛错', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const body = { pipeTo: vi.fn(), cancel }
+    stubFetch(() => Promise.resolve({
+      ok: true, status: 200, body,
+      headers: new Map<string, string>(),
+    } as any))
+    Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
+    expect(cancel).toHaveBeenCalled()
+    delete (window as any).showSaveFilePicker
+  })
+
+  it('streamBodyToFile 失败时 abort writable', async () => {
+    const abort = vi.fn().mockResolvedValue(undefined)
+    const body = { pipeTo: vi.fn().mockRejectedValue(new Error('pipe broke')), cancel: vi.fn().mockResolvedValue(undefined) }
+    stubFetch(() => Promise.resolve({
+      ok: true, status: 200, body,
+      headers: new Map<string, string>(),
+    } as any))
+    Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockResolvedValue({ createWritable: async () => ({ abort }) }), configurable: true })
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('pipe broke')
+    expect(abort).toHaveBeenCalled()
+    delete (window as any).showSaveFilePicker
+  })
+
+  it('s3api.downloadZipToDisk 包装函数转发', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({})))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await s3api.downloadZipToDisk('id1', { bucket: 'b', keys: ['a.txt'] })
+    expect(fetch).toHaveBeenCalledWith('https://s3.example.com/api/accounts/id1/download-zip', expect.anything())
+  })
+
+  it('token 一次迁移：session 无值但 localStorage 有旧值', async () => {
+    const { api } = await loadApi()
+    api.setTokenPersistent(false)
+    memLocal.setItem('s3c.token', 'legacy-token-1234567890')
+    expect(api.token).toBe('legacy-token-1234567890')
+  })
+
+  it('deleteServer 删除当前生效服务器 → 应用回退 profile（剩余第一个）', async () => {
+    const { api } = await loadApi()
+    const s1 = api.upsertServer({ name: 'one', base: 'http://one', token: 'tok1' })
+    api.selectServer(s1.id)
+    expect(api.base).toBe('http://one')
+    expect(api.token).toBe('tok1')
+    api.deleteServer(s1.id) // 删当前生效 → 回退到剩余第一个（内置默认）并应用
+    expect(api.base).toBe('')
+    expect(api.token).toBe('')
+    expect(api.listServers().length).toBe(1)
+  })
+})
+
+// ── api.ts 收尾：session 优先、persistent 读取异常、previewBuckets ──
+describe('api edge branches', () => {
+  it('readToken prefers sessionStorage', async () => {
+    memSession.setItem('s3c.token', 'session-token')
+    memLocal.setItem('s3c.token', 'local-token')
+    const { api } = await loadApi()
+    api.setTokenPersistent(false)
+    expect(api.token).toBe('session-token')
+  })
+
+  it('tokenPersistent 分支读取 localStorage，异常回退空串', async () => {
+    memLocal.setItem('s3c_token_persistent', '1')
+    memLocal.setItem('s3c.token', 'persisted-token')
+    const { api } = await loadApi()
+    expect(api.token).toBe('persisted-token')
+
+    const orig = memLocal.getItem
+    memLocal.getItem = ((k: string) => {
+      if (k === 's3c.token') throw new Error('boom')
+      return orig.call(memLocal, k)
+    }) as any
+    const { api: api2 } = await loadApi()
+    expect(api2.token).toBe('')
+    memLocal.getItem = orig
+  })
+
+  it('s3api.previewBuckets posts account input', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ buckets: [{ name: 'b1' }] })))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    const out = await s3api.previewBuckets({
+      name: 'a', endpoint: 'http://x', region: 'us-east-1',
+      accessKey: 'ak', secretKey: 'sk', bucket: 'b', pathStyle: true, useSSL: false,
+    })
+    expect(fetch).toHaveBeenCalledWith('https://s3.example.com/api/accounts/preview-buckets', expect.anything())
+    expect(out.buckets).toEqual([{ name: 'b1' }])
+  })
+})
+
+// ── api.ts 末批：Authorization 头、selectServer 未命中、versions/trash 参数、SSE ping ──
+describe('api final branches', () => {
+  it('request/requestResponse attach Authorization when token set', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
+    const { api, s3api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    api.setTokenPersistent(false)
+    api.token = 'tok-123'
+    await s3api.listAccounts()
+    const init = (fetch as any).mock.calls.at(-1)[1] ?? {}
+    expect(init.headers?.['Authorization']).toBe('Bearer tok-123')
+  })
+
+  it('selectServer unknown id returns undefined', async () => {
+    const { api } = await loadApi()
+    expect(api.selectServer('missing-id')).toBeUndefined()
+  })
+
+  it('listVersions forwards prefix/keyMarker/versionIdMarker', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({})))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await s3api.listVersions('id1', { bucket: 'b', prefix: 'p/', keyMarker: 'km', versionIdMarker: 'vm' })
+    const url = String((fetch as any).mock.calls.at(-1)[0])
+    expect(url).toContain('prefix=p%2F')
+    expect(url).toContain('keyMarker=km')
+    expect(url).toContain('versionIdMarker=vm')
+  })
+
+  it('listTrash forwards prefix/keyMarker/versionIdMarker/maxKeys', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({})))
+    const { s3api, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await s3api.listTrash('id1', { bucket: 'b', prefix: 'p/', keyMarker: 'km', versionIdMarker: 'vm', maxKeys: 999 })
+    const url = String((fetch as any).mock.calls.at(-1)[0])
+    expect(url).toContain('maxKeys=999')
+    expect(url).toContain('keyMarker=km')
+  })
+
+  it('subscribeMigrateEvents: ping+status+Authorization+EOF-done fallback', async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        // ping 心跳：eventName==='ping' → data 行被 continue 忽略
+        c.enqueue(new TextEncoder().encode('event: ping\ndata: {}\n\n'))
+        // 带 status 的 progress
+        c.enqueue(new TextEncoder().encode('event: progress\ndata: {"migrated":1,"status":"running"}\n\n'))
+        c.close() // EOF 无终态 → 触发 migrateJobStatus 回读
+      },
+    })
+    const statusResp = { done: true, progress: { migrated: 1, done: 1, total: 1, status: '' } }
+    stubFetch((input: any) => {
+      const url = String(input)
+      if (url.includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, body: stream, json: async () => ({}) } as any)
+      }
+      return Promise.resolve(makeBlobResponse(statusResp))
+    })
+    const { api, subscribeMigrateEvents } = await loadApi()
+    api.base = 'https://s3.example.com'
+    api.setTokenPersistent(false)
+    api.token = 'tok-sse'
+    const onProgress = vi.fn()
+    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(2))
+    // EOF 回读：最后一次回调为 migrateJobStatus 的 done
+    const last = (onProgress as any).mock.calls.at(-1)[0]
+    expect(last.status).toBe('done')
+    off()
+  })
+})
+
+// ── api.ts 覆盖率补全：readToken / newId / servers 分支 ──────────────────────
+describe('api gaps: token/servers 分支', () => {
+  it('readToken 持久化模式下 localStorage 无 token → 返回空串（line 48 ?? 右侧）', async () => {
+    memLocal.setItem('s3c_token_persistent', '1')
+    const { api } = await loadApi()
+    expect(api.isTokenPersistent).toBe(true)
+    expect(api.token).toBe('')
+  })
+
+  it('newId() 无 crypto.randomUUID 时回退时间戳+随机串', async () => {
+    vi.stubGlobal('crypto', { randomUUID: undefined })
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'x', base: '/', token: '' })
+    expect(p.id).toMatch(/^s-\d+-[a-z0-9]+$/)
+  })
+
+  it('listServers() 本地 JSON 非数组时回退默认 server（line 125 else）', async () => {
+    memLocal.setItem('s3c.servers', JSON.stringify({ not: 'array' }))
+    const { api } = await loadApi()
+    const list = api.listServers()
+    expect(Array.isArray(list)).toBe(true)
+    expect(list[0].name).toBe('server.sameOriginDefault')
+  })
+
+  it('listServers() 首次默认 server 在 Tauri 下用 localBackend 名称（line 133 左支）', async () => {
+    const orig = location.hostname
+    Object.defineProperty(location, 'hostname', { value: 'tauri.localhost', configurable: true })
+    try {
+      const { api } = await loadApi()
+      const list = api.listServers()
+      expect(list[0].name).toBe('server.localBackend')
+      expect(list[0].base).toBe('http://127.0.0.1:8080')
+    } finally {
+      Object.defineProperty(location, 'hostname', { value: orig, configurable: true })
+    }
+  })
+
+  it('activeServerId() 服务器列表为空 → 返回空串（line 197 ?? 右侧）', async () => {
+    memLocal.setItem('s3c.servers', '[]')
+    const { api } = await loadApi()
+    expect(api.activeServerId()).toBe('')
+    expect(api.getActiveServer()).toBeUndefined()
+  })
+
+  it('upsertServer() base 为空 → base 归一化为空串（line 215 || 右侧）', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'srv', base: '', token: '' })
+    expect(p.base).toBe('')
+  })
+
+  it('upsertServer() 名称为空且 base 非空 → 以 base 为名（line 217 中型 ||）', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: '', base: 'http://x:9001', token: '' })
+    expect(p.name).toBe('http://x:9001')
+  })
+
+  it('upsertServer() 名称、base 均为空 → 回退 sameOriginShort（line 217 尾支）', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: '   ', base: '', token: '' })
+    expect(p.name).toBe('server.sameOriginShort')
+    expect(p.base).toBe('')
+  })
+
+  it('upsertServer() id 不存在 → 创建新 server（line 220 else）', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ id: 'ghost-id', name: 'new', base: 'http://x:9002', token: '' })
+    expect(p.id).not.toBe('ghost-id')
+    expect(p.name).toBe('new')
+  })
+
+  it('upsertServer() 更新非当前 server → 不触发 applyProfile（line 223 假分支）', async () => {
+    const { api } = await loadApi()
+    const def = api.listServers()[0]
+    const extra = api.upsertServer({ name: 'extra', base: 'http://extra', token: 't-extra' })
+    api.base = 'http://keep-base'
+    api.token = 'keep-token'
+    api.upsertServer({ id: extra.id, name: 'extra-renamed', base: 'http://extra2', token: 't2' })
+    expect(api.base).toBe('http://keep-base')
+    expect(api.token).toBe('keep-token')
+    expect(api.activeServerId()).toBe(def.id)
+  })
+
+  it('deleteServer() 在 Tauri 下重建默认 server → localBackend（line 238 左支）', async () => {
+    const orig = location.hostname
+    Object.defineProperty(location, 'hostname', { value: 'tauri.localhost', configurable: true })
+    try {
+      const { api } = await loadApi()
+      const list = api.listServers()
+      api.deleteServer(list[0].id)
+      const list2 = api.listServers()
+      expect(list2[0].name).toBe('server.localBackend')
+      expect(list2[0].base).toBe('http://127.0.0.1:8080')
+    } finally {
+      Object.defineProperty(location, 'hostname', { value: orig, configurable: true })
+    }
+  })
+})
+
+// ── api.ts 覆盖率补全：s3api bucket 可选参数分支 ──────────────────────────────
+describe('api gaps: s3api bucket 可选参数', () => {
+  beforeEach(() => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({})))
+  })
+
+  it('bucket 缺省时各 bucket 接口拼接空 bucket 参数（?? 右侧）', async () => {
+    const { s3api } = await import('./api')
+    await s3api.getBucketInfo('id1')
+    await s3api.getBucketEncryption('id1')
+    await s3api.deleteBucketEncryption('id1')
+    await s3api.getBucketCors('id1')
+    await s3api.deleteBucketCors('id1')
+    await s3api.getBucketWebsite('id1')
+    await s3api.deleteBucketWebsite('id1')
+    await s3api.getBucketPolicy('id1')
+    await s3api.deleteBucketPolicy('id1')
+    await s3api.getBucketTags('id1')
+    await s3api.deleteBucketTags('id1')
+    await s3api.getLifecycle('id1')
+    const urls = (fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+    expect(urls.length).toBe(12)
+    for (const u of urls) expect(u).toContain('bucket=')
+    for (const u of urls) expect(u).not.toContain('bucket=undefined')
+  })
+
+  it('query 无 bucket 时 getObjectAcl/getObjectTags/listVersions/deleteObjectVersion/listTrash 不拼 bucket', async () => {
+    const { s3api } = await import('./api')
+    await s3api.getObjectAcl('id1', { key: 'k' })
+    await s3api.getObjectTags('id1', { key: 'k' })
+    await s3api.listVersions('id1', { prefix: 'p' })
+    await s3api.deleteObjectVersion('id1', { key: 'k', versionId: 'v' })
+    await s3api.listTrash('id1', { prefix: 'p' })
+    const urls = (fetch as any).mock.calls.map((c: any[]) => String(c[0]))
+    expect(urls.length).toBe(5)
+    for (const u of urls) expect(u).not.toContain('bucket=')
+  })
+})
+
+// ── api.ts 覆盖率补全：requestResponse 错误体与 downloadZipToDisk catch ──────
+describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
+  it('requestResponse 错误体无 error 字段 → 回退 statusText（line 275 假分支）', async () => {
+    stubFetch(() => Promise.resolve(makeErrorResponse(500, 'boom')))
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('500 boom')
+  })
+
+  it('FSA 失败且 body.cancel() 也失败 → cancel().catch 回调执行（line 336 函数）', async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'))
+    const body = { pipeTo: vi.fn(), cancel }
+    stubFetch(() => Promise.resolve({
+      ok: true, status: 200, body,
+      headers: new Map<string, string>(),
+    } as any))
+    Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
+    const { downloadZipToDisk, api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    delete (window as any).showSaveFilePicker
+  })
+
+  it('超限且 body 存在 → res.body?.cancel() 执行且其失败被吞（line 346 函数）', async () => {
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'))
+    stubFetch(() => Promise.resolve({
+      ok: true, status: 200, statusText: 'OK',
+      headers: new Map<string, string>([['Content-Length', '600000000']]),
+      body: { cancel },
+    } as any))
+    const { downloadZipToDisk } = await import('./api')
+    await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('api.zipTooLarge')
+    expect(cancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── api.ts 覆盖率补全：subscribeMigrateEvents SSE 分支 ───────────────────────
+describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
+  it('无空格 data 行 + 未知字段行 + 终态 done → 不触发回读（line 614/611/627）', async () => {
+    const stream = new ReadableStream({
+      start(c) {
+        // data: 不带空格（614 右支）；retry 行既不 event: 也不 data:（611 else 支）
+        c.enqueue(new TextEncoder().encode('event: progress\ndata:{"status":"done"}\nretry: 100\n\n'))
+        c.close()
+      },
+    })
+    stubFetch((input: any) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+      }
+      return Promise.resolve(makeBlobResponse({ done: true, progress: { status: 'done' } }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
+    expect((onProgress as any).mock.calls.at(-1)[0].status).toBe('done')
+    await new Promise((r) => setTimeout(r, 20))
+    expect(fetch).toHaveBeenCalledTimes(1) // EOF 后 lastStatus==='done' → 不回读
+    off()
+  })
+
+  it('回读时 progress 无 status 且任务完成 → status 取 done（line 632 三元真支）', async () => {
+    const stream = new ReadableStream({ start(c) { c.close() } })
+    stubFetch((input: any) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+      }
+      return Promise.resolve(makeBlobResponse({ done: true, progress: {} }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
+    expect((onProgress as any).mock.calls.at(-1)[0].status).toBe('done')
+    off()
+  })
+
+  it('回读时 progress 无 status 且任务未完成 → status 为 undefined（line 632 三元假支）', async () => {
+    const stream = new ReadableStream({ start(c) { c.close() } })
+    stubFetch((input: any) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, body: stream } as any)
+      }
+      return Promise.resolve(makeBlobResponse({ done: false, progress: {} }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const off = subscribeMigrateEvents('job-1', onProgress as any, vi.fn())
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
+    expect((onProgress as any).mock.calls.at(-1)[0].status).toBeUndefined()
+    off()
+  })
+
+  it('fetch 抛非 Error 字符串 → onError 收到包装后的 Error（line 641 三元假支）', async () => {
+    stubFetch(() => Promise.reject('plain failure'))
+    const { subscribeMigrateEvents } = await import('./api')
+    const onError = vi.fn()
+    const off = subscribeMigrateEvents('job-1', vi.fn() as any, onError)
+    await vi.waitFor(() => expect(onError).toHaveBeenCalled())
+    expect((onError as any).mock.calls[0][0]).toBeInstanceOf(Error)
+    off()
+  })
+
+  it('abort 后 fetch 仍 reject → 不回调 onError（line 641 假分支）', async () => {
+    let rejectFetch: (e: any) => void = () => {}
+    stubFetch(() => new Promise((_, rej) => { rejectFetch = rej }))
+    const { subscribeMigrateEvents } = await import('./api')
+    const onError = vi.fn()
+    const off = subscribeMigrateEvents('job-1', vi.fn() as any, onError)
+    await new Promise((r) => setTimeout(r, 10))
+    off()
+    rejectFetch(new Error('network down'))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('abort 后流才 EOF → 跳过回读且无回调（line 627 abort 项）', async () => {
+    let resolveRead: (v: any) => void = () => {}
+    const pending = new Promise<any>((res) => { resolveRead = res })
+    stubFetch((input: any) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({ ok: true, status: 200, body: { getReader: () => ({ read: () => pending, cancel: vi.fn() }) } } as any)
+      }
+      return Promise.resolve(makeBlobResponse({ done: true, progress: { status: 'done' } }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const off = subscribeMigrateEvents('job-1', onProgress as any, onError)
+    await new Promise((r) => setTimeout(r, 20))
+    off()
+    resolveRead({ done: true, value: new Uint8Array(0) })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(onError).not.toHaveBeenCalled()
+    expect(onProgress).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── api.ts 覆盖率补全：directUpload 进度分支 ────────────────────────────────
+describe('api gaps: directUpload 进度分支', () => {
+  function createXhrMockClass() {
+    const instances: any[] = []
+    class XHRMock {
+      open = vi.fn()
+      setRequestHeader = vi.fn()
+      send = vi.fn()
+      abort = vi.fn()
+      status = 200
+      upload = { onprogress: null as ((e: any) => void) | null }
+      onload: ((e: any) => void) | null = null
+      onerror: ((e: any) => void) | null = null
+      onabort: ((e: any) => void) | null = null
+      constructor() {
+        instances.push(this)
+      }
+      static getInstances() { return instances }
+      static clear() { instances.length = 0 }
+    }
+    return XHRMock
+  }
+
+  it('进度事件 lengthComputable=false → 不回调 onProgress（line 673 假分支）', async () => {
+    const XHRMock = createXhrMockClass()
+    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    const { directUpload } = await import('./api')
+    const onProgress = vi.fn()
+    const promise = directUpload('https://x', new Blob(['a'] as any) as any, onProgress)
+    const inst = XHRMock.getInstances()[0]
+    inst.upload.onprogress?.({ lengthComputable: false, loaded: 50, total: 100 })
+    expect(onProgress).not.toHaveBeenCalled()
+    inst.onload?.({})
+    await promise
+  })
+
+  it('未提供 onProgress 时进度事件正常触发不报错', async () => {
+    const XHRMock = createXhrMockClass()
+    vi.stubGlobal('XMLHttpRequest', XHRMock as any)
+    const { directUpload } = await import('./api')
+    const promise = directUpload('https://x', new Blob(['a'] as any) as any)
+    const inst = XHRMock.getInstances()[0]
+    inst.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
+    inst.onload?.({})
+    await promise
   })
 })

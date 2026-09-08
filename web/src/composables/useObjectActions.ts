@@ -171,7 +171,8 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
   function download(o: ObjectItem) {
     const a = document.createElement('a')
     a.href = proxyUrl(requireAccId(), ctx.currentBucket.value, 'download', o.key, api.base)
-    a.download = o.key.split('/').pop() ?? 'object'
+    // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
+    a.download = o.key.split('/').pop() || 'object'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

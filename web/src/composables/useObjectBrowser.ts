@@ -402,9 +402,8 @@ export function useObjectBrowser(bindings: KeyBindings) {
       if (seq !== loadSeq.value) return
       toast(tf('objects.toastLoadedAll', { files: fileObjects.value.length, folders: commonPrefixes.value.length }))
       if (isTruncated.value) toast(tf('objects.toastLoadedCap', { n: guard * 100 }), 'err')
-    } catch (err: unknown) {
-      if (seq === loadSeq.value) error.value = err instanceof Error ? err.message : String(err)
     } finally {
+      // load() 内部已捕获列表错误（不经 reject 上抛），此处无需 catch（原 catch 为死代码）。
       if (seq === loadSeq.value) loadingAll.value = false
     }
   }

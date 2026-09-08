@@ -13,7 +13,6 @@ import { useUploadQueue } from '../composables/useUploadQueue'
 import type { UploadQueueItem } from '../composables/useUploadQueue'
 
 const prefix = ref('')
-const error = ref('')
 const dragging = ref(false)
 const fileInput = ref<HTMLInputElement>()
 
@@ -55,7 +54,6 @@ function onDrop(e: DragEvent) {
 
 async function uploadAll() {
   if (!account.value) return
-  error.value = ''
   const processed = await queue.run()
   const failed = processed.filter((it) => it.status === 'err').length
   if (processed.length) {
@@ -155,10 +153,8 @@ function clearDone() {
         </div>
         <div class="dz-title">{{ t('upload.dropTitle') }}</div>
         <div class="dz-sub">{{ t('upload.dropSub') }}</div>
-        <input ref="fileInput" type="file" multiple style="display:none" @change="(e) => addFiles((e.target as HTMLInputElement).files)" />
+        <input ref="fileInput" type="file" multiple style="display:none" @click.stop @change="(e) => addFiles((e.target as HTMLInputElement).files)" />
       </div>
-
-      <div v-if="error" class="msg err" style="margin-bottom:10px">{{ error }}</div>
 
       <template v-if="items.length">
         <div class="row" style="margin-bottom:10px">

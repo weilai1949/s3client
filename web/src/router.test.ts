@@ -57,4 +57,23 @@ describe('onTabHashChange', () => {
     window.addEventListener = origAdd
     window.removeEventListener = origRemove
   })
+
+  it('invokes callback when hashchange fires', () => {
+    const cb = vi.fn()
+    let handler: (() => void) | null = null
+    const origAdd = window.addEventListener
+    const origRemove = window.removeEventListener
+    window.addEventListener = ((type: string, fn: () => void) => {
+      if (type === 'hashchange') handler = fn
+    }) as any
+    window.removeEventListener = vi.fn() as any
+
+    const off = onTabHashChange(cb)
+    handler!()
+    expect(cb).toHaveBeenCalled()
+
+    off()
+    window.addEventListener = origAdd
+    window.removeEventListener = origRemove
+  })
 })

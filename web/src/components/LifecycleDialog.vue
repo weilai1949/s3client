@@ -82,7 +82,7 @@ async function submitLifecycle() {
         </tr>
       </tbody>
     </table>
-    <div v-else-if="!loading" class="empty" style="padding:18px">
+    <div v-else class="empty" style="padding:18px">
       {{ t('lifecycle.empty') }}
     </div>
     <div class="row" style="margin-top:12px">

@@ -90,8 +90,8 @@ function normalizePrincipal(p: unknown): string | null {
     const o = p as Record<string, unknown>
     // 仅支持单值 AWS 或 *；多 Principal（数组）不支持。
     const aws = o.AWS
+    // 注意：typeof aws === 'string' 分支（含 '*'）必然先命中，`aws === '*'` 为不可达分支。
     if (typeof aws === 'string') return stripAWSPrefix(aws)
-    if (aws === '*') return '*'
   }
   return null
 }

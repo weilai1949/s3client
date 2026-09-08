@@ -137,4 +137,113 @@ describe('ObjectToolbar', () => {
     const filterEvents = w.emitted('update:filter')!
     expect(filterEvents[filterEvents.length - 1]).toEqual([''])
   })
+
+  it('无桶时显示 noBucket 占位选项；loadingBuckets 禁用选择器；空桶禁用桶属性/向上', () => {
+    const w = mount(ObjectToolbar, {
+      props: { ...baseProps, buckets: [], bucket: '', prefix: '', loadingBuckets: true },
+    })
+    const sel = w.find('select')
+    expect(sel.attributes('disabled')).toBeDefined()
+    const opts = sel.findAll('option').map((o) => o.text())
+    expect(opts).toEqual(['toolbar.noBucket'])
+    // 无 bucket → 桶属性/向上按钮禁用
+    expect(findButton(w, 'toolbar.bucketProps').attributes('disabled')).toBeDefined()
+    expect(findButton(w, 'toolbar.goUp').attributes('disabled')).toBeDefined()
+    // 路径根按钮显示占位文案 Bucket
+    expect(w.findAll('button.link').some((b) => b.text() === 'Bucket')).toBe(true)
+  })
+
+  it('面包屑：根按钮 go-root，非当前路径 crumb 进入前缀，当前路径为纯文本', async () => {
+    const w = mount(ObjectToolbar, {
+      props: {
+        ...baseProps,
+        crumbs: [
+          { name: 'dir', path: 'dir/' },
+          { name: 'sub', path: 'dir/sub/' },
+        ],
+      },
+    })
+    await findButton(w, 'my-bucket').trigger('click')
+    expect(w.emitted('go-root')).toBeTruthy()
+    // 当前前缀为纯文本（无按钮）
+    expect(w.findAll('span.cur').map((s) => s.text())).toEqual(['dir'])
+    await findButton(w, 'sub').trigger('click')
+    expect(w.emitted('enter-prefix')?.[0]).toEqual(['dir/sub/'])
+  })
+
+  it('桶属性按钮触发 open-bucket-info；向上/返回桶列表触发对应事件', async () => {
+    const w = mount(ObjectToolbar, { props: baseProps })
+    await findButton(w, 'toolbar.bucketProps').trigger('click')
+    expect(w.emitted('open-bucket-info')).toBeTruthy()
+    await findButton(w, 'toolbar.goUp').trigger('click')
+    expect(w.emitted('go-up')).toBeTruthy()
+    await findButton(w, 'toolbar.backBuckets').trigger('click')
+    expect(w.emitted('back-to-buckets')).toBeTruthy()
+  })
+
+  it('上传中显示 uploading 文案并禁用上传；loading/opsBusy 禁用刷新/上传', async () => {
+    const w = mount(ObjectToolbar, { props: baseProps })
+    await w.setProps({ uploading: true })
+    const upBtn = findButton(w, 'toolbar.uploading')
+    expect(upBtn.attributes('disabled')).toBeDefined()
+    await w.setProps({ loading: true })
+    expect(findButton(w, 'common.refresh').attributes('disabled')).toBeDefined()
+    expect(findButton(w, 'toolbar.backBuckets').attributes('disabled')).toBeDefined()
+    await w.setProps({ uploading: false, loading: false, opsBusy: true })
+    expect(findButton(w, 'common.refresh').attributes('disabled')).toBeDefined()
+    expect(findButton(w, 'toolbar.upload').attributes('disabled')).toBeDefined()
+  })
+
+  it('全选 checkbox 触发 toggle-select-all', async () => {
+    const w = mount(ObjectToolbar, { props: baseProps })
+    const cb = w.find('input[type="checkbox"]')
+    expect((cb.element as HTMLInputElement).checked).toBe(false)
+    await cb.setValue(true)
+    expect(w.emitted('toggle-select-all')).toBeTruthy()
+  })
+
+  it('批量操作按钮逐一触发对应事件', async () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, selectedCount: 2, selectedSize: 64 } })
+    await findButton(w, 'toolbar.copyTo').trigger('click')
+    expect(w.emitted('open-dest-multi')?.[0]).toEqual(['copy'])
+    await findButton(w, 'toolbar.moveTo').trigger('click')
+    expect(w.emitted('open-dest-multi')?.[1]).toEqual(['move'])
+    await findButton(w, 'toolbar.copyLink').trigger('click')
+    expect(w.emitted('copy-links')).toBeTruthy()
+    await findButton(w, 'toolbar.zipDownload').trigger('click')
+    expect(w.emitted('download-zip')).toBeTruthy()
+    await findButton(w, 'toolbar.batchEdit').trigger('click')
+    expect(w.emitted('open-batch-edit')).toBeTruthy()
+    await findButton(w, 'common.delete').trigger('click')
+    expect(w.emitted('remove-selected')).toBeTruthy()
+    // 选中统计 badge
+    expect(w.text()).toContain('toolbar.selectedFiles')
+  })
+
+  it('zipLoading 显示 zipping 文案并禁用下载', () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, selectedCount: 1, zipLoading: true } })
+    const zip = findButton(w, 'toolbar.zipping')
+    expect(zip.attributes('disabled')).toBeDefined()
+  })
+
+  it('路径输入 v-model 更新 pathDraft；blur 提交路径', async () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, pathEditing: true } })
+    const input = w.find('.path-input')
+    await input.setValue('newdir/')
+    expect(w.emitted('update:pathDraft')?.[0]).toEqual(['newdir/'])
+    await input.trigger('blur')
+    expect(w.emitted('commit-path')).toBeTruthy()
+  })
+
+  it('grid 视图切换按钮显示 listView 文案', () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, bucketView: 'grid' } })
+    const viewBtn = w.findAll('button').find((b) => b.text().includes('toolbar.listView'))
+    expect(viewBtn).toBeTruthy()
+  })
+
+  it('编辑态路径按钮显示 ✓ 并触发 toggle-path-edit', async () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, pathEditing: true } })
+    await findButton(w, '✓').trigger('click')
+    expect(w.emitted('toggle-path-edit')).toBeTruthy()
+  })
 })

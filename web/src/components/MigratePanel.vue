@@ -37,12 +37,15 @@ function measureViewport() {
   if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || 480
 }
 let resizeObs: ResizeObserver | undefined
-onMounted(() => {
+// 虚拟列表在组件挂载后才随对象数据渲染，scrollEl 的 ref 绑定晚于 onMounted：
+// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（修复原 onMounted 恒空失效）。
+watch(scrollEl, (el) => {
+  resizeObs?.disconnect()
+  resizeObs = undefined
+  if (!el || typeof ResizeObserver === 'undefined') return
   measureViewport()
-  if (scrollEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObs = new ResizeObserver(measureViewport)
-    resizeObs.observe(scrollEl.value)
-  }
+  resizeObs = new ResizeObserver(measureViewport)
+  resizeObs.observe(el)
 })
 onBeforeUnmount(() => {
   resizeObs?.disconnect()

@@ -300,11 +300,11 @@ function dismissError() {
         @load-all="loadAll"
       />
 
-      <!-- 对象详情（弹窗） -->
+      <!-- 对象详情（弹窗：仅账号存在时渲染，account.id 必填，无空串回退） -->
       <ObjectDetailDialog
         :open="!!detail"
         :detail="detail"
-        :account-id="account?.id ?? ''"
+        :account-id="account.id"
         :bucket="currentBucket"
         @close="detail = null"
         @edit-headers="openHeadersDialog"

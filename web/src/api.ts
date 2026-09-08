@@ -231,12 +231,14 @@ export const api = {
   },
 
   deleteServer(id: string): void {
+    // 删除前判定：被删服务器是否为当前生效项（删除后 activeServerId 已无法回退到它）。
+    const wasActive = this.activeServerId() === id
     let list = readServers().filter((s) => s.id !== id)
     if (!list.length) {
       list = [{ id: newId(), name: isTauri() ? t('server.localBackend') : t('server.sameOriginDefault'), base: defaultBase(), token: '' }]
     }
     writeServers(list)
-    if (this.activeServerId() === id) {
+    if (wasActive) {
       applyProfile(list[0])
     }
   },
@@ -261,7 +263,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 /** 原始 Response（流式下载用）；失败时解析 JSON error。 */
-async function requestResponse(path: string, opts: RequestInit = {}): Promise<Response> {
+export async function requestResponse(path: string, opts: RequestInit = {}): Promise<Response> {
   const headers: Record<string, string> = { ...((opts.headers as Record<string, string>) ?? {}) }
   if (opts.body != null) headers['Content-Type'] = 'application/json'
   if (api.token) headers['Authorization'] = `Bearer ${api.token}`

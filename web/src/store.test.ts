@@ -172,4 +172,10 @@ describe('dismissToast', () => {
     dismissToast(id)
     expect(toasts).toHaveLength(0)
   })
+
+  it('no-op for unknown id (timer undefined + index < 0 两侧)', () => {
+    toasts.splice(0, toasts.length)
+    dismissToast(424242)
+    expect(toasts).toHaveLength(0)
+  })
 })

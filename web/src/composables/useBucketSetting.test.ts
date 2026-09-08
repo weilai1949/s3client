@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { defineComponent, ref } from 'vue'
 import { useBucketSetting } from './useBucketSetting'
 
 describe('useBucketSetting', () => {
@@ -63,5 +65,55 @@ describe('useBucketSetting', () => {
     const fn = vi.fn(async () => {})
     await result.save(fn, 'ok')
     expect(fn).toHaveBeenCalled()
+  })
+
+  it('save 并发防重入：第一个保存挂起时第二个直接返回', async () => {
+    const load = vi.fn(async () => {})
+    const onError = vi.fn()
+    const result = useBucketSetting({ bucket: () => 'b1', load, onError })
+    let resolveFn!: () => void
+    const first = result.save(() => new Promise<void>((r) => { resolveFn = r }), 'first')
+    const secondFn = vi.fn(async () => {})
+    await result.save(secondFn, 'second')
+    expect(secondFn).not.toHaveBeenCalled()
+    resolveFn()
+    await first
+  })
+})
+
+describe('useBucketSetting watch (host mounted)', () => {
+  it('bucket change triggers reload via watch', async () => {
+    const load = vi.fn(async () => {})
+    const onError = vi.fn()
+    const bucket = ref('b1')
+    const Host = defineComponent({
+      setup() {
+        useBucketSetting({ bucket: () => bucket.value, load, onError })
+        return () => null
+      },
+    })
+    mount(Host)
+    await vi.waitFor(() => expect(load).toHaveBeenCalled())
+    bucket.value = 'b2'
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('useBucketSetting bucket empty branch', () => {
+  it('empty bucket does not reload', async () => {
+    const load = vi.fn(async () => {})
+    const onError = vi.fn()
+    const bucket = ref('')
+    const Host = defineComponent({
+      setup() {
+        useBucketSetting({ bucket: () => bucket.value, load, onError })
+        return () => null
+      },
+    })
+    mount(Host)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(load).not.toHaveBeenCalled()
+    bucket.value = 'b1'
+    await vi.waitFor(() => expect(load).toHaveBeenCalled())
   })
 })

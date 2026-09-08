@@ -77,6 +77,8 @@ interface FakeDb {
   /** 已接收到的 API 调用记录：`METHOD /path?query [body]`。 */
   calls: string[]
   restoreSeq: number
+  policy: string
+  tags: Map<string, { key: string; value: string }[]>
 }
 
 const K = (...parts: string[]) => parts.join('|')
@@ -91,6 +93,8 @@ function emptyDb(): FakeDb {
     failures: [],
     calls: [],
     restoreSeq: 1,
+    policy: '',
+    tags: new Map(),
   }
 }
 
@@ -286,6 +290,29 @@ async function handleApi(route: Route, db: FakeDb): Promise<void> {
   if (rest === 'bucket-info' && method === 'GET') {
     const bucket = url.searchParams.get('bucket') ?? ''
     return json(route, 200, { bucket, region: 'us-east-1', createdAt: '2024-01-02T00:00:00.000Z', versioning: '' })
+  }
+  if (rest === 'bucket/policy' && method === 'GET') {
+    return json(route, 200, {
+      policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::reports/*"}]}',
+    })
+  }
+  if (rest === 'bucket/policy' && method === 'PUT') {
+    const body = JSON.parse(postData || '{}') as { policy?: string }
+    db.policy = body.policy ?? ''
+    return json(route, 200, { saved: true })
+  }
+  if (rest === 'bucket/policy' && method === 'DELETE') {
+    db.policy = ''
+    return json(route, 200, { deleted: true })
+  }
+  if (rest === 'bucket/tags' && method === 'GET') {
+    const bucket = url.searchParams.get('bucket') ?? ''
+    return json(route, 200, { bucket, tags: db.tags.get(bucket) ?? [] })
+  }
+  if (rest === 'bucket/tags' && method === 'PUT') {
+    const body = JSON.parse(postData || '{}') as { bucket?: string; tags?: { key: string; value: string }[] }
+    db.tags.set(body.bucket ?? '', body.tags ?? [])
+    return json(route, 200, { updated: (body.tags ?? []).length })
   }
 
   await json(route, 404, { error: 'not found: ' + method + ' ' + path })
@@ -530,4 +557,73 @@ test('迁移面板：渲染 + 列出源对象（弱断言，不发起真实迁�
 
   // 弱断言：从未发起真实迁移任务
   expect(db.calls.filter((c) => c.startsWith('POST /api/migrate')).length).toBe(0)
+})
+
+test('桶策略：编辑器加载 + 应用模板保存 PUT /bucket/policy', async ({ page }) => {
+  const db = emptyDb()
+  db.accounts = [fakeAccount('acc-1', 'account-1')]
+  db.buckets.set('acc-1', ['reports'])
+  await installFake(page, db)
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /桶管理|^Buckets$/ }).click()
+  await expect.poll(() => db.calls.some((c) => c.includes('GET /api/accounts/acc-1/bucket-info'))).toBe(true)
+  await page.getByRole('button', { name: /桶策略|^Policy$/ }).click()
+  // 编辑器加载既有策略（JSON 预览 pre 隐藏，断言可见的语句卡片）
+  await expect(page.locator('[data-testid="policy-stmt-0"]')).toBeVisible()
+
+  // 应用「公开读」模板 → 保存
+  await page.getByRole('button', { name: /^公共读（GetObject）$|^Public read \(GetObject\)$/ }).click()
+  await page.getByRole('button', { name: /保存|Save/ }).click()
+  await expect
+    .poll(() => db.calls.some((c) => c.startsWith('PUT /api/accounts/acc-1/bucket/policy') && c.includes('"policy":')))
+    .toBe(true)
+  expect(db.policy).toContain('s3:GetObject')
+})
+
+test('桶标签：添加行 + 保存 PUT /bucket/tags', async ({ page }) => {
+  const db = emptyDb()
+  db.accounts = [fakeAccount('acc-1', 'account-1')]
+  db.buckets.set('acc-1', ['reports'])
+  await installFake(page, db)
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /桶管理|^Buckets$/ }).click()
+  await expect.poll(() => db.calls.some((c) => c.includes('GET /api/accounts/acc-1/bucket-info'))).toBe(true)
+  await page.getByRole('button', { name: /标签|Tags/ }).click()
+  await page.getByRole('button', { name: /添加标签|Add tag/ }).click()
+  const row = page.locator('tbody tr').last()
+  const inputs = row.locator('input')
+  await inputs.nth(0).fill('env')
+  await inputs.nth(1).fill('prod')
+  await page.getByRole('button', { name: /保存|Save/ }).click()
+  await expect
+    .poll(() => db.calls.some((c) => c.startsWith('PUT /api/accounts/acc-1/bucket/tags') && c.includes('"key":"env"')))
+    .toBe(true)
+})
+
+test('服务器设置：添加服务器并测试连通', async ({ page }) => {
+  const db = emptyDb()
+  db.accounts = [fakeAccount('acc-1', 'account-1')]
+  await installFake(page, db)
+
+  // 健康检查：拦截 /api/health（任意源），返回版本号供连通性断言
+  await page.route('**/api/health', (route) => {
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: '9.9.9' }) })
+  })
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /服务器|^Server$/ }).click()
+  await page.getByRole('button', { name: /新增服务端|Add server/ }).click()
+  const dlg = page.getByRole('dialog', { name: /新增服务端|Add server/ })
+  const inputs = dlg.locator('input')
+  await inputs.nth(0).fill('dev-server')
+  await inputs.nth(1).fill('http://127.0.0.1:9000')
+  await dlg.getByRole('button', { name: /保存|Save/ }).click()
+  // upsert 后服务器列表展示新条目
+  await expect(page.getByRole('cell', { name: 'http://127.0.0.1:9000' })).toBeVisible()
+
+  // 全部检测（probeAll）→ 每行健康列显示后端版本号
+  await page.getByRole('button', { name: /全部检测|Probe all/ }).click()
+  await expect(page.getByRole('cell', { name: /9\.9\.9/ })).toHaveCount(2)
 })

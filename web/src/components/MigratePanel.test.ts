@@ -1,0 +1,744 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import MigratePanel from './MigratePanel.vue'
+import { s3api, subscribeMigrateEvents } from '../api'
+import type { MigrateProgress } from '../api'
+import { currentAccount, requestTab, selectAccount, state, toast } from '../store'
+import { tf } from '../i18n'
+import type { Account, ListObjectsResponse, ObjectItem } from '../types'
+
+vi.mock('../api', () => ({
+  s3api: {
+    listBuckets: vi.fn(),
+    listObjects: vi.fn(),
+    migrateAsync: vi.fn(),
+    migrateJobStatus: vi.fn(),
+    migrateJobCancel: vi.fn(),
+  },
+  subscribeMigrateEvents: vi.fn(() => () => {}),
+}))
+
+vi.mock('../store', async () => {
+  const { reactive } = await import('vue')
+  return {
+    state: reactive({ accounts: [] as Account[], currentAccountId: '' }),
+    currentAccount: vi.fn(),
+    toast: vi.fn(),
+    selectAccount: vi.fn(),
+    requestTab: vi.fn(),
+  }
+})
+
+vi.mock('../i18n', () => ({
+  t: (k: string) => k,
+  tf: vi.fn((k: string) => k),
+}))
+
+const acc1: Account = {
+  id: 'acc-1', name: 'acc-one', endpoint: 'http://minio:9000', region: 'r',
+  accessKey: 'ak', secretKey: 'sk', bucket: 'src-bucket', pathStyle: true, useSSL: false,
+}
+const acc2: Account = { ...acc1, id: 'acc-2', name: 'acc-two', bucket: 'dst-bucket' }
+
+const objA: ObjectItem = { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', contentType: 'text/plain', isDir: false }
+const objB: ObjectItem = { key: 'b.bin', size: 20, lastModified: '2024-01-02', etag: 'e2', contentType: '', isDir: false }
+const objDir: ObjectItem = { key: 'dir/', size: 0, lastModified: '', etag: '', contentType: '', isDir: true }
+
+const ModalDialogStub = {
+  name: 'ModalDialog',
+  props: ['open', 'title', 'width'],
+  template: '<div class="dlg-stub"><slot /></div>',
+}
+
+let mounted: ReturnType<typeof mount> | undefined
+afterEach(() => {
+  mounted?.unmount()
+  mounted = undefined
+})
+
+function mountPanel() {
+  mounted = mount(MigratePanel, { global: { stubs: { ModalDialog: ModalDialogStub } } })
+  return mounted
+}
+
+function findButton(w: ReturnType<typeof mount>, text: string) {
+  const btn = w.findAll('button').find((b) => b.text() === text)
+  expect(btn, `button "${text}" should exist`).toBeTruthy()
+  return btn!
+}
+
+function findButtonStartsWith(w: ReturnType<typeof mount>, prefix: string) {
+  const btn = w.findAll('button').find((b) => b.text().startsWith(prefix))
+  expect(btn, `button starting with "${prefix}" should exist`).toBeTruthy()
+  return btn!
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  state.accounts = [acc1, acc2]
+  state.currentAccountId = 'acc-1'
+  vi.mocked(currentAccount).mockImplementation(() =>
+    state.accounts.find((a) => a.id === state.currentAccountId),
+  )
+  vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] } as any)
+  vi.mocked(s3api.listObjects).mockResolvedValue({
+    objects: [objA, objB, objDir], commonPrefixes: [], isTruncated: false, nextToken: '',
+  } as any)
+})
+
+describe('MigratePanel', () => {
+  it('shows empty state without an account and skips loading', async () => {
+    state.accounts = []
+    state.currentAccountId = ''
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.empty').text()).toContain('migrate.needAccount')
+    expect(s3api.listBuckets).not.toHaveBeenCalled()
+    expect(s3api.listObjects).not.toHaveBeenCalled()
+  })
+
+  it('无源账号时 loadAllSourceObjects / migrate 走守卫直接返回', async () => {
+    state.accounts = []
+    state.currentAccountId = ''
+    const w = mountPanel()
+    await flushPromises()
+    await (w.vm as unknown as { loadAllSourceObjects: () => Promise<void> }).loadAllSourceObjects()
+    await (w.vm as unknown as { migrate: () => Promise<void> }).migrate()
+    expect(s3api.listObjects).not.toHaveBeenCalled()
+    expect(s3api.migrateAsync).not.toHaveBeenCalled()
+  })
+
+  it('renders source/target selects and lists objects excluding folders', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    // 源加载 + 目标加载（onMounted 显式调用 + targetAccountId watch 兜底）
+    expect(s3api.listBuckets).toHaveBeenCalledWith('acc-1')
+    expect(s3api.listBuckets).toHaveBeenCalledWith('acc-2')
+    expect(s3api.listObjects).toHaveBeenCalledWith('acc-1', {
+      bucket: '', prefix: '', delimiter: '/', maxKeys: '200',
+    })
+    const selects = w.findAll('select')
+    expect(selects).toHaveLength(3)
+    // 源 bucket 下拉：默认 + 桶列表
+    const srcOpts = selects[0].findAll('option').map((o) => o.text())
+    expect(srcOpts).toEqual(['migrate.defaultBucket', 'b-one'])
+    // 目标账号下拉：两个账号，源账号带 sameAccount 后缀
+    const tgtOpts = selects[1].findAll('option').map((o) => o.text())
+    expect(tgtOpts).toEqual(['acc-one' + 'migrate.sameAccount', 'acc-two'])
+    // 行渲染：目录被过滤
+    const rows = w.findAll('.v-row')
+    expect(rows).toHaveLength(2)
+    expect(w.text()).toContain('a.txt')
+    expect(w.text()).not.toContain('dir/')
+  })
+
+  it('toggle/selectAll sync selection and migrate button enablement', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const start = findButton(w, 'migrate.start')
+    expect(start.attributes('disabled')).toBeDefined()
+    // 勾选一行
+    await w.findAll('.v-row input[type="checkbox"]')[0].setValue(true)
+    await nextTick()
+    expect(findButton(w, 'migrate.start').attributes('disabled')).toBeUndefined()
+    // 全选 → 2 行选中；取消勾选 → 清空
+    const allCb = w.find('.toolbar input[type="checkbox"]')
+    await allCb.setValue(true)
+    await nextTick()
+    expect(w.findAll('tr.selected')).toHaveLength(2)
+    await allCb.setValue(false)
+    await nextTick()
+    expect(w.findAll('tr.selected')).toHaveLength(0)
+  })
+
+  it('prefix input + list button/keyup.enter reload listings', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const pInput = w.find('input[placeholder="migrate.prefixPlaceholder"]')
+    await pInput.setValue('sub/')
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    expect(s3api.listObjects).toHaveBeenLastCalledWith('acc-1', {
+      bucket: '', prefix: 'sub/', delimiter: '/', maxKeys: '200',
+    })
+    await pInput.trigger('keyup.enter')
+    await flushPromises()
+    expect(s3api.listObjects).toHaveBeenCalledTimes(3)
+  })
+
+  it('shows loading skeleton while listing and clears error afterwards', async () => {
+    let resolveObjects!: (v: ListObjectsResponse) => void
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReturnValueOnce(new Promise((res) => (resolveObjects = res)))
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await nextTick()
+    expect(w.find('[aria-busy="true"]').exists()).toBe(true)
+    expect(w.findAll('.skel-row')).toHaveLength(4)
+    resolveObjects({ objects: [objA], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    await flushPromises()
+    expect(w.findAll('.v-row')).toHaveLength(1)
+    expect(w.find('[aria-busy="true"]').exists()).toBe(false)
+  })
+
+  it('surfaces listObjects error in the error banner', async () => {
+    vi.mocked(s3api.listObjects).mockRejectedValueOnce(new Error('list failed'))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('list failed')
+  })
+
+  it('loadSourceBuckets/loadTargetBuckets catch clears their bucket lists', async () => {
+    // 第一次调用（源）失败 → sourceBuckets 被清空
+    vi.mocked(s3api.listBuckets).mockRejectedValueOnce(new Error('src boom'))
+    const w = mountPanel()
+    await flushPromises()
+    let srcSel = w.findAll('select')[0]
+    expect(srcSel.findAll('option')).toHaveLength(1) // 仅默认
+
+    // 重新挂载：源成功、目标失败 → targetBuckets 被清空
+    w.unmount()
+    vi.mocked(s3api.listBuckets)
+      .mockResolvedValueOnce({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] } as any)
+      .mockRejectedValueOnce(new Error('dst boom'))
+    const w2 = mountPanel()
+    await flushPromises()
+    const tgtSel = w2.findAll('select')[1]
+    expect(tgtSel.findAll('option')).toHaveLength(2) // 仅两个账号 option，无桶
+  })
+
+  it('listAll paginates with continuationToken and toasts listedAll', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects)
+      .mockResolvedValueOnce({ objects: [objA], commonPrefixes: [], isTruncated: true, nextToken: 't1' } as any)
+      .mockResolvedValueOnce({ objects: [objB], commonPrefixes: [], isTruncated: false, nextToken: '' } as any)
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    expect(vi.mocked(s3api.listObjects).mock.calls[0][1]).toEqual({
+      bucket: '', prefix: '', maxKeys: '1000',
+    })
+    expect(vi.mocked(s3api.listObjects).mock.calls[1][1]).toEqual({
+      bucket: '', prefix: '', maxKeys: '1000', continuationToken: 't1',
+    })
+    expect(toast).toHaveBeenCalledWith('migrate.listedAll')
+  })
+
+  it('listAll caps at MAX_ALL_PAGES and toasts listedCap', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReset()
+    let page = 0
+    vi.mocked(s3api.listObjects).mockImplementation(async () => ({
+      objects: [{ ...objA, key: `f${page++}.dat` }], commonPrefixes: [], isTruncated: true, nextToken: 't',
+    } as any))
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    expect(toast).toHaveBeenCalledWith('migrate.listedCap', 'err')
+    // 200 页后仍提示成功（现有行为）
+    expect(toast).toHaveBeenCalledWith('migrate.listedAll')
+  })
+
+  it('migrate runs progress, opens result dialog and goto targets', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    const unsub = vi.fn()
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j1' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done', done: 2, total: 2, migrated: 1, failed: 1 },
+      result: { migrated: 1, failed: 1, failedKeys: ['k1', 'k2', 'k3'], lastError: 'boom' },
+    } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return unsub
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    expect(s3api.migrateAsync).toHaveBeenCalledWith({
+      sourceAccountId: 'acc-1', sourceBucket: undefined, sourceKeys: ['a.txt', 'b.bin'],
+      targetAccountId: 'acc-2', targetBucket: undefined, targetPrefix: '',
+    })
+    expect(subscribeMigrateEvents).toHaveBeenCalledWith('j1', expect.any(Function), expect.any(Function))
+
+    // 进度 1/2 → 50%
+    progressCb({ done: 1, total: 2, migrated: 0, failed: 0, status: 'running' })
+    await nextTick()
+    expect(findButtonStartsWith(w, 'migrate.running').text()).toBe('migrate.running 1/2')
+    expect(w.find('.progress .bar').attributes('style')).toContain('50%')
+
+    // 完成
+    progressCb({ done: 2, total: 2, migrated: 1, failed: 1, status: 'done' })
+    await flushPromises()
+    expect(s3api.migrateJobStatus).toHaveBeenCalledWith('j1')
+    expect(unsub).toHaveBeenCalled()
+    // 结果弹窗内容（ModalDialog stub 恒渲染 slot）
+    expect(w.text()).toContain('k1')
+    expect(w.text()).toContain('k3')
+    expect(w.text()).toContain('migrate.firstError')
+    expect(toast).toHaveBeenCalledWith('migrate.toastPartial', 'err')
+    // 跳转目标账号
+    await findButton(w, 'migrate.gotoTarget').trigger('click')
+    expect(selectAccount).toHaveBeenCalledWith('acc-2')
+    expect(requestTab).toHaveBeenCalledWith('objects')
+    // 关闭按钮
+    const closeBtn = w.findAll('button').find((b) => b.text() === 'common.close')
+    expect(closeBtn).toBeTruthy()
+    await closeBtn!.trigger('click')
+  })
+
+  it('migrate success without failures toasts toastOk', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j2' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 2, failed: 0 },
+    } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    progressCb({ done: 2, total: 2, migrated: 2, failed: 0, status: 'done' })
+    await flushPromises()
+    expect(toast).toHaveBeenCalledWith('migrate.toastOk')
+  })
+
+  it('cancel in-flight migration requests cancel and toasts cancelled on completion', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    const unsub = vi.fn()
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j3' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'cancelled' }, result: { migrated: 0, failed: 0 },
+    } as any)
+    vi.mocked(s3api.migrateJobCancel).mockResolvedValue({} as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return unsub
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    // 在途：取消按钮出现
+    const cancel = findButton(w, 'migrate.cancel')
+    await cancel.trigger('click')
+    await flushPromises()
+    expect(s3api.migrateJobCancel).toHaveBeenCalledWith('j3')
+    expect(toast).toHaveBeenCalledWith('migrate.cancelRequested')
+    // 服务端最终取消状态 → toastCancelled
+    progressCb({ done: 0, total: 2, migrated: 0, failed: 0, status: 'done' })
+    await flushPromises()
+    expect(toast).toHaveBeenCalledWith('migrate.toastCancelled', 'err')
+  })
+
+  it('cancelMigrate surfaces cancel errors', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j4' } as any)
+    vi.mocked(s3api.migrateJobCancel).mockRejectedValueOnce(new Error('cancel failed'))
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 0, failed: 0 } } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    await findButton(w, 'migrate.cancel').trigger('click')
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('cancel failed')
+    // 收尾，避免泄漏未决 promise
+    progressCb({ done: 1, total: 1, migrated: 0, failed: 0, status: 'done' })
+    await flushPromises()
+  })
+
+  it('migrateAsync rejection surfaces error', async () => {
+    vi.mocked(s3api.migrateAsync).mockRejectedValueOnce(new Error('migrate failed'))
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('migrate failed')
+    // 按钮恢复可用
+    expect(findButton(w, 'migrate.start').attributes('disabled')).toBeUndefined()
+  })
+
+  it('SSE onError rejects migration and surfaces the error', async () => {
+    let errorCb!: (e: Error) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j5' } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, _onP, onErr) => {
+      errorCb = onErr
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    errorCb(new Error('sse down'))
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('sse down')
+  })
+
+  it('unmount during in-flight migration disconnects subscription', async () => {
+    const unsub = vi.fn()
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j6' } as any)
+    vi.mocked(subscribeMigrateEvents).mockReturnValue(unsub)
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    // 仍在途 → unmount 触发 activeUnsub
+    w.unmount()
+    expect(unsub).toHaveBeenCalledTimes(1)
+  })
+
+  it('account switch watch resets state and reloads', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    state.currentAccountId = 'acc-2'
+    await flushPromises()
+    expect(s3api.listObjects).toHaveBeenLastCalledWith('acc-2', expect.anything())
+    expect(s3api.listBuckets).toHaveBeenCalledWith('acc-2')
+    // 目标账号切换 → 目标桶重置并重新加载（此时另一账号为 acc-1）
+    const tgtSel = w.findAll('select')[1]
+    await tgtSel.setValue('acc-2')
+    await flushPromises()
+    expect(s3api.listBuckets).toHaveBeenLastCalledWith('acc-2')
+  })
+
+  it('same-account migration: only one account present defaults target to source', async () => {
+    state.accounts = [acc1]
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j7' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' }, result: { migrated: 1, failed: 0 } } as any)
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    expect(s3api.migrateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ targetAccountId: 'acc-1' }),
+    )
+    progressCb({ done: 1, total: 1, migrated: 1, failed: 0, status: 'done' })
+    await flushPromises()
+  })
+
+  it('listAll surfaces errors in the error banner', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects).mockRejectedValue(new Error('collect failed'))
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('collect failed')
+  })
+
+  it('goto targets with missing account skips selectAccount and requests tab', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j8' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
+    } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    progressCb({ done: 1, total: 1, migrated: 1, failed: 0, status: 'done' })
+    await flushPromises()
+    // 目标账号在迁移完成后被移除 → found 分支跳过 selectAccount
+    state.accounts = [acc1]
+    await findButton(w, 'migrate.gotoTarget').trigger('click')
+    expect(selectAccount).not.toHaveBeenCalled()
+    expect(requestTab).toHaveBeenCalledWith('objects')
+  })
+
+  it('virtualizes long object lists and scrolls with spacer rows', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
+      etag: 'e', contentType: '', isDir: false,
+    }))
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: many, commonPrefixes: [], isTruncated: false, nextToken: '',
+    } as any)
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.findAll('.v-row')).toHaveLength(37)
+    // 初始 padBottom spacer（50-37 行）
+    expect(w.findAll('tbody tr.v-spacer')).toHaveLength(1)
+    const wrap = w.find('.tbl-wrap')
+    ;(wrap.element as HTMLElement).scrollTop = 38 * 30
+    await wrap.trigger('scroll')
+    await nextTick()
+    // 滚动后 padTop 出现（18*38=684px）
+    const spacer = w.find('tbody tr.v-spacer')
+    expect(spacer.exists()).toBe(true)
+    expect(spacer.find('td').attributes('style')).toContain('684px')
+    expect(w.findAll('.v-row')[0].text()).toContain('f18.dat')
+  })
+})
+
+describe('MigratePanel defensive guards (vm direct)', () => {
+  it('migrate 无账号源时提前返回（!src 守卫）', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const vm = w.vm as any
+    await expect(vm.migrate()).resolves.toBeUndefined()
+  })
+})
+
+describe('MigratePanel selectTarget defensive guard', () => {
+  it('migrate with cleared target → selectTarget 错误', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    await w.findAll('.v-row input[type="checkbox"]')[0].setValue(true)
+    await nextTick()
+    const vm = w.vm as any
+    // ensureTargetAccount 会自动填充；显式清空以命中防御守卫
+    vm.targetAccountId = ''
+    await vm.migrate()
+    expect(String(vm.error)).toMatch(/selectTarget|migrate.selectTarget/)
+  })
+})
+
+describe('MigratePanel virtual list scroll', () => {
+  it('scrolling the list updates scrollTop via onListScroll', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    const tbl = w.find('.tbl-virtual')
+    expect(tbl.exists()).toBe(true)
+    // happy-dom 无法真实滚动；直接派发 scroll 事件并断言 viewport 计算不抛错
+    await tbl.trigger('scroll')
+    await nextTick()
+    expect(w.find('.tbl-virtual').exists()).toBe(true)
+  })
+})
+
+describe('MigratePanel bucket/prefix v-model wiring', () => {
+  it('binds source/target bucket selects, target prefix and result dialog close', async () => {
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j9' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
+    } as any)
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    // 源 bucket select（selects[0]）：默认 + b-one，设置值后重新列出
+    const srcSel = w.findAll('select')[0]
+    await srcSel.setValue('b-one')
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    expect(s3api.listObjects).toHaveBeenLastCalledWith('acc-1', {
+      bucket: 'b-one', prefix: '', delimiter: '/', maxKeys: '200',
+    })
+    // 目标 bucket select（selects[2]）与目标前缀输入
+    await w.findAll('select')[2].setValue('b-one')
+    await w.find('input[placeholder="migrate.targetPrefixPh"]').setValue('dst/')
+    // 勾选并迁移 → 结果弹窗打开（title 传给 ModalDialog）
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    expect(s3api.migrateAsync).toHaveBeenCalledWith(expect.objectContaining({
+      sourceBucket: 'b-one', targetBucket: 'b-one', targetPrefix: 'dst/',
+    }))
+    progressCb({ done: 1, total: 1, migrated: 1, failed: 0, status: 'done' })
+    await flushPromises()
+    const dlg = w.findComponent({ name: 'ModalDialog' })
+    expect(dlg.props('open')).toBe(true)
+    expect(dlg.props('title')).toBe('migrate.resultTitle')
+    // ModalDialog @close 事件路径：关闭结果弹窗
+    ;(dlg.vm as any).$emit('close')
+    await nextTick()
+    expect(dlg.props('open')).toBe(false)
+  })
+})
+
+describe('MigratePanel final branches', () => {
+  it('loadSourceBuckets with no account returns early', async () => {
+    state.accounts = []
+    state.currentAccountId = ''
+    const w = mountPanel()
+    await flushPromises()
+    expect(s3api.listBuckets).not.toHaveBeenCalled()
+    await (w.vm as any).loadSourceBuckets?.()
+    expect(s3api.listBuckets).not.toHaveBeenCalled()
+    state.accounts = [acc1]
+    state.currentAccountId = 'acc-1'
+  })
+
+  it('toggle deselect removes key from selection (UI double check)', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    const cb = w.findAll('.v-row input[type="checkbox"]')[0]
+    await cb.setValue(true) // 勾选 → 选中
+    await nextTick()
+    expect((w.vm as any).selected?.has?.('a.txt')).toBe(true)
+    await cb.setValue(false) // 取消 → 反选
+    await nextTick()
+    expect((w.vm as any).selected?.has?.('a.txt')).toBe(false)
+  })
+
+  it('cancelMigrate without job or while cancelling is a no-op', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const vm = w.vm as any
+    await expect(vm.cancelMigrate?.()).resolves.toBeUndefined()
+    vm.cancelling = true
+    await expect(vm.cancelMigrate?.()).resolves.toBeUndefined()
+  })
+
+  it('ensureTargetAccount is idempotent', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    const vm = w.vm as any
+    vm.ensureTargetAccount()
+    const before = vm.targetAccountId
+    vm.ensureTargetAccount() // 已有 target → 不改变
+    expect(vm.targetAccountId).toBe(before)
+  })
+})
+
+describe('MigratePanel remaining branches', () => {
+  it('桶列表响应缺 buckets 键时源/目标桶列表均回退为空', async () => {
+    vi.mocked(s3api.listBuckets).mockResolvedValue({} as any)
+    const w = mountPanel()
+    await flushPromises()
+    // 源桶下拉：仅默认选项（res.buckets ?? []）
+    expect(w.findAll('select')[0].findAll('option')).toHaveLength(1)
+    // 目标桶下拉：仅两个账号 option，无桶
+    expect(w.findAll('select')[1].findAll('option')).toHaveLength(2)
+  })
+
+  it('ensureTargetAccount 回退 state.accounts[0].id（源账号不存在且无其他账号）', async () => {
+    state.accounts = [{ ...acc1, id: undefined }] as any
+    state.currentAccountId = 'zz-missing'
+    vi.mocked(currentAccount).mockReturnValue(undefined)
+    const w = mountPanel()
+    await flushPromises()
+    // other?.id 与 srcId 均空 → state.accounts[0].id（undefined 值执行该分支）
+    expect((w.vm as any).targetAccountId).toBeUndefined()
+  })
+
+  it('migrateJobStatus 响应缺 result 键时回退 0/0 并 toastOk', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j10' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({ progress: { status: 'done' } } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    progressCb({ done: 1, total: 1, migrated: 1, failed: 0, status: 'done' })
+    await flushPromises()
+    // st.result 缺省 → { migrated: 0, failed: 0 } → toastOk
+    expect(toast).toHaveBeenCalledWith('migrate.toastOk')
+  })
+
+  it('无默认桶配置的账号源桶下拉回退 default', async () => {
+    state.accounts = [{ ...acc1, bucket: '' }]
+    mountPanel()
+    await flushPromises()
+    expect(vi.mocked(tf)).toHaveBeenCalledWith('migrate.defaultBucket', { name: 'default' })
+  })
+
+  it('结果弹窗：有失败但无 lastError 时不渲染 firstError', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j11' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' },
+      result: { migrated: 0, failed: 1, failedKeys: ['k-bad'], lastError: '' },
+    } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    progressCb({ done: 1, total: 1, migrated: 0, failed: 1, status: 'done' })
+    await flushPromises()
+    expect(w.text()).toContain('k-bad')
+    expect(w.text()).not.toContain('migrate.firstError')
+  })
+
+  it('进度 total 为 0 时 progressPct 回退 0', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j12' } as any)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' },
+      result: { migrated: 1, failed: 0 },
+    } as any)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    // total=0 → progress.total 为假 → 0%
+    progressCb({ done: 0, total: 0, migrated: 0, failed: 0, status: 'running' })
+    await nextTick()
+    expect(w.find('.progress .bar').attributes('style')).toContain('0%')
+    progressCb({ done: 0, total: 0, migrated: 0, failed: 0, status: 'done' })
+    await flushPromises()
+  })
+
+  it('scrollEl 未绑定时 onListScroll/measureViewport 空安全，绑定后按 clientHeight 测量', async () => {
+    const w = mountPanel()
+    const vm = w.vm as any
+    // 列表尚未渲染（scrollEl 为 null）→ 守卫直接跳过
+    vm.onListScroll()
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(480)
+    await flushPromises()
+    // 列表渲染绑定 scrollEl → 测量（happy-dom clientHeight=0 → 480 兜底）
+    expect(w.find('.tbl-virtual').exists()).toBe(true)
+    expect(vm.viewportH).toBe(480)
+    const wrap = w.find('.tbl-virtual')
+    Object.defineProperty(wrap.element, 'clientHeight', { value: 600, configurable: true })
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(600)
+  })
+})

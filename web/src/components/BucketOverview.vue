@@ -24,7 +24,8 @@ const toggling = ref(false)
 const { loading, reload } = useBucketSetting({
   bucket: () => props.bucket,
   onError: (m) => emit('error', m),
-  onChanged: () => emit('changed'),
+  // 本组件不使用 save()（toggle 走自带 confirm + put + reload），
+  // useBucketSetting 的 onChanged 从未被触发，故不传（原为死代码）。
   load: async () => {
     const r = await s3api.getBucketInfo(props.accountId, props.bucket)
     info.value = { region: r.region, createdAt: r.createdAt, versioning: r.versioning }

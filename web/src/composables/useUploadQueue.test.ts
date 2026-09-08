@@ -132,4 +132,57 @@ describe('useUploadQueue 共享状态机', () => {
     expect(item.status).toBe('err')
     expect(item.err).toBe('upload failed')
   })
+
+  it('默认参数：进度回调闭包经默认 writePct 落盘 it.pct（onProgress fallback）', async () => {
+    const q = mountQueue({ drain: false }) // 不带 onProgress/selectBatch/onItemStart
+    const [a] = enqueue(q, ['a.txt'])
+    let gotPct: ((p: number) => void) | undefined
+    vi.mocked(uploadObject).mockImplementationOnce(async (_f, _t, pct) => {
+      gotPct = pct
+    })
+    await q.run()
+    expect(a.status).toBe('done')
+    // 强制调用传给 uploadObject 的进度回调：验证 `(p) => writePct(it, p)` → `it.pct = p`
+    expect(gotPct).toBeTypeOf('function')
+    gotPct!(42)
+    expect(a.pct).toBe(42)
+  })
+
+  it('enqueue 传入 null/空 FileList 直接返回（early-return，不 push 条目）', () => {
+    const q = mountQueue()
+    q.enqueue(null)
+    q.enqueue([] as unknown as FileList)
+    expect(q.items.value.length).toBe(0)
+  })
+
+  it('abortItem 取消 signing 状态条目：默认 cancel 策略标 cancelled', () => {
+    const q = mountQueue()
+    const it: UploadQueueItem = { file: new File(['x'], 's.txt'), key: 's.txt', pct: 0, status: 'signing' }
+    q.items.value.push(it)
+    q.abortItem(it)
+    expect(it.status).toBe('cancelled')
+  })
+
+  it('abortItem 对终态条目（done/err）不改变状态（非 pending/signing/uploading 的 false 侧）', () => {
+    const q = mountQueue()
+    const done: UploadQueueItem = { file: new File(['x'], 'd.txt'), key: 'd.txt', pct: 100, status: 'done' }
+    const err: UploadQueueItem = { file: new File(['x'], 'e.txt'), key: 'e.txt', pct: 0, status: 'err' }
+    q.items.value.push(done, err)
+    q.abortItem(done)
+    q.abortItem(err)
+    expect(done.status).toBe('done')
+    expect(err.status).toBe('err')
+  })
+
+  it('running 中再次 run 直接返回空数组', async () => {
+    const q = mountQueue({ drain: false })
+    enqueue(q, ['a.txt'])
+    const first = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+    const second = await q.run()
+    expect(second).toEqual([])
+    inFlight.splice(0).forEach((f) => f.resolve())
+    await first
+    expect(q.items.value[0].status).toBe('done')
+  })
 })

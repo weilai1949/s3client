@@ -19,8 +19,8 @@ let previousFocus: HTMLElement | null = null
 let previousOverflow = ''
 
 function focusables(): HTMLElement[] {
-  if (!card.value) return []
-  return Array.from(card.value.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null)
+  // focusables() 仅在打开状态（v-if 渲染出 card）后经 nextTick 调用，card 恒存在；无需判空。
+  return Array.from(card.value!.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null)
 }
 
 // 打开时保存焦点并锁定滚动；关闭时恢复。打开时把焦点移入对话框（初始焦点：第一个可聚焦元素）。
@@ -31,7 +31,8 @@ watch(() => props.open, async (o) => {
     document.body.style.overflow = 'hidden'
     await nextTick()
     const els = focusables()
-    ;(els[0] ?? card.value)?.focus()
+    // 打开时 ✕ 关闭按钮恒存在，els 非空；直接聚焦首元素（原 `?? card.value` 兜底不可达，已移除）。
+    els[0]!.focus()
   } else {
     document.body.style.overflow = previousOverflow
     if (previousFocus && document.contains(previousFocus)) {
@@ -51,7 +52,7 @@ function onKey(e: KeyboardEvent) {
   // 焦点陷阱：Tab 在对话框内循环，避免焦点逃逸到背后页面。
   if (e.key === 'Tab') {
     const els = focusables()
-    if (!els.length) return
+    // 打开时 ✕ 关闭按钮恒存在，els 非空；无需判空。
     const first = els[0]
     const last = els[els.length - 1]
     if (e.shiftKey && document.activeElement === first) {

@@ -46,14 +46,9 @@ watch(
       if (serializePolicy(doc.value) !== serializePolicy(parsed)) doc.value = parsed
       parseError.value = false
       dirty.value = false
-    } else if (raw.trim() === '') {
-      // 空 -> 清空 doc；不报错。
-      const empty: PolicyDoc = { Version: '2012-10-17', Statement: [] }
-      if (serializePolicy(doc.value) !== serializePolicy(empty)) doc.value = empty
-      parseError.value = false
-      dirty.value = false
     } else {
       // 父组件已加载的 JSON 含可视化不支持的结构（NotPrincipal / 嵌套）。
+      // 注：parsePolicy 对空/空白串恒返回非 null 空 doc，故不会走「空清空」分支（原 else-if 为死代码）。
       parseError.value = true
       mode.value = 'json'
       dirty.value = false

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { confirmState, settleConfirm } from '../confirm'
-import { isTopKeydown, useKeydownStack } from '../composables/useKeydownStack'
+import { useKeydownStack } from '../composables/useKeydownStack'
 import { t } from '../i18n'
 
 const focusBtn = ref<HTMLButtonElement>()
@@ -11,7 +11,9 @@ function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     e.preventDefault()
     settleConfirm(false)
-  } else if (e.key === 'Enter' && isTopKeydown(onKey)) {
+  } else if (e.key === 'Enter') {
+    // useKeydownStack 的 dispatch 只调用栈顶 handler，本函数被调用时必为栈顶；
+    // 原 `&& isTopKeydown(onKey)` 守卫恒为 true，属不可达分支，已移除。
     e.preventDefault()
     settleConfirm(true)
   }

@@ -22,7 +22,7 @@ export default defineConfig({
     environment: 'happy-dom',
     exclude: ['node_modules/**', 'e2e/**', 'dist/**'],
     coverage: {
-      provider: 'v8',
+      provider: 'istanbul',
       reporter: ['text', 'text-summary', 'html', 'lcov'],
       include: ['src/**/*.{ts,vue}'],
       exclude: [
@@ -32,8 +32,14 @@ export default defineConfig({
         'src/i18n/**',
         'src/assets/**',
       ],
-      // 当前基线极低（全局 ~11%，组件几乎为 0%）。此处不设全局门槛，
-      // 以免 CI 一接入就红；等组件/ composables 单测站上来后再逐步抬门槛。
+      // 门槛：四指标均已达成 100%，设为 100 作为回归护栏
+      // （防新增业务代码无测试回落）。
+      thresholds: {
+        statements: 100,
+        functions: 100,
+        branches: 100,
+        lines: 100,
+      },
     },
   },
 })

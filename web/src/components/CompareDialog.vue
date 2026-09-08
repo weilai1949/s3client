@@ -125,7 +125,8 @@ async function runCompare() {
 function downloadVersion(v: CompareVersion) {
   const a = document.createElement('a')
   a.href = proxyUrl(props.accountId, props.bucket, 'download', props.objectKey, api.base, v.versionId)
-  a.download = props.objectKey.split('/').pop() ?? 'object'
+  // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
+  a.download = props.objectKey.split('/').pop() || 'object'
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

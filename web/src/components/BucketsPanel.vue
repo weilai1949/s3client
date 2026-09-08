@@ -174,7 +174,7 @@ async function removeBucket(name: string) {
         <BucketCors v-else-if="activeTab === 'cors'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
         <BucketWebsite v-else-if="activeTab === 'website'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
         <BucketPolicy v-else-if="activeTab === 'policy'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
-        <BucketTags v-else-if="activeTab === 'tags'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
+        <BucketTags v-else :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
       </div>
     </template>
 

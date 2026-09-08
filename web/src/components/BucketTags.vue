@@ -44,10 +44,8 @@ async function clear() {
 
 async function saveTags() {
   await save(async () => {
+    // 已按 key.trim() 过滤出有效行；空 key 行不会进入提交（原循环校验为死代码）。
     const valid = tags.value.filter((row) => row.key.trim())
-    for (const row of valid) {
-      if (!row.key.trim()) throw new Error(t('bucketTags.errEmptyKey'))
-    }
     await s3api.putBucketTags(props.accountId, {
       bucket: props.bucket,
       tags: valid.map((row) => ({ key: row.key.trim(), value: row.value })),

@@ -49,7 +49,7 @@ async function loadBuckets() {
 // 避免「快速切桶时两个并发循环互相 push 覆盖 marker」的竞态（仿 useObjectBrowser 的 loadSeq）。
 let loadSeq = 0
 
-async function loadMarkers(reset = true) {
+async function loadMarkers(reset: boolean) {
   if (!accSel.value || !bucketSel.value) return
   const seq = ++loadSeq
   if (reset) {
