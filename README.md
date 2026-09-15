@@ -195,7 +195,9 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 
 ## 文档
 
+- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 全部已完成修复 / 优化记录（单一事实来源）
 - [REST API 参考](docs/API.md)
+- [错误约定](docs/ERRORS.md)
 - [贡献指南](CONTRIBUTING.md)
 - [Agent 开发规范（TDD 优先）](agents.md)
 - 配置见上文矩阵。

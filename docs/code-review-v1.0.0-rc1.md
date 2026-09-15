@@ -87,6 +87,8 @@
 
 ## 5. Optional（摘要）
 
+> 各项最终采纳 / 已解决 / 延后状态见 [`FEATURES.md`](FEATURES.md) 的「二、已完成修复与优化 → E」；本节保留原始评审摘要。
+
 - 后端：encrypted 驱动 Update 失败不回滚内存（与 json 驱动不一致，store.go:135-138 有回滚）；
   流式复制 64MB/worker 缓冲建议 sync.Pool；`/api/metrics` 无鉴权暴露运行时指标；
   migrate SSE 无写超时；worker-pool 模式仓内重复 4 份可收敛泛型 helper；
@@ -98,6 +100,8 @@
   `|| true` 吞安装失败；Makefile 每次启动 `go mod tidy` 易漂移。
 
 ## 6. Nit（摘要）
+
+> 各项最终采纳 / 已解决 / 延后状态见 [`FEATURES.md`](FEATURES.md) 的「二、已完成修复与优化 → E」；本节保留原始评审摘要。
 
 后端：X-Request-ID 回显可塞超长值；Bearer scheme 大小写敏感（RFC 7235 应不区分）；
 `metadata.go:40` 变量遮蔽外层 `r *http.Request`；.env 按进程 CWD 相对加载；UserMessage 靠
@@ -130,24 +134,12 @@ revokeObjectURL；`{} as KeyBindings` cast hack。
 4. CI 一次整改：全部 actions pin SHA + 发布加 SHA256SUMS
 5. i18n 拆分与双上传队列收敛
 6. 贯穿：消除死代码；先补齐单测覆盖率再动刀
+
 ## 9. 整改落地记录（v1.0.0-rc1 评估后）
 
-按第 8 节行动顺序执行完毕，全部提交对应 `go vet/build/test -race` 与 `pnpm test/build` 门禁：
-
-| # | 事项 | 提交 |
-|---|---|---|
-| 1 | s3wrap fake-S3 单元测试补齐（覆盖率 22.4%→61.5%） | `5c2ff52` |
-| 2 | R1 `RunBatch[I]` 泛型池收敛（batch.go）+ 进度竞态修复 | `2cae3f9` |
-| 3 | R2 persistLocked 残留 tmp 清理（O_EXCL 前置 os.Remove） | `abef0fb` |
-| 4 | R3 SSRF 阻断表补 IMDS IPv6 `fd00:ec2::254` | `be8d390` |
-| 5 | CI/桌面/脚本加固（actions SHA 锁定、SHA256SUMS、Tauri 权限收敛、PID 校验、回环端口） | `4e6c0f0` |
-| 6 | R5 Store.List 错误传播（json/encrypted/sqlite） | `4b303a8` |
-| 7 | 前端四项：上传中止即重启（cancelled 终态 + toRaw 键归一化）、面板快捷键误触（panelActive 守卫）、回收站 loadSeq 竞态、SSE 进度 toast 节流 | `0356b8d` |
-| 8 | s3wrap 覆盖率 61.5%→87.0%（object 全生命周期 fake 测试） | `00089e3` |
-| 9 | R4 防腐层：s3wrap 全部返回 DTO，handler/service 零 SDK 类型；presign 零过期守卫（93.4%） | `fc3269c` |
-| 10 | i18n 按域拆分（1352→82 行）+ 双上传队列收敛为共享状态机 | `88e0205` |
-| 11 | 死代码清理：api.ts requestBlob/downloadZip、useObjectBrowser 冗余文件排序；后端扫描无未引用导出 | 本次提交 |
-| 12 | 后端单测覆盖率 55%→94.5%（config 100 / model 100 / s3wrap 99.7 / service 94.8 / main 94.6 / handler 93.5 / store 91.2），CI 总覆盖率门禁同步提至 90%；顺带修复 Store/EncryptedStore.Delete 持久化失败不回滚、json Store.Create 重复 ID 静默覆盖 | `ea60969` 及此前 coverage 提交链 |
-
-注：第 4 节「GET /api/accounts 返回明文 SecretKey」一项为误报（所有出口均 `Sanitized()`），
-未采纳；见第 4 节原文。
+> **已迁移**：原 §9 的 12 项「整改落地记录」提交对照表，已迁移至 **[`FEATURES.md`](FEATURES.md)** 的「二、已完成修复与优化 → D / E」。
+> 本文件保留为 2026-09-03 的评估快照（§1–§8）。
+>
+> **误报仲裁记录（原样保留）**：第 4 节「GET /api/accounts 返回明文 SecretKey」不成立——
+> `listAccounts` / `getAccount` 响应路径全部走 `Sanitized()`，明文 SecretKey 仅存在于服务端
+> 签名内部使用的 `Get()`，从未写回响应；该项未采纳，见第 4 节原文。
