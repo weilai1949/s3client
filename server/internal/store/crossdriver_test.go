@@ -223,7 +223,7 @@ func TestCrossDriverCRUDEquivalence(t *testing.T) {
 
 // TestCrossDriverCreateIsolatesCallerInput Create 之后调用方再修改入参对象，
 // 不得改变已落库账号（三个驱动语义必须一致）。Store 原先把调用方指针直接存进内存，
-// 与 EncryptedStore 的「存副本」行为不一致——此测试即为该差异的回归保护。
+// 与 encrypted 驱动的「存副本」行为不一致——此测试即为该差异的回归保护。
 func TestCrossDriverCreateIsolatesCallerInput(t *testing.T) {
 	for _, spec := range driverSpecs() {
 		t.Run(spec.name, func(t *testing.T) {

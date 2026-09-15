@@ -51,28 +51,33 @@ func encAtRestAcct() *model.Account {
 	}
 }
 
-// ---- keyFromEnv：空 key → nil；非空 key → 派生 AES 密钥 ----
+// ---- newStoreCodec：严格模式决定盐策略与加密启停 ----
 
-func TestKeyFromEnvBranches(t *testing.T) {
-	t.Run("empty key returns nil", func(t *testing.T) {
-		setStoreKey(t, "")
-		if k := keyFromEnv(); k != nil {
-			t.Fatalf("empty S3C_STORE_KEY should yield nil, got %x", k)
+func TestStoreCodecConfig(t *testing.T) {
+	t.Run("json permissive derives no key dependency", func(t *testing.T) {
+		// json 无 key：明文 codec；missing 不生成盐。
+		c := newStoreCodec("", false)
+		if c.strict {
+			t.Fatal("json codec must not be strict")
+		}
+		if err := c.missing(); err != nil {
+			t.Fatalf("missing: %v", err)
+		}
+		if c.salt != nil {
+			t.Fatal("json codec must not pre-generate salt")
 		}
 	})
 
-	t.Run("set key derives AES-256 key", func(t *testing.T) {
-		setStoreKey(t, "test-secret-key")
-		k := keyFromEnv()
-		if k == nil {
-			t.Fatal("non-empty S3C_STORE_KEY should yield a derived key")
+	t.Run("encrypted strict generates salt on missing", func(t *testing.T) {
+		c := newStoreCodec("pw", true)
+		if !c.strict {
+			t.Fatal("encrypted codec must be strict")
 		}
-		if len(k) != keyLen {
-			t.Fatalf("derived key length = %d, want %d", len(k), keyLen)
+		if err := c.missing(); err != nil {
+			t.Fatalf("missing: %v", err)
 		}
-		// 同密钥 + 固定盐 → 派生结果确定。
-		if k2 := keyFromEnv(); string(k) != string(k2) {
-			t.Fatal("same key should always derive the same AES key")
+		if len(c.salt) != encSaltLen {
+			t.Fatalf("encrypted codec salt len = %d, want %d", len(c.salt), encSaltLen)
 		}
 	})
 }
