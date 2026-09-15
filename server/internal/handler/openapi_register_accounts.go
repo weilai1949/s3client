@@ -34,7 +34,7 @@ func registerAccounts(r *openapi.Registry) {
 			}, "name", "endpoint", "accessKey", "secretKey")},
 		},
 		Responses: map[string]openapi.Response{
-			"201": {Description: "已创建（含敏感字段占位）", JSON: openapi.Obj()},
+			"201": {Description: "已创建（返回 AccountView：secretSet 表示是否已设置密钥，不回传 secretKey）", JSON: openapi.Obj()},
 			"400": {Description: "参数错误", JSON: openapi.Obj()},
 		},
 	})

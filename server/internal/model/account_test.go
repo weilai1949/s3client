@@ -28,6 +28,38 @@ func TestSanitizedNil(t *testing.T) {
 	}
 }
 
+func TestViewSecretSet(t *testing.T) {
+	cases := []struct {
+		name string
+		acc  *Account
+		want bool
+	}{
+		{"real secret", &Account{ID: "1", Name: "x", SecretKey: "sk"}, true},
+		{"masked secret", &Account{ID: "2", SecretKey: MaskedSecret}, true},
+		{"empty secret", &Account{ID: "3"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v := c.acc.View()
+			if v == nil {
+				t.Fatal("View returned nil")
+			}
+			if v.SecretSet != c.want {
+				t.Fatalf("secretSet = %v, want %v", v.SecretSet, c.want)
+			}
+			if v.ID != c.acc.ID || v.Name != c.acc.Name {
+				t.Fatalf("view fields not copied: %+v", v)
+			}
+		})
+	}
+}
+
+func TestViewNil(t *testing.T) {
+	if (*Account)(nil).View() != nil {
+		t.Fatal("nil account View should return nil")
+	}
+}
+
 // TestBucketOrDefault 默认桶回退：空返回空串由调用方处理，非空原样。
 func TestBucketOrDefault(t *testing.T) {
 	if got := (&Account{}).BucketOrDefault(); got != "" {

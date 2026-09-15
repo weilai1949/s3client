@@ -15,7 +15,11 @@ func (h *Handler) listAccounts(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to load accounts")
 		return
 	}
-	h.writeJSON(w, http.StatusOK, map[string]any{"accounts": accounts})
+	views := make([]*model.AccountView, 0, len(accounts))
+	for _, a := range accounts {
+		views = append(views, a.View())
+	}
+	h.writeJSON(w, http.StatusOK, map[string]any{"accounts": views})
 }
 
 func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +43,7 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to create account")
 		return
 	}
-	h.writeJSON(w, http.StatusCreated, created)
+	h.writeJSON(w, http.StatusCreated, created.View())
 }
 
 func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +57,7 @@ func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to load account")
 		return
 	}
-	h.writeJSON(w, http.StatusOK, a.Sanitized())
+	h.writeJSON(w, http.StatusOK, a.View())
 }
 
 func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +87,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.clients.evict(id)
-	h.writeJSON(w, http.StatusOK, updated)
+	h.writeJSON(w, http.StatusOK, updated.View())
 }
 
 func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
