@@ -3,8 +3,7 @@
 > 本文件是 s3clinet 的**单一事实来源**：产品能力总览 + 全部已完成修复 / 优化记录。
 > 已把散落在各评估文档与 [`CHANGELOG.md`](../CHANGELOG.md) 中的「已实现 / 已修复 / 已完善」功能统一汇总于此；CHANGELOG 仍保留逐字发布历史。
 >
-> - 问题分析与历史评估原文（保留为快照）：[`full-assessment.md`](full-assessment.md)、[`code-review-v1.0.0-rc1.md`](code-review-v1.0.0-rc1.md)、[`code-review.md`](code-review.md)
-> - 发版历史：[`CHANGELOG.md`](../CHANGELOG.md)
+> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md)
 > - 接口细节：[`API.md`](API.md) · 错误约定：[`ERRORS.md`](ERRORS.md) · 开发规范：[`agents.md`](../agents.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
 > 最后更新：2026-09-15（`v1.0.0-rc1` 之后的 Unreleased 区间）
@@ -308,10 +307,10 @@
 | LOW | `zip.go` `ctxReader` 无法中断阻塞式底层 Read | ✅（后续 `ctxCancelReader` + `context.AfterFunc` 专项修复） |
 | LOW | `zip.go` producer goroutine 泄漏 | ➖（复核为无泄漏） |
 | MEDIUM | `batchMetadata.ts` 计数器并发非原子 | ➖（JS 单线程事件循环保证原子性） |
-| INFO | §4「GET /api/accounts 返回明文 SecretKey」 | ➖（误报：所有出口均 `Sanitized()`） |
-| — | 其余 Info 项 | ✅ / ➖（见原文） |
+| INFO | 「GET /api/accounts 返回明文 SecretKey」指控 | ➖（误报：所有出口均 `Sanitized()`；详见 todolist #2 降级建议） |
+| — | 其余 Info 项 | ✅ / ➖（见 `CHANGELOG.md` 对应版本段） |
 
-### E. Optional / Nit 长尾采纳情况（v1.0.0-rc1 §5 / §6）
+### E. Optional / Nit 长尾采纳情况（v1.0.0-rc1 评估）
 
 | 项 | 状态 | 说明 |
 |---|---|---|

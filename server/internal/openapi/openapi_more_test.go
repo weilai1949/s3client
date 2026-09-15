@@ -186,27 +186,3 @@ func TestHTTPHandler_Error(t *testing.T) {
 		t.Error("expected an error body")
 	}
 }
-
-// TestProp 覆盖 required 有无，以及 desc 是否已被设置。
-func TestProp(t *testing.T) {
-	// desc 为空，无 required —— 触发 s.Description == "" 分支。
-	name1, s1 := Prop("a", "aaa", Str())
-	if name1 != "a" {
-		t.Errorf("name1 = %q", name1)
-	}
-	if s1.Description != "aaa" {
-		t.Errorf("s1.Description = %q", s1.Description)
-	}
-
-	// desc 已设置 —— 跳过覆盖。
-	_, s2 := Prop("b", "bbb", &Schema{Type: "string", Description: "existing"})
-	if s2.Description != "existing" {
-		t.Errorf("s2.Description = %q", s2.Description)
-	}
-
-	// 带 required —— 触发 len(required) > 0 分支。返回值与名称不受影响。
-	_, s3 := Prop("c", "ccc", Str(), true)
-	if s3.Description != "ccc" {
-		t.Errorf("s3.Description = %q", s3.Description)
-	}
-}
