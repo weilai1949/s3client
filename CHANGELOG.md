@@ -14,6 +14,11 @@
 - **delete-objects 单次 ≤1000**：与 S3 `DeleteObjects` 上限对齐；超限返回 400 并提示走 `delete-prefix`。
 - **migrate SSE 写超时**：复用 `streamIdleTimeout`（每次成功写出后刷新），慢客户端不会让连接无限挂着。
 - **store 失败回滚**：`EncryptedStore.Update` 持久化失败回滚内存；`SQLiteStore.Update` 显式传播 `Exec` 错误；`JSON Store.Update` 补测。
+- **错误映射去字符串匹配**：新增 sentinel `ErrObjectTooLarge` / `ErrSourceDeleteFailed` 并用 `errors.Is` 判断；`PutObject`/`CopyObject` 把 S3 `EntityTooLarge` 归一为 sentinel，不再依赖 SDK 文案。
+- **X-Request-ID 回显加固**：仅回显长度 ≤128 且全为可见 ASCII 的值，超长/含控制字符改由服务端生成 UUID，阻挡日志与响应头注入。
+- **Bearer scheme 大小写不敏感**：按 RFC 7235 接受 `bearer`/`BEARER` 等，凭证仍常量时间比较。
+- **`.env` 解析解耦进程 CWD**：`S3C_ENV_FILE`（设置后为唯一来源）→ CWD `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先。
+- **nginx 内存上限**：两个 compose 文件为 nginx 显式设置 `deploy.resources.limits.memory: 128M`。
 
 ### 工程化（v1.0.0-rc1 评估 P1/P2 路线落地）
 - **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），67 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
@@ -30,6 +35,9 @@
 - **`go mod tidy` 显式化**：Makefile 移除每次 `server` 启动的隐式 tidy，新增 `make tidy` 显式入口。
 - **SSE 卸载中断**：`useObjectActions` `showDetail` 加 `detailSeq` 序号守卫；`MigratePanel` 组件级 `activeUnsub`，`onBeforeUnmount` 断开进行中的 SSE。
 - **列表请求 AbortController**：`useObjectBrowser.load` 每次新请求取消旧的；`onBeforeUnmount` 取消进行中的 fetch。
+- **双文件存储驱动去重**：`json` / `encrypted` 驱动共享 unexported `fileStore` + 注入式 `fileCodec`，锁 / CRUD / 持久化回滚 / 快照排序 / JSON 中间表示单点实现（净减约 331 行），文件名、磁盘格式、错误文案与加密语义不变。
+- **OpenAPI 契约测试**：`routes.go` ↔ 规范双向一致（漏登记与陈旧条目都红灯）、operation 完整性 / 路径参数 / `$ref` 可解析 / `MarshalJSON` 确定性；`internal/openapi` 包与 handler 内全部 OpenAPI 函数达 100% statement 覆盖。
+- **全仓 gofmt 对齐 Go 1.26**：修正结构体字段对齐与文档注释空行规则，CI `gofmt -l .` 门禁恢复干净。
 
 ### 前端
 - **Token 默认 sessionStorage**：`s3c_token_persistent='1'` 显式开启才写 localStorage；旧版本 localStorage 遗留值首次读取时自动迁移到 sessionStorage 并清空 localStorage 副本。
@@ -37,6 +45,11 @@
 - **showDetail seq 守卫**：快速切对象时过期响应丢弃。
 - **lint 收紧**：`@typescript-eslint/no-explicit-any` 由 off 改 warn；新增 `isTauri` 类型明确化。
 - **集中式 `requireAccId()`**：`useObjectActions` 13 处 `ctx.account.value!.id` 收敛为单一异常入口。
+- **SSE 卸载中断补齐**：`DestDialog` 迁移进度流与 `useObjectActions` 前缀删除流在 `onBeforeUnmount` 主动 abort，不再后台悬挂推送。
+- **VersionsDialog 分页**：按 `keyMarker`/`versionIdMarker` 翻页（≤20 页），仍被截断时显示提示，不再静默丢弃第 1000 条之后的版本。
+- **消除非空断言**：剩余 3 处 `ctx.account.value!` 与 `ObjectsPanel` 的 `{} as KeyBindings` 改为守卫 / 可选类型（`KeyBindings` 字段可选 + `?.` 调用）。
+- **blob 下载延迟回收**：`revokeObjectURL` 由同步改为延迟 60s，避免中断浏览器尚未开始的下载。
+- **lint 再收紧**：`@typescript-eslint/no-explicit-any` 由 warn 改 error（当前 0 违规）。
 
 
 ## [v1.0.0-rc1] - 2026-09-02
