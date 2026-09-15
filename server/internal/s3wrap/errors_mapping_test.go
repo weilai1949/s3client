@@ -17,8 +17,8 @@ func TestUserMessageCoversAllBranches(t *testing.T) {
 		want string
 	}{
 		{"nil error", nil, ""},
-		{"5GB single put limit", errors.New("put failed: object exceeds 5GB limit"), "object exceeds 5GB single-put limit; use multipart upload"},
-		{"copy source delete failure", errors.New("copied ok, failed to delete source object"), "copied but failed to delete source"},
+		{"5GB single put limit", fmt.Errorf("put failed: %w", ErrObjectTooLarge), "object exceeds 5GB single-put limit; use multipart upload"},
+		{"copy source delete failure", fmt.Errorf("copied ok, %w", ErrSourceDeleteFailed), "copied but failed to delete source"},
 		{"NoSuchBucket typed", &types.NoSuchBucket{}, "bucket not found"},
 		{"NoSuchKey typed", &types.NoSuchKey{}, "object not found"},
 		{"NotFound code", fakeAPIError{code: "NotFound"}, "object not found"},

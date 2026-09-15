@@ -2,22 +2,40 @@ package s3wrap
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
 
+// 应用层错误 sentinel：供 UserMessage 用 errors.Is 识别，避免依赖脆弱的错误文本匹配
+// （SDK / 各 S3 兼容实现的文案随时可能变化）。
+var (
+	// ErrObjectTooLarge 表示对象超过单次 PutObject / CopyObject 上限（5GB），应改用分段上传。
+	ErrObjectTooLarge = errors.New("object exceeds single-put limit")
+	// ErrSourceDeleteFailed 表示复制成功但删除源对象失败（移动半成功）。
+	ErrSourceDeleteFailed = errors.New("copied but failed to delete source")
+)
+
+// wrapObjectTooLarge 把 S3 的 EntityTooLarge 归一为 ErrObjectTooLarge，
+// 让上层可用 errors.Is 判断「单次上传/复制超限」并给出 multipart 指引。
+func wrapObjectTooLarge(err error) error {
+	if err != nil && HasErrorCode(err, "EntityTooLarge") {
+		return fmt.Errorf("%w: %w", ErrObjectTooLarge, err)
+	}
+	return err
+}
+
 // UserMessage 将 S3/SDK 错误映射为面向用户的短消息（防腐层出口）。
 func UserMessage(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
-	if strings.Contains(msg, "exceeds 5GB") {
+	if errors.Is(err, ErrObjectTooLarge) {
 		return "object exceeds 5GB single-put limit; use multipart upload"
 	}
-	if strings.Contains(msg, "failed to delete source") {
+	if errors.Is(err, ErrSourceDeleteFailed) {
 		return "copied but failed to delete source"
 	}
 	if IsNotFound(err) {
@@ -112,6 +130,9 @@ func IsAPIError(err error) bool { return ErrorCode(err) != "" }
 func IsEntityTooLarge(err error) bool {
 	if err == nil {
 		return false
+	}
+	if errors.Is(err, ErrObjectTooLarge) {
+		return true
 	}
 	if HasErrorCode(err, "EntityTooLarge") || UserMessage(err) == "entity too large" {
 		return true

@@ -29,8 +29,11 @@ func TestUserMessageAndHTTPStatus(t *testing.T) {
 	if !IsEntityTooLarge(fakeAPIError{code: "EntityTooLarge"}) {
 		t.Fatal("EntityTooLarge")
 	}
-	if UserMessage(fmt.Errorf("object x exceeds 5GB")) != "object exceeds 5GB single-put limit; use multipart upload" {
+	if UserMessage(fmt.Errorf("copy: %w", ErrObjectTooLarge)) != "object exceeds 5GB single-put limit; use multipart upload" {
 		t.Fatal("5GB")
+	}
+	if UserMessage(fmt.Errorf("move: %w", ErrSourceDeleteFailed)) != "copied but failed to delete source" {
+		t.Fatal("source delete failed")
 	}
 	if UserMessage(errors.New("weird")) != "storage operation failed" || HTTPStatus(errors.New("weird")) != 500 {
 		t.Fatal("unknown")

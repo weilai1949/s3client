@@ -185,7 +185,8 @@ func copyKeysThenDelete(
 				return err
 			}
 			if err := client.DeleteObject(ctx, srcBucket, p[0]); err != nil {
-				return fmt.Errorf("copied %s but failed to delete source: %w", p[0], err)
+				// sentinel 包装：批量结果用 errors.Is 识别「移动半成功」，不依赖错误文案。
+				return fmt.Errorf("%w: %s: %w", s3wrap.ErrSourceDeleteFailed, p[0], err)
 			}
 			return nil
 		},

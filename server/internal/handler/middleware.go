@@ -30,12 +30,32 @@ func (h *Handler) withSecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// maxRequestIDLen 是回显客户端 X-Request-ID 的最大长度。
+// 超长值会污染日志与响应头，超出即视为无效并由服务端生成新 id。
+const maxRequestIDLen = 128
+
+// validRequestID 判断客户端提供的 X-Request-ID 是否可安全回显：
+// 非空、长度 ≤ maxRequestIDLen、且全部为可见 ASCII（0x21–0x7E，排除空格与控制字符）。
+// 拒绝控制字符同时也挡住了换行注入（日志伪造 / 响应头拆分）。
+func validRequestID(id string) bool {
+	if id == "" || len(id) > maxRequestIDLen {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if c := id[i]; c < 0x21 || c > 0x7E {
+			return false
+		}
+	}
+	return true
+}
+
 // withLogging 记录每个请求的方法、路径、耗时与 request id；并累计 metrics。
 func (h *Handler) withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		reqID := r.Header.Get("X-Request-ID")
-		if reqID == "" {
+		if !validRequestID(reqID) {
+			// 客户端未提供或提供了不可信（超长/含控制字符/非 ASCII）的值时生成服务端 id。
 			reqID = uuid.NewString()
 		}
 		w.Header().Set("X-Request-ID", reqID)
@@ -199,8 +219,14 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 			return
 		}
 		auth := r.Header.Get("Authorization")
+		// RFC 7235：auth-scheme 大小写不敏感；凭证本身仍按常量时间比较。
+		scheme, cred, ok := strings.Cut(auth, " ")
+		if !ok || !strings.EqualFold(scheme, "bearer") {
+			h.writeErr(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
 		for _, t := range h.tokens {
-			if secureCompare(auth, "Bearer "+t) {
+			if secureCompare(cred, t) {
 				next.ServeHTTP(w, r)
 				return
 			}

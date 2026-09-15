@@ -68,10 +68,12 @@ docker-compose.yml   一键起 server + RustFS
 
 ## 配置（服务端）
 
-所有配置通过环境变量注入，支持 `.env`（见 `server/.env.example`）。
+所有配置通过环境变量注入，支持 `.env`（见 `server/.env.example`）。  
+`.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
+| `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选 |
 | `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080` |
 | `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`） |
 | `S3C_STATIC_DIR` | `./web/dist` | Web 静态资源目录 |

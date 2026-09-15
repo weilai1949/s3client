@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -46,6 +47,35 @@ func loadDotEnvFile(path string) {
 	}
 }
 
+// envFileCandidates 返回 .env 的候选路径（按优先级）：
+//  1. 显式 S3C_ENV_FILE（部署可用绝对路径，与进程 CWD 解耦；设置后即为唯一来源）；
+//  2. 进程工作目录 .env（历史默认，本地开发习惯）；
+//  3. 可执行文件同目录 .env（systemd / 双击启动时 CWD 往往不是安装目录）。
+func envFileCandidates() []string {
+	if p := strings.TrimSpace(os.Getenv("S3C_ENV_FILE")); p != "" {
+		return []string{p}
+	}
+	out := []string{".env"}
+	// os.Executable 在极少数平台可能失败；失败时只保留 CWD 候选。
+	if exe, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(exe), ".env"); p != ".env" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// loadDotEnv 加载第一个存在的候选 .env 文件（不存在则静默跳过，保持零配置可启动）。
+func loadDotEnv() {
+	for _, p := range envFileCandidates() {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		loadDotEnvFile(p)
+		return
+	}
+}
+
 // Config 汇总服务端配置。所有项均可通过环境变量覆盖，并内置安全默认值。
 type Config struct {
 	Addr               string   // 监听地址，默认回环 127.0.0.1:8080（更安全）
@@ -83,9 +113,9 @@ func envOrInt(key string, def int) int {
 	return n
 }
 
-// FromEnv 从环境变量构建配置；启动时先加载工作目录下的 .env（真实环境变量优先）。
+// FromEnv 从环境变量构建配置；启动时按 envFileCandidates 加载 .env（真实环境变量优先）。
 func FromEnv() Config {
-	loadDotEnvFile(".env")
+	loadDotEnv()
 	return Config{
 		Addr:               envOr("S3C_ADDR", "127.0.0.1:8080"),
 		DataDir:            envOr("S3C_DATA_DIR", "./data"),
@@ -136,6 +166,7 @@ func IsLoopbackAddr(addr string) bool {
 // Validate 对配置做安全校验：
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
 //   - 非回环监听必须设置 S3C_TOKEN。
+//
 // 多 token 时以单 token 最短者判定长度。
 func (c Config) Validate() error {
 	if c.Token != "" {

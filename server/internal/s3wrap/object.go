@@ -74,7 +74,7 @@ func (c *Client) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, d
 		Key:        aws.String(dstKey),
 		CopySource: aws.String(url.PathEscape(srcBucket + "/" + srcKey)),
 	})
-	return err
+	return wrapObjectTooLarge(err)
 }
 
 // CopyObjectWithMeta 复制对象并替换元数据。
@@ -135,7 +135,7 @@ func (c *Client) PutObject(ctx context.Context, bucket, key string, body io.Read
 		in.Metadata = metadata
 	}
 	_, err := c.s3.PutObject(ctx, in)
-	return err
+	return wrapObjectTooLarge(err)
 }
 
 // GetObjectAcl 读取对象 ACL，返回展示型 DTO（owner/是否公开/授权行）。

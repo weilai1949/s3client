@@ -7,6 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+
+	"github.com/weilai1949/s3clinet/server/internal/s3wrap"
 )
 
 type fakeAPIError struct {
@@ -28,8 +30,12 @@ func TestS3UserMessage(t *testing.T) {
 	if got := s3UserMessage(fakeAPIError{code: "AccessDenied"}); got != "access denied" {
 		t.Fatalf("AccessDenied = %q", got)
 	}
-	if got := s3UserMessage(fmt.Errorf("object x exceeds 5GB single-put limit")); got != "object exceeds 5GB single-put limit; use multipart upload" {
+	// sentinel 匹配（errors.Is），不再依赖错误文本子串。
+	if got := s3UserMessage(fmt.Errorf("copy x: %w", s3wrap.ErrObjectTooLarge)); got != "object exceeds 5GB single-put limit; use multipart upload" {
 		t.Fatalf("5GB = %q", got)
+	}
+	if got := s3UserMessage(fmt.Errorf("move x: %w", s3wrap.ErrSourceDeleteFailed)); got != "copied but failed to delete source" {
+		t.Fatalf("delete source = %q", got)
 	}
 	if got := s3UserMessage(errors.New("something weird")); got != "storage operation failed" {
 		t.Fatalf("unknown = %q", got)

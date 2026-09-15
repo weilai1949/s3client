@@ -12,14 +12,19 @@
 | `AccessDenied` | 403 | `access denied` | |
 | `InvalidAccessKeyId` / `SignatureDoesNotMatch` | 403 | `invalid credentials` | |
 | `InvalidRequest` / `InvalidArgument` / `MalformedPolicy` / `MalformedXML` / `InvalidStorageClass` | 400 | `invalid request` | |
-| `EntityTooLarge` | 400 | `entity too large` | 亦见字符串匹配 |
+| `EntityTooLarge` | 400 | `entity too large` | `PutObject`/`CopyObject` 会把该错误码归一为 `s3wrap.ErrObjectTooLarge`（见下） |
 | `BucketNotEmpty` | 409 | `bucket not empty` | |
 | `InvalidRange` | 416 | （proxy 专用文案） | `proxyErr` |
 | `SlowDown` / `ServiceUnavailable` | 503 | `storage temporarily unavailable` | |
 | `NoSuchUpload` | 500* | `multipart upload not found` | *HTTP 默认走 fallback 500；消息单独映射 |
-| 错误串含 `exceeds 5GB` | 500* | `object exceeds 5GB single-put limit; use multipart upload` | 应用层限制 |
-| 错误串含 `failed to delete source` | 500* | `copied but failed to delete source` | 移动半成功 |
+| `errors.Is(err, s3wrap.ErrObjectTooLarge)` | 400** | `object exceeds 5GB single-put limit; use multipart upload` | 单次上传/复制 >5GB；`PutObject`/`CopyObject` 用 `%w` 包装 |
+| `errors.Is(err, s3wrap.ErrSourceDeleteFailed)` | 500* | `copied but failed to delete source` | 移动半成功；handler 用 `%w` 包装 |
 | 其他 | 500 | `storage operation failed` | |
+
+> **已移除字符串匹配**：应用层错误（5GB 上限 / 删源失败）改用 sentinel + `errors.Is` 识别
+> （`ErrObjectTooLarge` / `ErrSourceDeleteFailed`），不再依赖 `strings.Contains(err.Error(), ...)`；
+> 即使 SDK/各 S3 实现的文案变化也不会静默失效。`**HTTPStatus` 对包装后的错误仍经 `errors.As` 取到
+> `EntityTooLarge` 码 → 400。
 
 > `HTTPStatus` 未单独列出的码（如 `NoSuchUpload`）回落 **500**；业务 handler 可在映射前特判。
 

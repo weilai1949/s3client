@@ -36,8 +36,8 @@ func (h *Handler) getObjectAcl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	grants := []aclGrant{}
-	for _, r := range rows {
-		grants = append(grants, aclGrant{Grantee: r.Grantee, Permission: r.Permission})
+	for _, row := range rows {
+		grants = append(grants, aclGrant{Grantee: row.Grantee, Permission: row.Permission})
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{
 		"bucket": bucket,
