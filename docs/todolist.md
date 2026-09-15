@@ -11,15 +11,13 @@
 
 - [一、功能 / 架构待办](#一功能--架构待办)
 - [二、API / 契约待办](#二api--契约待办)
-- [三、历史评审遗留（迁移自快照文档）](#三历史评审遗留迁移自快照文档)
-
 ---
 
 ## 一、功能 / 架构待办
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 1 | `EncryptedStore` 与「带 `S3C_STORE_KEY` 的 JSON Store」功能重叠 | `full-assessment.md` T-8 注 | ⬜ | 两者加密语义与落盘格式一致（S3C2 信封），入口重复。后续可择一收敛为单一驱动，减少维护面。 |
+| 1 | `EncryptedStore` 与「带 `S3C_STORE_KEY` 的 JSON Store」功能重叠 | `full-assessment.md` T-8 注 | ✅ | 已收敛：两驱动统一为 `Store` + 单一 `storeCodec`（strict 区分 json/encrypted），删除 `EncryptedStore` / `encryptedCodec`；磁盘格式与错误文案不变，`internal/store` 覆盖率 100%。 |
 
 ---
 
@@ -31,18 +29,3 @@
 | 3 | OpenAPI `components.schemas` / `parameters` / `responses` 目前 **0 个 `$ref`** | `FEATURES.md` 已知边界 | ➖ | 已决策：接线 `$ref` 会改变对外契约，刻意不为凑引用而改动。保留片段供后续按需引用。 |
 | 4 | `POST /api/accounts/preview-buckets` 使用临时凭据，不落库 | `FEATURES.md` 已知边界 | ➖ | 设计决策：预览桶仅用表单凭据临时 `ListBuckets`，不写入存储。 |
 
----
-
-## 三、历史评审遗留（迁移自快照文档）
-
-> 以下项自评估快照中摘出；其余问题均已修复 / 评估关闭，详见 [`FEATURES.md`](FEATURES.md) 的「二、已完成修复与优化 → C / D / E」。
-
-| # | 项 | 来源 | 状态 | 说明 |
-|---|----|------|------|------|
-| 5 | `ssrf.go` `To4` 死分支 | `code-review-v1.0.0-rc1.md` §6 | ➖ | 复核：代码中已无 `To4`；拨号循环分支互异，无死代码。 |
-| 6 | `zip.go` producer goroutine 泄漏 | `code-review-v1.0.0-rc1.md` §3 | ➖ | 复核为无泄漏（`ctxCancelReader` + `context.AfterFunc` 已覆盖阻塞读中断）。 |
-| 7 | `batchMetadata.ts` 计数器并发非原子 | `code-review-v1.0.0-rc1.md` §3 | ➖ | JS 单线程事件循环保证原子性，无需改动。 |
-| 8 | 面板挂载隐式切全局账号 | `code-review-v1.0.0-rc1.md` §5 | ➖ | 复核：`onMounted`/`onActivated` 仅 reload，不 `selectAccount`。 |
-| 9 | `|| true` 吞安装失败 | `code-review-v1.0.0-rc1.md` §5 | ➖ | 已无 install 命令使用；仅保留 read/kill 的良性回退。 |
-| 10 | Handler 结构体拆分（12 字段） | `full-assessment.md` A-2 / M-2 | ➖ | 评估后维持：方法已按域分文件，拆子 handler 收益低、风险高。 |
-| 11 | 批量元数据端点（`object-batch/*`） | `full-assessment.md` API-1 / API-4 | ➖ | 前端编排用的单对象端点（object-acl / tags / storage-class）已在 OpenAPI 登记；不新增后端批量端点。 |

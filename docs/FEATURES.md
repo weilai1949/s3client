@@ -107,10 +107,10 @@
 | 能力 | 说明 |
 |---|---|
 | 三驱动 | `json`（默认）/ `sqlite` / `encrypted`，统一 `store.Open` 入口 |
-| 共享实现 | `json` 与 `encrypted` 复用 unexported `fileStore` + 注入式 `fileCodec`（锁 / CRUD / 回滚 / 快照单点实现） |
+| 共享实现 | `json` 与 `encrypted` 统一为 `Store` + 单一 `storeCodec`（strict 区分），复用 `fileStore`（锁 / CRUD / 回滚 / 快照单点实现） |
 | 落盘加密 | `S3C_STORE_KEY` → Argon2id + AES-256-GCM，格式 `S3C2｜salt｜ciphertext` |
 | 原子写 | 临时文件 + 写后 rename；写前清残骸（`O_EXCL`）；0600 权限 |
-| 兼容性 | `json` 驱动同时读明文与历史 S3C2 文件；`encrypted` 保持随机盐 |
+| 兼容性 | `json` 驱动同时读明文与历史 S3C2 文件（permissive，写盘换新盐）；`encrypted` 严格 S3C2、复用文件盐 |
 | 失败回滚 | `Create`/`Update`/`Delete` 持久化失败回滚内存，避免内存/磁盘漂移 |
 
 ### 10. 服务端安全与鉴权
@@ -176,7 +176,7 @@
 
 | 项 | 状态 | 内容 |
 |---|---|---|
-| 双存储驱动重叠 | ✅ | `json` 与 `encrypted` 抽取共享 `fileStore` + `fileCodec`；`store.go` 244→93、`encrypted.go` 267→80，净减约 331 行；磁盘格式 / 错误文案 / 加密语义不变 |
+| 双存储驱动重叠 | ✅ | 抽取共享 `fileStore` + `fileCodec`（净减约 331 行）；**后续再收敛**：`EncryptedStore`/`encryptedCodec` 并入统一 `Store` + 单一 `storeCodec`（strict 模式），删除 `encrypted.go`；磁盘格式 / 错误文案 / 加密语义不变 |
 | `Create` 跨驱动一致性 | ✅ | 统一存防御性副本（此前 json 驱动别名调用方指针，encrypted 已复制） |
 | 跨驱动对照测试 | ✅ | `crossdriver_test.go`：三驱动 CRUD 等价、遗留 S3C2 信封可读、落盘字节布局 |
 | OpenAPI 覆盖率 | ✅ | `internal/openapi` 与 handler 内全部 OpenAPI 函数 **100.0%** statement |
@@ -203,6 +203,9 @@
 | `server/internal/store/encrypted.go` | 267 → 80 行：仅选 `encryptedCodec`（随机盐） |
 | `server/internal/store/account_store.go` | `ErrNotFound` 移到接口旁 |
 | `open.go` / `sqlite.go` / `atomic.go` | 未改动（文件路径、返回类型、故障注入 seams 全部保留） |
+
+> 后续再收敛（本轮）：`encryptedCodec` / `EncryptedStore` 并入统一 `storeCodec`（`strict` 区分
+> permissive/严格语义），`encrypted.go` 删除，`NewEncrypted` 返回 `*Store`；行为、错误文案、磁盘格式不变。
 
 ### C. 全方位评估 58 项（2026-04-19 全部落地）
 
