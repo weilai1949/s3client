@@ -61,7 +61,7 @@ const acc: Account = {
   endpoint: '',
   region: '',
   accessKey: '',
-  secretKey: '',
+  secretSet: false,
   bucket: 'b1',
   pathStyle: true,
   useSSL: true,

@@ -53,7 +53,7 @@ vi.mock('../i18n', () => ({
 
 const acc1: Account = {
   id: 'acc-1', name: 'acc-one', endpoint: 'http://minio:9000', region: 'r',
-  accessKey: 'ak', secretKey: 'sk', bucket: 'src-bucket', pathStyle: true, useSSL: false,
+  accessKey: 'ak', secretSet: true, bucket: 'src-bucket', pathStyle: true, useSSL: false,
 }
 const acc2: Account = { ...acc1, id: 'acc-2', name: 'acc-two', bucket: 'dst-bucket' }
 

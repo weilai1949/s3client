@@ -41,7 +41,7 @@ const account: Account = {
   endpoint: 'http://minio:9000',
   region: 'us-east-1',
   accessKey: 'ak',
-  secretKey: 'sk',
+  secretSet: true,
   bucket: 'b1',
   pathStyle: true,
   useSSL: false,

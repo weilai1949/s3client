@@ -1,3 +1,4 @@
+/** 后端返回的账号视图：不回传 secretKey，secretSet 表示是否已设置密钥。 */
 export interface Account {
   id: string
   name: string
@@ -5,7 +6,7 @@ export interface Account {
   publicEndpoint?: string
   region: string
   accessKey: string
-  secretKey: string
+  secretSet: boolean
   bucket: string
   pathStyle: boolean
   useSSL: boolean
@@ -13,6 +14,7 @@ export interface Account {
   updatedAt?: string
 }
 
+/** 新建 / 编辑账号的提交载荷：secretKey 仅用于输入（编辑时留空表示保持不变）。 */
 export interface AccountInput {
   name: string
   endpoint: string
