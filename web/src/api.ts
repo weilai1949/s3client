@@ -283,6 +283,12 @@ export async function requestResponse(path: string, opts: RequestInit = {}): Pro
 
 const ZIP_BLOB_MAX_BYTES = 500 * 1024 * 1024 // 500MB blob 兜底上限
 
+/**
+ * blob 下载用的 object URL 回收延迟：click() 之后部分浏览器才异步读取 blob，
+ * 同步 revokeObjectURL 会中断下载（0 字节/失败），因此推迟到下载启动之后再回收。
+ */
+const BLOB_URL_REVOKE_DELAY_MS = 60_000
+
 type SaveFilePickerWindow = Window & {
   showSaveFilePicker?: (options?: {
     suggestedName?: string
@@ -348,16 +354,14 @@ export async function downloadZipToDisk(
   }
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // 不在同一任务内 revoke：延迟回收，避免中断浏览器尚未开始的下载。
+  setTimeout(() => URL.revokeObjectURL(url), BLOB_URL_REVOKE_DELAY_MS)
 }
 
 export const s3api = {

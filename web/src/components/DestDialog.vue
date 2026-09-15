@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api, subscribeMigrateEvents, type MigrateProgress } from '../api'
@@ -66,24 +66,35 @@ function modeAction(kind: 'plain' | 'past' | 'ing'): string {
   return t(props.mode === 'copy' ? 'dest.actionCopy' : 'dest.actionMove')
 }
 
+/** 进行中的 SSE 取消器：组件卸载时全部断开，避免流悬挂、后台持续推送或回调写入已销毁的 ref。 */
+const activeStops = new Set<() => void>()
+
+onBeforeUnmount(() => {
+  for (const stop of activeStops) stop()
+  activeStops.clear()
+})
+
 function waitMigrateJob(jobId: string, onProgress?: (p: MigrateProgress) => void): Promise<{ ok: number; failed: number }> {
   return new Promise((resolve, reject) => {
     let last = { ok: 0, failed: 0 }
+    const finish = (fn: () => void) => {
+      activeStops.delete(stop)
+      fn()
+    }
     const stop = subscribeMigrateEvents(
       jobId,
       (p) => {
         last = { ok: p.migrated ?? 0, failed: p.failed ?? 0 }
         onProgress?.(p)
         if (p.status === 'done' || p.status === 'cancelled') {
-          stop()
-          resolve(last)
+          finish(() => resolve(last))
         }
       },
       (e) => {
-        stop()
-        reject(e)
+        finish(() => reject(e))
       },
     )
+    activeStops.add(stop)
   })
 }
 

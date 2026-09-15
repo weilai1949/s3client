@@ -255,6 +255,28 @@ describe('DestDialog', () => {
     expect(w.emitted('submit')).toBeTruthy()
   })
 
+  it('unmount aborts the in-flight SSE subscription', async () => {
+    const stop = vi.fn()
+    let held: ((p: MigrateProgress) => void) | undefined
+    vi.mocked(subscribeMigrateEvents).mockImplementation(((_jobId: string, onProgress: (p: MigrateProgress) => void) => {
+      held = onProgress
+      return stop
+    }) as never)
+    // 单独挂载（不 track）：本用例自行卸载，避免 afterEach 重复卸载。
+    const w = mount(DestDialog, {
+      props: { open: false, accountId: 'acc-1', sourceBucket: 'b1', kind: 'folder', mode: 'copy', objectKey: 'k' },
+      attachTo: document.body,
+    })
+    await openDialog(w)
+    clickBody('common.copy')
+    await flushPromises()
+    expect(held).toBeTruthy()
+    expect(stop).not.toHaveBeenCalled()
+
+    w.unmount()
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
   it('folder copy partial failure toast (cancelled job)', async () => {
     vi.mocked(subscribeMigrateEvents).mockImplementation(((_jobId: string, onProgress: (p: MigrateProgress) => void) => {
       queueMicrotask(() => onProgress({ status: 'cancelled', migrated: 0, failed: 3, done: 0, total: 4 }))

@@ -372,4 +372,18 @@ describe('UploadPanel queue option callbacks', () => {
     await (w.vm as unknown as { copyDoneLink: (it: UploadQueueItem) => Promise<void> }).copyDoneLink(item())
     expect(s3api.presign).not.toHaveBeenCalled()
   })
+
+  it('无当前账号时 target 抛错（由队列记为条目错误，而非静默非空断言）', () => {
+    const q = makeQueue()
+    let opts!: QueueOptionsProbe
+    vi.mocked(useUploadQueue).mockImplementation((o) => {
+      opts = o as unknown as QueueOptionsProbe
+      return q as unknown as ReturnType<typeof useUploadQueue>
+    })
+    const accState = ref<Account | undefined>(undefined)
+    vi.mocked(currentAccount).mockImplementation(() => accState.value)
+    mounted = mount(UploadPanel)
+
+    expect(() => opts.target({ id: 1, file: new File(['x'], 'a.txt'), key: 'a.txt' })).toThrow('no active account')
+  })
 })

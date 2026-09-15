@@ -38,6 +38,12 @@ const rows = ref<VersionRow[]>([])
 const loading = ref(false)
 const busy = ref(false)
 const compareOpen = ref(false)
+/** 达到分页上限后服务端仍有更多版本（此时不再静默丢弃，UI 明确提示）。 */
+const truncated = ref(false)
+const truncatedPages = ref(0)
+
+/** 单次 load 最多翻多少页（页大小由后端固定 ≤1000），避免极端桶把弹窗拖死。 */
+const MAX_VERSION_PAGES = 20
 
 /** 可参与内容比较的版本（排除删除标记）。 */
 const contentVersions = computed<CompareVersion[]>(() =>
@@ -55,17 +61,60 @@ const contentVersions = computed<CompareVersion[]>(() =>
 
 async function load() {
   rows.value = []
+  truncated.value = false
+  truncatedPages.value = 0
   loading.value = true
   try {
-    const r = await s3api.listVersions(props.accountId, { bucket: props.bucket, prefix: props.objectKey })
     const merged: VersionRow[] = []
-    for (const m of r.deleteMarkers ?? []) {
-      if (m.key !== props.objectKey) continue
-      merged.push({ key: m.key, versionId: m.versionId, isLatest: m.isLatest, lastModified: m.lastModified, size: 0, etag: '', storageClass: '', isDeleteMarker: true })
-    }
-    for (const v of r.versions ?? []) {
-      if (v.key !== props.objectKey) continue
-      merged.push({ key: v.key, versionId: v.versionId, isLatest: v.isLatest, lastModified: v.lastModified, size: v.size, etag: v.etag, storageClass: v.storageClass ?? '', isDeleteMarker: false })
+    // 按 keyMarker/versionIdMarker 翻页直到不再截断（或达到上限），
+    // 避免后端 isTruncated=true 时静默丢失 1000 条之后的版本。
+    let isTruncated = false
+    let keyMarker: string | undefined
+    let versionIdMarker: string | undefined
+    let pages = 0
+    do {
+      const r = await s3api.listVersions(props.accountId, {
+        bucket: props.bucket,
+        prefix: props.objectKey,
+        keyMarker,
+        versionIdMarker,
+      })
+      for (const m of r.deleteMarkers ?? []) {
+        if (m.key !== props.objectKey) continue
+        merged.push({
+          key: m.key,
+          versionId: m.versionId,
+          isLatest: m.isLatest,
+          lastModified: m.lastModified,
+          size: 0,
+          etag: '',
+          storageClass: '',
+          isDeleteMarker: true,
+        })
+      }
+      for (const v of r.versions ?? []) {
+        if (v.key !== props.objectKey) continue
+        merged.push({
+          key: v.key,
+          versionId: v.versionId,
+          isLatest: v.isLatest,
+          lastModified: v.lastModified,
+          size: v.size,
+          etag: v.etag,
+          storageClass: v.storageClass ?? '',
+          isDeleteMarker: false,
+        })
+      }
+      isTruncated = !!r.isTruncated
+      keyMarker = r.nextKeyMarker
+      versionIdMarker = r.nextVersionIdMarker
+      pages++
+      // 服务端说还有更多，但没给游标（异常实现）时也停止，避免死循环。
+    } while (isTruncated && keyMarker && pages < MAX_VERSION_PAGES)
+
+    if (isTruncated) {
+      truncated.value = true
+      truncatedPages.value = pages
     }
     merged.sort((a, b) => (b.lastModified || '').localeCompare(a.lastModified || ''))
     rows.value = merged
@@ -158,6 +207,7 @@ async function removeVersion(v: VersionRow) {
           {{ contentVersions.length < 2 ? t('versions.compareNeed') : t('versions.compare') }}
         </button>
         <span class="badge" v-if="rows.some((v) => v.isDeleteMarker)">{{ t('versions.hasDeleteMarker') }}</span>
+        <span class="badge" v-if="truncated" style="color:#d64545">{{ tf('versions.truncated', { pages: truncatedPages }) }}</span>
       </div>
       <table class="tbl">
         <thead><tr><th style="width:96px">{{ t('versions.colType') }}</th><th>{{ t('versions.colVersionId') }}</th><th style="width:140px">{{ t('versions.colMtime') }}</th><th style="width:70px">{{ t('versions.colSize') }}</th><th style="width:96px">{{ t('versions.colStorage') }}</th><th style="width:190px">{{ t('versions.colActions') }}</th></tr></thead>

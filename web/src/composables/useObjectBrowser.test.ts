@@ -178,6 +178,29 @@ describe('useObjectBrowser', () => {
     expect(bindings.previewOrDownload).not.toHaveBeenCalled()
   })
 
+  it('bindings 缺省（面板初始化期间）：快捷键与双击不抛错', () => {
+    // 不传 bindings：命中默认参数与可选链的 undefined 分支。
+    const browser = useObjectBrowser()
+    browser.panelActive.value = true
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+    ]
+    browser.selected.value = new Set(['a.txt'])
+
+    expect(() => browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Enter' }))).not.toThrow()
+    expect(() => browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'F2' }))).not.toThrow()
+    expect(() => browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Delete' }))).not.toThrow()
+    expect(() =>
+      browser.onRowDblClick({
+        kind: 'file',
+        key: 'a.txt',
+        name: 'a.txt',
+        object: { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      } as Entry),
+    ).not.toThrow()
+  })
+
   it('enterBucket / goRoot / goUp', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.enterBucket('my-bucket')
@@ -592,6 +615,14 @@ describe('useObjectBrowser final branches', () => {
 
   it('removeBucket returns early when confirm is cancelled', async () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
+    const browser = useObjectBrowser(makeBindings())
+    await browser.removeBucket({ name: 'b1' } as unknown as BucketItem)
+    expect(s3api.deleteBucket).not.toHaveBeenCalled()
+  })
+
+  it('removeBucket 无当前账号时直接返回（不依赖非空断言）', async () => {
+    vi.mocked(confirmDialog).mockResolvedValue(true)
+    vi.mocked(currentAccount).mockReturnValue(undefined)
     const browser = useObjectBrowser(makeBindings())
     await browser.removeBucket({ name: 'b1' } as unknown as BucketItem)
     expect(s3api.deleteBucket).not.toHaveBeenCalled()

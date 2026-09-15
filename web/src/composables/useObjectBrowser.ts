@@ -17,15 +17,16 @@ export interface CtxMenu {
 
 /**
  * 跨组合式注入的键盘/双击回调：由面板在创建 actions/preview 后回填。
- * 由于监听器在 onMounted 注册、且只在用户输入时触发，回填时刻不影响行为。
+ * 由于监听器在 onMounted 注册、且只在用户输入时触发，回填时刻不影响行为；
+ * 全部可选——未回填时对应快捷键静默忽略（面板初始化期间不会 panic）。
  */
 export interface KeyBindings {
-  previewOrDownload: (o: ObjectItem) => void
-  ctxRenameKey: (key: string) => void
-  removeSelected: () => void
+  previewOrDownload?: (o: ObjectItem) => void
+  ctxRenameKey?: (key: string) => void
+  removeSelected?: () => void
 }
 
-export function useObjectBrowser(bindings: KeyBindings) {
+export function useObjectBrowser(bindings: KeyBindings = {}) {
   const prefix = ref('')
   const currentBucket = ref('')
   const buckets = ref<BucketItem[]>([])
@@ -176,8 +177,11 @@ export function useObjectBrowser(bindings: KeyBindings) {
       message: tf('buckets.deleteConfirm', { name: b.name }),
     })
     if (!ok) return
+    // 账号可能已被切走/清空：此时无可删除目标，直接返回而不是非空断言。
+    const accId = account.value?.id
+    if (!accId) return
     try {
-      await s3api.deleteBucket(account.value!.id, b.name)
+      await s3api.deleteBucket(accId, b.name)
       toast(tf('buckets.deleted', { name: b.name }))
       if (currentBucket.value === b.name) currentBucket.value = ''
       await loadBuckets()
@@ -303,17 +307,17 @@ export function useObjectBrowser(bindings: KeyBindings) {
     if (e.key === 'Enter') {
       if (first) {
         e.preventDefault()
-        bindings.previewOrDownload(first)
+        bindings.previewOrDownload?.(first)
       }
     } else if (e.key === 'F2') {
       if (first) {
         e.preventDefault()
-        bindings.ctxRenameKey(first.key)
+        bindings.ctxRenameKey?.(first.key)
       }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (files.length) {
         e.preventDefault()
-        bindings.removeSelected()
+        bindings.removeSelected?.()
       }
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
       e.preventDefault()
@@ -374,7 +378,7 @@ export function useObjectBrowser(bindings: KeyBindings) {
   /** 双击：文件=查看（预览，未知类型下载），文件夹=进入。 */
   function onRowDblClick(e: Entry) {
     if (e.kind === 'folder') enterPrefix(e.key)
-    else if (e.object) bindings.previewOrDownload(e.object)
+    else if (e.object) bindings.previewOrDownload?.(e.object)
   }
 
   async function refreshAll() {

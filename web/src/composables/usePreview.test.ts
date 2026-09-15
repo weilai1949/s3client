@@ -109,4 +109,17 @@ describe('usePreview', () => {
     result.ctxPreview()
     expect(ctx.closeCtx).toHaveBeenCalled()
   })
+
+  it('showPreview 无当前账号时不打开预览（不依赖非空断言）', () => {
+    const ctx = {
+      account: { value: undefined },
+      currentBucket: { value: 'b1' },
+      getCtxEntry: vi.fn(),
+      closeCtx: vi.fn(),
+      download: vi.fn(),
+    }
+    const result = usePreview(ctx as unknown as PreviewCtx)
+    result.showPreview({ key: 'test.txt' } as unknown as ObjectItem)
+    expect(result.preview.value).toBeNull()
+  })
 })

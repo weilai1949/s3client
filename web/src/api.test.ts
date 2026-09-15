@@ -593,6 +593,33 @@ describe('s3api', () => {
     expect(fetch).toHaveBeenCalled()
   })
 
+  it('downloadZipToDisk blob fallback 延迟 revokeObjectURL（不中断下载）', async () => {
+    stubFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Map<string, string>([['Content-Length', '1000']]),
+        blob: () => Promise.resolve(new Blob(['zip'])),
+        body: null,
+      })
+    )
+    const { downloadZipToDisk } = await import('./api')
+    const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:zip')
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.useFakeTimers()
+    try {
+      await downloadZipToDisk('id1', { keys: ['a.txt'] })
+      expect(create).toHaveBeenCalled()
+      // 关键：下载启动时不得同步回收（否则部分浏览器会中断下载）
+      expect(revoke).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(60_000)
+      expect(revoke).toHaveBeenCalledWith('blob:zip')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('downloadZipToDisk rejects when keys > 50 and no Content-Length', async () => {
     stubFetch(() =>
       Promise.resolve({

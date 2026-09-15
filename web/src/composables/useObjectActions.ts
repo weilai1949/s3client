@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api, api, subscribeMigrateEvents } from '../api'
@@ -39,6 +39,13 @@ export interface DestCtx {
 export function useObjectActions(ctx: ObjectBrowserCtx) {
   const detail = ref<ObjectMeta | null>(null)
   const detailSeq = ref(0) // showDetail 序号守卫，过期响应丢弃
+  // 进行中的异步任务 SSE 取消器；组件卸载时断开，避免流悬挂/回调写入已销毁的 ref。
+  let activeUnsub: (() => void) | undefined
+
+  onBeforeUnmount(() => {
+    activeUnsub?.()
+    activeUnsub = undefined
+  })
 
   /**
    * 解析当前账号 id。所有"非空断言"集中在这里：
@@ -451,15 +458,19 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
               delProgress(tf('dest.toastDeleteProgress', { done: p.done, total: p.total }))
             }
             if (p.status === 'done' || p.status === 'cancelled') {
+              activeUnsub = undefined
               stop()
               resolve(n)
             }
           },
           (err) => {
+            activeUnsub = undefined
             stop()
             reject(err)
           },
         )
+        // 记录当前订阅，供组件卸载时立即断开。
+        activeUnsub = stop
       })
       toast(
         start.truncated

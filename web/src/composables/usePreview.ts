@@ -22,12 +22,15 @@ export function usePreview(ctx: PreviewCtx) {
   const preview = ref<PreviewState | null>(null)
 
   function showPreview(o: ObjectItem) {
+    // 无当前账号（面板已卸载 / 尚未选中）时不打开预览：代理 URL 需要账号 id。
+    const accId = ctx.account.value?.id
+    if (!accId) return
     const kind = previewKind(o.key)
     // 未知类型也打开预览面板（显示友好提示与下载入口），避免“右键没有查看入口”的困惑
     preview.value = {
       key: o.key,
       kind,
-      url: kind === 'none' ? '' : proxyUrl(ctx.account.value!.id, ctx.currentBucket.value, 'inline', o.key, api.base),
+      url: kind === 'none' ? '' : proxyUrl(accId, ctx.currentBucket.value, 'inline', o.key, api.base),
     }
   }
 

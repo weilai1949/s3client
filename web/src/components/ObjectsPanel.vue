@@ -23,7 +23,9 @@ import { useObjectActions } from '../composables/useObjectActions'
 import { usePreview } from '../composables/usePreview'
 
 /* ---- 组合式编排：对象浏览（state / 导航 / 选择 / 分页）+ 动作（右键 / 弹窗 / 上传） + 预览 ---- */
-const bindings = {} as KeyBindings
+// KeyBindings 全部可选：先传空对象创建 browser，创建 actions/preview 后回填（见下方 bindings.* 赋值），
+// 无需 `{} as KeyBindings` 断言；回填前的快捷键调用被静默忽略。
+const bindings: KeyBindings = {}
 const browser = useObjectBrowser(bindings)
 const actions = useObjectActions({
   account: browser.account,

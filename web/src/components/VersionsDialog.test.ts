@@ -425,4 +425,55 @@ describe('VersionsDialog', () => {
     await flushPromises()
     expect(vi.mocked(s3api.listVersions)).toHaveBeenCalledTimes(1)
   })
+
+  it('isTruncated：按游标翻页拉齐全部版本后再渲染', async () => {
+    vi.mocked(s3api.listVersions)
+      .mockResolvedValueOnce({
+        versions: [{ key: 'k', versionId: 'v2', isLatest: true, lastModified: '2024-01-02', size: 2, etag: 'e2', storageClass: 'STANDARD' }],
+        deleteMarkers: [],
+        isTruncated: true,
+        nextKeyMarker: 'k',
+        nextVersionIdMarker: 'v2',
+      } as never)
+      .mockResolvedValueOnce({
+        versions: [{ key: 'k', versionId: 'v1', isLatest: false, lastModified: '2024-01-01', size: 1, etag: 'e1', storageClass: 'STANDARD' }],
+        deleteMarkers: [],
+        isTruncated: false,
+      } as never)
+
+    const w = mountDialog()
+    await w.setProps({ open: true })
+    await flushPromises()
+
+    expect(vi.mocked(s3api.listVersions)).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(s3api.listVersions)).toHaveBeenNthCalledWith(2, 'acc-1', {
+      bucket: 'b',
+      prefix: 'k',
+      keyMarker: 'k',
+      versionIdMarker: 'v2',
+    })
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('v1')
+    expect(text).toContain('v2')
+    expect(document.body.querySelectorAll('tbody tr')).toHaveLength(2)
+    // 翻页已拉齐 → 无截断提示
+    expect(text).not.toContain('versions.truncated')
+  })
+
+  it('仍截断（达分页上限）时明确提示，不静默丢弃', async () => {
+    vi.mocked(s3api.listVersions).mockResolvedValue({
+      versions: [{ key: 'k', versionId: 'v1', isLatest: true, lastModified: '2024-01-01', size: 1, etag: 'e', storageClass: 'STANDARD' }],
+      deleteMarkers: [],
+      isTruncated: true,
+      nextKeyMarker: 'k',
+      nextVersionIdMarker: 'v1',
+    } as never)
+
+    const w = mountDialog()
+    await w.setProps({ open: true })
+    await flushPromises()
+
+    expect(vi.mocked(s3api.listVersions)).toHaveBeenCalledTimes(20)
+    expect(document.body.textContent ?? '').toContain('versions.truncated')
+  })
 })

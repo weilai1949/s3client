@@ -25,7 +25,12 @@ function keyFor(filename: string): string {
 // 共享上传队列：并发控制 / 状态机 / abort 见 useUploadQueue。
 // 本面板语义：中止回 pending（可再次上传，requeue）、单批快照（不带边传边加）。
 const queue = useUploadQueue({
-  target: (it) => ({ accId: account.value!.id, key: it.key }),
+  // 目标账号在 run 时逐条求值：无账号时抛错，由队列状态机记为条目错误（不静默断言）。
+  target: (it) => {
+    const accId = account.value?.id
+    if (!accId) throw new Error('no active account')
+    return { accId, key: it.key }
+  },
   onItemStart: (it) => (it.key = keyFor(it.file.name)), // 用当前前缀
   selectBatch: (all) => all.filter((it) => it.status !== 'done' && it.status !== 'cancelled'),
   drain: false,

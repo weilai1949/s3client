@@ -99,6 +99,14 @@ let lastCtx: ObjectBrowserCtx | null = null
 
 /** 挂一个宿主组件：setup 内调用组合式，把返回值存到外层变量供断言。 */
 function makeActions(overrides: Partial<ObjectBrowserCtx> = {}): ReturnType<typeof useObjectActions> {
+  return mountActionsHost(overrides).actions
+}
+
+/** 同上，但保留宿主组件句柄以便测试卸载（onBeforeUnmount）行为。 */
+function mountActionsHost(overrides: Partial<ObjectBrowserCtx> = {}): {
+  actions: ReturnType<typeof useObjectActions>
+  unmount: () => void
+} {
   let captured!: ReturnType<typeof useObjectActions>
   const Host = defineComponent({
     setup() {
@@ -106,8 +114,8 @@ function makeActions(overrides: Partial<ObjectBrowserCtx> = {}): ReturnType<type
       return () => null
     },
   })
-  mount(Host)
-  return captured
+  const wrapper = mount(Host)
+  return { actions: captured, unmount: () => wrapper.unmount() }
 }
 
 function mountActions(): ReturnType<typeof useObjectActions> {
@@ -992,6 +1000,25 @@ describe('删除文件夹（异步任务 + SSE 进度）', () => {
     await run
     expect(lastCtx!.error.value).toBe('sse fail')
     expect(lastCtx!.opsBusy.value).toBe(false)
+  })
+
+  it('组件卸载时断开进行中的 SSE 订阅', async () => {
+    let onProgress: ((p: Partial<MigrateProgress>) => void) | undefined
+    const stop = vi.fn()
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_jobId, p) => {
+      onProgress = p as (p: Partial<MigrateProgress>) => void
+      return stop
+    })
+    vi.mocked(s3api.deletePrefixAsync).mockResolvedValueOnce({ jobId: 'j5', total: 2 })
+    const { actions, unmount } = mountActionsHost()
+    setEntry({ kind: 'folder', key: 'dir/', name: 'dir' })
+
+    void actions.ctxDeleteFolder()
+    await vi.waitFor(() => expect(onProgress).toBeTruthy())
+    expect(stop).not.toHaveBeenCalled()
+
+    unmount()
+    expect(stop).toHaveBeenCalledTimes(1)
   })
 })
 
