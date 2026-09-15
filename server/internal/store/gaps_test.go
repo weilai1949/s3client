@@ -808,7 +808,7 @@ func TestGapEncryptedUpdateRollbackOnPersistFail(t *testing.T) {
 	}
 }
 
-// TestGapJSONUpdateRollbackOnPersistFail 与 EncryptedStore 行为对齐：JSON Store
+// TestGapJSONUpdateRollbackOnPersistFail 与 encrypted 驱动行为对齐：JSON Store
 // 原本已支持回滚，此处显式补测以防回归。
 func TestGapJSONUpdateRollbackOnPersistFail(t *testing.T) {
 	dir := t.TempDir()
