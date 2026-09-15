@@ -29,14 +29,14 @@ func registerBucketSettings(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/encryption", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除 SSE 配置", OperationID: "deleteBucketEncryption",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 
 	// CORS
 	r.Operation("GET", "/api/accounts/{id}/bucket/cors", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "桶 CORS 规则列表", OperationID: "getBucketCors",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket/cors", openapi.Op{
@@ -53,14 +53,14 @@ func registerBucketSettings(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/cors", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除 CORS", OperationID: "deleteBucketCors",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 
 	// Website
 	r.Operation("GET", "/api/accounts/{id}/bucket/website", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "桶静态网站托管配置", OperationID: "getBucketWebsite",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回 configured=false", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket/website", openapi.Op{
@@ -79,14 +79,14 @@ func registerBucketSettings(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/website", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除静态网站托管", OperationID: "deleteBucketWebsite",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 
 	// Policy
 	r.Operation("GET", "/api/accounts/{id}/bucket/policy", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "桶策略（JSON 字符串）", OperationID: "getBucketPolicy",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回 configured=false", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket/policy", openapi.Op{
@@ -103,14 +103,14 @@ func registerBucketSettings(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/policy", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除桶策略", OperationID: "deleteBucketPolicy",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 
 	// Tags
 	r.Operation("GET", "/api/accounts/{id}/bucket/tags", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "桶标签", OperationID: "getBucketTags",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket/tags", openapi.Op{
@@ -127,7 +127,7 @@ func registerBucketSettings(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/tags", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除桶标签", OperationID: "deleteBucketTags",
-		Params: []openapi.Param{acctIDParam(), bucketQ},
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 }

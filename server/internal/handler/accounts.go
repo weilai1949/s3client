@@ -162,6 +162,7 @@ func (h *Handler) previewBuckets(w http.ResponseWriter, r *http.Request) {
 //   - 首尾必须是小写字母或数字
 //   - 不允许连续两个点（保留 ..）
 //   - 不允许以连字符相邻（保留 -. / .-）
+//
 // 完整 S3 规则还有"禁止 IP 形式"和"禁止 xn-- 前缀"等更细边界，违反会由 S3 端拒绝。
 func validBucketName(name string) bool {
 	if len(name) < 3 || len(name) > 63 {

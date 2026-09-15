@@ -65,9 +65,9 @@ type MediaType struct {
 
 // Request 描述请求体。
 type Request struct {
-	Required bool       `json:"required,omitempty"`
-	Content  MediaType  `json:"content"`
-	Example  any        `json:"-"`
+	Required bool      `json:"required,omitempty"`
+	Content  MediaType `json:"content"`
+	Example  any       `json:"-"`
 }
 
 // Response 描述单个响应。
@@ -311,9 +311,9 @@ func Str(format ...string) *Schema {
 	}
 	return s
 }
-func Int() *Schema         { return &Schema{Type: "integer"} }
-func Int64() *Schema       { return &Schema{Type: "integer", Format: "int64"} }
-func Bool() *Schema        { return &Schema{Type: "boolean"} }
+func Int() *Schema   { return &Schema{Type: "integer"} }
+func Int64() *Schema { return &Schema{Type: "integer", Format: "int64"} }
+func Bool() *Schema  { return &Schema{Type: "boolean"} }
 func Arr(items *Schema) *Schema {
 	return &Schema{Type: "array", Items: items}
 }

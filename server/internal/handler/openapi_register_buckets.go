@@ -36,7 +36,7 @@ func registerBuckets(r *openapi.Registry) {
 	})
 	r.Operation("GET", "/api/accounts/{id}/bucket-info", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "桶属性（区域 / 创建时间 / 版本控制）", OperationID: "getBucketInfo",
-		Params: []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
+		Params:    []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket-versioning", openapi.Op{

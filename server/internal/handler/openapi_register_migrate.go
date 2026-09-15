@@ -8,26 +8,26 @@ func registerMigrate(r *openapi.Registry) {
 	migrateReq := openapi.Request{
 		Required: true,
 		Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-			"srcAccountId":  openapi.Str(),
-			"srcBucket":     openapi.Str(),
-			"srcPrefix":     openapi.Str(),
-			"dstAccountId":  openapi.Str(),
-			"dstBucket":     openapi.Str(),
-			"dstPrefix":     openapi.Str(),
-			"keys":          openapi.Arr(openapi.Str()),
-			"deleteSource":  desc(openapi.Bool(), "true=移动"),
-			"storageClass":  openapi.Str(),
+			"srcAccountId": openapi.Str(),
+			"srcBucket":    openapi.Str(),
+			"srcPrefix":    openapi.Str(),
+			"dstAccountId": openapi.Str(),
+			"dstBucket":    openapi.Str(),
+			"dstPrefix":    openapi.Str(),
+			"keys":         openapi.Arr(openapi.Str()),
+			"deleteSource": desc(openapi.Bool(), "true=移动"),
+			"storageClass": openapi.Str(),
 		})},
 	}
 
 	r.Operation("POST", "/api/migrate", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "同步迁移（流式）", OperationID: "migrate",
-		Request: &migrateReq,
+		Request:   &migrateReq,
 		Responses: map[string]openapi.Response{"200": {Description: "含 copied/failed/failedKeys/lastError", JSON: openapi.Obj()}},
 	})
 	r.Operation("POST", "/api/migrate/async", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "异步迁移（SSE 进度）", OperationID: "migrateAsync",
-		Request: &migrateReq,
+		Request:   &migrateReq,
 		Responses: map[string]openapi.Response{"200": {Description: "含 jobId", JSON: openapi.Obj()}},
 	})
 	r.Operation("POST", "/api/migrate/sync", openapi.Op{
@@ -52,12 +52,12 @@ func registerMigrate(r *openapi.Registry) {
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "查询迁移任务状态", OperationID: "migrateJobStatus",
-		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
+		Params:    []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 	r.Operation("POST", "/api/migrate/jobs/{id}/cancel", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "取消迁移任务", OperationID: "migrateJobCancel",
-		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
+		Params:    []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}/events", openapi.Op{

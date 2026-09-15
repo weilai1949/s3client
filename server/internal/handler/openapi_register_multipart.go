@@ -11,10 +11,10 @@ func registerMultipart(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":       openapi.Str(),
-				"key":          openapi.Str(),
-				"contentType":  openapi.Str(),
-				"metadata":     openapi.Obj(),
+				"bucket":      openapi.Str(),
+				"key":         openapi.Str(),
+				"contentType": openapi.Str(),
+				"metadata":    openapi.Obj(),
 			}, "bucket", "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 uploadId", JSON: openapi.Obj()}},
@@ -25,9 +25,9 @@ func registerMultipart(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":   openapi.Str(),
-				"key":      openapi.Str(),
-				"uploadId": openapi.Str(),
+				"bucket":     openapi.Str(),
+				"key":        openapi.Str(),
+				"uploadId":   openapi.Str(),
 				"partNumber": openapi.Int(),
 			}, "bucket", "key", "uploadId", "partNumber")},
 		},

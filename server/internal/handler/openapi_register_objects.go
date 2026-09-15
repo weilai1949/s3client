@@ -60,7 +60,7 @@ func registerObjects(r *openapi.Registry) {
 	})
 	r.Operation("GET", "/api/accounts/{id}/lifecycle", openapi.Op{
 		Tags: []string{"objects"}, Summary: "生命周期规则（桶级）", OperationID: "getLifecycle",
-		Params: []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
+		Params:    []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/lifecycle", openapi.Op{
@@ -108,11 +108,11 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":     openapi.Str(),
-				"key":        openapi.Str(),
-				"newBucket":  openapi.Str("可选；省略=同桶"),
-				"newKey":     openapi.Str(),
-				"replaceTags":   desc(openapi.Bool(), "保留标签"),
+				"bucket":      openapi.Str(),
+				"key":         openapi.Str(),
+				"newBucket":   openapi.Str("可选；省略=同桶"),
+				"newKey":      openapi.Str(),
+				"replaceTags": desc(openapi.Bool(), "保留标签"),
 			}, "bucket", "key", "newKey")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
