@@ -2,6 +2,8 @@
 
 遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。v1.0.0 之前采用 [SemVer](https://semver.org/lang/zh-CN/)；稳定里程碑后日常发版用 **`v1.0.0-YYYYMMDDHHmmss`**，预发布可用 **`v1.0.0-rcN`**（例如 `v1.0.0-rc0`）。
 
+> 「已实现 / 已修复 / 已完善」功能的合并视图（含 0.1.0 起的全量台账）见 [`docs/FEATURES.md`](docs/FEATURES.md)；本文件保留逐字发布历史。
+
 ## [Unreleased]
 
 ### 安全与可靠性
