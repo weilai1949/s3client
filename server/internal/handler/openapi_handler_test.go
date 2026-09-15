@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/weilai1949/s3clinet/server/internal/openapi"
 	"github.com/weilai1949/s3clinet/server/internal/store"
 )
 
@@ -17,50 +17,28 @@ func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-// TestOpenAPI_ExposesAllRoutes 验证 /api/openapi.json 与 routes.go 注册数一致，
-// 防止「新增端点忘了登记 / 删除端点忘了下架」造成契约漂移。
+// TestOpenAPI_ExposesAllRoutes 验证 /api/openapi.json 能取到、路由总数与 routes.go 一致、
+// 核心端点已登记且带 operationId/summary、bearerAuth 存在。
+// 完整的 routes.go ↔ 规范双向比对见 openapi_contract_test.go 的 TestOpenAPI_ContractRoutesMatchSpec。
 func TestOpenAPI_ExposesAllRoutes(t *testing.T) {
-	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
-	if err != nil {
-		t.Fatalf("store.New: %v", err)
-	}
-	h := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, true)
+	t.Parallel()
+	doc := openAPIDoc(t)
+	paths := openAPIPaths(t, doc)
 
-	// 真实路由数：routes.go 中 mux.HandleFunc 共 68 行；其中 1 行为 SPA fallback `/`。
-	const wantAPIRoutes = 67
-	srv := httptest.NewServer(h.Routes())
-	defer srv.Close()
+	// 路由总数以 routes.go 的实际注册为准（解析 AST），杜绝注释/常量漂移。
+	routes := routesFromSource(t)
+	total := 0
+	for _, methods := range routes {
+		total += len(methods)
+	}
+	if total != apiRouteCount {
+		t.Fatalf("routes.go API 路由数 = %d, want %d", total, apiRouteCount)
+	}
+	if got := countOperations(paths); got != total {
+		t.Errorf("规范 operation 数 = %d, want %d", got, total)
+	}
 
-	resp, err := srv.Client().Get(srv.URL + "/api/openapi.json")
-	if err != nil {
-		t.Fatalf("GET openapi.json: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d", resp.StatusCode)
-	}
-	var doc map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if doc["openapi"] != "3.0.3" {
-		t.Errorf("openapi version = %v", doc["openapi"])
-	}
-	paths := doc["paths"].(map[string]any)
-	// 统计每个 path 下的 method 数（同一 path 多 method 共享 key）。
-	methodCount := 0
-	for _, ops := range paths {
-		m, ok := ops.(map[string]any)
-		if !ok {
-			continue
-		}
-		methodCount += len(m)
-	}
-	const wantMethods = 68 // 67 业务 + 1 /api/openapi.json 自指
-	if methodCount < wantMethods {
-		t.Errorf("api method count = %d, want >= %d", methodCount, wantMethods)
-	}
-	// 抽样：核心端点必须存在且 operationId 非空
+	// 抽样：核心端点必须存在且 operationId/summary 至少一个非空。
 	for _, mustExist := range []string{
 		"/api/health",
 		"/api/accounts",
@@ -70,16 +48,18 @@ func TestOpenAPI_ExposesAllRoutes(t *testing.T) {
 		"/api/migrate/async",
 		"/api/openapi.json",
 	} {
-		entry, ok := paths[mustExist].(map[string]any)
+		entry, ok := paths[mustExist]
 		if !ok {
 			t.Errorf("missing path %s", mustExist)
 			continue
 		}
-		// 任一 method 下必须有 operationId 或 summary
 		hasContent := false
-		for _, v := range entry {
-			m := v.(map[string]any)
-			if m["operationId"] != nil || m["summary"] != nil {
+		for _, m := range entry {
+			if s, _ := m["operationId"].(string); s != "" {
+				hasContent = true
+				break
+			}
+			if s, _ := m["summary"].(string); s != "" {
 				hasContent = true
 				break
 			}
@@ -88,10 +68,33 @@ func TestOpenAPI_ExposesAllRoutes(t *testing.T) {
 			t.Errorf("%s: no operationId/summary on any method", mustExist)
 		}
 	}
-	comps := doc["components"].(map[string]any)
-	sec := comps["securitySchemes"].(map[string]any)
+
+	comps, ok := doc["components"].(map[string]any)
+	if !ok {
+		t.Fatalf("components 类型 = %T, want object", doc["components"])
+	}
+	sec, ok := comps["securitySchemes"].(map[string]any)
+	if !ok {
+		t.Fatalf("securitySchemes 类型 = %T, want object", comps["securitySchemes"])
+	}
 	if sec["bearerAuth"] == nil {
 		t.Error("bearerAuth scheme missing")
+	}
+}
+
+// TestOpenAPI_DescNilSafe 直测注册辅助 desc 的 nil 保护与就地补描述语义。
+// desc 的所有生产调用点都传非 nil schema，nil 分支是纯防御性守卫；
+// 这里显式覆盖，证明守卫语义正确（而不是仅为了数字）。
+func TestOpenAPI_DescNilSafe(t *testing.T) {
+	t.Parallel()
+	if got := desc(nil, "ignored"); got != nil {
+		t.Errorf("desc(nil, ...) = %v, want nil", got)
+	}
+	s := openapi.Str()
+	if got := desc(s, "说明"); got != s {
+		t.Errorf("desc 应返回同一 *Schema 指针，got %p want %p", got, s)
+	} else if s.Description != "说明" {
+		t.Errorf("desc 未补描述: %q", s.Description)
 	}
 }
 
@@ -105,6 +108,7 @@ func TestOpenAPI_GateAndAuth(t *testing.T) {
 
 	// 1) 默认（未开启）：一律 404，不泄露端点信息。
 	hHidden := New(st, quietLogger(), t.TempDir(), nil, "", "test", false, false)
+	t.Cleanup(hHidden.Shutdown)
 	srvHidden := httptest.NewServer(hHidden.Routes())
 	defer srvHidden.Close()
 	resp, err := srvHidden.Client().Get(srvHidden.URL + "/api/openapi.json")
@@ -118,6 +122,7 @@ func TestOpenAPI_GateAndAuth(t *testing.T) {
 
 	// 2) 显式开启 + 配置 token：未带 token 应 401，带 token 应 200。
 	h := New(st, quietLogger(), t.TempDir(), nil, "supersecrettokenmustbelongenough", "test", false, true)
+	t.Cleanup(h.Shutdown)
 	srv := httptest.NewServer(h.Routes())
 	defer srv.Close()
 
