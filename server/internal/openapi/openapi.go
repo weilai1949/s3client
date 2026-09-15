@@ -55,7 +55,6 @@ type Schema struct {
 	Properties  map[string]*Schema `json:"properties,omitempty"`
 	Required    []string           `json:"required,omitempty"`
 	Items       *Schema            `json:"items,omitempty"`
-	Additional  *Schema            `json:"additionalProperties,omitempty"`
 }
 
 // MediaType 一个请求 / 响应体的描述。
@@ -67,15 +66,12 @@ type MediaType struct {
 type Request struct {
 	Required bool      `json:"required,omitempty"`
 	Content  MediaType `json:"content"`
-	Example  any       `json:"-"`
 }
 
 // Response 描述单个响应。
 type Response struct {
-	Description string             `json:"description,omitempty"`
-	JSON        *Schema            `json:"-"`
-	Headers     map[string]*Schema `json:"-"`
-	Content     map[string]*any    `json:"-"`
+	Description string  `json:"description,omitempty"`
+	JSON        *Schema `json:"-"`
 }
 
 // Op 单个操作的元数据。
@@ -319,19 +315,6 @@ func Arr(items *Schema) *Schema {
 }
 func Obj() *Schema { return &Schema{Type: "object"} }
 
-// Prop 声明一个带描述的对象属性。
-func Prop(name, desc string, s *Schema, required ...bool) (string, *Schema) {
-	req := false
-	if len(required) > 0 {
-		req = required[0]
-	}
-	_ = req // required 在 Obj 收集阶段统一管理
-	if s.Description == "" {
-		s.Description = desc
-	}
-	return name, s
-}
-
 // BuildObj 把一组 (name, schema) 升格为 Object Schema，并按 optRequiredNames 标注 required。
 // 设计取舍：不依赖运行时反射，所有字段显式登记，避免「struct tag 改了忘了同步文档」。
 func BuildObj(props map[string]*Schema, required ...string) *Schema {
@@ -372,8 +355,9 @@ func defaultSecurity() map[string]any {
 	}
 }
 
-// sharedSchemas / sharedParams / sharedResponses 为全局复用片段；
-// 注册时直接 Ref 引用，避免每个端点重复贴一遍。
+// sharedSchemas / sharedParams / sharedResponses 输出 components 下可供复用的片段。
+// 现状：文档为保持对外契约稳定，暂未将端点内联 schema 接线为 $ref（接线会改变
+// 生成的 JSON 形状）；这些片段随契约保留，供后续按需引用。
 func sharedSchemas() map[string]*Schema {
 	return map[string]*Schema{
 		"Error": BuildObj(map[string]*Schema{
@@ -409,7 +393,7 @@ func sharedSchemas() map[string]*Schema {
 			"isDir":        Bool(),
 		}, "key", "size", "lastModified", "isDir"),
 		"ListObjectsResp": BuildObj(map[string]*Schema{
-			"objects":        Arr(Obj()), // 展开为 ObjectItem 由 $ref 提供更精准，但简化为 object
+			"objects":        Arr(Obj()),
 			"commonPrefixes": Arr(Str()),
 			"isTruncated":    Bool(),
 			"nextToken":      Str(),
