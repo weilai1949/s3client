@@ -68,6 +68,12 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    # nginx 只做单 worker 反向代理/静态托管，128M 足够；与 server/rustfs 一样显式限内存，
+    # 避免代理层异常时无界占用宿主机内存。
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     logging:
       driver: json-file
       options:

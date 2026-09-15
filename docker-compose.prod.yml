@@ -59,6 +59,11 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    # 单 worker 反向代理 + 静态托管；显式内存上限，防止代理层无界占用宿主机内存。
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     logging:
       driver: json-file
       options:
