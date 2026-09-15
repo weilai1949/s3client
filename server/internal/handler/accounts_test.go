@@ -68,8 +68,11 @@ func TestAccountCRUD(t *testing.T) {
 	}
 	var a map[string]any
 	_ = json.Unmarshal(rr.Body.Bytes(), &a)
-	if a["secretKey"] != "******" {
-		t.Fatalf("expected masked secret, got %v", a["secretKey"])
+	if a["secretKey"] != nil {
+		t.Fatalf("response must not contain secretKey, got %v", a["secretKey"])
+	}
+	if a["secretSet"] != true {
+		t.Fatalf("expected secretSet=true after create, got %v", a["secretSet"])
 	}
 	// 必填校验
 	bad := doJSON(t, h, "POST", "/api/accounts", `{"name":"x"}`)
@@ -304,17 +307,20 @@ func TestAccountRUD(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
 
-	// GET /api/accounts/{id}：返回脱敏密钥
+	// GET /api/accounts/{id}：返回视图（无 secretKey，secretSet=true）
 	rr := doJSON(t, h, "GET", "/api/accounts/"+acc.ID, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("get status=%d body=%s", rr.Code, rr.Body.String())
 	}
-	var a model.Account
-	if err := json.Unmarshal(rr.Body.Bytes(), &a); err != nil {
+	var av model.AccountView
+	if err := json.Unmarshal(rr.Body.Bytes(), &av); err != nil {
 		t.Fatalf("get body: %v", err)
 	}
-	if a.SecretKey != "******" {
-		t.Fatalf("secret=%q, want masked", a.SecretKey)
+	if !av.SecretSet {
+		t.Fatalf("secretSet=false, want true (account has secret)")
+	}
+	if av.ID != acc.ID {
+		t.Fatalf("get id=%q, want %q", av.ID, acc.ID)
 	}
 
 	// PUT：更新名称
@@ -323,9 +329,9 @@ func TestAccountRUD(t *testing.T) {
 	if rr2.Code != http.StatusOK {
 		t.Fatalf("put status=%d body=%s", rr2.Code, rr2.Body.String())
 	}
-	var up model.Account
+	var up model.AccountView
 	_ = json.Unmarshal(rr2.Body.Bytes(), &up)
-	if up.Name != "renamed" || up.SecretKey != "******" {
+	if up.Name != "renamed" || !up.SecretSet {
 		t.Fatalf("updated=%+v", up)
 	}
 

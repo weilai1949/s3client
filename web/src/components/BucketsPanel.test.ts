@@ -55,11 +55,11 @@ vi.mock('../confirm', () => ({ confirmDialog: vi.fn(async () => true) }))
 
 const account1: Account = {
   id: 'acc-1', name: 'Alpha', endpoint: 'http://minio:9000', region: 'us-east-1',
-  accessKey: 'ak', secretKey: 'sk', bucket: 'b1', pathStyle: true, useSSL: false,
+  accessKey: 'ak', secretSet: true, bucket: 'b1', pathStyle: true, useSSL: false,
 }
 const account2: Account = {
   id: 'acc-2', name: 'Beta', endpoint: 'http://minio:9000', region: 'us-east-1',
-  accessKey: 'ak2', secretKey: 'sk2', bucket: 'b2', pathStyle: true, useSSL: false,
+  accessKey: 'ak2', secretSet: true, bucket: 'b2', pathStyle: true, useSSL: false,
 }
 
 const buckets: BucketItem[] = [

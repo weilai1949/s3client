@@ -25,7 +25,7 @@ interface FakeAcc {
   endpoint: string
   region: string
   accessKey: string
-  secretKey: string
+  secretSet: boolean
   bucket: string
   pathStyle: boolean
   useSSL: boolean
@@ -105,7 +105,7 @@ function fakeAccount(id: string, name: string, bucket = ''): FakeAcc {
     endpoint: 'http://127.0.0.1:9000',
     region: 'us-east-1',
     accessKey: 'AKIA' + id.toUpperCase(),
-    secretKey: 'SECRET' + id.toUpperCase(),
+    secretSet: true,
     bucket,
     pathStyle: true,
     useSSL: false,

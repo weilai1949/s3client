@@ -42,7 +42,7 @@ const acc1: Account = {
   endpoint: '127.0.0.1:9000',
   region: 'us-east-1',
   accessKey: 'ak',
-  secretKey: 'sk',
+  secretSet: true,
   bucket: 'b1',
   pathStyle: true,
   useSSL: false,

@@ -31,9 +31,9 @@ Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设�
 GET /api/accounts
 ```
 ```json
-200 {"accounts":[{"id":"...","name":"...","endpoint":"...","secretKey":"******","...":true}]}
+200 {"accounts":[{"id":"...","name":"...","endpoint":"...","accessKey":"...","secretSet":true,"bucket":"...","pathStyle":true,"useSSL":false}]}
 ```
-`secretKey` 始终脱敏为 `******`。
+响应为 `AccountView`：**不回传 `secretKey`**，用 `secretSet`（boolean）表示是否已设置密钥，客户端无法从响应中区分占位与真实密钥。
 
 ### 创建
 ```
@@ -53,7 +53,7 @@ GET /api/accounts/{id}
 ```
 PUT /api/accounts/{id}
 ```
-字段同创建；`secretKey` 传空或不传则保留原值（不会把 `******` 回写）。
+字段同创建；`secretKey` 传空或不传则保留原值（响应为 `AccountView`，`secretSet` 反映更新后是否仍有密钥）。
 
 ### 删除
 ```

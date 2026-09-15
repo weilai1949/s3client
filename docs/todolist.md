@@ -25,7 +25,7 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 2 | 契约里 `secretKey` 恒为 `"******"` 占位，可改 `secretSet: boolean` | `code-review-v1.0.0-rc1.md` §4 | ⬜ | 评审降级建议（原指控「回传明文 SecretKey」为误报，所有出口均 `Sanitized()`）。改为布尔字段可让客户端区分「已设置 / 未设置」，属于对外契约变更，需与前端联调后决定。 |
+| 2 | 契约里 `secretKey` 恒为 `"******"` 占位，可改 `secretSet: boolean` | `code-review-v1.0.0-rc1.md` §4 | ✅ | 已收敛：响应改为 `AccountView`（无 `secretKey`，新增 `secretSet: boolean`）；请求仍用 `secretKey` 提交。后端/前端/OpenAPI/文档同步更新，`internal/model` 覆盖率 100%。 |
 | 3 | OpenAPI `components.schemas` / `parameters` / `responses` 目前 **0 个 `$ref`** | `FEATURES.md` 已知边界 | ➖ | 已决策：接线 `$ref` 会改变对外契约，刻意不为凑引用而改动。保留片段供后续按需引用。 |
 | 4 | `POST /api/accounts/preview-buckets` 使用临时凭据，不落库 | `FEATURES.md` 已知边界 | ➖ | 设计决策：预览桶仅用表单凭据临时 `ListBuckets`，不写入存储。 |
 

@@ -16,7 +16,7 @@ export interface FakeAccount {
   name: string
   endpoint: string
   accessKey: string
-  secretKey: string
+  secretSet: boolean
   region: string
   bucket?: string
   pathStyle?: boolean

@@ -25,7 +25,8 @@ const MaskedSecret = "******"
 // IsMaskedSecret 判断 SecretKey 是否已是脱敏占位（避免脱敏值回写）。
 func IsMaskedSecret(s string) bool { return s == MaskedSecret }
 
-// Sanitized 返回一份脱敏后的副本，用于对外展示（隐藏 SecretKey）。
+// Sanitized 返回一份脱敏后的副本（隐藏 SecretKey），供存储层对 List/Create/Update
+// 的返回值做防御性脱敏；不再直接序列化到 HTTP 响应（见 View）。
 func (a *Account) Sanitized() *Account {
 	if a == nil {
 		return nil
@@ -35,6 +36,45 @@ func (a *Account) Sanitized() *Account {
 		c.SecretKey = MaskedSecret
 	}
 	return &c
+}
+
+// AccountView 是账号的对外展示视图（HTTP 响应 DTO）：不包含 secretKey，
+// 用 secretSet 布尔表示是否已设置密钥，避免向客户端暴露任何密钥占位。
+type AccountView struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Endpoint       string    `json:"endpoint"`
+	PublicEndpoint string    `json:"publicEndpoint"`
+	Region         string    `json:"region"`
+	AccessKey      string    `json:"accessKey"`
+	SecretSet      bool      `json:"secretSet"`
+	Bucket         string    `json:"bucket"`
+	PathStyle      bool      `json:"pathStyle"`
+	UseSSL         bool      `json:"useSSL"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+// View 返回账号的对外视图。secretSet 表示当前是否持有密钥
+// （真实密钥或脱敏占位都算已设置；空串才算未设置）。
+func (a *Account) View() *AccountView {
+	if a == nil {
+		return nil
+	}
+	return &AccountView{
+		ID:             a.ID,
+		Name:           a.Name,
+		Endpoint:       a.Endpoint,
+		PublicEndpoint: a.PublicEndpoint,
+		Region:         a.Region,
+		AccessKey:      a.AccessKey,
+		SecretSet:      a.SecretKey != "",
+		Bucket:         a.Bucket,
+		PathStyle:      a.PathStyle,
+		UseSSL:         a.UseSSL,
+		CreatedAt:      a.CreatedAt,
+		UpdatedAt:      a.UpdatedAt,
+	}
 }
 
 // BucketOrDefault 返回默认桶；为空时返回空串（由调用方决定如何处理）。
