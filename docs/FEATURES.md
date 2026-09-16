@@ -6,7 +6,7 @@
 > - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md)
 > - 接口细节：[`API.md`](API.md) · 错误约定：[`ERRORS.md`](ERRORS.md) · 开发规范：[`agents.md`](../agents.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-15（`v1.0.0-rc1` 之后的 Unreleased 区间）
+> 最后更新：2026-09-16（`v1.0.0-rc1` 之后的 Unreleased 区间）
 
 ## 目录
 
@@ -177,7 +177,7 @@
 
 | 项 | 状态 | 内容 |
 |---|---|---|
-| 双存储驱动重叠 | ✅ | 抽取共享 `fileStore` + `fileCodec`（净减约 331 行）；**后续再收敛**：`EncryptedStore`/`encryptedCodec` 并入统一 `Store` + 单一 `storeCodec`（strict 模式），删除 `encrypted.go`；磁盘格式 / 错误文案 / 加密语义不变 |
+| 双存储驱动重叠 | ✅ | 抽取共享 `fileStore` + `fileCodec`（净减约 331 行）后**再收敛完成**：`EncryptedStore`/`encryptedCodec` 并入统一 `Store` + 单一 `storeCodec`（strict 区分 json permissive / encrypted 严格），`encrypted.go` 删除、`NewEncrypted` 返回 `*Store`；磁盘格式 / 错误文案 / 加密语义不变 |
 | `Create` 跨驱动一致性 | ✅ | 统一存防御性副本（此前 json 驱动别名调用方指针，encrypted 已复制） |
 | 跨驱动对照测试 | ✅ | `crossdriver_test.go`：三驱动 CRUD 等价、遗留 S3C2 信封可读、落盘字节布局 |
 | OpenAPI 覆盖率 | ✅ | `internal/openapi` 与 handler 内全部 OpenAPI 函数 **100.0%** statement |
@@ -202,11 +202,11 @@
 | `server/internal/store/filestore.go` | 新增（213 行）：共享内存状态 + 锁 + CRUD + 回滚 + `snapshotLocked`/`persistLocked` |
 | `server/internal/store/crypto.go` | 新增（66 行）：S3C2 常量、`deriveKey`、`envelope`、AES-256-GCM 加解密 |
 | `server/internal/store/store.go` | 244 → 93 行：仅选 `storeCodec`（明文 + 兼容 S3C2） |
-| `server/internal/store/encrypted.go` | 267 → 80 行：仅选 `encryptedCodec`（随机盐） |
+| `server/internal/store/encrypted.go` | 267 → 80 行（去重后仅选 `encryptedCodec`）；**再收敛后已删除**，逻辑并入 `store.go` 的 `storeCodec`（strict） |
 | `server/internal/store/account_store.go` | `ErrNotFound` 移到接口旁 |
 | `open.go` / `sqlite.go` / `atomic.go` | 未改动（文件路径、返回类型、故障注入 seams 全部保留） |
 
-> 后续再收敛（本轮）：`encryptedCodec` / `EncryptedStore` 并入统一 `storeCodec`（`strict` 区分
+> 再收敛已完成（本轮）：`encryptedCodec` / `EncryptedStore` 并入统一 `storeCodec`（`strict` 区分
 > permissive/严格语义），`encrypted.go` 删除，`NewEncrypted` 返回 `*Store`；行为、错误文案、磁盘格式不变。
 
 ### C. 全方位评估 58 项（2026-04-19 全部落地）
@@ -312,7 +312,7 @@
 | LOW | `zip.go` `ctxReader` 无法中断阻塞式底层 Read | ✅（后续 `ctxCancelReader` + `context.AfterFunc` 专项修复） |
 | LOW | `zip.go` producer goroutine 泄漏 | ➖（复核为无泄漏） |
 | MEDIUM | `batchMetadata.ts` 计数器并发非原子 | ➖（JS 单线程事件循环保证原子性） |
-| INFO | 「GET /api/accounts 返回明文 SecretKey」指控 | ➖（误报：所有出口均 `Sanitized()`；详见 todolist #2 降级建议） |
+| INFO | 「GET /api/accounts 返回明文 SecretKey」指控 | ➖（误报：所有出口均 `Sanitized()`；后续契约收敛为 `AccountView.secretSet`，见 §10「账号密钥不出口」） |
 | — | 其余 Info 项 | ✅ / ➖（见 `CHANGELOG.md` 对应版本段） |
 
 ### E. Optional / Nit 长尾采纳情况（v1.0.0-rc1 评估）
