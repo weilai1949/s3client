@@ -761,3 +761,153 @@ func TestOpenAPI_ContractTopLevelShape(t *testing.T) {
 		t.Errorf("bearerAuth = %v, want {type: http, scheme: bearer}", bearer)
 	}
 }
+
+// ---- 7. requestBody 与真实 handler DTO 契约对齐 ----
+
+// requestBodyProps 从 operation 的 requestBody.content["application/json"].schema 提取
+// 属性名集合（内联 object 或 $ref 到 components.schemas 的 object 均支持）。
+func requestBodyProps(t *testing.T, doc map[string]any, path, method string) (props map[string]bool) {
+	t.Helper()
+	paths := openAPIPaths(t, doc)
+	op, ok := paths[path][method]
+	if !ok {
+		t.Fatalf("openapi 无 %s %s", method, path)
+	}
+	rb, ok := op["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s 无 requestBody", method, path)
+	}
+	content, ok := rb["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody 无 content", method, path)
+	}
+	mt, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody 无 application/json", method, path)
+	}
+	schema, ok := mt["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody schema 类型 = %T", method, path, mt["schema"])
+	}
+	if ref, _ := schema["$ref"].(string); ref != "" {
+		schema, ok = derefComponent(doc, ref)
+		if !ok {
+			t.Fatalf("%s %s $ref 解析失败: %s", method, path, ref)
+		}
+	}
+	probs, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s schema 无 properties", method, path)
+	}
+	props = make(map[string]bool, len(probs))
+	for name := range probs {
+		props[name] = true
+	}
+	return props
+}
+
+// TestOpenAPI_ContractRequestBodyMatchesHandlers 验证 requestBody schema 与真实 handler DTO 对齐：
+// 这是「注册表 ↔ 实际解析字段」三方一致性的最后一道防线（补 routes↔spec 双向检查覆盖不到的
+// 字段级漂移）。已知失真点（2026-09-16 评估 H1）逐一断言：
+//   - /api/migrate、/api/migrate/async：schema 曾写 srcAccountId/srcBucket/...dstAccountId 等，
+//     真实 handler migrateRequest 使用 sourceAccountId/sourceBucket/sourceKeys/targetAccountId/
+//     targetBucket/targetPrefix，且无 deleteSource/storageClass 字段；
+//   - /api/accounts/{id}/presign：schema 曾声明 method 枚举 GET/PUT/DELETE/HEAD，真实 handler
+//     仅支持 get/put/post（strings.ToLower 匹配）；
+//   - /api/accounts/{id}/delete：schema 曾声明 versionId，真实 handler 无此字段；
+//   - /api/accounts/{id}/multipart/part：真实 handler 额外支持 expiresIn。
+func TestOpenAPI_ContractRequestBodyMatchesHandlers(t *testing.T) {
+	t.Parallel()
+	doc := openAPIDoc(t)
+
+	// 1. migrate / migrate/async 请求体字段必须与 handler.migrateRequest 完全一致。
+	wantMigrate := map[string]bool{
+		"sourceAccountId": true, "sourceBucket": true, "sourceKeys": true,
+		"targetAccountId": true, "targetBucket": true, "targetPrefix": true,
+	}
+	for _, path := range []string{"/api/migrate", "/api/migrate/async"} {
+		got := requestBodyProps(t, doc, path, "post")
+		for name := range wantMigrate {
+			if !got[name] {
+				t.Errorf("%s POST schema 缺少字段 %q（真实 handler migrateRequest 必需）", path, name)
+			}
+		}
+		for name := range got {
+			if !wantMigrate[name] {
+				t.Errorf("%s POST schema 多出字段 %q（真实 handler migrateRequest 不解析；客户端按文档发送将被 DisallowUnknownFields 拒绝或忽略）", path, name)
+			}
+		}
+	}
+
+	// 2. presign method 枚举：真实 handler 仅 get/put/post（小写）。
+	for _, method := range []string{"GET", "PUT", "DELETE", "HEAD"} {
+		if docHasEnumValue(t, doc, "/api/accounts/{id}/presign", "post", "method", method) {
+			t.Errorf("presign schema 声明 method=%q，真实 handler 仅支持 get/put/post（400 拒绝）", method)
+		}
+	}
+	for _, method := range []string{"get", "put", "post"} {
+		if !docHasEnumValue(t, doc, "/api/accounts/{id}/presign", "post", "method", method) {
+			t.Errorf("presign schema 未声明 method=%q（真实 handler 支持）", method)
+		}
+	}
+
+	// 3. delete 请求体：不得声明 versionId（真实 handler 无此字段）。
+	if props := requestBodyProps(t, doc, "/api/accounts/{id}/delete", "post"); props["versionId"] {
+		t.Errorf("delete POST schema 声明 versionId，真实 handler 不解析该字段")
+	}
+
+	// 4. multipart/part：应声明 expiresIn（真实 handler 支持）。
+	if props := requestBodyProps(t, doc, "/api/accounts/{id}/multipart/part", "post"); !props["expiresIn"] {
+		t.Errorf("multipart/part POST schema 缺少 expiresIn（真实 handler 解析）")
+	}
+}
+
+// docHasEnumValue 检查指定操作 schema 中字段的 enum 是否包含给定值。
+func docHasEnumValue(t *testing.T, doc map[string]any, path, method, field, value string) bool {
+	t.Helper()
+	paths := openAPIPaths(t, doc)
+	op, ok := paths[path][method]
+	if !ok {
+		t.Fatalf("openapi 无 %s %s", method, path)
+	}
+	rb, ok := op["requestBody"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s 无 requestBody", method, path)
+	}
+	content, ok := rb["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody 无 content", method, path)
+	}
+	mt, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody 无 application/json", method, path)
+	}
+	schema, ok := mt["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s requestBody schema 类型 = %T", method, path, mt["schema"])
+	}
+	if ref, _ := schema["$ref"].(string); ref != "" {
+		schema, ok = derefComponent(doc, ref)
+		if !ok {
+			t.Fatalf("%s %s $ref 解析失败: %s", method, path, ref)
+		}
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s schema 无 properties", method, path)
+	}
+	fieldSchema, ok := props[field].(map[string]any)
+	if !ok {
+		return false
+	}
+	enum, ok := fieldSchema["enum"].([]any)
+	if !ok {
+		return false
+	}
+	for _, v := range enum {
+		if s, _ := v.(string); s == value {
+			return true
+		}
+	}
+	return false
+}

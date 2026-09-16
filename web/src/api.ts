@@ -117,17 +117,116 @@ function newId(): string {
   return crypto.randomUUID?.() ?? `s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// 多服务器 token 存储：`s3c.servers` 只存 {id,name,base}（不落 token，见 writeServers），
+// 每个服务器的 token 按 `s3c.token.<serverId>` 独立存储（默认 sessionStorage；
+// 显式「跨会话保留」时同时写 localStorage），与单服务器 `s3c.token` 策略一致。
+function serverTokenKey(id: string): string {
+  return `${LS_TOKEN}.${id}`
+}
+
+function readServerToken(id: string): string {
+  try {
+    const fromSession = sessionStorage.getItem(serverTokenKey(id))
+    if (fromSession) return fromSession
+  } catch {
+    /* ignore */
+  }
+  if (tokenPersistent()) {
+    try {
+      return localStorage.getItem(serverTokenKey(id)) ?? ''
+    } catch {
+      return ''
+    }
+  }
+  return ''
+}
+
+function writeServerToken(id: string, token: string) {
+  const trimmed = token.trim()
+  try {
+    if (trimmed) sessionStorage.setItem(serverTokenKey(id), trimmed)
+    else sessionStorage.removeItem(serverTokenKey(id))
+  } catch {
+    /* ignore */
+  }
+  if (tokenPersistent()) {
+    try {
+      if (trimmed) localStorage.setItem(serverTokenKey(id), trimmed)
+      else localStorage.removeItem(serverTokenKey(id))
+    } catch {
+      /* ignore */
+    }
+  } else {
+    try {
+      localStorage.removeItem(serverTokenKey(id))
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function clearServerToken(id: string) {
+  try {
+    sessionStorage.removeItem(serverTokenKey(id))
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(serverTokenKey(id))
+  } catch {
+    /* ignore */
+  }
+}
+
+// StoredServerProfile 是 s3c.servers 的实际落盘形态：**不含 token**（安全策略）。
+type StoredServerProfile = Omit<ServerProfile, 'token'>
+
 function readServers(): ServerProfile[] {
+  // 原始存储条目（含旧版本内嵌 token，供一次性迁移）；StoredServerProfile 不含 token。
+  let rawList: Array<Partial<StoredServerProfile> & { token?: string }> = []
+  let hasValidArray = false
   try {
     const raw = localStorage.getItem(LS_SERVERS)
-    if (raw) {
-      const list = JSON.parse(raw) as ServerProfile[]
-      if (Array.isArray(list)) return list
+    if (raw !== null) {
+      const list = JSON.parse(raw) as unknown as Array<Partial<StoredServerProfile> & { token?: string }>
+      if (Array.isArray(list)) {
+        rawList = list
+        hasValidArray = true
+      }
     }
   } catch {
     /* ignore */
   }
-  // 首次：默认一条
+  // 兼容迁移：旧版本 s3c.servers 内嵌 token → 迁移到 per-server 存储并重写 localStorage（一次性）。
+  let migrated = false
+  const hydrated: ServerProfile[] = rawList.map((s) => {
+    const id = s.id ?? ''
+    const legacy = (s as { token?: string }).token ?? ''
+    if (legacy) {
+      writeServerToken(id, legacy)
+      migrated = true
+    }
+    return { id, name: s.name ?? '', base: s.base ?? '', token: readServerToken(id) }
+  })
+  if (migrated) {
+    writeServers(hydrated)
+    // 保持旧行为：若活动服务器带 token 且全局 token 为空（如 sessionStorage 已清），应用之，
+    // 使升级后当前会话仍能直接请求。
+    const activeId = (() => {
+      try {
+        return localStorage.getItem(LS_ACTIVE) ?? ''
+      } catch {
+        return ''
+      }
+    })()
+    const active = hydrated.find((s) => s.id === activeId)
+    if (active && active.token && !readToken()) {
+      applyProfile(active)
+    }
+  }
+  // 已存在合法数组键（即便为空数组）：保持原样，不自动创建默认 server（activeServerId 会回退到 ''）。
+  if (hasValidArray) return hydrated
+  // 首次 / 键损坏：默认一条
   const p: ServerProfile = {
     id: newId(),
     name: isTauri() ? t('server.localBackend') : t('server.sameOriginDefault'),
@@ -141,7 +240,9 @@ function readServers(): ServerProfile[] {
 }
 
 function writeServers(list: ServerProfile[]) {
-  localStorage.setItem(LS_SERVERS, JSON.stringify(list))
+  // 落盘时剥离 token：s3c.servers 永远不包含密钥。
+  const stored: StoredServerProfile[] = list.map(({ id, name, base }) => ({ id, name, base }))
+  localStorage.setItem(LS_SERVERS, JSON.stringify(stored))
 }
 
 function applyProfile(p: ServerProfile) {
@@ -218,13 +319,19 @@ export const api = {
     if (input.id) {
       const i = list.findIndex((s) => s.id === input.id)
       if (i >= 0) {
-        list[i] = { ...list[i], name, base, token }
+        const updated: ServerProfile = { ...list[i], name, base, token }
+        // token 不随 servers 列表落 localStorage；按服务器 id 独立存 sessionStorage/持久化。
+        writeServerToken(input.id, token)
+        list[i] = { ...updated, token: readServerToken(input.id) }
         writeServers(list)
         if (this.activeServerId() === input.id) applyProfile(list[i])
         return list[i]
       }
     }
     const p: ServerProfile = { id: newId(), name, base, token }
+    // 同上：token 独立存储，servers 列表不含密钥。
+    writeServerToken(p.id, token)
+    p.token = readServerToken(p.id)
     list.push(p)
     writeServers(list)
     return p
@@ -233,9 +340,11 @@ export const api = {
   deleteServer(id: string): void {
     // 删除前判定：被删服务器是否为当前生效项（删除后 activeServerId 已无法回退到它）。
     const wasActive = this.activeServerId() === id
+    clearServerToken(id)
     let list = readServers().filter((s) => s.id !== id)
     if (!list.length) {
-      list = [{ id: newId(), name: isTauri() ? t('server.localBackend') : t('server.sameOriginDefault'), base: defaultBase(), token: '' }]
+      const fresh: ServerProfile = { id: newId(), name: isTauri() ? t('server.localBackend') : t('server.sameOriginDefault'), base: defaultBase(), token: '' }
+      list = [fresh]
     }
     writeServers(list)
     if (wasActive) {
@@ -578,6 +687,12 @@ export interface MigrateProgress {
   status?: string
 }
 
+// 流 EOF 后回读 job 状态的重试参数：任务仍在运行则轮询直到终态（防 Promise 永久悬挂）；
+// 连续多次回读失败视为网络不可用，快速 onError 让调用方复位（三个调用方均无自身超时兜底）。
+const JOB_STATUS_POLL_MS = 30_000 // 任务仍在运行时的最长轮询
+const JOB_STATUS_POLL_INTERVAL_MS = 500
+const JOB_STATUS_MAX_CONSECUTIVE_FAILURES = 3
+
 /** 订阅迁移 SSE 进度（fetch 流式，支持 Bearer）。返回 abort 函数。 */
 export function subscribeMigrateEvents(
   jobId: string,
@@ -627,18 +742,38 @@ export function subscribeMigrateEvents(
           }
         }
       }
-      // 流正常 EOF 但未收到终态：回读一次 job 状态，避免 UI 永久卡在「迁移中」
+      // 流正常 EOF 但未收到终态：回读并轮询 job 状态，直到终态或超时，
+      // 避免 UI 永久卡在「迁移中」（旧实现只回读一次：回读失败或任务仍未完成即悬挂，
+      // 三个调用方 ctxDeleteFolder / DestDialog / MigratePanel 均无超时兜底）。
       if (lastStatus !== 'done' && lastStatus !== 'cancelled' && !ctrl.signal.aborted) {
-        try {
-          const st = await s3api.migrateJobStatus(jobId)
-          const p: MigrateProgress = {
-            ...st.progress,
-            status: st.progress.status ?? (st.done ? 'done' : st.progress.status),
+        const deadline = Date.now() + JOB_STATUS_POLL_MS
+        let consecutiveFailures = 0
+        for (;;) {
+          if (ctrl.signal.aborted) break
+          try {
+            const st = await s3api.migrateJobStatus(jobId)
+            consecutiveFailures = 0
+            if (st.done) {
+              // 终态：无论回读进度是否自带 status，都合成终态事件让调用方 resolve。
+              const s = st.progress.status
+              onProgress({ ...st.progress, status: s === 'cancelled' ? 'cancelled' : 'done' })
+              break
+            }
+            // 任务仍在运行：上报一次当前进度（非终态），继续轮询。
+            onProgress({ ...st.progress, status: st.progress.status || 'running' })
+          } catch {
+            // 网络抖动：连续失败达上限即判网络不可用，快速 onError（不再死等 deadline）。
+            consecutiveFailures++
+            if (consecutiveFailures >= JOB_STATUS_MAX_CONSECUTIVE_FAILURES) {
+              onError(new Error(`migrate job ${jobId} status unavailable`))
+              break
+            }
           }
-          if (st.done && !p.status) p.status = 'done'
-          onProgress(p)
-        } catch {
-          /* status 回读失败时由调用方超时/重试兜底 */
+          if (Date.now() >= deadline) {
+            onError(new Error(`migrate job ${jobId} status timeout`))
+            break
+          }
+          await new Promise((r) => setTimeout(r, JOB_STATUS_POLL_INTERVAL_MS))
         }
       }
     } catch (e) {

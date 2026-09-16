@@ -81,9 +81,10 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":    openapi.Str(),
-				"key":       openapi.Str(),
-				"method":    openapi.EnumStr("GET", "PUT", "DELETE", "HEAD"),
+				"bucket": openapi.Str(),
+				"key":    openapi.Str(),
+				// method 枚举必须与 objects.go presign 的 switch 一致（小写 get|put|post）。
+				"method":    openapi.EnumStr("get", "put", "post"),
 				"expiresIn": openapi.Int(),
 				"versionId": openapi.Str(),
 			}, "bucket", "key", "method")},
@@ -160,9 +161,10 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":    openapi.Str(),
-				"keys":      openapi.Arr(openapi.Str()),
-				"versionId": openapi.Str("可选：仅删该版本"),
+				"bucket": openapi.Str(),
+				"keys":   openapi.Arr(openapi.Str()),
+				// 注意：真实 handler deleteObjects 仅解析 bucket/keys，无 versionId；
+				// 指定版本删除走 DELETE /api/accounts/{id}/version。
 			}, "bucket", "keys")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError", JSON: openapi.Obj()}, "400": {Description: "key 数>1000", JSON: refSchema("Error")}},

@@ -29,6 +29,7 @@ func registerMultipart(r *openapi.Registry) {
 				"key":        openapi.Str(),
 				"uploadId":   openapi.Str(),
 				"partNumber": openapi.Int(),
+				"expiresIn":  openapi.Int(),
 			}, "bucket", "key", "uploadId", "partNumber")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "partNumber 非法", JSON: refSchema("Error")}},
