@@ -5,7 +5,7 @@
 >
 > 状态图例：⬜ 待办 · ⏳ 已排期 / 进行中 · ✅ 已完成 · ➖ 已决策（不做 / 维持现状）
 >
-> 最后更新：2026-09-15
+> 最后更新：2026-09-16
 
 ## 目录
 
@@ -26,6 +26,6 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 2 | 契约里 `secretKey` 恒为 `"******"` 占位，可改 `secretSet: boolean` | `code-review-v1.0.0-rc1.md` §4 | ✅ | 已收敛：响应改为 `AccountView`（无 `secretKey`，新增 `secretSet: boolean`）；请求仍用 `secretKey` 提交。后端/前端/OpenAPI/文档同步更新，`internal/model` 覆盖率 100%。 |
-| 3 | OpenAPI `components.schemas` / `parameters` / `responses` 目前 **0 个 `$ref`** | `FEATURES.md` 已知边界 | ➖ | 已决策：接线 `$ref` 会改变对外契约，刻意不为凑引用而改动。保留片段供后续按需引用。 |
-| 4 | `POST /api/accounts/preview-buckets` 使用临时凭据，不落库 | `FEATURES.md` 已知边界 | ➖ | 设计决策：预览桶仅用表单凭据临时 `ListBuckets`，不写入存储。 |
+| 3 | OpenAPI `components.schemas` / `parameters` / `responses` 目前 **0 个 `$ref`** | `FEATURES.md` 已知边界 | ✅ | 已接线：新增 `openapi.Ref()` 与 `Param.Ref` / `Response.Ref`，共享 schema / parameter / response 全部通过 `refSchema` / `refParam` / `refResp` 接线为 `$ref`（109 处引用、12 个唯一目标）；契约测试同步支持 `$ref` 解析，并新增「components 无死片段」断言；`internal/openapi` 覆盖率保持 100%。 |
+| 4 | `POST /api/accounts/preview-buckets` 使用临时凭据，不落库 | `FEATURES.md` 已知边界 | ✅ | 已确认并补文档：仅用表单临时凭据 `ListBuckets`、不写入存储（请求体已细化，400 缺字段/500 上游失败均有测试）；FEATURES/API 描述已同步。 |
 

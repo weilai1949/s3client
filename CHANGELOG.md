@@ -23,7 +23,7 @@
 - **nginx 内存上限**：两个 compose 文件为 nginx 显式设置 `deploy.resources.limits.memory: 128M`。
 
 ### 工程化（v1.0.0-rc1 评估 P1/P2 路线落地）
-- **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），67 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
+- **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），69 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
 - **Playwright 浏览器 E2E 基建**：chromium + vite preview + `page.route()` 拦截 `/api/*` 回放 fixture；`smoke.spec.ts` 3 例 + `account-flow.spec.ts` 2 例；新增 `.github/workflows/e2e-playwright.yml`（PR/dispatch + 每周三 02:00 UTC 冒烟）；`pnpm e2e:install` 安装 chromium 与系统依赖；vitest exclude `e2e/**` 避免冲突。
 - **增量同步**：`POST /api/migrate/sync`（withStreamLimit 保护），按 `etag`（默认）/ `size_mtime` / `always` 三种 mode 比对源/目标，仅复制差异对象，跳过完全一致的对象；internal/service.SyncKeys 复用 MigrateKeys 完成实际复制；`s3wrap.Client.Endpoint()` 访问器供 SameEndpoint 比对。
 - **桶策略可视化编辑器**：web/src/bucketPolicy.ts + BucketPolicyVisualEditor.vue：Statement（Effect/Principal/Actions/Resources/Sid）表单式编辑，4 个常用模板（公共读 / 公共读写 / 拒绝 List / 清空），实时 JSON 预览 + validateDoc 校验；不支持的结构（NotPrincipal/嵌套）自动回退原始 JSON 模式，避免覆盖用户已写的高级策略。
@@ -35,6 +35,7 @@
 - **文档收敛**：三份已迁移的历史评估快照（`full-assessment.md` / `code-review.md` / `code-review-v1.0.0-rc1.md`）移除；散落的待处理事项统一汇总到 `docs/todolist.md`（单一待办来源），`FEATURES.md` / `README.md` 同步更新链接。
 - **存储驱动再收敛**：`EncryptedStore` / `encryptedCodec` 并入统一 `Store` + 单一 `storeCodec`（`strict` 区分 json permissive / encrypted 严格语义），`encrypted.go` 删除，`NewEncrypted` 返回 `*Store`；磁盘格式、错误文案、盐策略与覆盖率 100% 不变，解决历史「双驱动功能重叠」遗留项。
 - **账号响应契约收敛**：账号响应从 `secretKey: "******"` 占位改为 `AccountView`（新增 `secretSet: boolean`，**不再回传 `secretKey`**）；请求仍以 `secretKey` 提交（编辑留空 = 保持不变）。后端（`model.AccountView` / handler 视图转换）、前端（`types.ts` `Account.secretSet`）、OpenAPI 与 `docs/API.md` 同步更新；`internal/model` 覆盖率 100%。
+- **OpenAPI components 接线 `$ref`**：新增 `openapi.Ref()` 与 `Param.Ref` / `Response.Ref` 渲染分支；共享 `schemas`（Error/Account/Bucket/ObjectItem/ListObjectsResp）、`parameters`（AccountID/Bucket/Prefix/MaxKeys/ContinuationToken）、`responses`（BadRequest/NotFound）经 `refSchema` / `refParam` / `refResp` 全部接线为 `$ref`（109 处引用、12 个唯一目标），消灭「components 0 引用」死代码状态；契约测试改为先解析 `$ref` 再校验路径参数 / 响应描述，新增「components 无死片段」断言（`Unauthorized`/`TooManyRequests`/`InternalError` 为全局错误词汇除外）；`internal/openapi` 覆盖率保持 100%。`/api/openapi.json` 输出形状从内联改为 `$ref`（对外契约结构性更新，运行时 API 行为不变，前端不消费该文档）。
 - **待办清理**：`docs/todolist.md` 移除「三、历史评审遗留」整节（7 项均已复核关闭，详见 `FEATURES.md` C / D / E），待办清单仅保留仍未决事项。
 - **Trivy 镜像扫描**：CI 在 Docker 构建后跑 `aquasecurity/trivy:0.58.1`，CRITICAL/HIGH 漏洞硬失败；新增 `.trivyignore` 与 `--ignorefile` 集中收纳可忽略的 CVE。
 - **构建层升级 Node 24**：Dockerfile 与所有 workflow 的 `node-version` 升到 24；pnpm 锁回 9.15.0（与 `package.json` 的 `packageManager` 声明一致，兼容现有 `pnpm-lock.yaml`）。

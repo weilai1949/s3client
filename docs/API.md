@@ -67,11 +67,11 @@ POST /api/accounts/preview-buckets
 ```json
 {"name":"N(可选)","endpoint":"http://minio:9000","region":"us-east-1","accessKey":"ak","secretKey":"sk","pathStyle":true}
 ```
-用表单凭证临时列出桶（不保存账号），用于新建账号时选择默认桶。
+用表单临时凭据只读列出桶（不保存账号），用于新建账号时选择默认桶；仍受 endpoint 校验与拨号期 SSRF 防护。
 ```json
 200 {"buckets":[{"name":"b1","creationDate":"..."}]}
 ```
-缺 endpoint/accessKey/secretKey 返回 400。
+缺 endpoint/accessKey/secretKey 返回 400；上游 `ListBuckets` 失败返回 500。
 
 ### 连通性测试
 ```
@@ -649,8 +649,9 @@ POST /api/migrate/sync
 GET /api/openapi.json
 ```
 
-OpenAPI 3.0 规范，作为 67 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
+OpenAPI 3.0 规范，作为 69 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
 前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
+共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
 
 ## 静态资源
 
