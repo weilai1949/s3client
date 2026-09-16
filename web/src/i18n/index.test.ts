@@ -96,4 +96,17 @@ describe('i18n', () => {
     expect(tf('server.active', { name: 'local' })).toContain('local')
     expect(tf('compare.error', { msg: 'CORS' })).toContain('CORS')
   })
+
+  // 回归：这 3 个键曾被引用但未定义，用户会看到原始 key（2026-09-16 评估 L4 / R1）。
+  // 断言「解析结果不等于 key 本身」，而非断言具体文案，兼顾文案微调与缺失检测。
+  it('resolves previously-missing keys instead of echoing the raw key', () => {
+    for (const loc of ['zh-CN', 'en-US'] as const) {
+      setLocale(loc)
+      for (const key of ['objects.toastCopyFailed', 'batchEdit.tagsNeedKey', 'common.working']) {
+        expect(t(key), `${loc} ${key}`).not.toBe(key)
+        expect(t(key).length).toBeGreaterThan(0)
+      }
+    }
+    setLocale('zh-CN')
+  })
 })

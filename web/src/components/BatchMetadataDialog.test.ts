@@ -174,6 +174,8 @@ describe('BatchMetadataDialog extra branches', () => {
     await addBtn.trigger('click')
     await w.find('.tag-row input[id^="batch-tag-val-"]').setValue('orphan')
     await confirmBtn(w).trigger('click')
+    // 断言用的是该 key；「该 key 确有定义」由 i18n/coverage.test.ts 静态扫描兜底
+    // （本文件的 i18n mock 回显 key，无法在此发现缺失键）。
     expect(toast).toHaveBeenCalledWith('batchEdit.tagsNeedKey', 'err')
     expect(batchSetMetadata).not.toHaveBeenCalled()
   })

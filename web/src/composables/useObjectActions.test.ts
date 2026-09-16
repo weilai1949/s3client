@@ -815,6 +815,8 @@ describe('批量签名链接', () => {
     await flushPromises()
     expect(vi.mocked(copyText)).toHaveBeenCalledWith('u1')
     expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastCopiedLinks')
+    // 断言用的是该 key；「该 key 确有定义」由 i18n/coverage.test.ts 静态扫描兜底
+    // （本文件的 i18n mock 回显 key，无法在此发现缺失键）。
     expect(lastCtx!.error.value).toBe('objects.toastCopyFailed')
   })
 
