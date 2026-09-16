@@ -50,10 +50,10 @@ func registerVersions(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":         openapi.Str(),
-				"key":            openapi.Str(),
-				"deleteMarkerId": openapi.Str(),
-			}, "bucket", "key", "deleteMarkerId")},
+				"bucket":    openapi.Str(),
+				"key":       openapi.Str(),
+				"versionId": openapi.Str(),
+			}, "bucket", "key", "versionId")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})

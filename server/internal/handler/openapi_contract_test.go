@@ -860,6 +860,37 @@ func TestOpenAPI_ContractRequestBodyMatchesHandlers(t *testing.T) {
 	if props := requestBodyProps(t, doc, "/api/accounts/{id}/multipart/part", "post"); !props["expiresIn"] {
 		t.Errorf("multipart/part POST schema 缺少 expiresIn（真实 handler 解析）")
 	}
+
+	// 5. delete-marker/restore：必须与 handler.restoreDeleteMarker 一致，用 versionId。
+	// 曾错误声明为 deleteMarkerId，客户端按文档调用会因缺 versionId 直接 400
+	// （metadata.go:379-395）。此处同时断言「有 versionId」与「无 deleteMarkerId」。
+	dmProps := requestBodyProps(t, doc, "/api/accounts/{id}/delete-marker/restore", "post")
+	if !dmProps["versionId"] {
+		t.Errorf("delete-marker/restore POST schema 缺少 versionId（真实 handler 解析）")
+	}
+	if dmProps["deleteMarkerId"] {
+		t.Errorf("delete-marker/restore POST schema 声明 deleteMarkerId，真实 handler 不解析该字段")
+	}
+	for _, field := range []string{"bucket", "key"} {
+		if !dmProps[field] {
+			t.Errorf("delete-marker/restore POST schema 缺少字段 %q（真实 handler 解析）", field)
+		}
+	}
+
+	// 6. 版本相关端点：version 删除（DELETE）与 version/restore 均以 versionId
+	//    标识版本，禁止出现 deleteMarkerId 之类未解析字段。
+	for _, tc := range []struct{ path, method string }{
+		{"/api/accounts/{id}/version", "delete"},
+		{"/api/accounts/{id}/version/restore", "post"},
+	} {
+		props := requestBodyProps(t, doc, tc.path, tc.method)
+		if !props["versionId"] {
+			t.Errorf("%s %s schema 缺少 versionId（真实 handler 解析）", tc.method, tc.path)
+		}
+		if props["deleteMarkerId"] {
+			t.Errorf("%s %s schema 声明 deleteMarkerId，真实 handler 不解析该字段", tc.method, tc.path)
+		}
+	}
 }
 
 // docHasEnumValue 检查指定操作 schema 中字段的 enum 是否包含给定值。
