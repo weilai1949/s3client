@@ -8,7 +8,7 @@ func registerBuckets(r *openapi.Registry) {
 	r.Operation("GET", "/api/accounts/{id}/buckets", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "列出账号下全部桶", OperationID: "listBuckets",
 		Params:    []openapi.Param{acctIDParam()},
-		Responses: map[string]openapi.Response{"200": {Description: "桶列表", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "桶列表", JSON: openapi.BuildObj(map[string]*openapi.Schema{"buckets": openapi.Arr(refSchema("Bucket"))}, "buckets")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/bucket", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "创建桶", OperationID: "createBucket",
@@ -23,7 +23,7 @@ func registerBuckets(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "OK", JSON: openapi.Obj()},
-			"400": {Description: "桶名非法 / acl 非法", JSON: openapi.Obj()},
+			"400": refResp("BadRequest"),
 		},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket", openapi.Op{
@@ -36,7 +36,7 @@ func registerBuckets(r *openapi.Registry) {
 	})
 	r.Operation("GET", "/api/accounts/{id}/bucket-info", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "桶属性（区域 / 创建时间 / 版本控制）", OperationID: "getBucketInfo",
-		Params:    []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
+		Params:    []openapi.Param{acctIDParam(), refParam("Bucket")},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket-versioning", openapi.Op{
@@ -49,7 +49,7 @@ func registerBuckets(r *openapi.Registry) {
 				"status": openapi.EnumStr("Enabled", "Suspended"),
 			}, "bucket", "status")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "status 非法", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": refResp("BadRequest")},
 	})
 }
 

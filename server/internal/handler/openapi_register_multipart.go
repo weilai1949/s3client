@@ -31,7 +31,7 @@ func registerMultipart(r *openapi.Registry) {
 				"partNumber": openapi.Int(),
 			}, "bucket", "key", "uploadId", "partNumber")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "partNumber 非法", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "partNumber 非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/multipart/complete", openapi.Op{
 		Tags: []string{"multipart"}, Summary: "完成分段上传", OperationID: "multipartComplete",

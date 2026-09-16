@@ -46,8 +46,8 @@ func registerMigrate(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError", JSON: openapi.Obj()},
-			"400": {Description: "mode 非法 / 账号缺配置", JSON: openapi.Obj()},
-			"404": {Description: "账号不存在", JSON: openapi.Obj()},
+			"400": {Description: "mode 非法 / 账号缺配置", JSON: refSchema("Error")},
+			"404": {Description: "账号不存在", JSON: refSchema("Error")},
 		},
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}", openapi.Op{

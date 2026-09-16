@@ -9,35 +9,35 @@ func registerObjects(r *openapi.Registry) {
 		Tags: []string{"objects"}, Summary: "列对象（含公共前缀 / 分页）", OperationID: "listObjects",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
-			openapi.Param{Name: "prefix", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
+			refParam("Prefix"),
 			openapi.Param{Name: "delimiter", In: "query", Schema: openapi.Str()},
-			openapi.Param{Name: "maxKeys", In: "query", Schema: openapi.Int()},
-			openapi.Param{Name: "continuationToken", In: "query", Schema: openapi.Str()},
+			refParam("MaxKeys"),
+			refParam("ContinuationToken"),
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: refSchema("ListObjectsResp")}},
 	})
 	r.Operation("GET", "/api/accounts/{id}/head", openapi.Op{
 		Tags: []string{"objects"}, Summary: "对象元数据", OperationID: "headObject",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "404": {Description: "对象不存在", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "404": refResp("NotFound")},
 	})
 	r.Operation("GET", "/api/accounts/{id}/proxy", openapi.Op{
 		Tags: []string{"objects"}, Summary: "对象代理下载 / 预览（流式）", OperationID: "proxyObject",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 			openapi.Param{Name: "mode", In: "query", Schema: openapi.EnumStr("download", "inline", "text")},
 			openapi.Param{Name: "versionId", In: "query", Schema: openapi.Str()},
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "二进制流 / text/plain", JSON: nil},
-			"404": {Description: "对象不存在", JSON: openapi.Obj()},
+			"404": refResp("NotFound"),
 		},
 	})
 	r.Operation("POST", "/api/accounts/{id}/set-headers", openapi.Op{
@@ -56,11 +56,11 @@ func registerObjects(r *openapi.Registry) {
 				"metadata":     openapi.Obj(),
 			}, "bucket", "key")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "metadata 校验失败", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "metadata 校验失败", JSON: refSchema("Error")}},
 	})
 	r.Operation("GET", "/api/accounts/{id}/lifecycle", openapi.Op{
 		Tags: []string{"objects"}, Summary: "生命周期规则（桶级）", OperationID: "getLifecycle",
-		Params:    []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
+		Params:    []openapi.Param{acctIDParam(), refParam("Bucket")},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.Obj()}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/lifecycle", openapi.Op{
@@ -88,7 +88,7 @@ func registerObjects(r *openapi.Registry) {
 				"versionId": openapi.Str(),
 			}, "bucket", "key", "method")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "method/expiresIn 非法", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "method/expiresIn 非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/mkdir", openapi.Op{
 		Tags: []string{"objects"}, Summary: "新建空文件夹（PUT 空对象）", OperationID: "mkdirObject",
@@ -165,7 +165,7 @@ func registerObjects(r *openapi.Registry) {
 				"versionId": openapi.Str("可选：仅删该版本"),
 			}, "bucket", "keys")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError", JSON: openapi.Obj()}, "400": {Description: "key 数>1000", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError", JSON: openapi.Obj()}, "400": {Description: "key 数>1000", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/delete-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归删除前缀（同步流式）", OperationID: "deletePrefix",
@@ -223,7 +223,7 @@ func registerObjects(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "application/zip 流", JSON: nil},
-			"400": {Description: "keys 为空 / >1000", JSON: openapi.Obj()},
+			"400": {Description: "keys 为空 / >1000", JSON: refSchema("Error")},
 		},
 	})
 	r.Operation("POST", "/api/accounts/{id}/storage-class", openapi.Op{
@@ -237,7 +237,7 @@ func registerObjects(r *openapi.Registry) {
 				"storageClass": openapi.Str(),
 			}, "bucket", "key", "storageClass")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "存储类型非法", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "存储类型非法", JSON: refSchema("Error")}},
 	})
 }
 
@@ -248,7 +248,7 @@ func registerObjectMeta(r *openapi.Registry) {
 		Tags: []string{"object-meta"}, Summary: "对象 ACL", OperationID: "getObjectAcl",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
@@ -270,7 +270,7 @@ func registerObjectMeta(r *openapi.Registry) {
 		Tags: []string{"object-meta"}, Summary: "对象标签", OperationID: "getObjectTags",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.Obj()}},

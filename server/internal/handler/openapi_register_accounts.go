@@ -10,8 +10,8 @@ func registerAccounts(r *openapi.Registry) {
 		Summary:     "列出全部账号",
 		OperationID: "listAccounts",
 		Responses: map[string]openapi.Response{
-			"200": {Description: "账号列表", JSON: openapi.BuildObj(map[string]*openapi.Schema{
-				"accounts": openapi.Arr(openapi.Obj()),
+			"200": {Description: "账号列表（AccountView，不含 secretKey）", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"accounts": openapi.Arr(refSchema("Account")),
 			}, "accounts")},
 		},
 	})
@@ -34,8 +34,8 @@ func registerAccounts(r *openapi.Registry) {
 			}, "name", "endpoint", "accessKey", "secretKey")},
 		},
 		Responses: map[string]openapi.Response{
-			"201": {Description: "已创建（返回 AccountView：secretSet 表示是否已设置密钥，不回传 secretKey）", JSON: openapi.Obj()},
-			"400": {Description: "参数错误", JSON: openapi.Obj()},
+			"201": {Description: "已创建（AccountView，secretSet 表示是否已设置密钥）", JSON: refSchema("Account")},
+			"400": refResp("BadRequest"),
 		},
 	})
 	r.Operation("GET", "/api/accounts/{id}", openapi.Op{
@@ -44,8 +44,8 @@ func registerAccounts(r *openapi.Registry) {
 		OperationID: "getAccount",
 		Params:      []openapi.Param{acctIDParam()},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "账号", JSON: openapi.Obj()},
-			"404": {Description: "不存在", JSON: openapi.Obj()},
+			"200": {Description: "账号（AccountView）", JSON: refSchema("Account")},
+			"404": refResp("NotFound"),
 		},
 	})
 	r.Operation("PUT", "/api/accounts/{id}", openapi.Op{
@@ -58,8 +58,8 @@ func registerAccounts(r *openapi.Registry) {
 			Content:  openapi.MediaType{Schema: openapi.Obj()},
 		},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "更新后", JSON: openapi.Obj()},
-			"404": {Description: "不存在", JSON: openapi.Obj()},
+			"200": {Description: "更新后（AccountView）", JSON: refSchema("Account")},
+			"404": refResp("NotFound"),
 		},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}", openapi.Op{
@@ -69,14 +69,14 @@ func registerAccounts(r *openapi.Registry) {
 		Params:      []openapi.Param{acctIDParam()},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "OK", JSON: openapi.Obj()},
-			"404": {Description: "不存在", JSON: openapi.Obj()},
+			"404": refResp("NotFound"),
 		},
 	})
 	r.Operation("POST", "/api/accounts/{id}/test", openapi.Op{
 		Tags:        []string{"accounts"},
 		Summary:     "连通性检测（200+ok 表示通；ok=false 含 error）",
 		OperationID: "testAccount",
-		Params:      []openapi.Param{acctIDParam(), openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}},
+		Params:      []openapi.Param{acctIDParam(), refParam("Bucket")},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "检测结果（始终 200，字段 ok 表状态）", JSON: openapi.Obj()},
 		},
@@ -87,10 +87,21 @@ func registerAccounts(r *openapi.Registry) {
 		OperationID: "previewBuckets",
 		Request: &openapi.Request{
 			Required: true,
-			Content:  openapi.MediaType{Schema: openapi.Obj()},
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"name":      openapi.Str(),
+				"endpoint":  openapi.Str(),
+				"region":    openapi.Str(),
+				"accessKey": openapi.Str(),
+				"secretKey": openapi.Str(),
+				"bucket":    openapi.Str(),
+				"pathStyle": openapi.Bool(),
+			}, "endpoint", "accessKey", "secretKey")},
 		},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "桶列表", JSON: openapi.Obj()},
+			"200": {Description: "桶列表", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"buckets": openapi.Arr(refSchema("Bucket")),
+			}, "buckets")},
+			"400": refResp("BadRequest"),
 		},
 	})
 }
