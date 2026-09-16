@@ -71,7 +71,7 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 19 | **异步任务丢失恢复缺失**：JobRegistry 纯内存无持久化，「复制→删源」两阶段可能半途中断且无对账 | ASSESSMENT S1 / SRE 审查 | ⬜ | 任务清单落盘（复用 store 原子写）+ 启动标记 interrupted + 前端展示未完成任务 |
+| 19 | ~~**异步任务丢失恢复缺失**：JobRegistry 纯内存无持久化，「复制→删源」两阶段可能半途中断且无对账~~ | ASSESSMENT S1 / SRE 审查 | ✅ | 已修复：`service/job_persist.go` 任务清单落盘（临时文件 + rename + 0600）+ 启动标记 `interrupted` 并回写 + `GET /api/migrate/jobs` + 前端 `MigratePanel` 未完成任务视图；`interrupted` 保留 7 天 |
 | 20 | 流式传输错误被静默吞（`copyStream` 忽略 `io.Copy` 返回值），大文件下载中断无日志/指标 | ASSESSMENT S2 / SRE 审查 | ⬜ | `copyStream` 返回 error 记日志 + `s3c_stream_interrupted` 计数 |
 | 21 | 指标不足：缺 S3 上游延迟/错误分类/存储状态/流字节数；compose 未启用 `S3C_LOG_JSON=1` | ASSESSMENT S3/S4 / SRE 审查 | ⬜ | s3wrap 层加调用耗时/错误/字节 metric；compose 默认结构化日志 |
 | 22 | 前端对后端不可用恢复弱（仅挂载 load 一次，无健康轮询/自动重试）；`useBucketSetting.reload()` 无竞态守卫 | ASSESSMENT S5/S8 / SRE+前端审查 | ⬜ | 健康轮询 + 自动恢复；reload 加 seq/AbortController |
@@ -87,5 +87,6 @@
 >
 > 2026-09-16 评估的 4 项 P0（#5 `loadAll()` 空 token 误报、#6 SSE 终态悬挂、#7 OpenAPI 契约漂移、
 > #15 前端 token 明文落 localStorage）已修复并归档至 [`FEATURES.md`](FEATURES.md)「H. 2026-09-16
-> P0 发布阻塞修复」；同轮 4 项 P1（#13 Go 1.26.6 + govulncheck、#14 幽灵 SHA、#24 i18n 缺失键、
-> 契约 `deleteMarkerId` 收尾）已修复并归档至同文件「I. 2026-09-16 P1 稳定版门槛修复」。
+> P0 发布阻塞修复」；同轮 5 项 P1（#13 Go 1.26.6 + govulncheck、#14 幽灵 SHA、#19 异步任务持久化、
+> #24 i18n 缺失键、契约 `deleteMarkerId` 收尾）已修复并归档至同文件「I. 2026-09-16 P1 稳定版门槛修复」。
+> **P1 已清零，`v1.0.0` 稳定版门槛达成。**

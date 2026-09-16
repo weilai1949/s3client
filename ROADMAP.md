@@ -29,7 +29,7 @@
 ## 一、当前定位
 
 **产品形态**：S3 兼容对象存储客户端，Web 端 + Tauri 2 桌面端（B/S 架构、无 IPC、全 HTTP）；Go 后端
-（AWS SDK for Go v2）+ Vue 3 / Vite / TS 前端，69 个 `/api/*` 端点、OpenAPI 3.0.3 自动生成。
+（AWS SDK for Go v2）+ Vue 3 / Vite / TS 前端，70 个 `/api/*` 端点、OpenAPI 3.0.3 自动生成。
 
 **结论**：工程质量显著高于平均水平，**已具备发布条件**：2026-09-16 评估发现的 4 项发布前必修缺陷
 （P0）已全部修复并提交（`e03a15e`），并归档至 [`docs/FEATURES.md`](docs/FEATURES.md)「H」段与
@@ -71,7 +71,7 @@
 `v1.0.0` 前置基线。**不含新功能**。
 
 > **状态：已收口（2026-09-16）**。四项均以提交 `e03a15e` 合并入 `develop`，门禁全绿
-> （`go vet` / `go test -race` / `pnpm lint` / `vue-tsc` / 前端 956 测试 + 覆盖率 100%）。
+> （`go vet` / `go test -race` / `pnpm lint` / `vue-tsc` / 前端 966 测试 + 覆盖率 100%）。
 > 逐条归档见 [`docs/FEATURES.md`](docs/FEATURES.md)「H. 2026-09-16 评估 P0 发布阻塞修复」。
 > 仅 #1 的 `deleteMarkerId`↔`versionId` 子项按计划转入 §四 #10 收尾。
 
@@ -93,14 +93,14 @@
 
 ### P1（稳定版门槛）
 
-> **进度（2026-09-16）**：#5 / #6 / #8 / #10 已完成并验证，见 [`FEATURES.md`](docs/FEATURES.md)「I」段；
-> 仅剩 **#7 异步任务持久化** 一项，完成后即可发布 `v1.0.0`。
+> **进度（2026-09-16）**：#5 / #6 / #7 / #8 / #10 **全部完成并验证**，见 [`FEATURES.md`](docs/FEATURES.md)「I」段；
+> P1 已清零，`v1.0.0` 稳定版门槛达成。
 
 | # | 条目 | 来源 | 状态 | 验收标准 |
 |---|---|---|---|---|
 | 5 | Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE） | ASSESSMENT H2 / todolist #13 | ✅ | `server/go.mod`、`server/Dockerfile` 升至 1.26.6（CI 经 `go-version-file` 跟随）；CI 增补 `govulncheck@v1.8.0` 门禁；实测 **0 可达漏洞** |
 | 6 | 修正 workflow 中的**幽灵 action SHA（2 处）**：`e2e-playwright.yml:35` 的 `pnpm/action-setup`、`e2e-playwright.yml:74` 的 `actions/upload-artifact`（GitHub API 均 404） | ASSESSMENT H3 / todolist #14 + 本轮新发现 | ✅ | 已改为 `b906affcce14559ad1aafd4ab0e942779e9f58b1` / `ea165f8d65b6e75b540449e92b4886f43607fa02`；全仓 10 个 action SHA 经 GitHub API 逐一核验均 200 |
-| 7 | 异步任务持久化 + 重启恢复 | ASSESSMENT S1 / todolist #19 | ⬜ | 任务清单复用 store 原子写落盘；启动时标记 `interrupted`；前端展示未完成任务；「复制成功但源未删」可对账 |
+| 7 | 异步任务持久化 + 重启恢复 | ASSESSMENT S1 / todolist #19 | ✅ | `service/job_persist.go` 任务清单落盘（临时文件 + rename + 0600；未复用 `store/atomic.go` 以避免 `service→store` 分层倒置，见架构文档）；启动恢复将非终态任务标记 `interrupted` 并回写；新增 `GET /api/migrate/jobs`；前端 `MigratePanel` 展示未完成任务并提示「移动任务可能已复制未删源」；`interrupted` 保留 7 天（`JobInterruptedTTL`）避免被 30 分钟 TTL 误清 |
 | 8 | 补齐 3 个缺失 i18n 键 | ASSESSMENT L4 / todolist #24 | ✅ | `objects.toastCopyFailed` / `batchEdit.tagsNeedKey` / `common.working` 已补 zh/en 定义；新增 `src/i18n/coverage.test.ts` 静态扫描防复发 |
 
 ### 契约与文档一致性
@@ -171,7 +171,7 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint` | ✅ 0 error / 0 warning |
 | 前端类型 | `vue-tsc --noEmit` | ✅ exit 0 |
-| 前端测试 | `pnpm test` | ✅ 956 例全绿（62 文件） |
+| 前端测试 | `pnpm test` | ✅ 966 例全绿（62 文件） |
 | 前端覆盖率 | statements / branches / functions / lines | ✅ 100% |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 幽灵 SHA 已修（#6，2 处） |
@@ -183,7 +183,7 @@
 | 风险 | 影响 | 缓解 |
 |---|---|---|
 | OpenAPI 契约作为 SSOT 仍可能漂移 | 客户端按文档调用 400 | 契约测试升级为「注册表 ↔ handler 解析字段」三方断言（#10），并入 CI 必过项 |
-| 异步任务纯内存 | 重启丢任务、产生中间态 | v1.0.0 完成持久化 + 启动对账（#7） |
+| 异步任务纯内存 | 重启丢任务、产生中间态 | 已解决（#7）：任务清单落盘 + 启动标记 `interrupted` + 前端对账视图 |
 | `localStorage` 中残留历史 token | 升级用户仍明文落盘 | ✅ H4 迁移逻辑一次性清除内嵌 token（已随 rc1 提交 `e03a15e`） |
 | Go stdlib CVE 修复线滞后 | 运行时 DoS / 复杂度攻击面 | ✅ 已升级 1.26.6 + `govulncheck` 门禁（#5），dependabot 已覆盖 |
 | 幽灵 action SHA（2 处） | 工作流失败，或 fork 伪造 tag 时执行恶意 action | ✅ 已按 GitHub API 核验结果替换（#6），全仓 SHA 复核通过 |
@@ -201,3 +201,5 @@
 3. **状态真实性**：标 ✅ 必须附门禁实跑或测试证据；标 ⏳ 必须是工作区/分支已有代码变更，并在合并后改为 ✅。
 4. **发版触发**：里程碑验收标准全部满足后，由 `scripts/release-version.sh` 同步版本号并更新
    [`CHANGELOG.md`](CHANGELOG.md)，再打 tag。
+5. **文档同步**：修复 bug 或新增功能完成后必须更新相关文档（对照表见
+   [`docs/development.md`](docs/development.md) §4 与 [`agents.md`](agents.md)）；本路线图的版本级条目随改动同步。

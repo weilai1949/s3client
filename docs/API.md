@@ -582,6 +582,16 @@ POST /api/migrate/async
 ```
 
 ```
+GET /api/migrate/jobs
+```
+返回异步任务清单（按创建时间倒序，最新在前），含进程重启后恢复的任务。
+`status` 取值：`running` | `done` | `cancelled` | `interrupted`。
+`interrupted` 表示服务重启导致任务中断，需人工对账——**移动（`deleteSource:true`）任务可能已复制但源未删除**。
+```json
+200 {"jobs":[{"id":"uuid","created":"2026-09-16T10:00:00Z","total":100,"status":"interrupted","progress":{"done":42,"total":100,"migrated":42,"failed":0,"status":"interrupted"},"result":{"migrated":42,"failed":0}}]}
+```
+
+```
 GET /api/migrate/jobs/{id}
 ```
 ```json
@@ -649,7 +659,7 @@ POST /api/migrate/sync
 GET /api/openapi.json
 ```
 
-OpenAPI 3.0 规范，作为 69 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
+OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
 前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
 

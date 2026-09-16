@@ -66,9 +66,10 @@ server/internal/model        领域模型（Account / AccountView）
 | SSRF 防护 | `s3wrap/ssrf.go` | 创建时 + 拨号期双重校验（禁 IMDS/链路本地、禁重定向、禁代理） |
 | 预签名 | `s3wrap/presign.go` | v4 签名 URL，过期钳制 [1h, 24h] |
 | 原子写 | `store/atomic.go` | 临时文件 + rename + 0600；写失败回滚内存 |
+| 任务清单落盘 | `service/job_persist.go` | 同上原子写策略，但自包含于 `service` 包：`service→store` 会形成分层倒置 |
 | 流式限并发 | `handler/stream.go` | 全局 32 并发 + 滚动空闲写超时 5min |
 | 批量有界并发 | `service/batch.go` | `RunBatch` 无缓冲结果通道，内存 O(workers) |
-| 异步任务 | `service/job.go` | 内存 JobRegistry + SSE 进度 + TTL reap |
+| 异步任务 | `service/job.go` + `job_persist.go` | JobRegistry + SSE 进度 + TTL reap；任务清单可选落盘（`JobPersister`），启动时把非终态任务标记 `interrupted` 并对账 |
 
 ## 3. 前端架构
 

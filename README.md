@@ -196,7 +196,7 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 ## 文档
 
 - [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
-- [REST API 参考](docs/API.md) — 69 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [REST API 参考](docs/API.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
 - [错误约定](docs/ERRORS.md) — S3 错误 → HTTP 状态映射
 - [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
 - [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）

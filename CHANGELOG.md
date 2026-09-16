@@ -6,7 +6,11 @@
 
 ## [Unreleased]
 
+### 开发规范
+- **新增「改完代码必须同步文档」强制规则**：修复 bug 或新增功能完成后**必须**更新相关文档，文档未同步视为改动未完成、不得提交/合并。新增「改动类型 → 必须更新的文档」对照表（README / `docs/API.md` + `openapi_register_*.go` / `CHANGELOG.md` / `docs/FEATURES.md` / `docs/todolist.md` / `ROADMAP.md` / `docs/architecture.md` / `docs/deployment.md` / `docs/security.md` / `docs/ERRORS.md` / `CONTRIBUTING.md` 等），落地到 [`agents.md`](agents.md) 与 [`docs/development.md`](docs/development.md) §4「文档同步门禁」，并写入验收清单与 Red Flags；[`CONTRIBUTING.md`](CONTRIBUTING.md) 开发规范速览同步补充。
+
 ### P1 稳定版门槛修复（2026-09-16 评估）
+- **异步任务清单持久化 + 重启恢复（v1.0.0 最后一项门槛）**：`JobRegistry` 此前纯内存，进程重启即丢失全部任务记录；而「复制→删源」的移动语义是两阶段操作，中途崩溃会留下「已复制但源未删除」的中间态且无任何痕迹可对账。现在任务清单经 `service/job_persist.go` 的 `JobPersister` 落盘（临时文件 → rename → 0600；`Create`/`Finish` 必写、中间进度 2s 节流），启动时把非终态任务标记为 `interrupted` 并回写；新增 `GET /api/migrate/jobs` 返回任务清单；前端 `MigratePanel` 新增「未完成任务」区块，明确提示移动任务「可能已复制但源未删除」并支持逐条忽略。`interrupted` 采用独立 7 天保留期（`JobInterruptedTTL`），修复了「恢复后首次 reap 就被 30 分钟 TTL 清除、恢复功能形同虚设」的缺陷（附回归测试）。落盘未复用 `store/atomic.go`——`service→store` 会造成分层倒置，两处技术策略一致。`NewJobRegistry()` 保持纯内存语义，既有调用方与测试不受影响。
 - **Go 工具链 1.26.5 → 1.26.6，并新增 `govulncheck` 门禁**：`server/go.mod`、`server/Dockerfile` 同步至 1.26.6（CI 经 `go-version-file` 自动跟随）。修复 go1.26.5 中 6 个**可达** stdlib 漏洞（net/url 二次方复杂度、crypto/tls 握手 DoS、net/http HTTP/2 探测、encoding/xml 递归、encoding/asn1 递归、net/http Punycode），`govulncheck ./...` 实测由「6 个可达」降为 **0**。CI 在 `go vet` 后新增固定版本 `golang.org/x/vuln/cmd/govulncheck@v1.8.0` 门禁——Trivy 只扫容器 OS/库，拦不住标准库 CVE，此前是盲区。
 - **修正 2 处幽灵 action SHA**：`e2e-playwright.yml` 的 `pnpm/action-setup` 与 `actions/upload-artifact` 指向的 commit 在 GitHub 上不存在（API 404），会导致工作流失败，且若上游伪造同名 tag 存在执行恶意 action 的供应链风险。已改为与其它 workflow 一致的正确 SHA；全仓 10 个 action SHA 经 GitHub API 逐一核验均有效。
 - **补齐 3 个缺失 i18n 键**：`objects.toastCopyFailed`、`batchEdit.tagsNeedKey`、`common.working` 此前被引用但未定义，用户界面会直接显示原始 key。已补齐 zh-CN / en-US 文案；新增 `src/i18n/coverage.test.ts` 静态扫描「被引用但未定义」的字面量键（用 `import.meta.glob` 读源码，不引入 `node:*` 依赖），作为该类缺陷的常驻门禁。
@@ -35,7 +39,7 @@
 - **nginx 内存上限**：两个 compose 文件为 nginx 显式设置 `deploy.resources.limits.memory: 128M`。
 
 ### 工程化（v1.0.0-rc1 评估 P1/P2 路线落地）
-- **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），69 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
+- **OpenAPI 自动生成**：`/api/openapi.json` 端点（无依赖显式 builder），70 个 `/api/*` 端点按域（accounts/buckets/bucket-settings/objects/object-meta/multipart/versions/trash/migrate/system）集中登记；与 routes.go 一一对应；端点不进鉴权层（契约非业务）。
 - **Playwright 浏览器 E2E 基建**：chromium + vite preview + `page.route()` 拦截 `/api/*` 回放 fixture；`smoke.spec.ts` 3 例 + `account-flow.spec.ts` 2 例；新增 `.github/workflows/e2e-playwright.yml`（PR/dispatch + 每周三 02:00 UTC 冒烟）；`pnpm e2e:install` 安装 chromium 与系统依赖；vitest exclude `e2e/**` 避免冲突。
 - **增量同步**：`POST /api/migrate/sync`（withStreamLimit 保护），按 `etag`（默认）/ `size_mtime` / `always` 三种 mode 比对源/目标，仅复制差异对象，跳过完全一致的对象；internal/service.SyncKeys 复用 MigrateKeys 完成实际复制；`s3wrap.Client.Endpoint()` 访问器供 SameEndpoint 比对。
 - **桶策略可视化编辑器**：web/src/bucketPolicy.ts + BucketPolicyVisualEditor.vue：Statement（Effect/Principal/Actions/Resources/Sid）表单式编辑，4 个常用模板（公共读 / 公共读写 / 拒绝 List / 清空），实时 JSON 预览 + validateDoc 校验；不支持的结构（NotPrincipal/嵌套）自动回退原始 JSON 模式，避免覆盖用户已写的高级策略。
