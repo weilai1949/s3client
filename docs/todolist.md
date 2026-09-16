@@ -32,7 +32,9 @@
 ## 二、API / 契约待办
 
 > 原 #7（OpenAPI 契约与真实 handler 字段级不一致）已修复并归档至
-> [`FEATURES.md`](FEATURES.md)「H. 2026-09-16 P0 发布阻塞修复」。
+> [`FEATURES.md`](FEATURES.md)「H. 2026-09-16 P0 发布阻塞修复」；其遗留的
+> `delete-marker/restore` 字段名（`deleteMarkerId` → `versionId`）已在本轮 P1 收尾修复，
+> 契约测试同时扩展到 versions / version 端点。
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
@@ -56,11 +58,14 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 13 | **Go 1.26.5 有 6 个可达 stdlib 漏洞**（修复版 1.26.6）：net/url、crypto/tls、net/http、encoding/xml、encoding/asn1、Punycode | ASSESSMENT H2 / 安全审计 | ⬜ | `go.mod:3` + `server/Dockerfile:25` + CI 同步；CI 增补 `govulncheck ./...` 门禁 |
-| 14 | **workflow 幽灵 action SHA（2 处）**：`e2e-playwright.yml:35` 的 `pnpm/action-setup@b906affcce14559ad1aafd4ab0d3e1d3ed4c0f0`、`e2e-playwright.yml:74` 的 `actions/upload-artifact@ea165f8d45b6c00b04997f9f0f6da4b11e28e695`（GitHub API 均 404 不存在） | ASSESSMENT H3 / 安全审计 + 本轮全量核验 | ⬜ | pnpm → `b906affcce14559ad1aafd4ab0e942779e9f58b1`；upload-artifact → `ea165f8d65b6e75b540449e92b4886f43607fa02`；全仓 action SHA 逐一 API 核验 |
+| 13 | ~~**Go 1.26.5 有 6 个可达 stdlib 漏洞**（修复版 1.26.6）~~ | ASSESSMENT H2 / 安全审计 | ✅ | 已升级 `go.mod` / `Dockerfile` 至 1.26.6（CI 经 `go-version-file` 自动跟随）；CI 新增 `govulncheck v1.8.0` 门禁。修复后实测 **0 可达漏洞** |
+| 14 | ~~**workflow 幽灵 action SHA（2 处）**~~ | ASSESSMENT H3 + 本轮全量核验 | ✅ | 已改为正确 SHA（pnpm `...0e942779e9f58b1`、upload-artifact `...f43607fa02`）；全仓 10 个 action SHA 经 GitHub API 逐一核验均 200 |
 | 16 | SQLite 驱动 `secret_key` 明文落盘且 compose 默认即该驱动；Argon2 参数偏弱（t=1）；`S3C_STORE_KEY` 无最短长度校验 | ASSESSMENT M1/M2 / 安全审计 | ⬜ | compose 默认改 encrypted + 磁盘级加密文档；Argon2 t≥2；StoreKey 加长度校验 |
 | 17 | 无安全审计日志（401、账号 CRUD、策略/删除变更）；JobRegistry 无总 job 上限；XFF 完全信任可绕过限速 | ASSESSMENT M3/M4/M5 / 安全审计 | ⬜ | 安全事件日志；JobRegistry 上限；XFF 仅信任已知代理 |
 | 18 | TLS 前置无 HSTS / Permissions-Policy；`/api/health` 暴露 version | ASSESSMENT M6/L3 / 安全审计 | ⬜ | nginx TLS conf 加 `add_header`；health 考虑去 version |
+
+> 归档说明：#13 / #14 属 v1.0.0（P1）门槛项，已随本轮修复关闭，详见 [`FEATURES.md`](FEATURES.md)
+> 「I. 2026-09-16 P1 稳定版门槛修复」。
 
 ## 五、可靠性 / 可观测性待办
 
@@ -71,7 +76,7 @@
 | 21 | 指标不足：缺 S3 上游延迟/错误分类/存储状态/流字节数；compose 未启用 `S3C_LOG_JSON=1` | ASSESSMENT S3/S4 / SRE 审查 | ⬜ | s3wrap 层加调用耗时/错误/字节 metric；compose 默认结构化日志 |
 | 22 | 前端对后端不可用恢复弱（仅挂载 load 一次，无健康轮询/自动重试）；`useBucketSetting.reload()` 无竞态守卫 | ASSESSMENT S5/S8 / SRE+前端审查 | ⬜ | 健康轮询 + 自动恢复；reload 加 seq/AbortController |
 | 23 | 预签名错误被吞（`u, _ :=`，失败返回空 url 的 200）；错误消息回显用户输入 | ASSESSMENT L1/L2 / 后端审查 | ⬜ | 检查并 500；去掉拼接回显 |
-| 24 | 3 个 i18n 键被引用但未定义（`objects.toastCopyFailed`/`batchEdit.tagsNeedKey`/`common.working`） | ASSESSMENT L4 / 前端审查 R1 | ⬜ | 补齐定义；测试断言改为真实文案而非原始 key |
+| 24 | ~~3 个 i18n 键被引用但未定义（`objects.toastCopyFailed`/`batchEdit.tagsNeedKey`/`common.working`）~~ | ASSESSMENT L4 / 前端审查 R1 | ✅ | 已补齐 zh/en 定义；新增 `src/i18n/coverage.test.ts` 静态扫描「引用但未定义」的键，防止复发 |
 
 ---
 
@@ -82,4 +87,5 @@
 >
 > 2026-09-16 评估的 4 项 P0（#5 `loadAll()` 空 token 误报、#6 SSE 终态悬挂、#7 OpenAPI 契约漂移、
 > #15 前端 token 明文落 localStorage）已修复并归档至 [`FEATURES.md`](FEATURES.md)「H. 2026-09-16
-> P0 发布阻塞修复」。
+> P0 发布阻塞修复」；同轮 4 项 P1（#13 Go 1.26.6 + govulncheck、#14 幽灵 SHA、#24 i18n 缺失键、
+> 契约 `deleteMarkerId` 收尾）已修复并归档至同文件「I. 2026-09-16 P1 稳定版门槛修复」。

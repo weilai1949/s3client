@@ -71,7 +71,7 @@
 `v1.0.0` 前置基线。**不含新功能**。
 
 > **状态：已收口（2026-09-16）**。四项均以提交 `e03a15e` 合并入 `develop`，门禁全绿
-> （`go vet` / `go test -race` / `pnpm lint` / `vue-tsc` / 前端 952 测试 + 覆盖率 100%）。
+> （`go vet` / `go test -race` / `pnpm lint` / `vue-tsc` / 前端 956 测试 + 覆盖率 100%）。
 > 逐条归档见 [`docs/FEATURES.md`](docs/FEATURES.md)「H. 2026-09-16 评估 P0 发布阻塞修复」。
 > 仅 #1 的 `deleteMarkerId`↔`versionId` 子项按计划转入 §四 #10 收尾。
 
@@ -93,19 +93,22 @@
 
 ### P1（稳定版门槛）
 
+> **进度（2026-09-16）**：#5 / #6 / #8 / #10 已完成并验证，见 [`FEATURES.md`](docs/FEATURES.md)「I」段；
+> 仅剩 **#7 异步任务持久化** 一项，完成后即可发布 `v1.0.0`。
+
 | # | 条目 | 来源 | 状态 | 验收标准 |
 |---|---|---|---|---|
-| 5 | Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE） | ASSESSMENT H2 / todolist #13 | ⬜ | `server/go.mod`、`server/Dockerfile`、CI 工具链同步；CI 增补 `govulncheck ./...` 门禁；无 HIGH 可达告警 |
-| 6 | 修正 workflow 中的**幽灵 action SHA（2 处）**：`e2e-playwright.yml:35` 的 `pnpm/action-setup`、`e2e-playwright.yml:74` 的 `actions/upload-artifact`（GitHub API 均 404） | ASSESSMENT H3 / todolist #14 + 本轮新发现 | ⬜ | 与其它 workflow 一致：pnpm → `b906affcce14559ad1aafd4ab0e942779e9f58b1`；upload-artifact → `ea165f8d65b6e75b540449e92b4886f43607fa02`；全仓 action SHA 用 GitHub API 逐一核验 |
+| 5 | Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE） | ASSESSMENT H2 / todolist #13 | ✅ | `server/go.mod`、`server/Dockerfile` 升至 1.26.6（CI 经 `go-version-file` 跟随）；CI 增补 `govulncheck@v1.8.0` 门禁；实测 **0 可达漏洞** |
+| 6 | 修正 workflow 中的**幽灵 action SHA（2 处）**：`e2e-playwright.yml:35` 的 `pnpm/action-setup`、`e2e-playwright.yml:74` 的 `actions/upload-artifact`（GitHub API 均 404） | ASSESSMENT H3 / todolist #14 + 本轮新发现 | ✅ | 已改为 `b906affcce14559ad1aafd4ab0e942779e9f58b1` / `ea165f8d65b6e75b540449e92b4886f43607fa02`；全仓 10 个 action SHA 经 GitHub API 逐一核验均 200 |
 | 7 | 异步任务持久化 + 重启恢复 | ASSESSMENT S1 / todolist #19 | ⬜ | 任务清单复用 store 原子写落盘；启动时标记 `interrupted`；前端展示未完成任务；「复制成功但源未删」可对账 |
-| 8 | 补齐 3 个缺失 i18n 键 | ASSESSMENT L4 / todolist #24 | ⬜ | `objects.toastCopyFailed` / `batchEdit.tagsNeedKey` / `common.working` 有定义；测试断言真实文案而非原始 key |
+| 8 | 补齐 3 个缺失 i18n 键 | ASSESSMENT L4 / todolist #24 | ✅ | `objects.toastCopyFailed` / `batchEdit.tagsNeedKey` / `common.working` 已补 zh/en 定义；新增 `src/i18n/coverage.test.ts` 静态扫描防复发 |
 
 ### 契约与文档一致性
 
 | # | 条目 | 来源 | 状态 | 验收标准 |
 |---|---|---|---|---|
 | 9 | `docs/API.md` 自动化校验 | ASSESSMENT I2 / todolist #8 | ⬜ | CI 增加文档-路由 diff 检查或由 OpenAPI 生成；文档与 `routes.go` 漂移即红灯 |
-| 10 | 契约测试覆盖全部 `requestBody` 端点 | ASSESSMENT H1 收尾 / ROADMAP #1 ⑥ | ⏳ | 现有 `TestOpenAPI_ContractRequestBodyMatchesHandlers` 扩展至 versions / trash / bucket-settings 等；`delete-marker/restore` 的 `deleteMarkerId`↔`versionId` 对齐并断言 |
+| 10 | 契约测试覆盖全部 `requestBody` 端点 | ASSESSMENT H1 收尾 / ROADMAP #1 ⑥ | ✅ | `TestOpenAPI_ContractRequestBodyMatchesHandlers` 已扩展至 `delete-marker/restore` / `version`(DELETE) / `version/restore`；`deleteMarkerId`↔`versionId` 已对齐并断言（回退即失败） |
 
 ---
 
@@ -165,13 +168,13 @@
 | Go 静态检查 | `go vet ./...` | ✅ 0 告警 |
 | Go 测试 | `go test -race -count=1 ./...` | ✅ 8/8 包通过 |
 | Go 覆盖率 | 各包 statements | ✅ 100%（去注水见 #21） |
-| Go 漏洞 | `govulncheck ./...` | ⚠️ 6 个可达 stdlib CVE（go1.26.5，修复版 1.26.6；#5） |
+| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint` | ✅ 0 error / 0 warning |
 | 前端类型 | `vue-tsc --noEmit` | ✅ exit 0 |
-| 前端测试 | `pnpm test` | ✅ 952 例全绿（rc1 P0 新增用例后） |
+| 前端测试 | `pnpm test` | ✅ 956 例全绿（62 文件） |
 | 前端覆盖率 | statements / branches / functions / lines | ✅ 100% |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
-| E2E | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ⚠️ 幽灵 SHA 待修（#6，2 处） |
+| E2E | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 幽灵 SHA 已修（#6，2 处） |
 
 ---
 
@@ -182,8 +185,8 @@
 | OpenAPI 契约作为 SSOT 仍可能漂移 | 客户端按文档调用 400 | 契约测试升级为「注册表 ↔ handler 解析字段」三方断言（#10），并入 CI 必过项 |
 | 异步任务纯内存 | 重启丢任务、产生中间态 | v1.0.0 完成持久化 + 启动对账（#7） |
 | `localStorage` 中残留历史 token | 升级用户仍明文落盘 | ✅ H4 迁移逻辑一次性清除内嵌 token（已随 rc1 提交 `e03a15e`） |
-| Go stdlib CVE 修复线滞后 | 运行时 DoS / 复杂度攻击面 | 升级 1.26.6 + `govulncheck` 门禁（#5），dependabot 已覆盖 |
-| 幽灵 action SHA（2 处） | 工作流失败，或 fork 伪造 tag 时执行恶意 action | 按 GitHub API 核验结果逐一替换（#6），并纳入 SHA 一致性核对 |
+| Go stdlib CVE 修复线滞后 | 运行时 DoS / 复杂度攻击面 | ✅ 已升级 1.26.6 + `govulncheck` 门禁（#5），dependabot 已覆盖 |
+| 幽灵 action SHA（2 处） | 工作流失败，或 fork 伪造 tag 时执行恶意 action | ✅ 已按 GitHub API 核验结果替换（#6），全仓 SHA 复核通过 |
 | 覆盖率 100% 掩盖死代码 | 维护成本高、真实覆盖失真 | 门禁调整与死代码清理同批做（#21 / #19） |
 | SQLite 默认驱动密钥明文 | 落盘密钥泄露 | v1.0.x 默认加密或文档化磁盘加密（#11） |
 

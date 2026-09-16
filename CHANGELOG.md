@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### P1 稳定版门槛修复（2026-09-16 评估）
+- **Go 工具链 1.26.5 → 1.26.6，并新增 `govulncheck` 门禁**：`server/go.mod`、`server/Dockerfile` 同步至 1.26.6（CI 经 `go-version-file` 自动跟随）。修复 go1.26.5 中 6 个**可达** stdlib 漏洞（net/url 二次方复杂度、crypto/tls 握手 DoS、net/http HTTP/2 探测、encoding/xml 递归、encoding/asn1 递归、net/http Punycode），`govulncheck ./...` 实测由「6 个可达」降为 **0**。CI 在 `go vet` 后新增固定版本 `golang.org/x/vuln/cmd/govulncheck@v1.8.0` 门禁——Trivy 只扫容器 OS/库，拦不住标准库 CVE，此前是盲区。
+- **修正 2 处幽灵 action SHA**：`e2e-playwright.yml` 的 `pnpm/action-setup` 与 `actions/upload-artifact` 指向的 commit 在 GitHub 上不存在（API 404），会导致工作流失败，且若上游伪造同名 tag 存在执行恶意 action 的供应链风险。已改为与其它 workflow 一致的正确 SHA；全仓 10 个 action SHA 经 GitHub API 逐一核验均有效。
+- **补齐 3 个缺失 i18n 键**：`objects.toastCopyFailed`、`batchEdit.tagsNeedKey`、`common.working` 此前被引用但未定义，用户界面会直接显示原始 key。已补齐 zh-CN / en-US 文案；新增 `src/i18n/coverage.test.ts` 静态扫描「被引用但未定义」的字面量键（用 `import.meta.glob` 读源码，不引入 `node:*` 依赖），作为该类缺陷的常驻门禁。
+- **OpenAPI 契约收尾**：`POST /api/accounts/{id}/delete-marker/restore` 请求体由错误的 `deleteMarkerId` 修正为 handler 实际解析的 `versionId`（此前客户端按文档调用会因缺 `versionId` 直接 400）。契约测试同步扩展至 `delete-marker/restore` / `version`(DELETE) / `version/restore`，断言「含 `versionId` 且不含 `deleteMarkerId`」，并已验证该测试在回退修复时确实失败。
+
 ### P0 发布阻塞修复（2026-09-16 评估）
 - **OpenAPI 契约与真实 handler 字段级对齐**：`/api/migrate`、`/api/migrate/async` 请求体字段改为 handler 实际解析的 `sourceAccountId` / `sourceBucket` / `sourceKeys` / `targetAccountId` / `targetBucket` / `targetPrefix`（删除此前虚构的 `deleteSource` / `storageClass`）；presign `method` 枚举由 `GET/PUT/DELETE/HEAD` 改为实际支持的 `get/put/post`；delete 请求体移除 handler 不解析的 `versionId`；multipart/part 补上 handler 支持的 `expiresIn`。新增 `TestOpenAPI_ContractRequestBodyMatchesHandlers`，对「注册表 schema ↔ handler DTO」做字段级一致性断言（含 `$ref` 解引用 / enum 检查），补上 routes↔spec 检查覆盖不到的漂移面。
 - **前端 Token 不再明文落 `localStorage`**：`s3c.servers` 只存 `{id,name,base}`；token 单副本按 `s3c.token.<serverId>` 存储（默认 sessionStorage，仅显式开启「跨会话保留」时写 localStorage）。旧版本内嵌 token 首次读取时一次性迁移并回填活动服务器 profile；删除服务器同步清理 per-server token。修复「token 仅 sessionStorage」策略被多服务器列表旁路的问题。

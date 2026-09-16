@@ -464,18 +464,33 @@
 | P0-3 | `loadAll()` 在 `nextToken` 为空时不发请求却误报「已加载全部」（M8 / C2） | ✅ | 改为 do-while：`nextToken` 为空时仍加载第一页（reset 语义，替换旧列表避免重复项）；某页失败即停止续页且不再发成功 toast；`MAX_ALL_PAGES` 上限保留 |
 | P0-4 | 批量复制/移动/删除 SSE 终态检测导致 Promise 悬挂、`opsBusy` 永不复位（S7 / C3） | ✅ | `subscribeMigrateEvents` 在流 EOF 且未收到终态时轮询 `migrateJobStatus`（500ms 间隔、30s 上限）直到 done/cancelled，并在回读结果上合成终态 `status`；连续 3 次回读失败快速 `onError`。三个调用方（`ctxDeleteFolder` / `DestDialog` / `MigratePanel`）由此保证拿到终态或错误，不再永久禁用按钮 |
 
+### I. 2026-09-16 P1 稳定版门槛修复
+
+> 来源：[`ASSESSMENT.md`](ASSESSMENT.md) §六 P1 与 §二 L4。对应 todolist #13 / #14 / #24，以及 P0-1 的契约收尾。
+> 修复后 `govulncheck ./...` 由 6 个可达 stdlib 漏洞降为 **0**；全仓 action SHA 经 GitHub API 核验均有效。
+
+| # | 项 | 状态 | 修复内容 |
+|---|----|------|----------|
+| P1-1 | Go 1.26.5 的 6 个可达 stdlib 漏洞（H2） | ✅ | `server/go.mod` 与 `server/Dockerfile` 升至 1.26.6（CI 经 `go-version-file` 自动跟随）。CI 在 `go vet` 后新增固定版本 `govulncheck@v1.8.0` 门禁，补上 Trivy 只扫 OS/库、拦不住标准库 CVE 的盲区 |
+| P1-2 | workflow 幽灵 action SHA（H3，实际 2 处） | ✅ | `e2e-playwright.yml` 的 `pnpm/action-setup` 与 `actions/upload-artifact` 改为正确 SHA；全仓 10 个 action SHA 经 GitHub API 逐一核验 |
+| P1-3 | 3 个 i18n 键被引用但未定义（L4 / R1） | ✅ | 补齐 `objects.toastCopyFailed` / `batchEdit.tagsNeedKey` / `common.working` 的 zh-CN / en-US 文案；新增 `src/i18n/coverage.test.ts` 静态扫描（`import.meta.glob` 读源码，不引入 `node:*` 依赖），已验证删键即失败 |
+| P1-4 | `delete-marker/restore` 契约字段漂移（P0-1 收尾） | ✅ | 请求体 `deleteMarkerId` → `versionId`（对齐 `restoreDeleteMarker` handler 与 `docs/API.md`）；契约测试扩展至 `delete-marker/restore` / `version`(DELETE) / `version/restore`，并验证回退修复时测试确实失败 |
+
 ---
 
 ## 三、质量与覆盖率现状
 
-> 2026-09-15 本机实测；2026-09-16 P0 修复后复测：`go vet ./...` 干净、`go test ./...` 8/8 包通过（`handler` 覆盖率 100.0%）、前端 61 文件 / **952** 测试全绿且四指标均 100%、`vue-tsc` / `vite build` / `eslint` 干净。
+> 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
+> （`handler` 覆盖率 100.0%）、`govulncheck ./...` **0 可达漏洞**、前端 62 文件 / **956** 测试全绿且四指标均 100%、
+> `vue-tsc` / `vite build` / `eslint` 干净。
 
 | 门禁 | 结果 |
 |---|---|
 | `go vet ./...` | 干净 |
 | `go test -race -count=1 ./...` | 8/8 包通过 |
+| `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 61 文件 / 952 测试全绿 |
+| 前端 `pnpm test` | 62 文件 / 956 测试全绿 |
 | 前端覆盖率 | **statements / branches / functions / lines 均 100%** |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（~355KB，gzip ~109KB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |

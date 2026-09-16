@@ -79,9 +79,8 @@
 
 ## 5. 依赖与供应链
 
-- **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ actions 全部 pin SHA。
-- ⚠️ **待办**：CI 增补 `govulncheck`（todo #13）；修正 workflow 中 **2 处幽灵 SHA**（todo #14：
-  `e2e-playwright.yml` 的 `pnpm/action-setup` 与 `actions/upload-artifact`）。
+- **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ `govulncheck@v1.8.0`（Go 可达漏洞，
+  go1.26.6 下 0 告警）+ actions 全部 pin SHA（10 个 SHA 经 GitHub API 核验有效）。
 - `.trivyignore`：空清单（无掩盖性忽略）。
 - dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
 
@@ -89,7 +88,7 @@
 
 > 完整清单见 [todolist.md](todolist.md)「四、安全 / 供应链待办」与 [ASSESSMENT.md](ASSESSMENT.md) §二。
 
-- Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）
+- ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
 - SQLite 明文密钥（生产改 encrypted）
 - 安全审计日志缺失
 - XFF 伪造绕过限速 / JobRegistry 无上限
