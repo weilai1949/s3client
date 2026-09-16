@@ -57,7 +57,7 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 13 | **Go 1.26.5 有 6 个可达 stdlib 漏洞**（修复版 1.26.6）：net/url、crypto/tls、net/http、encoding/xml、encoding/asn1、Punycode | ASSESSMENT H2 / 安全审计 | ⬜ | `go.mod:3` + `server/Dockerfile:25` + CI 同步；CI 增补 `govulncheck ./...` 门禁 |
-| 14 | **e2e-playwright.yml:35 pnpm/action-setup 幽灵 SHA**（GitHub API 422 不存在，与正确 SHA 差 8 位） | ASSESSMENT H3 / 安全审计 | ⬜ | 改为与其它 workflow 一致的 `b906affcce14559ad1aafd4ab0e942779e9f58b1` |
+| 14 | **workflow 幽灵 action SHA（2 处）**：`e2e-playwright.yml:35` 的 `pnpm/action-setup@b906affcce14559ad1aafd4ab0d3e1d3ed4c0f0`、`e2e-playwright.yml:74` 的 `actions/upload-artifact@ea165f8d45b6c00b04997f9f0f6da4b11e28e695`（GitHub API 均 404 不存在） | ASSESSMENT H3 / 安全审计 + 本轮全量核验 | ⬜ | pnpm → `b906affcce14559ad1aafd4ab0e942779e9f58b1`；upload-artifact → `ea165f8d65b6e75b540449e92b4886f43607fa02`；全仓 action SHA 逐一 API 核验 |
 | 16 | SQLite 驱动 `secret_key` 明文落盘且 compose 默认即该驱动；Argon2 参数偏弱（t=1）；`S3C_STORE_KEY` 无最短长度校验 | ASSESSMENT M1/M2 / 安全审计 | ⬜ | compose 默认改 encrypted + 磁盘级加密文档；Argon2 t≥2；StoreKey 加长度校验 |
 | 17 | 无安全审计日志（401、账号 CRUD、策略/删除变更）；JobRegistry 无总 job 上限；XFF 完全信任可绕过限速 | ASSESSMENT M3/M4/M5 / 安全审计 | ⬜ | 安全事件日志；JobRegistry 上限；XFF 仅信任已知代理 |
 | 18 | TLS 前置无 HSTS / Permissions-Policy；`/api/health` 暴露 version | ASSESSMENT M6/L3 / 安全审计 | ⬜ | nginx TLS conf 加 `add_header`；health 考虑去 version |

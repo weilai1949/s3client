@@ -201,6 +201,7 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 - [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
 - [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）
 - [综合评估报告](docs/ASSESSMENT.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
+- [路线图（Roadmap）](ROADMAP.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
 - [安全设计](docs/security.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](SECURITY.md)
 - [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维
 - [开发指南（TDD 优先）](docs/development.md) — 测试规范 / 验收清单 / 技术债

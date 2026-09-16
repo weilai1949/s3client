@@ -80,7 +80,8 @@
 ## 5. 依赖与供应链
 
 - **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ actions 全部 pin SHA。
-- ⚠️ **待办**：CI 增补 `govulncheck`（todo #13）；修正 e2e-playwright.yml 幽灵 SHA（todo #14）。
+- ⚠️ **待办**：CI 增补 `govulncheck`（todo #13）；修正 workflow 中 **2 处幽灵 SHA**（todo #14：
+  `e2e-playwright.yml` 的 `pnpm/action-setup` 与 `actions/upload-artifact`）。
 - `.trivyignore`：空清单（无掩盖性忽略）。
 - dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
 
