@@ -3,8 +3,8 @@
 > 本文件是 s3clinet 的**单一事实来源**：产品能力总览 + 全部已完成修复 / 优化记录。
 > 已把散落在各评估文档与 [`CHANGELOG.md`](../CHANGELOG.md) 中的「已实现 / 已修复 / 已完善」功能统一汇总于此；CHANGELOG 仍保留逐字发布历史。
 >
-> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md)
-> - 接口细节：[`API.md`](API.md) · 错误约定：[`ERRORS.md`](ERRORS.md) · 开发规范：[`agents.md`](../agents.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
+> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`ASSESSMENT.md`](ASSESSMENT.md)
+> - 接口细节：[`API.md`](API.md) · 错误约定：[`ERRORS.md`](ERRORS.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`security.md`](security.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
 > 最后更新：2026-09-16（`v1.0.0-rc1` 之后的 Unreleased 区间）
 
