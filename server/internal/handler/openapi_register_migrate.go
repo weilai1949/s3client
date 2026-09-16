@@ -51,6 +51,12 @@ func registerMigrate(r *openapi.Registry) {
 			"404": {Description: "账号不存在", JSON: refSchema("Error")},
 		},
 	})
+	r.Operation("GET", "/api/migrate/jobs", openapi.Op{
+		Tags: []string{"migrate"}, Summary: "异步任务清单（含重启后中断的任务）", OperationID: "migrateJobs",
+		Responses: map[string]openapi.Response{
+			"200": {Description: "含 jobs[]：id/created/total/status/progress/result；status 为 running|done|cancelled|interrupted", JSON: openapi.Obj()},
+		},
+	})
 	r.Operation("GET", "/api/migrate/jobs/{id}", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "查询迁移任务状态", OperationID: "migrateJobStatus",
 		Params:    []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},

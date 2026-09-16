@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,6 +13,14 @@ const (
 	JobTTL            = 30 * time.Minute
 	JobTimeout        = 2 * time.Hour
 	SSEHeartbeatEvery = 15 * time.Second
+
+	// JobInterruptedTTL 是「重启中断」任务的保留期。这类任务是待对账证据
+	// （例如移动任务中复制成功但源未删除），保留 7 天便于用户发现并处理。
+	JobInterruptedTTL = 7 * 24 * time.Hour
+
+	// 中间进度落盘节流间隔：每帧都写盘会让批量任务的 IO 放大到不可接受，
+	// 但完全依赖终态落盘又会让「重启时进度」退回 0。折中为固定间隔采样。
+	jobProgressPersistEvery = 2 * time.Second
 )
 
 // JobProgress 异步任务进度（SSE/轮询 JSON 形状：migrated）。
@@ -26,11 +35,12 @@ type JobProgress struct {
 }
 
 // JobResult 异步任务终态汇总。
+// JSON 标签是落盘格式的一部分（JobRecord.Result），改名会让旧任务清单读不出来。
 type JobResult struct {
-	Migrated  int
-	Failed    int
-	LastError string
-	FailKeys  []string
+	Migrated  int      `json:"migrated"`
+	Failed    int      `json:"failed"`
+	LastError string   `json:"lastError,omitempty"`
+	FailKeys  []string `json:"failKeys,omitempty"`
 }
 
 // Job 单次异步批量任务。
@@ -45,24 +55,130 @@ type Job struct {
 	done     bool
 	cancel   context.CancelFunc
 	subs     map[chan JobProgress]struct{}
+
+	// persist 由注册表注入（nil = 纯内存）；lastSave 用于节流中间进度落盘。
+	persist  func()
+	lastSave time.Time
 }
 
-// JobRegistry 内存任务注册表（reap + 关停取消）。
+// JobRegistry 任务注册表（reap + 关停取消 + 可选落盘）。
 type JobRegistry struct {
-	mu     sync.Mutex
-	jobs   map[string]*Job
-	stopCh chan struct{}
-	once   sync.Once
+	mu        sync.Mutex
+	jobs      map[string]*Job
+	stopCh    chan struct{}
+	once      sync.Once
+	persister JobPersister
 }
 
-// NewJobRegistry 创建并启动 reap 循环。
+// NewJobRegistry 创建纯内存注册表（不落盘，与历史行为一致）并启动 reap 循环。
 func NewJobRegistry() *JobRegistry {
+	return NewJobRegistryWithPersister(nil)
+}
+
+// NewJobRegistryWithPersister 创建注册表并恢复既有任务清单（persister 为 nil 时纯内存）。
+//
+// 恢复语义：上次进程退出时仍在 running 的任务不可能继续执行，一律标记为 interrupted，
+// 使「复制成功但源未删除」这类半途中断的移动任务在重启后仍可被前端看到并对账
+// （ASSESSMENT S1 / todolist #19）。已完成任务的终态原样保留。
+//
+// 任务清单属于辅助信息：Load/Save 失败只降级为内存态，不影响服务启动
+// （与账号存储「不可用则硬失败」的取舍不同，见 ADR-002）。
+func NewJobRegistryWithPersister(p JobPersister) *JobRegistry {
 	r := &JobRegistry{
-		jobs:   make(map[string]*Job),
-		stopCh: make(chan struct{}),
+		jobs:      make(map[string]*Job),
+		stopCh:    make(chan struct{}),
+		persister: p,
 	}
+	r.restore()
 	go r.reapLoop()
 	return r
+}
+
+// restore 载入历史任务清单；未完成任务标记为 interrupted 并回写。
+func (r *JobRegistry) restore() {
+	if r.persister == nil {
+		return
+	}
+	recs, err := r.persister.Load()
+	if err != nil {
+		return // 降级：清单损坏/不可读不应阻止启动
+	}
+	changed := false
+	for _, rec := range recs {
+		if rec.ID == "" {
+			continue
+		}
+		status := rec.Status
+		if !IsTerminalJobStatus(status) {
+			status = JobStatusInterrupted
+			changed = true
+		}
+		progress := rec.Progress
+		progress.Total = rec.Total
+		progress.Status = status
+		r.jobs[rec.ID] = &Job{
+			ID:       rec.ID,
+			Created:  rec.Created,
+			Total:    rec.Total,
+			progress: progress,
+			result:   rec.Result,
+			done:     true, // 重启后不可能再推进，直接视为终态
+			subs:     make(map[chan JobProgress]struct{}),
+		}
+	}
+	if changed {
+		r.persistJobs()
+	}
+}
+
+// persistJobs 回写整份清单；失败静默降级（下一次状态变更会再试）。
+func (r *JobRegistry) persistJobs() {
+	if r.persister == nil {
+		return
+	}
+	_ = r.persister.Save(r.List())
+}
+
+// List 返回任务清单快照（按创建时间倒序，最新在前），供 API/前端展示未完成任务。
+func (r *JobRegistry) List() []JobRecord {
+	r.mu.Lock()
+	recs := make([]JobRecord, 0, len(r.jobs))
+	for _, j := range r.jobs {
+		recs = append(recs, j.record())
+	}
+	r.mu.Unlock()
+
+	sort.Slice(recs, func(i, k int) bool {
+		if !recs[i].Created.Equal(recs[k].Created) {
+			return recs[i].Created.After(recs[k].Created)
+		}
+		return recs[i].ID < recs[k].ID // 同刻创建时保证顺序稳定
+	})
+	return recs
+}
+
+// record 生成任务的可序列化快照（含 result 内切片的深拷贝，避免泄露内部状态）。
+func (j *Job) record() JobRecord {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	status := j.progress.Status
+	if status == "" {
+		if j.done {
+			status = JobStatusDone
+		} else {
+			status = JobStatusRunning
+		}
+	}
+	result := j.result
+	if j.result.FailKeys != nil {
+		result.FailKeys = append([]string(nil), j.result.FailKeys...)
+	}
+	progress := j.progress
+	progress.Status = status
+	return JobRecord{
+		ID: j.ID, Created: j.Created, Total: j.Total,
+		Status: status, Progress: progress, Result: result,
+	}
 }
 
 // Stop 取消未完成任务并停止 reap。
@@ -99,33 +215,51 @@ func (r *JobRegistry) reapLoop() {
 }
 
 // Reap 清理过期已完成任务（测试可调用）。
+//
+// interrupted 任务用更长的保留期：它是「需人工对账」的证据（如复制成功但源未删除），
+// 若沿用 30 分钟 TTL，重启后首次 reap 就会把刚恢复的记录删掉，使恢复功能形同虚设。
 func (r *JobRegistry) Reap() {
-	cutoff := time.Now().Add(-JobTTL)
+	now := time.Now()
+	cutoff := now.Add(-JobTTL)
+	interruptedCutoff := now.Add(-JobInterruptedTTL)
+	removed := false
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	for id, j := range r.jobs {
 		j.mu.Lock()
 		expired := j.done && j.Created.Before(cutoff)
+		if expired && j.progress.Status == JobStatusInterrupted {
+			expired = j.Created.Before(interruptedCutoff)
+		}
 		j.mu.Unlock()
 		if expired {
 			delete(r.jobs, id)
+			removed = true
 		}
+	}
+	r.mu.Unlock()
+	if removed {
+		r.persistJobs()
 	}
 }
 
-// Create 注册新任务。
+// Create 注册新任务；注入 persister 时立即落盘，使进程随后崩溃仍能恢复出该任务。
 func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
 	j := &Job{
 		ID:       uuid.NewString(),
 		Created:  time.Now(),
 		Total:    total,
-		progress: JobProgress{Total: total, Status: "running"},
+		progress: JobProgress{Total: total, Status: JobStatusRunning},
 		subs:     make(map[chan JobProgress]struct{}),
 		cancel:   cancel,
+		lastSave: time.Now(),
+	}
+	if r.persister != nil {
+		j.persist = r.persistJobs
 	}
 	r.mu.Lock()
 	r.jobs[j.ID] = j
 	r.mu.Unlock()
+	r.persistJobs()
 	return j
 }
 
@@ -159,7 +293,7 @@ func (j *Job) Unsubscribe(ch chan JobProgress) {
 	j.mu.Unlock()
 }
 
-// Emit 广播中间进度（慢订阅者可丢中间帧）。
+// Emit 广播中间进度（慢订阅者可丢中间帧）；落盘按 jobProgressPersistEvery 节流。
 func (j *Job) Emit(p JobProgress) {
 	j.mu.Lock()
 	j.progress = p
@@ -167,7 +301,15 @@ func (j *Job) Emit(p JobProgress) {
 	for ch := range j.subs {
 		subs = append(subs, ch)
 	}
+	shouldPersist := j.persist != nil && time.Since(j.lastSave) >= jobProgressPersistEvery
+	if shouldPersist {
+		j.lastSave = time.Now()
+	}
 	j.mu.Unlock()
+
+	if shouldPersist {
+		j.persist()
+	}
 	for _, ch := range subs {
 		select {
 		case ch <- p:
@@ -198,7 +340,13 @@ func (j *Job) Finish(out JobResult, status string) {
 	}
 	final := j.progress
 	j.subs = make(map[chan JobProgress]struct{})
+	persist := j.persist
 	j.mu.Unlock()
+
+	// 终态必须落盘：这是「任务是否完成」的唯一持久证据。
+	if persist != nil {
+		persist()
+	}
 
 	for _, ch := range subs {
 		select {

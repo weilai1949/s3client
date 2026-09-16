@@ -9,12 +9,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/weilai1949/s3clinet/server/internal/config"
 	"github.com/weilai1949/s3clinet/server/internal/handler"
+	"github.com/weilai1949/s3clinet/server/internal/service"
 	"github.com/weilai1949/s3clinet/server/internal/store"
 )
 
@@ -67,6 +69,9 @@ func runServer(ctx context.Context) int {
 
 	h := handler.New(st, logger, cfg.StaticDir, cfg.CORSOrigins, cfg.Token, version, cfg.ExposeMetrics, cfg.ExposeOpenAPI)
 	h.SetCSPConnectSrc(cfg.CSPConnectSrc)
+	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
+	// 「复制成功但源未删除」的移动任务（todolist #19）。
+	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

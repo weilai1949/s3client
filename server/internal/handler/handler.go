@@ -73,6 +73,17 @@ func (h *Handler) SetCSPConnectSrc(src string) {
 	}
 }
 
+// SetJobPersister 替换任务清单持久化器，并立即按历史清单恢复任务（未完成 → interrupted）。
+// 需在 Routes() 前调用；不调用则保持纯内存（默认，与历史行为一致）。
+//
+// 采用 setter 而非扩展 New 的参数：New 有 50+ 处调用点（含测试），
+// 追加参数会造成大范围机械改动，且该能力对绝大多数测试无关。
+func (h *Handler) SetJobPersister(p service.JobPersister) {
+	// 先停掉旧注册表（取消其未完成任务），再以新 persister 重建。
+	h.migrateJobs.Stop()
+	h.migrateJobs = service.NewJobRegistryWithPersister(p)
+}
+
 // Shutdown 取消进行中的异步迁移并停止 reap 循环。
 func (h *Handler) Shutdown() {
 	if h.migrateJobs != nil {
