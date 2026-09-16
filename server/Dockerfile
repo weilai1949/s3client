@@ -20,9 +20,9 @@ COPY web/ .
 RUN pnpm build
 
 ###### Go 后端构建 ######
-# 固定 patch 版本（go.mod 要求 1.26.5）；alpine 镜像无 shell/apt 包，
+# 固定 patch 版本（go.mod 要求 1.26.6）；alpine 镜像无 shell/apt 包，
 # 仅产出静态二进制供运行时拷贝。
-FROM golang:1.26.5-alpine AS build
+FROM golang:1.26.6-alpine AS build
 ARG GOPROXY
 ARG VERSION
 RUN apk add --no-cache ca-certificates
