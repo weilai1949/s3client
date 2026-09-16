@@ -29,7 +29,7 @@ func registerVersions(r *openapi.Registry) {
 				"versionId": openapi.Str(),
 			}, "bucket", "key", "versionId")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "缺 key/versionId", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "缺 key/versionId", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/version/restore", openapi.Op{
 		Tags: []string{"versions"}, Summary: "把历史版本恢复为当前（复制回 key）", OperationID: "restoreObjectVersion",

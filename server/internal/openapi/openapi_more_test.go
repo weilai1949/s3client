@@ -126,14 +126,15 @@ func TestRenderOp_Empty(t *testing.T) {
 	}
 }
 
-// TestRenderParams 覆盖 required 真假与 schema 有无。
+// TestRenderParams 覆盖 required 真假、schema 有无，以及 $ref 参数分支。
 func TestRenderParams(t *testing.T) {
 	ps := []Param{
 		{Name: "a", In: "path", Required: true, Schema: Str()},
 		{Name: "b", In: "query", Description: "no schema", Required: false},
+		{Ref: "#/components/parameters/AccountID"},
 	}
 	out := renderParams(ps)
-	if len(out) != 2 {
+	if len(out) != 3 {
 		t.Fatalf("len = %d", len(out))
 	}
 	first := out[0]
@@ -149,6 +150,39 @@ func TestRenderParams(t *testing.T) {
 	}
 	if _, ok := second["schema"]; ok {
 		t.Errorf("second.schema should be omitted, got %v", second["schema"])
+	}
+	third := out[2]
+	if ref, _ := third["$ref"].(string); ref != "#/components/parameters/AccountID" {
+		t.Errorf("third.$ref = %q", ref)
+	}
+	if len(third) != 1 {
+		t.Errorf("third 应只含 $ref，got %v", third)
+	}
+}
+
+// TestRenderResponsesRef 覆盖 renderResponses 的 $ref 与内联两个分支。
+func TestRenderResponsesRef(t *testing.T) {
+	rs := map[string]Response{
+		"404": {Ref: "#/components/responses/NotFound"},
+		"200": {Description: "OK", JSON: Obj()},
+	}
+	out := renderResponses(rs)
+	if len(out) != 2 {
+		t.Fatalf("len = %d", len(out))
+	}
+	nf := out["404"].(map[string]any)
+	if ref, _ := nf["$ref"].(string); ref != "#/components/responses/NotFound" {
+		t.Errorf("404.$ref = %q", ref)
+	}
+	if len(nf) != 1 {
+		t.Errorf("404 应只含 $ref，got %v", nf)
+	}
+	ok := out["200"].(map[string]any)
+	if desc, _ := ok["description"].(string); desc != "OK" {
+		t.Errorf("200.description = %q", desc)
+	}
+	if ok["content"] == nil {
+		t.Error("200.content missing")
 	}
 }
 

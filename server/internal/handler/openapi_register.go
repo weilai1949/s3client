@@ -26,12 +26,24 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 
 // ---- Accounts ----
 
+// refParam 构造指向 components.parameters 的 $ref 参数（如 "AccountID"）。
+func refParam(component string) openapi.Param {
+	return openapi.Param{Ref: "#/components/parameters/" + component}
+}
+
+// refResp 构造指向 components.responses 的 $ref 响应（如 "NotFound"）。
+func refResp(component string) openapi.Response {
+	return openapi.Response{Ref: "#/components/responses/" + component}
+}
+
+// refSchema 构造指向 components.schemas 的 $ref schema（如 "Account"），用于响应体。
+func refSchema(component string) *openapi.Schema {
+	return openapi.Ref("#/components/schemas/" + component)
+}
+
+// acctIDParam 账号 UUID 路径参数（复用共享 AccountID 参数）。
 func acctIDParam() openapi.Param {
-	return openapi.Param{
-		Name: "id", In: "path", Required: true,
-		Description: "账号 UUID",
-		Schema:      openapi.Str(),
-	}
+	return refParam("AccountID")
 }
 
 // desc 给已有 schema 补一段描述，保持 BuildObj 一行式声明不被长串 Description 撑爆。

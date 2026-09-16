@@ -9,10 +9,10 @@ func registerTrash(r *openapi.Registry) {
 		Tags: []string{"trash"}, Summary: "列出桶内全部删除标记（分页游标）", OperationID: "listTrash",
 		Params: []openapi.Param{
 			acctIDParam(),
-			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
+			refParam("Bucket"),
 			openapi.Param{Name: "keyMarker", In: "query", Schema: openapi.Str()},
 			openapi.Param{Name: "versionIdMarker", In: "query", Schema: openapi.Str()},
-			openapi.Param{Name: "maxKeys", In: "query", Schema: openapi.Int()},
+			refParam("MaxKeys"),
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})

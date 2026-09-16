@@ -35,15 +35,17 @@ type Server struct {
 }
 
 // Param 描述单个路径 / 查询 / 头参数。
+// Ref 非空时输出为 {"$ref": "#/components/parameters/<name>"}（复用共享参数）。
 type Param struct {
 	Name        string  `json:"name"`
 	In          string  `json:"in"` // path | query | header
 	Required    bool    `json:"required,omitempty"`
 	Description string  `json:"description,omitempty"`
 	Schema      *Schema `json:"schema"`
+	Ref         string  `json:"-"`
 }
 
-// Schema JSON Schema 子集（足够描述我们 67 个端点的形态）。
+// Schema JSON Schema 子集（足够描述我们 69 个端点的形态）。
 // 字段用指针 omitempty 表达「字段缺省时省略」，避免输出噪声。
 type Schema struct {
 	Ref         string             `json:"$ref,omitempty"`
@@ -69,9 +71,11 @@ type Request struct {
 }
 
 // Response 描述单个响应。
+// Ref 非空时输出为 {"$ref": "#/components/responses/<name>"}（复用共享响应，如 NotFound）。
 type Response struct {
 	Description string  `json:"description,omitempty"`
 	JSON        *Schema `json:"-"`
+	Ref         string  `json:"-"`
 }
 
 // Op 单个操作的元数据。
@@ -236,6 +240,10 @@ func renderOp(op Op) map[string]any {
 func renderParams(ps []Param) []map[string]any {
 	out := make([]map[string]any, 0, len(ps))
 	for _, p := range ps {
+		if p.Ref != "" {
+			out = append(out, map[string]any{"$ref": p.Ref})
+			continue
+		}
 		m := map[string]any{
 			"name":        p.Name,
 			"in":          p.In,
@@ -272,6 +280,10 @@ func renderResponses(rs map[string]Response) map[string]any {
 	sort.Strings(keys)
 	for _, k := range keys {
 		r := rs[k]
+		if r.Ref != "" {
+			out[k] = map[string]any{"$ref": r.Ref}
+			continue
+		}
 		entry := map[string]any{"description": r.Description}
 		if r.JSON != nil {
 			entry["content"] = map[string]any{
@@ -315,6 +327,10 @@ func Arr(items *Schema) *Schema {
 }
 func Obj() *Schema { return &Schema{Type: "object"} }
 
+// Ref 构造一个指向 components 的 $ref 引用（如 "#/components/schemas/Account"）。
+// 用于把共享 schema / parameter / response 片段接线到各端点，避免组件零引用。
+func Ref(name string) *Schema { return &Schema{Ref: name} }
+
 // BuildObj 把一组 (name, schema) 升格为 Object Schema，并按 optRequiredNames 标注 required。
 // 设计取舍：不依赖运行时反射，所有字段显式登记，避免「struct tag 改了忘了同步文档」。
 func BuildObj(props map[string]*Schema, required ...string) *Schema {
@@ -355,9 +371,8 @@ func defaultSecurity() map[string]any {
 	}
 }
 
-// sharedSchemas / sharedParams / sharedResponses 输出 components 下可供复用的片段。
-// 现状：文档为保持对外契约稳定，暂未将端点内联 schema 接线为 $ref（接线会改变
-// 生成的 JSON 形状）；这些片段随契约保留，供后续按需引用。
+// sharedSchemas / sharedParams / sharedResponses 输出 components 下可复用的片段，
+// 并被各端点以 $ref 接线（见 openapi_register_*.go）。片段保持与真实响应形状一致。
 func sharedSchemas() map[string]*Schema {
 	return map[string]*Schema{
 		"Error": BuildObj(map[string]*Schema{
@@ -393,7 +408,7 @@ func sharedSchemas() map[string]*Schema {
 			"isDir":        Bool(),
 		}, "key", "size", "lastModified", "isDir"),
 		"ListObjectsResp": BuildObj(map[string]*Schema{
-			"objects":        Arr(Obj()),
+			"objects":        Arr(Ref("#/components/schemas/ObjectItem")),
 			"commonPrefixes": Arr(Str()),
 			"isTruncated":    Bool(),
 			"nextToken":      Str(),
@@ -445,11 +460,11 @@ func sharedResponses() map[string]any {
 		},
 		"NotFound": Response{
 			Description: "资源不存在",
-			JSON:        Obj(),
+			JSON:        Ref("#/components/schemas/Error"),
 		},
 		"InternalError": Response{
 			Description: "服务端内部错误",
-			JSON:        Obj(),
+			JSON:        Ref("#/components/schemas/Error"),
 		},
 		"Unauthorized": Response{
 			Description: "未鉴权或鉴权失败",

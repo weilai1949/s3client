@@ -5,7 +5,7 @@ import (
 )
 
 func registerBucketSettings(r *openapi.Registry) {
-	bucketQ := openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()}
+	bucketQ := refParam("Bucket")
 
 	// Encryption
 	r.Operation("GET", "/api/accounts/{id}/bucket/encryption", openapi.Op{
@@ -25,7 +25,7 @@ func registerBucketSettings(r *openapi.Registry) {
 				"bucketKeyEnabled": openapi.Bool(),
 			}, "bucket", "algorithm")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "algorithm 非法", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "algorithm 非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/encryption", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除 SSE 配置", OperationID: "deleteBucketEncryption",
@@ -75,7 +75,7 @@ func registerBucketSettings(r *openapi.Registry) {
 				"redirectAllRequestsTo": openapi.Str(),
 			}, "bucket")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "indexDocument/redirectAllRequestsTo 至少一个", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "indexDocument/redirectAllRequestsTo 至少一个", JSON: refSchema("Error")}},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/website", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除静态网站托管", OperationID: "deleteBucketWebsite",
@@ -99,7 +99,7 @@ func registerBucketSettings(r *openapi.Registry) {
 				"policy": openapi.Str("policy JSON 字符串；空字符串=删除"),
 			}, "bucket")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "policy 不是合法 JSON", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "policy 不是合法 JSON", JSON: refSchema("Error")}},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/bucket/policy", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "删除桶策略", OperationID: "deleteBucketPolicy",

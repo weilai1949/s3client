@@ -247,7 +247,8 @@ func TestOpenAPI_ContractRoutesMatchSpec(t *testing.T) {
 // 额外验证 operationId 全局唯一（防止复制粘贴后忘记改名）。
 func TestOpenAPI_ContractOperationsAreComplete(t *testing.T) {
 	t.Parallel()
-	paths := openAPIPaths(t, openAPIDoc(t))
+	doc := openAPIDoc(t)
+	paths := openAPIPaths(t, doc)
 
 	statusRe := regexp.MustCompile(`^([1-5][0-9]{2}|default)$`)
 	seen := map[string]string{}
@@ -274,9 +275,9 @@ func TestOpenAPI_ContractOperationsAreComplete(t *testing.T) {
 				if !statusRe.MatchString(status) {
 					t.Errorf("%s %s: 响应状态码 %q 非法", m, p, status)
 				}
-				rm, ok := raw.(map[string]any)
+				rm, ok := resolveRawResponse(doc, raw)
 				if !ok {
-					t.Errorf("%s %s: 响应 %s 类型 = %T, want object", m, p, status, raw)
+					t.Errorf("%s %s: 响应 %s 类型 = %T, want object（含可解析的 $ref）", m, p, status, raw)
 					continue
 				}
 				if desc, _ := rm["description"].(string); strings.TrimSpace(desc) == "" {
@@ -298,7 +299,8 @@ var pathTemplateParamRe = regexp.MustCompile(`\{([^{}]+)\}`)
 // 都声明为 in:path & required:true & name 一致，且不存在模板里没有的多余 path 参数。
 func TestOpenAPI_ContractPathParamsDeclared(t *testing.T) {
 	t.Parallel()
-	paths := openAPIPaths(t, openAPIDoc(t))
+	doc := openAPIDoc(t)
+	paths := openAPIPaths(t, doc)
 
 	validIn := map[string]bool{"path": true, "query": true, "header": true, "cookie": true}
 	checkedTemplates := 0
@@ -315,9 +317,9 @@ func TestOpenAPI_ContractPathParamsDeclared(t *testing.T) {
 			got := map[string]bool{}
 			params, _ := op["parameters"].([]any)
 			for _, rawParam := range params {
-				pm, ok := rawParam.(map[string]any)
+				pm, ok := resolveRawParam(doc, rawParam)
 				if !ok {
-					t.Errorf("%s %s: parameter 类型 = %T, want object", m, p, rawParam)
+					t.Errorf("%s %s: parameter 类型 = %T, want object（含可解析的 $ref）", m, p, rawParam)
 					continue
 				}
 				name, _ := pm["name"].(string)
@@ -404,13 +406,69 @@ func resolveLocalRef(root map[string]any, ref string) bool {
 	return true
 }
 
+// derefComponent 解析 doc 中 "#/components/<kind>/<name>" 引用并返回被引用的条目；
+// 无法解析时返回 (nil, false)。供契约测试在 $ref 接线后仍能校验 name/in/description 等。
+func derefComponent(doc map[string]any, ref string) (map[string]any, bool) {
+	if !strings.HasPrefix(ref, "#/components/") {
+		return nil, false
+	}
+	var cur any = doc
+	for _, seg := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+		seg = strings.ReplaceAll(seg, "~1", "/")
+		seg = strings.ReplaceAll(seg, "~0", "~")
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[seg]
+		if !ok {
+			return nil, false
+		}
+	}
+	out, ok := cur.(map[string]any)
+	return out, ok
+}
+
+// resolveRawParam 把 operation 参数列表规整为「可校验形态」：$ref 参数解析为
+// components.parameters 中的实体，内联参数原样返回。
+func resolveRawParam(doc map[string]any, raw any) (map[string]any, bool) {
+	pm, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	if ref, _ := pm["$ref"].(string); ref != "" {
+		resolved, ok := derefComponent(doc, ref)
+		return resolved, ok
+	}
+	return pm, true
+}
+
+// resolveRawResponse 把响应条目规整为「可校验形态」：$ref 响应解析为
+// components.responses 中的实体，内联响应原样返回。
+func resolveRawResponse(doc map[string]any, raw any) (map[string]any, bool) {
+	rm, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	if ref, _ := rm["$ref"].(string); ref != "" {
+		resolved, ok := derefComponent(doc, ref)
+		return resolved, ok
+	}
+	return rm, true
+}
+
 // TestOpenAPI_ContractRefsResolve 验证文档中每个 $ref 都指向 components 中真实存在的条目，
 // 且引用形式统一为 #/components/<kind>/<name>（契约要求复用片段集中在 components）。
 func TestOpenAPI_ContractRefsResolve(t *testing.T) {
 	t.Parallel()
 	doc := openAPIDoc(t)
 	refs := collectRefs(doc)
+	if len(refs) == 0 {
+		t.Fatal("规范中没有任何 $ref：components 片段未被接线（应通过 refSchema/refParam/refResp 复用）")
+	}
+	seen := map[string]bool{}
 	for _, ref := range refs {
+		seen[ref] = true
 		if !strings.HasPrefix(ref, "#/components/") {
 			t.Errorf("$ref %q 未指向 components（应为 #/components/...）", ref)
 			continue
@@ -419,7 +477,7 @@ func TestOpenAPI_ContractRefsResolve(t *testing.T) {
 			t.Errorf("$ref %q 无法解析到 components 中的条目", ref)
 		}
 	}
-	t.Logf("已校验 %d 个 $ref（当前文档完全自包含；解析器自身的正/反例另见 TestOpenAPI_ContractRefResolverSelfCheck）", len(refs))
+	t.Logf("已校验 %d 个 $ref（%d 个唯一引用目标）", len(refs), len(seen))
 }
 
 // TestOpenAPI_ContractRefResolverSelfCheck 用合成文档证明 $ref 解析器真的能区分可解析与悬空引用，
@@ -463,6 +521,51 @@ func TestOpenAPI_ContractRefResolverSelfCheck(t *testing.T) {
 	} {
 		if resolveLocalRef(doc, bad) {
 			t.Errorf("resolveLocalRef(%q) = true, want false（悬空/外部引用必须被识别）", bad)
+		}
+	}
+}
+
+// TestOpenAPI_ContractComponentsAreReferenced 防止 components 重新变成「死代码」：
+// schemas / parameters 里的每个片段必须至少被一个 $ref 引用一次（端点内联 schema 不得
+// 重复造轮子，复用片段应通过 refSchema/refParam 接线）。responses 例外：Unauthorized /
+// TooManyRequests / InternalError 是全局错误语义（Bearer 鉴权全局生效），作为契约错误词汇
+// 保留在 components 中，即使没有单个端点显式列出它们。
+func TestOpenAPI_ContractComponentsAreReferenced(t *testing.T) {
+	t.Parallel()
+	doc := openAPIDoc(t)
+	comps, ok := doc["components"].(map[string]any)
+	if !ok {
+		t.Fatalf("components 类型 = %T, want object", doc["components"])
+	}
+
+	referenced := map[string]bool{}
+	for _, ref := range collectRefs(doc) {
+		referenced[ref] = true
+	}
+
+	// 全局错误词汇：即使无端点显式引用，也属于对外契约的一部分。
+	globalErrorResponses := map[string]bool{
+		"#/components/responses/Unauthorized":    true,
+		"#/components/responses/TooManyRequests": true,
+		"#/components/responses/InternalError":   true,
+	}
+
+	for _, kind := range []string{"schemas", "parameters", "responses"} {
+		entries, ok := comps[kind].(map[string]any)
+		if !ok {
+			t.Errorf("components.%s 类型 = %T, want object", kind, comps[kind])
+			continue
+		}
+		for name := range entries {
+			ref := "#/components/" + kind + "/" + name
+			if referenced[ref] {
+				continue
+			}
+			if globalErrorResponses[ref] {
+				t.Logf("components.%s.%s 为全局错误词汇（未接线属预期）", kind, name)
+				continue
+			}
+			t.Errorf("components.%s.%s 未被任何 $ref 引用（死片段；应通过 refSchema/refParam/refResp 接线）", kind, name)
 		}
 	}
 }
