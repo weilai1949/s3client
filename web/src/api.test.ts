@@ -282,6 +282,73 @@ describe('servers', () => {
     expect(p).toBeDefined()
     expect(p?.id).toBe(api.activeServerId())
   })
+
+  it('upsertServer() 的 token 不得明文落 localStorage.s3c.servers（安全策略：token 仅 sessionStorage / 显式持久化）', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'sec-srv', base: 'http://x:9000', token: 'super-secret-token-xyz' })
+    // 1) 磁盘上的 servers 列表不得包含 token 字段
+    const raw = memLocal.getItem('s3c.servers')
+    expect(raw).not.toBeNull()
+    const stored = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>
+    expect(stored.length).toBeGreaterThanOrEqual(1)
+    for (const s of stored) {
+      expect(s).not.toHaveProperty('token')
+      expect(JSON.stringify(s)).not.toContain('super-secret-token-xyz')
+    }
+    // 2) 返回值仍携带 token（运行时视图）
+    expect(p.token).toBe('super-secret-token-xyz')
+    // 3) token 按服务器 id 存 sessionStorage（默认非持久化）
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('super-secret-token-xyz')
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBeNull()
+  })
+
+  it('upsertServer() 开启跨会话保留时 token 同时落 localStorage.s3c.token.<id>', async () => {
+    const { api } = await loadApi()
+    api.setTokenPersistent(true)
+    const p = api.upsertServer({ name: 'persist-srv', base: 'http://x:9000', token: 'persist-token-abc' })
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBe('persist-token-abc')
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('persist-token-abc')
+    // servers 列表仍然无 token
+    const raw = memLocal.getItem('s3c.servers')
+    expect(JSON.stringify(raw)).not.toContain('persist-token-abc')
+  })
+
+  it('listServers() 从 per-server token 存储恢复 token 视图', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'restore-srv', base: 'http://x:9000', token: 'restore-token-123' })
+    // 重新加载模块（模拟新会话/刷新）
+    const mod = await import('./api')
+    const list = mod.api.listServers()
+    const found = list.find((s) => s.id === p.id)
+    expect(found?.token).toBe('restore-token-123')
+  })
+
+  it('旧版本 s3c.servers 内嵌 token 首次读取时迁移到 per-server 存储并重写 localStorage', async () => {
+    const legacyId = 'legacy-server-id'
+    memLocal.setItem(
+      's3c.servers',
+      JSON.stringify([{ id: legacyId, name: 'old', base: 'http://x:9000', token: 'legacy-token-abc' }]),
+    )
+    memLocal.setItem('s3c.activeServerId', legacyId)
+    const { api } = await loadApi()
+    // 触发读取（迁移在 listServers/activeServerId 路径中执行）
+    api.listServers()
+    // 迁移：per-server 存储可见
+    expect(memSession.getItem(`s3c.token.${legacyId}`)).toBe('legacy-token-abc')
+    // localStorage.servers 已重写为无 token
+    const stored = JSON.parse(memLocal.getItem('s3c.servers') ?? '[]') as Array<Record<string, unknown>>
+    for (const s of stored) expect(s).not.toHaveProperty('token')
+    // 活动 server 的全局 token 也已生效
+    expect(api.token).toBe('legacy-token-abc')
+  })
+
+  it('deleteServer() 同时清除该 server 的 per-server token', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'to-del-sec', base: 'http://x:9000', token: 'del-token-456' })
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('del-token-456')
+    api.deleteServer(p.id)
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBeNull()
+  })
 })
 
 // ── api.base / api.token getter/setter ──────────────────────────────────────
@@ -746,6 +813,90 @@ describe('subscribeMigrateEvents', () => {
     await new Promise((r) => setTimeout(r, 100))
     abort()
     expect(onProgress).toHaveBeenCalled()
+  })
+
+  it('EOF 未收到终态且回读失败：应 onError（不得静默悬挂）', async () => {
+    // /events 立即 EOF；状态回读请求持续失败（网络抖动）
+    stubFetch((input: RequestInfo | URL) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: new Uint8Array(0) }),
+              cancel: vi.fn(),
+            }),
+          },
+        })
+      }
+      // 状态回读失败
+      return Promise.reject(new Error('network down'))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job1', onProgress, onError)
+    // 等待回读重试（3 次 × 500ms 间隔）耗尽
+    await new Promise((r) => setTimeout(r, 2500))
+    abort()
+    // 回读重试耗尽后必须 onError，让调用方 Promise reject（opsBusy 复位），而非永久悬挂
+    expect(onError).toHaveBeenCalled()
+  })
+
+  it('EOF 未收到终态且任务仍在运行：轮询直到 done 后回调终态（不得悬挂）', async () => {
+    let statusCalls = 0
+    stubFetch((input: RequestInfo | URL) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: new Uint8Array(0) }),
+              cancel: vi.fn(),
+            }),
+          },
+        })
+      }
+      // 状态回读：前两次返回「仍在运行」，第三次返回完成
+      statusCalls++
+      if (statusCalls < 3) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ done: false, progress: { done: 3, total: 10, migrated: 3 } }),
+          blob: () => Promise.resolve(new Blob(['ok'])),
+          headers: new Map<string, string>(),
+          body: null,
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ done: true, progress: { done: 10, total: 10, migrated: 10, failed: 0 } }),
+        blob: () => Promise.resolve(new Blob(['ok'])),
+        headers: new Map<string, string>(),
+        body: null,
+      })
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job1', onProgress, onError)
+    // 等待 3 次状态回读（前两次 running、第三次 done；间隔 500ms）
+    await new Promise((r) => setTimeout(r, 2500))
+    abort()
+    // 必须收到终态（status='done'），调用方 Promise 才能 resolve
+    const terminal = onProgress.mock.calls.find(([p]) => p.status === 'done')
+    expect(terminal).toBeTruthy()
+    expect(onError).not.toHaveBeenCalled()
   })
 })
 
@@ -1298,7 +1449,7 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     off()
   })
 
-  it('回读时 progress 无 status 且任务未完成 → status 为 undefined（line 632 三元假支）', async () => {
+  it('回读时 progress 无 status 且任务未完成 → status 为 running（非终态，调用方继续轮询等待）', async () => {
     const stream = new ReadableStream({ start(c) { c.close() } })
     stubFetch((input: RequestInfo | URL) => {
       if (String(input).includes('/events')) {
@@ -1310,7 +1461,10 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     const onProgress = vi.fn()
     const off = subscribeMigrateEvents('job-1', onProgress, vi.fn())
     await vi.waitFor(() => expect(onProgress).toHaveBeenCalledTimes(1))
-    expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]![0].status).toBeUndefined()
+    // 旧实现 status=undefined 会让调用方（ctxDeleteFolder/DestDialog）的
+    // `p.status === 'done'|'cancelled'` 判断永不成立 → Promise 悬挂；
+    // 新实现合成非终态 'running'，调用方知道仍在运行、继续等待轮询终态。
+    expect(onProgress.mock.calls[onProgress.mock.calls.length - 1]![0].status).toBe('running')
     off()
   })
 
@@ -1405,5 +1559,166 @@ describe('api gaps: directUpload 进度分支', () => {
     inst.upload.onprogress?.({ lengthComputable: true, loaded: 1, total: 2 })
     inst.onload?.({})
     await promise
+  })
+})
+
+// ── api.ts 覆盖率补全：per-server token 持久化读取/清理 + 迁移回退 + 轮询超时 ──
+describe('api gaps: per-server token 持久化与迁移回退', () => {
+  it('readServerToken 持久化开启时从 localStorage 恢复 per-server token', async () => {
+    memLocal.setItem('s3c_token_persistent', '1')
+    const { api } = await loadApi()
+    const srv = api.upsertServer({ name: 'a', base: 'http://a.example:9000', token: 'srv-tok-123456' })
+    // 清掉 session 副本，仅留 localStorage（模拟重开浏览器：sessionStorage 已清、持久化仍在）
+    memSession.removeItem(`s3c.token.${srv.id}`)
+    const found = api.listServers().find((s) => s.id === srv.id)
+    expect(found?.token).toBe('srv-tok-123456')
+  })
+
+  it('readServerToken 持久化读取 localStorage 抛异常 → 返回空串', async () => {
+    memLocal.setItem('s3c_token_persistent', '1')
+    const { api } = await loadApi()
+    const srv = api.upsertServer({ name: 'a', base: 'http://a.example:9000', token: 'srv-tok-abcdef' })
+    memSession.removeItem(`s3c.token.${srv.id}`)
+    const orig = memLocal.getItem
+    memLocal.getItem = ((k: string) => {
+      if (k.startsWith('s3c.token.')) throw new Error('boom')
+      return orig.call(memLocal, k)
+    }) as typeof memLocal.getItem
+    const found = api.listServers().find((s) => s.id === srv.id)
+    expect(found?.token).toBe('')
+    memLocal.getItem = orig
+  })
+
+  it('writeServerToken 持久化下清空 token → 同步移除 localStorage 副本', async () => {
+    memLocal.setItem('s3c_token_persistent', '1')
+    const { api } = await loadApi()
+    const srv = api.upsertServer({ name: 'a', base: 'http://a.example:9000', token: 'srv-tok-xyz' })
+    expect(memLocal.getItem(`s3c.token.${srv.id}`)).toBe('srv-tok-xyz')
+    api.upsertServer({ id: srv.id, name: 'a', base: 'http://a.example:9000', token: '' })
+    expect(memLocal.getItem(`s3c.token.${srv.id}`)).toBeNull()
+  })
+
+  it('迁移内嵌 token 时读取 activeServerId 抛异常 → 回退空串且迁移不中断', async () => {
+    memLocal.setItem(
+      's3c.servers',
+      JSON.stringify([{ id: 'srv-1', name: 'old', base: 'http://x:9000', token: 'legacy-1' }]),
+    )
+    memLocal.setItem('s3c.activeServerId', 'srv-1')
+    const orig = memLocal.getItem
+    memLocal.getItem = ((k: string) => {
+      if (k === 's3c.activeServerId') throw new Error('boom')
+      return orig.call(memLocal, k)
+    }) as typeof memLocal.getItem
+    const { api } = await loadApi()
+    api.listServers() // 触发 readServers() 内的一次性迁移
+    // activeId 回读抛异常被吞（catch 返回 ''），迁移仍完成：per-server token 落到 sessionStorage
+    expect(memSession.getItem('s3c.token.srv-1')).toBe('legacy-1')
+    memLocal.getItem = orig
+  })
+
+  it('迁移旧条目缺 id/name/base 时补空串，且无 activeServerId 时回退空串', async () => {
+    // 极旧格式：条目只有 token（正常路径下应已含 id/name/base），触发全部 ?? 兜底
+    memLocal.setItem('s3c.servers', JSON.stringify([{ token: 'legacy-partial-tok' }]))
+    const { api } = await loadApi()
+    const list = api.listServers()
+    expect(list[0]?.id).toBe('')
+    expect(list[0]?.name).toBe('')
+    expect(list[0]?.base).toBe('')
+    // token 已迁移到 per-server 存储（id 为空串）
+    expect(list[0]?.token).toBe('legacy-partial-tok')
+    // s3c.servers 已重写为无 token 形态
+    expect(memLocal.getItem('s3c.servers')).not.toContain('legacy-partial-tok')
+  })
+})
+
+// ── api.ts 覆盖率补全：迁移轮询超时（防 Promise 永久悬挂的兜底） ──────────────
+describe('api gaps: 迁移轮询超时', () => {
+  it('EOF 后任务长期未完成 → 轮询超时 onError（不永久悬挂）', async () => {
+    vi.useFakeTimers()
+    try {
+      stubFetch((input: RequestInfo | URL) => {
+        if (String(input).includes('/events')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            headers: new Map<string, string>(),
+            body: {
+              getReader: () => ({
+                read: () => Promise.resolve({ done: true, value: new Uint8Array(0) }),
+                cancel: vi.fn(),
+              }),
+            },
+          })
+        }
+        // 状态回读永远返回「未完成」→ 轮询到 deadline 后必须 onError
+        return Promise.resolve(makeBlobResponse({ done: false, progress: {} }))
+      })
+      const { subscribeMigrateEvents } = await import('./api')
+      const onProgress = vi.fn()
+      const onError = vi.fn()
+      subscribeMigrateEvents('job-1', onProgress, onError)
+      await vi.advanceTimersByTimeAsync(31_000)
+      expect(onError).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('回读终态为 cancelled → 合成 status=cancelled 回调（取消不被误报为 done）', async () => {
+    stubFetch((input: RequestInfo | URL) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: new Uint8Array(0) }),
+              cancel: vi.fn(),
+            }),
+          },
+        })
+      }
+      return Promise.resolve(makeBlobResponse({ done: true, progress: { status: 'cancelled' } }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job-1', onProgress, onError)
+    await vi.waitFor(() =>
+      expect(onProgress.mock.calls.some(([p]) => p.status === 'cancelled')).toBe(true),
+    )
+    abort()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('轮询等待期间 abort → 循环静默退出（不再 onError）', async () => {
+    stubFetch((input: RequestInfo | URL) => {
+      if (String(input).includes('/events')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: new Uint8Array(0) }),
+              cancel: vi.fn(),
+            }),
+          },
+        })
+      }
+      return Promise.resolve(makeBlobResponse({ done: false, progress: {} }))
+    })
+    const { subscribeMigrateEvents } = await import('./api')
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job-1', vi.fn(), onError)
+    // 完成至少一轮回读后中止，使循环在下一次迭代顶部检测到 aborted 而 break
+    await new Promise((r) => setTimeout(r, 700))
+    abort()
+    await new Promise((r) => setTimeout(r, 600))
+    expect(onError).not.toHaveBeenCalled()
   })
 })

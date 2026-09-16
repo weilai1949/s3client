@@ -494,6 +494,41 @@ describe('useObjectBrowser remaining', () => {
     expect(toast).toHaveBeenCalled()
   })
 
+  it('loadAll 在 nextToken 为空时也至少加载第一页（不得静默只加载 0 条并误报「已加载全部」）', async () => {
+    // 单页场景：首轮请求返回无 nextToken，随后不应再发分页请求。
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: [{ key: 'only.txt', size: 1, lastModified: '', isDir: false }],
+      commonPrefixes: [], nextToken: '', isTruncated: false,
+    } as unknown as ListObjectsResult)
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    // 模拟「刚进目录、尚未加载过任何一页」：nextToken 为空，objects 也为空。
+    browser.objects.value = []
+    browser.nextToken.value = ''
+    await browser.loadAll()
+    // 必须真正发起过列表请求并拿到数据
+    expect(s3api.listObjects).toHaveBeenCalled()
+    expect(browser.objects.value.length).toBe(1)
+    expect(browser.objects.value[0].key).toBe('only.txt')
+    expect(browser.loadingAll.value).toBe(false)
+  })
+
+  it('loadAll 在 nextToken 为空但已有旧列表时重置为第一页（不重复追加导致重复项）', async () => {
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: [{ key: 'p1.txt', size: 1, lastModified: '', isDir: false }],
+      commonPrefixes: [], nextToken: '', isTruncated: false,
+    } as unknown as ListObjectsResult)
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    // 旧列表已有数据但 nextToken 为空（例如此前加载失败残留）
+    browser.objects.value = [{ key: 'stale.txt', size: 9, lastModified: '', isDir: false }] as unknown as ObjectItem[]
+    browser.nextToken.value = ''
+    await browser.loadAll()
+    // 应重置为第一页，而不是在旧列表上追加（stale 被替换，且无重复 p1）
+    const keys = browser.objects.value.map((o) => o.key)
+    expect(keys).toEqual(['p1.txt'])
+  })
+
   it('togglePathEdit commits when editing', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.pathEditing.value = true

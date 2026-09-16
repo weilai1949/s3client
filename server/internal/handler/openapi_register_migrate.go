@@ -5,18 +5,19 @@ import (
 )
 
 func registerMigrate(r *openapi.Registry) {
+	// migrateRequest 字段必须与 migrate_exec.go 的 migrateRequest 保持一致：
+	// sourceAccountId/sourceBucket/sourceKeys/targetAccountId/targetBucket/targetPrefix。
+	// （2026-09-16 评估 H1：此前误写 srcAccountId/srcBucket/srcPrefix/dstAccountId/...，
+	//  且虚构了 deleteSource/storageClass 字段；契约测试 TestOpenAPI_ContractRequestBodyMatchesHandlers 兜底。）
 	migrateReq := openapi.Request{
 		Required: true,
 		Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-			"srcAccountId": openapi.Str(),
-			"srcBucket":    openapi.Str(),
-			"srcPrefix":    openapi.Str(),
-			"dstAccountId": openapi.Str(),
-			"dstBucket":    openapi.Str(),
-			"dstPrefix":    openapi.Str(),
-			"keys":         openapi.Arr(openapi.Str()),
-			"deleteSource": desc(openapi.Bool(), "true=移动"),
-			"storageClass": openapi.Str(),
+			"sourceAccountId": openapi.Str(),
+			"sourceBucket":    openapi.Str(),
+			"sourceKeys":      openapi.Arr(openapi.Str()),
+			"targetAccountId": openapi.Str(),
+			"targetBucket":    openapi.Str(),
+			"targetPrefix":    openapi.Str(),
 		})},
 	}
 

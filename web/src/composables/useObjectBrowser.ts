@@ -396,14 +396,23 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     const seq = ++loadSeq.value
     loadingAll.value = true
     error.value = ''
+    // 进入时 nextToken 是否为空：为空说明「尚未分页」（刚进目录 / 旧列表残留），
+    // 首轮需以 reset 语义加载第一页（替换旧列表，避免 append 造成重复项）。
+    const needFirstPage = !nextToken.value
     try {
       let guard = 0
-      while (nextToken.value && guard < MAX_ALL_PAGES) {
+      // 至少请求一次：nextToken 为空时也加载第一页。
+      // 旧实现 `while (nextToken.value && ...)` 在 nextToken 为空时一次都不请求，
+      // 却 toast「已加载全部」——实际只显示旧列表（可能为空），属数据完整性缺陷。
+      do {
         if (seq !== loadSeq.value) break // 期间发生导航，中止
         guard++
-        await load(false, seq)
-      }
+        await load(needFirstPage && guard === 1, seq)
+        if (error.value) break // 某页加载失败：停止续页（load 内部已捕获错误并置 error）
+      } while (nextToken.value && guard < MAX_ALL_PAGES)
       if (seq !== loadSeq.value) return
+      // 任一分页失败时不发「已加载全部」成功提示（error.value 已在 UI 展示）。
+      if (error.value) return
       toast(tf('objects.toastLoadedAll', { files: fileObjects.value.length, folders: commonPrefixes.value.length }))
       if (isTruncated.value) toast(tf('objects.toastLoadedCap', { n: guard * 100 }), 'err')
     } finally {
