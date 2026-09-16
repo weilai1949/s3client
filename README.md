@@ -195,22 +195,26 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 
 ## 文档
 
-- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 全部已完成修复 / 优化记录（单一事实来源）
-- [待办清单（To-do）](docs/todolist.md) — 散落各文档的待处理事项汇总
-- [REST API 参考](docs/API.md)
-- [错误约定](docs/ERRORS.md)
-- [贡献指南](CONTRIBUTING.md)
-- [Agent 开发规范（TDD 优先）](agents.md)
+- [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
+- [REST API 参考](docs/API.md) — 69 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [错误约定](docs/ERRORS.md) — S3 错误 → HTTP 状态映射
+- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
+- [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）
+- [综合评估报告](docs/ASSESSMENT.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
+- [安全设计](docs/security.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](SECURITY.md)
+- [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维
+- [开发指南（TDD 优先）](docs/development.md) — 测试规范 / 验收清单 / 技术债
+- [贡献指南](CONTRIBUTING.md) · [行为准则](CODE_OF_CONDUCT.md) · [安全策略](SECURITY.md)
 - 配置见上文矩阵。
 
 ## 安全说明
 
-- 账号 SecretKey 仅服务端存储，对外返回**脱敏**（`******`）。
+- 账号 SecretKey 仅服务端存储，对外返回**脱敏**（`AccountView.secretSet`，不回传 `secretKey`）。
 - 前端直传使用短时效 v4 签名 URL，密钥不暴露给前端。
 - 默认回环绑定、CORS 白名单、可选 Bearer 鉴权；S3C_TOKEN 短口令（< 16 字符）拒绝启动。
 - `/api/metrics` 默认 404，scrape 需显式 `S3C_EXPOSE_METRICS=1`。
 - 前端 Bearer Token 默认存 sessionStorage（关标签即清）；勾选「跨会话保留」才写 localStorage。
-- 生产部署请参考上文安全建议。
+- 生产部署请参考 [docs/deployment.md](docs/deployment.md) 与 [docs/security.md](docs/security.md)。
 
 ## License
 
