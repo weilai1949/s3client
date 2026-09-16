@@ -453,18 +453,29 @@
 ### G. Unreleased（进行中）已记录项
 运行时基镜像 Alpine 3.20、`/api/metrics` 默认关闭、S3C_TOKEN 短口令硬失败、S3 出站禁代理、桶名校验收紧、user metadata 400、delete-objects ≤1000、migrate SSE 写超时、store 失败回滚、错误 sentinel 化、X-Request-ID 加固、Bearer scheme、`.env` 解耦、nginx 内存上限、OpenAPI 自动生成 + 契约测试、**OpenAPI components 接线 `$ref`（109 处引用，消灭 0 引用死代码）**、双驱动去重、存储驱动再收敛（统一 `storeCodec`）、账号响应契约收敛（`secretSet` 替代 `"******"` 占位）、全仓 gofmt 对齐、Playwright E2E、增量同步、桶策略可视化编辑器、批量元数据编辑、存储类型切换、回收站、桌面端 SHA 校验与 actions pin SHA 等。完整逐条见 [`CHANGELOG.md`](../CHANGELOG.md)。
 
+### H. 2026-09-16 评估 P0 发布阻塞修复
+
+> 来源：[`ASSESSMENT.md`](ASSESSMENT.md) §六 P0（H1 / H4 / M8+C2 / S7+C3）。对应 todolist 原 #5 / #6 / #7 / #15，均已归档。
+
+| # | 项 | 状态 | 修复内容 |
+|---|----|------|----------|
+| P0-1 | OpenAPI 契约与真实 handler 字段级不一致（H1） | ✅ | `/api/migrate`、`/api/migrate/async` 请求体字段改为 handler 实际解析的 `sourceAccountId` / `sourceBucket` / `sourceKeys` / `targetAccountId` / `targetBucket` / `targetPrefix`（删除虚构的 `deleteSource` / `storageClass`）；presign `method` 枚举 `GET/PUT/DELETE/HEAD` → `get/put/post`；delete 移除 `versionId`；multipart/part 补 `expiresIn`。新增 `TestOpenAPI_ContractRequestBodyMatchesHandlers` 做「registry schema ↔ handler DTO」字段级三方一致性兜底（含 `$ref` 解引用与 enum 断言） |
+| P0-2 | 前端 Token 明文双份落 `localStorage['s3c.servers']`（H4） | ✅ | `s3c.servers` 只存 `{id,name,base}`；token 单副本按 `s3c.token.<serverId>` 独立存储（默认 sessionStorage，仅显式「跨会话保留」时写 localStorage）。旧版本内嵌 token 首次读取时一次性迁移并回填活动服务器 profile；删除服务器同步清理 per-server token |
+| P0-3 | `loadAll()` 在 `nextToken` 为空时不发请求却误报「已加载全部」（M8 / C2） | ✅ | 改为 do-while：`nextToken` 为空时仍加载第一页（reset 语义，替换旧列表避免重复项）；某页失败即停止续页且不再发成功 toast；`MAX_ALL_PAGES` 上限保留 |
+| P0-4 | 批量复制/移动/删除 SSE 终态检测导致 Promise 悬挂、`opsBusy` 永不复位（S7 / C3） | ✅ | `subscribeMigrateEvents` 在流 EOF 且未收到终态时轮询 `migrateJobStatus`（500ms 间隔、30s 上限）直到 done/cancelled，并在回读结果上合成终态 `status`；连续 3 次回读失败快速 `onError`。三个调用方（`ctxDeleteFolder` / `DestDialog` / `MigratePanel`）由此保证拿到终态或错误，不再永久禁用按钮 |
+
 ---
 
 ## 三、质量与覆盖率现状
 
-> 2026-09-15 本机实测。
+> 2026-09-15 本机实测；2026-09-16 P0 修复后复测：`go vet ./...` 干净、`go test ./...` 8/8 包通过（`handler` 覆盖率 100.0%）、前端 61 文件 / **952** 测试全绿且四指标均 100%、`vue-tsc` / `vite build` / `eslint` 干净。
 
 | 门禁 | 结果 |
 |---|---|
 | `go vet ./...` | 干净 |
 | `go test -race -count=1 ./...` | 8/8 包通过 |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 61 文件 / 935 测试全绿 |
+| 前端 `pnpm test` | 61 文件 / 952 测试全绿 |
 | 前端覆盖率 | **statements / branches / functions / lines 均 100%** |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（~355KB，gzip ~109KB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |

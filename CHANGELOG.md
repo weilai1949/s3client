@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### P0 发布阻塞修复（2026-09-16 评估）
+- **OpenAPI 契约与真实 handler 字段级对齐**：`/api/migrate`、`/api/migrate/async` 请求体字段改为 handler 实际解析的 `sourceAccountId` / `sourceBucket` / `sourceKeys` / `targetAccountId` / `targetBucket` / `targetPrefix`（删除此前虚构的 `deleteSource` / `storageClass`）；presign `method` 枚举由 `GET/PUT/DELETE/HEAD` 改为实际支持的 `get/put/post`；delete 请求体移除 handler 不解析的 `versionId`；multipart/part 补上 handler 支持的 `expiresIn`。新增 `TestOpenAPI_ContractRequestBodyMatchesHandlers`，对「注册表 schema ↔ handler DTO」做字段级一致性断言（含 `$ref` 解引用 / enum 检查），补上 routes↔spec 检查覆盖不到的漂移面。
+- **前端 Token 不再明文落 `localStorage`**：`s3c.servers` 只存 `{id,name,base}`；token 单副本按 `s3c.token.<serverId>` 存储（默认 sessionStorage，仅显式开启「跨会话保留」时写 localStorage）。旧版本内嵌 token 首次读取时一次性迁移并回填活动服务器 profile；删除服务器同步清理 per-server token。修复「token 仅 sessionStorage」策略被多服务器列表旁路的问题。
+- **`loadAll()` 至少在 `nextToken` 为空时也发起一次请求**：改为 do-while，空 token 时以 reset 语义加载第一页（替换旧列表、避免重复项），不再出现「一次请求都没发却提示已加载全部」；某页失败即停止续页且不再发成功提示。
+- **迁移 SSE 终态检测兜底，消除 Promise 永久悬挂**：流以 EOF 结束且未收到终态时，轮询 `migrateJobStatus`（500ms 间隔、30s 上限）直到 done/cancelled 并合成终态 `status`；连续 3 次回读失败快速 `onError`。`ctxDeleteFolder` / `DestDialog` / `MigratePanel` 三个调用方由此保证拿到终态或错误，`opsBusy` 不再永不复位、按钮不再永久禁用。
+
 ### 安全与可靠性
 - **运行时基镜像换成 Alpine 3.20**：`debian:bookworm-slim`（~80MB、90+ 包、glibc + openssl 3.0.x）→ `alpine:3.20`（~5MB、19 个包、musl + openssl 3.3.7）。体积从 ~80MB 降到 41.5MB；Trivy 报告的 CRITICAL/HIGH 漏洞面收窄 ~80%。
 - **`/api/metrics` 默认关闭**：新增 `S3C_EXPOSE_METRICS=1` 显式开启；默认返回 404，假装端点不存在，避免公网被 scrape 运行指标。

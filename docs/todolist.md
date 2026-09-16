@@ -22,17 +22,20 @@
 ## 一、功能 / 架构待办
 
 > 2026-09-16 评估新增（来源：[`ASSESSMENT.md`](ASSESSMENT.md)）。
+> 原 #5 / #6 两项 P0（`loadAll()` 空 token 误报、SSE 终态悬挂）已修复并归档至
+> [`FEATURES.md`](FEATURES.md)「H. 2026-09-16 P0 发布阻塞修复」。
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 5 | `loadAll()` 在 `nextToken` 为空时静默只加载第一页并误报「已加载全部」 | ASSESSMENT M8 / 前端审查 C2 | ⬜ | `while (nextToken.value && ...)` 改为 do-while 或本地 token 至少执行一次请求；补「nextToken 为空」路径测试 |
-| 6 | 批量复制/移动/删除（文件夹）SSE 终态检测：流以 EOF 结束时 Promise 悬挂、`opsBusy` 永不复位、按钮永久禁用 | ASSESSMENT S7 / 前端审查 C3 | ⬜ | 收敛为 MigratePanel 已实现的正确版本（共享 composable），`onProgress` 同时处理流结束回读 `done:true` |
+| — | （空） | — | — | 无待办事项 |
 
 ## 二、API / 契约待办
 
+> 原 #7（OpenAPI 契约与真实 handler 字段级不一致）已修复并归档至
+> [`FEATURES.md`](FEATURES.md)「H. 2026-09-16 P0 发布阻塞修复」。
+
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 7 | **OpenAPI 契约与真实 handler 不一致（SSOT 失真）**：`/api/migrate` 字段名 `srcAccountId/...` vs 真实 `sourceAccountId/...` 全对不上；presign 声明 `GET/PUT/DELETE/HEAD` vs 实际仅 `get\|put\|post`；delete 声明 `versionId` 但 handler 无此字段；`deleteMarkerId` vs `versionId` | ASSESSMENT H1 / 后端审查 R1 | ⬜ | 抽查 5 处 100% 命中；建议契约测试增加「注册表 schema ↔ handler 实际解析字段」三方一致性断言 |
 | 8 | docs/API.md 无自动化校验（OpenAPI 契约测试只校验 routes↔注册表） | ASSESSMENT I2 | ⬜ | CI 加文档-路由 diff 检查或文档生成 |
 
 ## 三、代码质量 / 死代码待办
@@ -48,11 +51,13 @@
 
 ## 四、安全 / 供应链待办
 
+> 原 #15（前端 Token 明文双份落 `localStorage['s3c.servers']`）已修复并归档至
+> [`FEATURES.md`](FEATURES.md)「H. 2026-09-16 P0 发布阻塞修复」。
+
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 13 | **Go 1.26.5 有 6 个可达 stdlib 漏洞**（修复版 1.26.6）：net/url、crypto/tls、net/http、encoding/xml、encoding/asn1、Punycode | ASSESSMENT H2 / 安全审计 | ⬜ | `go.mod:3` + `server/Dockerfile:25` + CI 同步；CI 增补 `govulncheck ./...` 门禁 |
 | 14 | **e2e-playwright.yml:35 pnpm/action-setup 幽灵 SHA**（GitHub API 422 不存在，与正确 SHA 差 8 位） | ASSESSMENT H3 / 安全审计 | ⬜ | 改为与其它 workflow 一致的 `b906affcce14559ad1aafd4ab0e942779e9f58b1` |
-| 15 | **前端 Token 明文双份落 `localStorage['s3c.servers']`**，旁路「token 仅 sessionStorage」策略 | ASSESSMENT H4 / 前端审查 C1 | ⬜ | `s3c.servers` 只存 `{id,name,base}`，token 单副本按服务器 id 前缀存 sessionStorage |
 | 16 | SQLite 驱动 `secret_key` 明文落盘且 compose 默认即该驱动；Argon2 参数偏弱（t=1）；`S3C_STORE_KEY` 无最短长度校验 | ASSESSMENT M1/M2 / 安全审计 | ⬜ | compose 默认改 encrypted + 磁盘级加密文档；Argon2 t≥2；StoreKey 加长度校验 |
 | 17 | 无安全审计日志（401、账号 CRUD、策略/删除变更）；JobRegistry 无总 job 上限；XFF 完全信任可绕过限速 | ASSESSMENT M3/M4/M5 / 安全审计 | ⬜ | 安全事件日志；JobRegistry 上限；XFF 仅信任已知代理 |
 | 18 | TLS 前置无 HSTS / Permissions-Policy；`/api/health` 暴露 version | ASSESSMENT M6/L3 / 安全审计 | ⬜ | nginx TLS conf 加 `add_header`；health 考虑去 version |
@@ -74,3 +79,7 @@
 
 > 此前 4 项（存储驱动收敛 / `secretSet` 契约 / OpenAPI `$ref` 接线 / 预览桶契约）均已完成并归档至
 > [`FEATURES.md`](FEATURES.md) 的「一、产品功能」与「二、已完成修复与优化」。
+>
+> 2026-09-16 评估的 4 项 P0（#5 `loadAll()` 空 token 误报、#6 SSE 终态悬挂、#7 OpenAPI 契约漂移、
+> #15 前端 token 明文落 localStorage）已修复并归档至 [`FEATURES.md`](FEATURES.md)「H. 2026-09-16
+> P0 发布阻塞修复」。
