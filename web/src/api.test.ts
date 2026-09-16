@@ -635,10 +635,11 @@ describe('s3api', () => {
     await s3api.copyPrefixAsync('id1', { bucket: 'b', prefix: 'p', targetBucket: 'tb', targetPrefix: 'tp' })
   })
 
-  it('migrate / migrateAsync / migrateJobStatus / migrateJobCancel / migrateSync', async () => {
+  it('migrate / migrateAsync / migrateJobs / migrateJobStatus / migrateJobCancel / migrateSync', async () => {
     const { s3api } = await import('./api')
     await s3api.migrate({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
     await s3api.migrateAsync({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
+    await s3api.migrateJobs()
     await s3api.migrateJobStatus('job1')
     await s3api.migrateJobCancel('job1')
     await s3api.migrateSync({ sourceAccountId: 'a1', sourcePrefix: 'p/', targetAccountId: 'a2' })

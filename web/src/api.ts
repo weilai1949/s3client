@@ -3,6 +3,7 @@ import type {
   AccountInput,
   BucketInfo,
   CorsRule,
+  JobRecord,
   LifecycleRule,
   ListObjectsResponse,
   ListVersionsResponse,
@@ -645,6 +646,9 @@ export const s3api = {
     targetPrefix?: string
   }) =>
     request<{ jobId: string; total: number }>('/api/migrate/async', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** 异步任务清单（含进程重启后中断的任务，用于「未完成任务」对账视图）。 */
+  migrateJobs: () => request<{ jobs: JobRecord[] }>('/api/migrate/jobs'),
 
   migrateJobStatus: (jobId: string) =>
     request<{ jobId: string; done: boolean; progress: MigrateProgress; result?: MigrationResult }>(

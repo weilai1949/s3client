@@ -29,6 +29,7 @@ vi.mock('../api', () => ({
     listBuckets: vi.fn(),
     listObjects: vi.fn(),
     migrateAsync: vi.fn(),
+    migrateJobs: vi.fn(),
     migrateJobStatus: vi.fn(),
     migrateJobCancel: vi.fn(),
   },
@@ -98,6 +99,7 @@ beforeEach(() => {
     state.accounts.find((a) => a.id === state.currentAccountId),
   )
   vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b-one', creationDate: '2024-01-01' }] })
+  vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [] })
   vi.mocked(s3api.listObjects).mockResolvedValue({
     objects: [objA, objB, objDir], commonPrefixes: [], isTruncated: false, nextToken: '',
   })
@@ -756,5 +758,123 @@ describe('MigratePanel remaining branches', () => {
     Object.defineProperty(wrap.element, 'clientHeight', { value: 600, configurable: true })
     vm.measureViewport()
     expect(vm.viewportH).toBe(600)
+  })
+})
+
+describe('MigratePanel 未完成任务（跨重启恢复）', () => {
+  const interrupted = {
+    id: 'job-int', created: '2026-09-16T10:00:00Z', total: 5, status: 'interrupted' as const,
+    progress: { done: 2, total: 5, migrated: 2, failed: 1, status: 'interrupted' },
+    result: { migrated: 2, failed: 1 },
+  }
+  const doneJob = {
+    id: 'job-done', created: '2026-09-16T09:00:00Z', total: 1, status: 'done' as const,
+    progress: { done: 1, total: 1, migrated: 1, failed: 0, status: 'done' },
+    result: { migrated: 1, failed: 0 },
+  }
+
+  it('展示 interrupted 任务，过滤掉已完成任务', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [interrupted, doneJob] })
+    const w = mountPanel()
+    await flushPromises()
+
+    expect(s3api.migrateJobs).toHaveBeenCalled()
+    const block = w.find('.unfinished')
+    expect(block.exists()).toBe(true)
+    // interrupted 必须可见：这是「移动任务复制成功但源未删除」的唯一提示
+    expect(block.text()).toContain('job-int')
+    expect(block.text()).toContain('migrate.statusInterrupted')
+    expect(block.text()).toContain('migrate.unfinishedProgress')
+    // done 任务不进入未完成视图
+    expect(block.text()).not.toContain('job-done')
+  })
+
+  it('无未完成任务时不渲染区块', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [doneJob] })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').exists()).toBe(false)
+  })
+
+  it('running 任务也展示（仍在进行中）', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({
+      jobs: [{ ...interrupted, id: 'job-run', status: 'running' as const }],
+    })
+    const w = mountPanel()
+    await flushPromises()
+    const block = w.find('.unfinished')
+    expect(block.text()).toContain('job-run')
+    expect(block.text()).toContain('migrate.statusRunning')
+  })
+
+  it('加载失败时展示错误且不崩溃', async () => {
+    vi.mocked(s3api.migrateJobs).mockRejectedValue(new Error('boom'))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').exists()).toBe(true)
+    expect(w.find('.unfinished').text()).toContain('boom')
+  })
+
+  it('dismiss 仅从本地列表移除', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [interrupted] })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').text()).toContain('job-int')
+
+    const btn = w.findAll('.unfinished button').find((b) => b.text() === 'migrate.dismiss')
+    expect(btn).toBeTruthy()
+    await btn!.trigger('click')
+    // 唯一一条被忽略后整块消失（v-if 依据 unfinished.length）
+    expect(w.find('.unfinished').exists()).toBe(false)
+  })
+
+  it('刷新按钮重新拉取清单', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [interrupted] })
+    const w = mountPanel()
+    await flushPromises()
+    const calls = vi.mocked(s3api.migrateJobs).mock.calls.length
+
+    const refresh = w.findAll('.unfinished button').find((b) => b.text() === 'common.refresh')
+    expect(refresh).toBeTruthy()
+    await refresh!.trigger('click')
+    await flushPromises()
+    expect(vi.mocked(s3api.migrateJobs).mock.calls.length).toBe(calls + 1)
+  })
+
+  it('迁移完成（终态）后不再出现在未完成列表', async () => {
+    // 先返回 running，再返回 done：模拟任务完成后刷新
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [{ ...interrupted, status: 'running' as const }] })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').text()).toContain('job-int')
+
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [doneJob] })
+    await (w.vm as unknown as { loadUnfinishedJobs: () => Promise<void> }).loadUnfinishedJobs()
+    await flushPromises()
+    expect(w.find('.unfinished').exists()).toBe(false)
+  })
+
+  it('jobs 为 null 时按空清单处理（后端返回 null 而非 []）', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: null as unknown as [] })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').exists()).toBe(false)
+  })
+
+  it('有失败数的中断任务展示失败计数', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({ jobs: [interrupted] })
+    const w = mountPanel()
+    await flushPromises()
+    // interrupted 含 failed=1 → 渲染 resultFail 提示，提醒用户存在半成功对象
+    expect(w.find('.unfinished').text()).toContain('migrate.resultFail')
+  })
+
+  it('无失败数的中断任务不展示失败计数', async () => {
+    vi.mocked(s3api.migrateJobs).mockResolvedValue({
+      jobs: [{ ...interrupted, result: { migrated: 2, failed: 0 } }],
+    })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.unfinished').text()).not.toContain('migrate.resultFail')
   })
 })

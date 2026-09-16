@@ -110,6 +110,21 @@ export interface MigrationResult {
   failedKeys?: string[]
 }
 
+/** 异步任务状态：interrupted = 进程重启导致中断，需人工对账（如移动任务源未删）。 */
+export type JobStatus = 'running' | 'done' | 'cancelled' | 'interrupted'
+
+/** 服务端持久化的异步任务记录（GET /api/migrate/jobs）。 */
+export interface JobRecord {
+  id: string
+  created: string
+  total: number
+  status: JobStatus
+  // 内联而非引用 api.ts 的 MigrateProgress：api.ts 已 import types.ts，
+  // 反向引用会形成模块循环。
+  progress: { done: number; total: number; migrated: number; failed: number; key?: string; error?: string; status?: string }
+  result: MigrationResult
+}
+
 /** 桶 CORS 规则。 */
 export interface CorsRule {
   id?: string

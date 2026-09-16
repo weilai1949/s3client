@@ -9,7 +9,7 @@ import { state, currentAccount, toast, selectAccount, requestTab } from '../stor
 import { fmtSize } from '../format'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
-import type { BucketItem, ObjectItem } from '../types'
+import type { BucketItem, JobRecord, ObjectItem } from '../types'
 
 // 大对象列表（listAll 上限 200×1000）走窗口化渲染，避免数十万行直接 v-for 冻结页面。
 const ROW_HEIGHT = 38
@@ -78,6 +78,33 @@ const activeJobId = ref('')
 // 组件级 SSE 取消器：保证 onBeforeUnmount 一定能断开正在进行的迁移事件流。
 let activeUnsub: (() => void) | undefined
 const cancelling = ref(false)
+
+/* ---- 未完成任务（跨重启恢复）---- */
+// 服务端持久化任务清单后，进程重启会把运行中的任务标记为 interrupted。
+// 这类任务（尤其移动语义「复制成功但源未删除」）必须让用户看到并对账，
+// 否则重启即静默丢失：源对象可能被重复迁移或遗留。
+const unfinished = ref<JobRecord[]>([])
+const unfinishedLoading = ref(false)
+const unfinishedError = ref('')
+
+async function loadUnfinishedJobs() {
+  unfinishedLoading.value = true
+  unfinishedError.value = ''
+  try {
+    const { jobs } = await s3api.migrateJobs()
+    // 只展示需要人工介入的：interrupted（重启中断）与 running（仍在进行）。
+    unfinished.value = (jobs ?? []).filter((j) => j.status === 'interrupted' || j.status === 'running')
+  } catch (e) {
+    unfinishedError.value = toErrorMessage(e)
+  } finally {
+    unfinishedLoading.value = false
+  }
+}
+
+/** 忽略一条中断记录：仅从本地列表移除（服务端记录仍按 TTL 保留，供审计）。 */
+function dismissUnfinished(id: string) {
+  unfinished.value = unfinished.value.filter((j) => j.id !== id)
+}
 
 /* ---- 迁移结果弹窗 ---- */
 const resultDialog = reactive({
@@ -300,6 +327,7 @@ watch(targetAccountId, () => {
 
 onMounted(async () => {
   ensureTargetAccount()
+  loadUnfinishedJobs()
   await loadSourceBuckets()
   await loadTargetBuckets()
   loadSourceObjects()
@@ -312,6 +340,31 @@ onMounted(async () => {
       <h3 style="margin:0">{{ t('migrate.title') }}</h3>
       <span class="spacer" />
       <span class="badge">{{ tf('migrate.sourceAccount', { name: sourceAccount?.name || t('common.noAccount') }) }}</span>
+    </div>
+
+    <!-- 未完成任务（跨重启恢复）：仅在有 interrupted/running 任务时出现 -->
+    <div v-if="unfinished.length || unfinishedLoading || unfinishedError" class="unfinished">
+      <div class="unfinished-head">
+        <span class="tag bad">{{ t('migrate.statusInterrupted') }}</span>
+        <strong>{{ t('migrate.unfinishedTitle') }}</strong>
+        <span class="badge">{{ tf('migrate.unfinishedCount', { n: unfinished.length }) }}</span>
+        <span class="spacer" />
+        <button class="btn secondary sm" :disabled="unfinishedLoading" @click="loadUnfinishedJobs">
+          {{ unfinishedLoading ? t('common.working') : t('common.refresh') }}
+        </button>
+      </div>
+      <p class="badge" style="margin:6px 0">{{ t('migrate.unfinishedHint') }}</p>
+      <div v-if="unfinishedError" class="badge" style="color:var(--danger)">{{ unfinishedError }}</div>
+      <div v-for="j in unfinished" :key="j.id" class="unfinished-item">
+        <span class="mono">{{ j.id }}</span>
+        <span class="tag" :class="j.status === 'interrupted' ? 'bad' : 'ok'">
+          {{ j.status === 'interrupted' ? t('migrate.statusInterrupted') : t('migrate.statusRunning') }}
+        </span>
+        <span class="badge">{{ tf('migrate.unfinishedProgress', { done: j.progress.done, total: j.total }) }}</span>
+        <span v-if="j.result.failed" class="badge" style="color:var(--danger)">{{ tf('migrate.resultFail', { n: j.result.failed }) }}</span>
+        <span class="spacer" />
+        <button class="btn secondary sm" @click="dismissUnfinished(j.id)">{{ t('migrate.dismiss') }}</button>
+      </div>
     </div>
 
     <div v-if="!sourceAccount" class="empty">
