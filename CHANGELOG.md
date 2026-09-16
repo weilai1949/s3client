@@ -37,6 +37,7 @@
 - **账号响应契约收敛**：账号响应从 `secretKey: "******"` 占位改为 `AccountView`（新增 `secretSet: boolean`，**不再回传 `secretKey`**）；请求仍以 `secretKey` 提交（编辑留空 = 保持不变）。后端（`model.AccountView` / handler 视图转换）、前端（`types.ts` `Account.secretSet`）、OpenAPI 与 `docs/API.md` 同步更新；`internal/model` 覆盖率 100%。
 - **OpenAPI components 接线 `$ref`**：新增 `openapi.Ref()` 与 `Param.Ref` / `Response.Ref` 渲染分支；共享 `schemas`（Error/Account/Bucket/ObjectItem/ListObjectsResp）、`parameters`（AccountID/Bucket/Prefix/MaxKeys/ContinuationToken）、`responses`（BadRequest/NotFound）经 `refSchema` / `refParam` / `refResp` 全部接线为 `$ref`（109 处引用、12 个唯一目标），消灭「components 0 引用」死代码状态；契约测试改为先解析 `$ref` 再校验路径参数 / 响应描述，新增「components 无死片段」断言（`Unauthorized`/`TooManyRequests`/`InternalError` 为全局错误词汇除外）；`internal/openapi` 覆盖率保持 100%。`/api/openapi.json` 输出形状从内联改为 `$ref`（对外契约结构性更新，运行时 API 行为不变，前端不消费该文档）。
 - **待办清理**：`docs/todolist.md` 移除「三、历史评审遗留」整节（7 项均已复核关闭，详见 `FEATURES.md` C / D / E），待办清单仅保留仍未决事项。
+- **待办归档**：`docs/todolist.md` 全部 4 项（存储驱动再收敛 / `secretSet` 账号契约 / OpenAPI `$ref` 接线 / `preview-buckets` 预览桶契约）均已完成，从待办清单移除并归档至 `FEATURES.md`「一、产品功能」与「二、已完成修复与优化」（A / B 段补记存储驱动收敛完成态），待办清单当前为空。
 - **Trivy 镜像扫描**：CI 在 Docker 构建后跑 `aquasecurity/trivy:0.58.1`，CRITICAL/HIGH 漏洞硬失败；新增 `.trivyignore` 与 `--ignorefile` 集中收纳可忽略的 CVE。
 - **构建层升级 Node 24**：Dockerfile 与所有 workflow 的 `node-version` 升到 24；pnpm 锁回 9.15.0（与 `package.json` 的 `packageManager` 声明一致，兼容现有 `pnpm-lock.yaml`）。
 - **配置校验函数 `Config.Validate()`**：`MinTokenLength=16`、非回环无 token 拒绝启动。
