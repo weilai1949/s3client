@@ -28,6 +28,16 @@
 
 > `HTTPStatus` 未单独列出的码（如 `NoSuchUpload`）回落 **500**；业务 handler 可在映射前特判。
 
+## 非 S3 来源的固定文案
+
+以下错误不来自上游 S3，而是本服务的本地校验 / 资源约束，文案固定、不经 `s3wrap` 映射：
+
+| 条件 | HTTP | 文案 | 备注 |
+|---|---:|---|---|
+| 预签名生成失败（取凭证、输入序列化等） | 500 | `failed to create presigned url` | 此前被 `u, _ :=` 吞掉，返回 `200 {"url":""}`（todolist #23） |
+| 在册异步任务数达上限 | 503 | `too many running jobs; retry later` | 上限 256 个未终结任务（todolist #17） |
+| 并发流式请求数达上限 | 503 | `too many concurrent streaming requests` | `withStreamLimit`，上限 32 |
+
 ## Handler 约定
 
 - `writeInternalErr`：可识别 S3 错误 → `s3HTTPStatus` + `s3UserMessage`；否则 500 + 通用文案。

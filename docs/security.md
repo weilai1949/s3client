@@ -55,6 +55,7 @@
 | `/api/metrics` 与 `/api/openapi.json` 默认 404 | `middleware.go:177-199` |
 | CORS 白名单仅 localhost/127.0.0.1/tauri + 跨域 403 硬阻断 | `middleware.go:105-172` |
 | 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP | `middleware.go:17-28` |
+| TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3clinet-tls.example.conf` |
 | 容器非 root（USER app）、HEALTHCHECK、内存上限 | `Dockerfile`、compose |
 | ReadHeaderTimeout 15s（防慢速请求头攻击） | `main.go:74` |
 
@@ -91,5 +92,5 @@
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
 - SQLite 明文密钥（生产改 encrypted）
 - 安全审计日志缺失
-- XFF 伪造绕过限速 / JobRegistry 无上限
-- TLS 前置无 HSTS
+- XFF 伪造绕过限速（JobRegistry 上限已加：256 个未终结任务，超限 503）
+- ~~TLS 前置无 HSTS~~ ✅ 已在 TLS 示例配置加 HSTS + Permissions-Policy

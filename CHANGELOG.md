@@ -16,6 +16,12 @@
 - **补齐 3 个缺失 i18n 键**：`objects.toastCopyFailed`、`batchEdit.tagsNeedKey`、`common.working` 此前被引用但未定义，用户界面会直接显示原始 key。已补齐 zh-CN / en-US 文案；新增 `src/i18n/coverage.test.ts` 静态扫描「被引用但未定义」的字面量键（用 `import.meta.glob` 读源码，不引入 `node:*` 依赖），作为该类缺陷的常驻门禁。
 - **OpenAPI 契约收尾**：`POST /api/accounts/{id}/delete-marker/restore` 请求体由错误的 `deleteMarkerId` 修正为 handler 实际解析的 `versionId`（此前客户端按文档调用会因缺 `versionId` 直接 400）。契约测试同步扩展至 `delete-marker/restore` / `version`(DELETE) / `version/restore`，断言「含 `versionId` 且不含 `deleteMarkerId`」，并已验证该测试在回退修复时确实失败。
 
+### P2 加固修复（2026-09-16 评估）
+- **预签名失败不再被静默吞掉**：`presign`（get/put/post）与 `multipart/part` 三处原为 `u, _ := client.PresignXxx(...)`，失败时返回 `200 {"url":""}`——调用方拿到空 URL 却看到成功状态。预签名并非不可能失败：AWS SDK 在取凭证、输入序列化等阶段都会报错（实测空 key、context 取消均可触发）。现统一经 `writePresignResult` 处理，失败返回 500 `failed to create presigned url`，并新增源码级门禁 `TestPresignErrorsNotSwallowed` 防止该写法复发（已回退验证门禁会失败）。
+- **流式传输中断不再无痕**：`copyStream` 原以 `_, _ = io.Copy(...)` 丢弃返回值，大文件下载被上游读失败或写超时打断时，日志与指标里都没有任何记录。现返回 `(int64, error)`，由 `recordStreamOutcome` 分流：真实中断记 Warn 并累加新指标 `s3c_stream_interrupted_total`；客户端主动断开（用户取消/关页面）仅记 Debug、不计入指标，避免污染告警。
+- **异步任务加上限**：`JobRegistry` 新增在册任务上限（256 个未终结任务），超限时异步端点返回 503 `too many running jobs; retry later`，避免短时间内大量请求持续堆积 goroutine、SSE 订阅与落盘条目。上限只统计未终结任务，因此恢复出的 `interrupted` 历史任务不会永久占满名额。`Create` 保持原签名以不波及 70+ 处调用点，新增 `TryCreate` 供需要感知容量的路径使用。
+- **TLS 站点补齐 HSTS 与 Permissions-Policy**：`deploy/nginx/conf.d/s3clinet-tls.example.conf` 增加 `Strict-Transport-Security`（180 天，暂不带 preload）与 `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort）。这两项只能由 TLS 终止层表达，后端已有的 CSP 等头无法替代。
+
 ### P0 发布阻塞修复（2026-09-16 评估）
 - **OpenAPI 契约与真实 handler 字段级对齐**：`/api/migrate`、`/api/migrate/async` 请求体字段改为 handler 实际解析的 `sourceAccountId` / `sourceBucket` / `sourceKeys` / `targetAccountId` / `targetBucket` / `targetPrefix`（删除此前虚构的 `deleteSource` / `storageClass`）；presign `method` 枚举由 `GET/PUT/DELETE/HEAD` 改为实际支持的 `get/put/post`；delete 请求体移除 handler 不解析的 `versionId`；multipart/part 补上 handler 支持的 `expiresIn`。新增 `TestOpenAPI_ContractRequestBodyMatchesHandlers`，对「注册表 schema ↔ handler DTO」做字段级一致性断言（含 `$ref` 解引用 / enum 检查），补上 routes↔spec 检查覆盖不到的漂移面。
 - **前端 Token 不再明文落 `localStorage`**：`s3c.servers` 只存 `{id,name,base}`；token 单副本按 `s3c.token.<serverId>` 存储（默认 sessionStorage，仅显式开启「跨会话保留」时写 localStorage）。旧版本内嵌 token 首次读取时一次性迁移并回填活动服务器 profile；删除服务器同步清理 per-server token。修复「token 仅 sessionStorage」策略被多服务器列表旁路的问题。

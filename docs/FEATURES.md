@@ -478,6 +478,22 @@
 | P1-4 | `delete-marker/restore` 契约字段漂移（P0-1 收尾） | ✅ | 请求体 `deleteMarkerId` → `versionId`（对齐 `restoreDeleteMarker` handler 与 `docs/API.md`）；契约测试扩展至 `delete-marker/restore` / `version`(DELETE) / `version/restore`，并验证回退修复时测试确实失败 |
 | P1-5 | 异步任务丢失无法恢复（S1，v1.0.0 最后一项门槛） | ✅ | ① `service/job_persist.go`：`JobPersister` 抽象 + `FileJobPersister` 原子写（临时文件 → rename → 0600），`Create`/`Finish` 必落盘、中间进度 2s 节流；② 启动恢复：非终态任务标记 `interrupted` 并回写，`NewJobRegistry()` 保持纯内存语义不破坏既有测试；③ `interrupted` 独立 7 天保留期（`JobInterruptedTTL`），修复「恢复后首次 reap 即被 30 分钟 TTL 清除」的缺陷（有回归测试）；④ 新增 `GET /api/migrate/jobs`（路由数 69 → 70，OpenAPI 同步）；⑤ 前端 `MigratePanel` 新增「未完成任务」区块，提示移动任务「已复制但源未删除」并可逐条忽略；⑥ `main.go` 注入 `dataDir/jobs.json`。落盘未复用 `store/atomic.go`：`service→store` 会形成分层倒置（技术策略一致，已在 `architecture.md` 记录） |
 
+### J. 2026-09-16 P2 加固修复（第一批）
+
+> 来源：[`ASSESSMENT.md`](ASSESSMENT.md) §二 L1/L2、§二 S2、§二 M4/M6。对应 todolist #17（部分）/ #18（部分）/ #20 / #23（部分）。
+
+| # | 项 | 状态 | 修复内容 |
+|---|----|------|----------|
+| P2-1 | 预签名错误被吞（L1） | ✅ | `objects.go` 三处 + `multipart.go` 一处 `u, _ := client.PresignXxx(...)` → 统一 `writePresignResult`，失败 500 而非 `200 {"url":""}`；新增源码级门禁 `TestPresignErrorsNotSwallowed`（逐行剔除注释后匹配，回退即失败） |
+| P2-2 | 流式传输错误被静默吞（S2） | ✅ | `copyStream` 返回 `(int64, error)`；`recordStreamOutcome` 区分「真实中断」（Warn + `s3c_stream_interrupted_total`）与「客户端主动断开」（Debug，不计数） |
+| P2-3 | JobRegistry 无总上限（M4） | ✅ | 新增 `TryCreate` + `ErrTooManyJobs`；上限 `maxJobs = 256` 只统计未终结任务（避免恢复的 interrupted 任务永久占满）；4 个异步端点超限返回 503 并释放 ctx；`Create` 保持原签名 |
+| P2-4 | TLS 前置无 HSTS / Permissions-Policy（M6） | ✅ | TLS 示例配置补 `Strict-Transport-Security`（180 天）+ `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort） |
+
+**未纳入本轮**（评估为需更大改动或属行为变更）：
+- **Argon2 `t=1` → `t≥2`**：加密文件格式只存 `S3C2` magic + salt，**不存 KDF 参数**。直接改 `argonTime` 会让所有既有 `accounts.json.enc` / `accounts.db` 无法解密。需先引入带参数的新格式版本（如 `S3C3`）并实现双版本读取迁移，属独立工作项。
+- **`/api/health` 移除 `version`**：前端不消费该字段，但移除会改变既有响应契约（`accounts_test.go` 已断言其存在）。保留是运维定位版本的实际需要，且该端点通常位于内网或鉴权之后。
+- **compose 默认改 encrypted**：会改变默认部署行为并涉及密钥管理（`S3C_STORE_KEY` 分发），需配套部署文档与升级说明。
+
 ---
 
 ## 三、质量与覆盖率现状

@@ -99,7 +99,7 @@ curl http://127.0.0.1:8080/api/health
 
 ### 6.3 指标
 
-`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数、uptime、goroutine、内存与 `s3c_build_info`。
+`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_stream_interrupted_total`（流式传输中断计数）。后者用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
 
 ### 6.4 升级
 

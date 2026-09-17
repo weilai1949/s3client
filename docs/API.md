@@ -22,7 +22,7 @@ GET /api/health
 ```
 GET /api/metrics
 ```
-Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存与 `s3c_build_info`。
+Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_stream_interrupted_total`（流式传输在完成前中断的次数：上游读失败 / 写超时 / 客户端断开）。
 
 ## 账号
 
