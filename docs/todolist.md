@@ -7,7 +7,7 @@
 >
 > 状态图例：⬜ 待办 · ⏳ 已排期 / 进行中 · ✅ 已完成 · ➖ 已决策（不做 / 维持现状）
 >
-> 最后更新：2026-09-16
+> 最后更新：2026-09-17
 
 ## 目录
 
@@ -75,7 +75,7 @@
 | 20 | ~~流式传输错误被静默吞（`copyStream` 忽略 `io.Copy` 返回值），大文件下载中断无日志/指标~~ | ASSESSMENT S2 / SRE 审查 | ✅ | 已修复：`copyStream` 返回 `(int64, error)`，`recordStreamOutcome` 对真实中断记 Warn + `s3c_stream_interrupted_total`；客户端主动断开仅 Debug、不计入指标 |
 | 21 | 指标不足：缺 S3 上游延迟/错误分类/存储状态/流字节数；~~compose 未启用 `S3C_LOG_JSON=1`~~ | ASSESSMENT S3/S4 / SRE 审查 | ⏳ | ~~compose 默认结构化日志~~ ✅ 已在 `docker-compose.yml` / `docker-compose.prod.yml` 注入 `S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"`（可设 0 覆盖回纯文本，经 `docker compose config` 验证）；**剩余**：`s3wrap` 层调用耗时/错误/字节 metric |
 | 22 | 前端对后端不可用恢复弱（仅挂载 load 一次，无健康轮询/自动重试）；`useBucketSetting.reload()` 无竞态守卫 | ASSESSMENT S5/S8 / SRE+前端审查 | ⬜ | 健康轮询 + 自动恢复；reload 加 seq/AbortController |
-| 23 | ~~预签名错误被吞（`u, _ :=`，失败返回空 url 的 200）~~；错误消息回显用户输入 | ASSESSMENT L1/L2 / 后端审查 | ⏳ | ~~检查并 500~~ ✅ 已修复（`writePresignResult`，3 处调用点）；新增源码级门禁 `TestPresignErrorsNotSwallowed` 防复发；**剩余**：错误消息回显用户输入 |
+| 23 | ~~预签名错误被吞（`u, _ :=`，失败返回空 url 的 200）~~；错误消息回显用户输入 | ASSESSMENT L1/L2 / 后端审查 | ⏳ | ~~检查并 500~~ ✅ 已修复（`writePresignResult`，3 处调用点）；新增源码级门禁 `TestPresignErrorsNotSwallowed` 防复发；**剩余**：`headers.go:35` 把 `ValidateUserMetadata` 的 `err.Error()` 回传客户端，消息含用户提交的 metadata key，应改固定文案 + 服务端日志 |
 | 24 | ~~3 个 i18n 键被引用但未定义（`objects.toastCopyFailed`/`batchEdit.tagsNeedKey`/`common.working`）~~ | ASSESSMENT L4 / 前端审查 R1 | ✅ | 已补齐 zh/en 定义；新增 `src/i18n/coverage.test.ts` 静态扫描「引用但未定义」的键，防止复发 |
 
 ---
