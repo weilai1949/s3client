@@ -39,6 +39,9 @@ services:
       # 从外部访问需跨域时填写（留空 = 仅 localhost/tauri）
       S3C_CORS_ORIGINS: "${S3C_CORS_ORIGINS:-}"
       S3C_LOG_LEVEL: "${S3C_LOG_LEVEL:-info}"
+      # 结构化日志：容器场景默认开启，便于日志采集器按字段检索（todolist #21）。
+      # 设为 0 可退回纯文本（本地人工阅读更方便）。
+      S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"
     volumes:
       - s3c-data:/data
     depends_on:

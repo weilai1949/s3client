@@ -33,6 +33,8 @@ services:
       S3C_TOKEN: "${S3C_TOKEN:?set S3C_TOKEN}"
       S3C_CORS_ORIGINS: "${S3C_CORS_ORIGINS:-}"
       S3C_LOG_LEVEL: "${S3C_LOG_LEVEL:-info}"
+      # 结构化日志：生产默认开启，便于日志采集器按字段检索（todolist #21）。
+      S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"
     volumes:
       - s3c-data:/data
     deploy:

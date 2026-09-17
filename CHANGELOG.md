@@ -22,6 +22,10 @@
 - **异步任务加上限**：`JobRegistry` 新增在册任务上限（256 个未终结任务），超限时异步端点返回 503 `too many running jobs; retry later`，避免短时间内大量请求持续堆积 goroutine、SSE 订阅与落盘条目。上限只统计未终结任务，因此恢复出的 `interrupted` 历史任务不会永久占满名额。`Create` 保持原签名以不波及 70+ 处调用点，新增 `TryCreate` 供需要感知容量的路径使用。
 - **TLS 站点补齐 HSTS 与 Permissions-Policy**：`deploy/nginx/conf.d/s3clinet-tls.example.conf` 增加 `Strict-Transport-Security`（180 天，暂不带 preload）与 `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort）。这两项只能由 TLS 终止层表达，后端已有的 CSP 等头无法替代。
 
+### P2 加固修复（续）
+- **清理后端死代码**：删除 `ctxReader`（与 `ctxCancelReader` 职责重复且零生产引用）、`batchItemError`（生产零引用；该格式串实际在 `service/batch.go` 内联）、`Client.S3()`（导出但零生产调用，E2E 清理逻辑改用包装层已有的 `DeleteObjectVersion`/`DeleteObject`）。核验后**保留** `isNoSuchBucketSetting`——它有 5 处生产调用，todolist 将其列为死代码属描述有误。覆盖率 99.6%，仍高于 90% 门禁。
+- **compose 默认结构化日志**：`docker-compose.yml` 与 `docker-compose.prod.yml` 注入 `S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"`，容器日志可直接被采集器按字段检索；设 `S3C_LOG_JSON=0` 可退回纯文本。已用 `docker compose config` 验证默认值与覆盖行为。
+
 ### P0 发布阻塞修复（2026-09-16 评估）
 - **OpenAPI 契约与真实 handler 字段级对齐**：`/api/migrate`、`/api/migrate/async` 请求体字段改为 handler 实际解析的 `sourceAccountId` / `sourceBucket` / `sourceKeys` / `targetAccountId` / `targetBucket` / `targetPrefix`（删除此前虚构的 `deleteSource` / `storageClass`）；presign `method` 枚举由 `GET/PUT/DELETE/HEAD` 改为实际支持的 `get/put/post`；delete 请求体移除 handler 不解析的 `versionId`；multipart/part 补上 handler 支持的 `expiresIn`。新增 `TestOpenAPI_ContractRequestBodyMatchesHandlers`，对「注册表 schema ↔ handler DTO」做字段级一致性断言（含 `$ref` 解引用 / enum 检查），补上 routes↔spec 检查覆盖不到的漂移面。
 - **前端 Token 不再明文落 `localStorage`**：`s3c.servers` 只存 `{id,name,base}`；token 单副本按 `s3c.token.<serverId>` 存储（默认 sessionStorage，仅显式开启「跨会话保留」时写 localStorage）。旧版本内嵌 token 首次读取时一次性迁移并回填活动服务器 profile；删除服务器同步清理 per-server token。修复「token 仅 sessionStorage」策略被多服务器列表旁路的问题。

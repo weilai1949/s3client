@@ -488,6 +488,8 @@
 | P2-2 | 流式传输错误被静默吞（S2） | ✅ | `copyStream` 返回 `(int64, error)`；`recordStreamOutcome` 区分「真实中断」（Warn + `s3c_stream_interrupted_total`）与「客户端主动断开」（Debug，不计数） |
 | P2-3 | JobRegistry 无总上限（M4） | ✅ | 新增 `TryCreate` + `ErrTooManyJobs`；上限 `maxJobs = 256` 只统计未终结任务（避免恢复的 interrupted 任务永久占满）；4 个异步端点超限返回 503 并释放 ctx；`Create` 保持原签名 |
 | P2-4 | TLS 前置无 HSTS / Permissions-Policy（M6） | ✅ | TLS 示例配置补 `Strict-Transport-Security`（180 天）+ `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort） |
+| P2-5 | 后端死代码（D1-D4） | ✅ | 删 `ctxReader`（与 `ctxCancelReader` 职责重复、零生产引用）、`batchItemError`（生产零引用）、`Client.S3()`（导出零生产调用，E2E 清理改用已有 `DeleteObjectVersion`/`DeleteObject`）；**`isNoSuchBucketSetting` 经核验有 5 处生产调用，非死代码，保留** |
+| P2-6 | compose 未启用结构化日志（S4） | ✅ | `docker-compose.yml` / `docker-compose.prod.yml` 注入 `S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"`，可设 0 覆盖；`.env.example` 同步说明；经 `docker compose config` 验证默认 1、可覆盖 0 |
 
 **未纳入本轮**（评估为需更大改动或属行为变更）：
 - **Argon2 `t=1` → `t≥2`**：加密文件格式只存 `S3C2` magic + salt，**不存 KDF 参数**。直接改 `argonTime` 会让所有既有 `accounts.json.enc` / `accounts.db` 无法解密。需先引入带参数的新格式版本（如 `S3C3`）并实现双版本读取迁移，属独立工作项。

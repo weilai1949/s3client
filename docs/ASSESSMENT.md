@@ -117,10 +117,10 @@ s3clinet 是一个工程质量**显著高于平均水平**的项目：所有声�
 
 | # | 死代码 | 证据 | 建议 |
 |---|---|---|---|
-| D1 | `ctxReader`（与 `ctxCancelReader` 重复，仅测试引用） | `service/zip.go:186-196` + `gaps_test.go:510-516` | 删除 |
-| D2 | `batchItemError`（生产零引用） | `handler/s3_errors.go:14` | 删除或并入 LastError 逻辑 |
-| D3 | `Client.S3()`（导出但生产零调用，仅测试白盒） | `s3wrap/client.go:172` | 标注或删除 |
-| D4 | `isNoSuchBucketSetting`（纯转发别名） | `bucket_settings.go:11-13` | 内联 |
+| D1 | ~~`ctxReader`（与 `ctxCancelReader` 重复，仅测试引用）~~ ✅ 已删除 | `service/zip.go` + `gaps_test.go` | ~~删除~~ 已删 |
+| D2 | ~~`batchItemError`（生产零引用）~~ ✅ 已删除 | `handler/s3_errors.go` | ~~删除~~ 已删（该格式串实际在 `service/batch.go` 内联，无需并入） |
+| D3 | ~~`Client.S3()`（导出但生产零调用，仅测试白盒）~~ ✅ 已删除 | `s3wrap/client.go` | ~~标注或删除~~ 已删；E2E 清理改用已有 `DeleteObjectVersion`/`DeleteObject` |
+| D4 | ~~`isNoSuchBucketSetting`（纯转发别名）~~ ❌ **误判：实为 5 处生产调用的在用代码**（`bucket_settings.go:34,108,179,253,328`） | `bucket_settings.go:11-13` | ~~内联~~ 保留（内联会重复 5 次 `s3wrap.HasErrorCode` 调用，反而降低可读性） |
 | D5 | endpoint 归一化三份实现（行为不一致） | `s3wrap/client.go:157`、`service/migrate.go:62` | 合并为单一 helper |
 | D6 | `timeOrZero`/`derefString`/`derefInt64`/`boolOrFalse` 跨包重复 | `handler.go:193-205`、`s3wrap/helpers.go`、`s3wrap_dto.go` | 去重 |
 
@@ -156,7 +156,7 @@ s3clinet 是一个工程质量**显著高于平均水平**的项目：所有声�
 | **S1** | **异步任务丢失恢复缺失**：JobRegistry 纯内存、无持久化、无重启恢复；「复制→删源」两阶段可能半途中断且无对账 | `service/job.go:51-56,117-130`、`handler.go:77-81` | 进程重启后进行中的迁移/删除**永久丢失且无痕迹**，可能产生「复制完成但源未删」的中间态 |
 | **S2** | **流式传输错误被静默吞**：`copyStream` 忽略 `io.Copy` 返回值，大文件下载中断无错误日志/指标 | `stream.go:43-47`、`proxy.go:115`、`zip.go:50` | 可观测性黑洞：客户端断连后日志仍显示 200 |
 | S3 | **指标严重不足**：只有 HTTP 计数/uptime/goroutine/内存/build_info；缺 S3 上游延迟、错误率按码分类、存储状态、流字节数 | `metrics.go:41-65` | S3 上游挂掉只能靠 5xx 间接推断 |
-| S4 | compose 未启用结构化日志（`S3C_LOG_JSON=1` 被注释） | `docker-compose.yml:41`、`.env.example:9` | 容器日志难采集检索 |
+| S4 | ~~compose 未启用结构化日志（`S3C_LOG_JSON=1` 被注释）~~ ✅ 已启用 | `docker-compose.yml`、`docker-compose.prod.yml`、`.env.example` | ~~容器日志难采集检索~~ 已注入 `S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"` |
 | S5 | 前端对后端不可用恢复弱：仅挂载时 load 一次，无健康轮询/自动重试 | `App.vue:85-109,166-169` | 后端恢复后需手动刷新 |
 | S6 | ZIP 部分失败无服务端日志，handler 忽略 failKeys/err | `service/zip.go:141-145` | 无法观测 zip 部分失败率 |
 | S7 | 批量操作 SSE 终态检测缺陷：流以 EOF 结束时 Promise 悬挂、`opsBusy` 永不复位、按钮永久禁用（MigratePanel 用另一套正确实现，属复制粘贴分叉） | `useObjectActions.ts:451-474`、`DestDialog.vue:77-99`、`api.ts:630-643` | 复制/移动/删除文件夹操作可永久卡死 |
