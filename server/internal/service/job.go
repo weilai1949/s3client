@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -243,7 +244,39 @@ func (r *JobRegistry) Reap() {
 }
 
 // Create 注册新任务；注入 persister 时立即落盘，使进程随后崩溃仍能恢复出该任务。
+//
+// 保持历史签名（不返回 error）以免波及 70+ 处既有调用点；需要感知容量上限的
+// 调用方请用 TryCreate。
 func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
+	j, err := r.TryCreate(total, cancel)
+	if err != nil {
+		// 仅在调用方未走 TryCreate 时可能发生：给出一个已终结的任务，
+		// 使调用方拿到合法 *Job 而不 panic，且不会真正占用资源。
+		j = &Job{
+			ID:       uuid.NewString(),
+			Created:  time.Now(),
+			Total:    total,
+			progress: JobProgress{Total: total, Status: JobStatusCancelled},
+			done:     true,
+			subs:     make(map[chan JobProgress]struct{}),
+		}
+	}
+	return j
+}
+
+// ErrTooManyJobs 表示在册（未终结）任务数已达上限。
+var ErrTooManyJobs = errors.New("too many running jobs")
+
+// maxJobs 是在册任务上限：每个任务持有 goroutine、SSE 订阅与落盘条目，
+// 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（todolist #17 / ASSESSMENT M4）。
+// 暴露为包级变量以便测试收紧。
+var maxJobs = 256
+
+// TryCreate 在容量允许时注册新任务；超限返回 ErrTooManyJobs 且不产生任何副作用。
+//
+// 上限只统计「未终结」任务：已 done/cancelled/interrupted 的历史任务不应
+// 永久占满名额（否则恢复出的中断任务会让服务再也无法接受新任务）。
+func (r *JobRegistry) TryCreate(total int, cancel context.CancelFunc) (*Job, error) {
 	j := &Job{
 		ID:       uuid.NewString(),
 		Created:  time.Now(),
@@ -257,10 +290,28 @@ func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
 		j.persist = r.persistJobs
 	}
 	r.mu.Lock()
+	if r.runningCountLocked() >= maxJobs {
+		r.mu.Unlock()
+		return nil, ErrTooManyJobs
+	}
 	r.jobs[j.ID] = j
 	r.mu.Unlock()
 	r.persistJobs()
-	return j
+	return j, nil
+}
+
+// runningCountLocked 统计未终结任务数（调用方须持有 r.mu）。
+func (r *JobRegistry) runningCountLocked() int {
+	n := 0
+	for _, j := range r.jobs {
+		j.mu.Lock()
+		done := j.done
+		j.mu.Unlock()
+		if !done {
+			n++
+		}
+	}
+	return n
 }
 
 // Get 按 id 取任务。
@@ -390,4 +441,12 @@ func ResultFromBatch(out BatchResult) JobResult {
 	return JobResult{
 		Migrated: out.OK, Failed: out.Failed, LastError: out.LastError, FailKeys: out.FailKeys,
 	}
+}
+
+// SetMaxJobsForTest 临时调整在册任务上限并返回旧值，仅供测试使用。
+// 生产代码不应调用（上限是编译期常量语义的配置）。
+func SetMaxJobsForTest(n int) int {
+	old := maxJobs
+	maxJobs = n
+	return old
 }

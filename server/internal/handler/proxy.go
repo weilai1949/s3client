@@ -112,7 +112,9 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(http.StatusOK)
 		}
-		copyStream(w, r, out.Body)
+		// 响应头已发出，无法再改状态码；此处只能记录失败以免静默（#20）。
+		n, err := copyStream(w, r, out.Body)
+		h.recordStreamOutcome(r.Context(), bucket, key, n, err)
 
 	default:
 		h.writeErr(w, http.StatusBadRequest, "invalid mode (download|inline|text)")

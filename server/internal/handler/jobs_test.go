@@ -122,3 +122,35 @@ func TestSetJobPersisterReplacesRegistry(t *testing.T) {
 	// 旧注册表已停止：其 reap 循环退出，Stop 幂等不 panic。
 	old.Stop()
 }
+
+// TestNewJobReturns503AtCapacity 在册任务达上限时异步端点返回 503 而非无限接受
+// （todolist #17 / ASSESSMENT M4）。用 ctx 取消状态间接确认 cancel() 被调用，
+// 避免注册失败时泄漏 WithTimeout 定时器。
+func TestNewJobReturns503AtCapacity(t *testing.T) {
+	old := service.SetMaxJobsForTest(1)
+	t.Cleanup(func() { service.SetMaxJobsForTest(old) })
+
+	h, _ := gapStoreHandler(t)
+	t.Cleanup(h.Shutdown)
+
+	// 占满唯一名额。
+	first, ok := h.newJob(httptest.NewRecorder(), 1, func() {})
+	if !ok {
+		t.Fatal("first job should be accepted")
+	}
+
+	// 第二个必须 503，且传入的 cancel 必须已被调用（否则定时器泄漏）。
+	cancelled := false
+	rr := httptest.NewRecorder()
+	job, ok := h.newJob(rr, 1, func() { cancelled = true })
+	if ok || job != nil {
+		t.Fatalf("job=%v ok=%v, want nil/false at capacity", job, ok)
+	}
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503; body=%s", rr.Code, rr.Body)
+	}
+	if !cancelled {
+		t.Error("cancel() must be called when registration fails")
+	}
+	_ = first
+}

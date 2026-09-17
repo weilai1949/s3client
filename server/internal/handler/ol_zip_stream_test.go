@@ -5,7 +5,9 @@ package handler
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -132,5 +134,94 @@ func drainSlots(t *testing.T) {
 		default:
 		}
 		return
+	}
+}
+
+// errReader 在读取时立即返回错误，用于模拟上游读中断。
+type errReader struct{ err error }
+
+func (e *errReader) Read(p []byte) (int, error) { return 0, e.err }
+
+// TestCopyStreamReportsUpstreamError copyStream 必须把上游读错误返回给调用方
+// （此前 `_, _ = io.Copy(...)` 会吞掉，下载中断在日志/指标里无痕迹 —— todolist #20）。
+func TestCopyStreamReportsUpstreamError(t *testing.T) {
+	req := httptest.NewRequest("GET", "/x", nil)
+	rr := httptest.NewRecorder()
+	want := errors.New("upstream read failed")
+
+	n, err := copyStream(rr, req, &errReader{err: want})
+	if !errors.Is(err, want) {
+		t.Fatalf("err = %v, want %v", err, want)
+	}
+	if n != 0 {
+		t.Errorf("bytes = %d, want 0", n)
+	}
+}
+
+// TestCopyStreamReportsBytesOnSuccess 成功路径返回实际字节数且无错误。
+func TestCopyStreamReportsBytesOnSuccess(t *testing.T) {
+	req := httptest.NewRequest("GET", "/x", nil)
+	rr := httptest.NewRecorder()
+
+	n, err := copyStream(rr, req, strings.NewReader("hello"))
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if n != 5 {
+		t.Errorf("bytes = %d, want 5", n)
+	}
+	if rr.Body.String() != "hello" {
+		t.Errorf("body = %q, want hello", rr.Body.String())
+	}
+}
+
+// TestCopyStreamContextCancelIsNotError 客户端断开（ctx 取消）也返回错误，
+// 但错误必须是 ctx.Err()，调用方据此与「真实传输失败」区分、不计入中断指标。
+func TestCopyStreamContextCancelIsNotError(t *testing.T) {
+	req := olCancelReq(t, "GET", "/x", "")
+	rr := httptest.NewRecorder()
+
+	_, err := copyStream(rr, req, strings.NewReader("hello"))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// TestRecordStreamOutcomeCountsRealInterruption 真实中断（ctx 未取消）→ 指标 +1。
+func TestRecordStreamOutcomeCountsRealInterruption(t *testing.T) {
+	h, _ := gapStoreHandler(t)
+	before := metricStreamInterrupted.Load()
+
+	h.recordStreamOutcome(context.Background(), "b", "k", 10, errors.New("read failed"))
+
+	if got := metricStreamInterrupted.Load(); got != before+1 {
+		t.Errorf("metricStreamInterrupted = %d, want %d", got, before+1)
+	}
+}
+
+// TestRecordStreamOutcomeIgnoresClientCancel 客户端主动断开不计入中断指标
+// （否则用户取消下载会污染告警）。
+func TestRecordStreamOutcomeIgnoresClientCancel(t *testing.T) {
+	h, _ := gapStoreHandler(t)
+	before := metricStreamInterrupted.Load()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	h.recordStreamOutcome(ctx, "b", "k", 10, context.Canceled)
+
+	if got := metricStreamInterrupted.Load(); got != before {
+		t.Errorf("metricStreamInterrupted = %d, want unchanged %d", got, before)
+	}
+}
+
+// TestRecordStreamOutcomeNilErrorNoop 无错误时不计数、不记录。
+func TestRecordStreamOutcomeNilErrorNoop(t *testing.T) {
+	h, _ := gapStoreHandler(t)
+	before := metricStreamInterrupted.Load()
+
+	h.recordStreamOutcome(context.Background(), "b", "k", 5, nil)
+
+	if got := metricStreamInterrupted.Load(); got != before {
+		t.Errorf("metricStreamInterrupted = %d, want unchanged %d", got, before)
 	}
 }

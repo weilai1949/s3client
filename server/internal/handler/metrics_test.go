@@ -29,7 +29,7 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		t.Fatalf("status=%d", rr.Code)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"s3c_http_requests_total", "s3c_uptime_seconds", "s3c_build_info"} {
+	for _, want := range []string{"s3c_http_requests_total", "s3c_uptime_seconds", "s3c_build_info", "s3c_stream_interrupted_total"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
 		}

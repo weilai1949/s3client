@@ -15,7 +15,10 @@ var (
 	metricHTTP2xx   atomic.Int64
 	metricHTTP4xx   atomic.Int64
 	metricHTTP5xx   atomic.Int64
-	metricStartedAt = time.Now()
+	// metricStreamInterrupted 统计流式传输在写出完成前中断的次数（上游读失败、
+	// 写超时、客户端断开）。此前这类失败被 io.Copy 的返回值吞掉，无从观测（#20）。
+	metricStreamInterrupted atomic.Int64
+	metricStartedAt         = time.Now()
 )
 
 func init() {
@@ -50,6 +53,9 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "s3c_http_responses_total{class=\"2xx\"} %d\n", metricHTTP2xx.Load())
 	fmt.Fprintf(w, "s3c_http_responses_total{class=\"4xx\"} %d\n", metricHTTP4xx.Load())
 	fmt.Fprintf(w, "s3c_http_responses_total{class=\"5xx\"} %d\n", metricHTTP5xx.Load())
+	fmt.Fprintf(w, "# HELP s3c_stream_interrupted_total Streams interrupted before completion (upstream read failure, write timeout, or client disconnect)\n")
+	fmt.Fprintf(w, "# TYPE s3c_stream_interrupted_total counter\n")
+	fmt.Fprintf(w, "s3c_stream_interrupted_total %d\n", metricStreamInterrupted.Load())
 	fmt.Fprintf(w, "# HELP s3c_uptime_seconds Process uptime in seconds\n")
 	fmt.Fprintf(w, "# TYPE s3c_uptime_seconds gauge\n")
 	fmt.Fprintf(w, "s3c_uptime_seconds %s\n", strconv.FormatInt(int64(time.Since(metricStartedAt).Seconds()), 10))

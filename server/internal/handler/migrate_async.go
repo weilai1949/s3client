@@ -21,7 +21,10 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), migrateJobTimeout)
-	job := h.migrateJobs.Create(len(req.SourceKeys), cancel)
+	job, ok := h.newJob(w, len(req.SourceKeys), cancel)
+	if !ok {
+		return
+	}
 	sameEP := service.SameEndpoint(src.Endpoint, src.Region, dst.Endpoint, dst.Region)
 	go func() {
 		defer cancel()

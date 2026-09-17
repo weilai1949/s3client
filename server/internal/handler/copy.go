@@ -151,7 +151,10 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 		pairs = append(pairs, [2]string{k, service.BaseKey(k, req.TargetPrefix)})
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), migrateJobTimeout)
-	job := h.migrateJobs.Create(len(pairs), cancel)
+	job, ok := h.newJob(w, len(pairs), cancel)
+	if !ok {
+		return
+	}
 	go func() {
 		defer cancel()
 		var out service.BatchResult
@@ -309,7 +312,10 @@ func (h *Handler) copyPrefixAsync(w http.ResponseWriter, r *http.Request) {
 		pairs = append(pairs, [2]string{k, service.RelKey(k, req.Prefix, req.TargetPrefix)})
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), migrateJobTimeout)
-	job := h.migrateJobs.Create(len(pairs), cancel)
+	job, ok := h.newJob(w, len(pairs), cancel)
+	if !ok {
+		return
+	}
 	go func() {
 		defer cancel()
 		out := service.CopyKeys(ctx, client, bucket, targetBucket, pairs, 4, func(p service.Progress) {
