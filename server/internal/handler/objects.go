@@ -314,7 +314,10 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), migrateJobTimeout)
-	job := h.migrateJobs.Create(len(keys), cancel)
+	job, ok := h.newJob(w, len(keys), cancel)
+	if !ok {
+		return
+	}
 	go func() {
 		defer cancel()
 		deleted, failed := 0, 0
@@ -437,20 +440,21 @@ func (h *Handler) presign(w http.ResponseWriter, r *http.Request) {
 
 	switch strings.ToLower(req.Method) {
 	case "get":
-		// 过期被钳制到 [1h, 24h]，PresignGetVersion 实际不可能失败。
-		u, _ := client.PresignGetVersion(r.Context(), bucket, req.Key, req.VersionID, expires)
-		h.writeJSON(w, http.StatusOK, map[string]any{"method": "get", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
+		u, err := client.PresignGetVersion(r.Context(), bucket, req.Key, req.VersionID, expires)
+		h.writePresignResult(w, err, map[string]any{"method": "get", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
 	case "post":
-		// 过期被钳制到 [1h, 24h]，PresignPost 实际不可能失败。
-		post, _ := client.PresignPost(r.Context(), bucket, req.Key, expires)
-		h.writeJSON(w, http.StatusOK, map[string]any{
-			"method": "post", "bucket": bucket, "key": req.Key,
-			"url": post.URL, "fields": post.Fields, "expiresIn": int64(expires.Seconds()),
-		})
+		post, err := client.PresignPost(r.Context(), bucket, req.Key, expires)
+		var body map[string]any
+		if err == nil {
+			body = map[string]any{
+				"method": "post", "bucket": bucket, "key": req.Key,
+				"url": post.URL, "fields": post.Fields, "expiresIn": int64(expires.Seconds()),
+			}
+		}
+		h.writePresignResult(w, err, body)
 	case "put":
-		// 过期被钳制到 [1h, 24h]，PresignPut 实际不可能失败。
-		u, _ := client.PresignPut(r.Context(), bucket, req.Key, expires)
-		h.writeJSON(w, http.StatusOK, map[string]any{"method": "put", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
+		u, err := client.PresignPut(r.Context(), bucket, req.Key, expires)
+		h.writePresignResult(w, err, map[string]any{"method": "put", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
 	default:
 		h.writeErr(w, http.StatusBadRequest, "invalid method (get|put|post)")
 	}
