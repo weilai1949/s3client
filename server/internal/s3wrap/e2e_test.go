@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
 	"github.com/weilai1949/s3clinet/server/internal/model"
 )
@@ -538,26 +537,24 @@ func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 			break
 		}
 		for _, v := range out.Versions {
-			key, vid := v.Key, v.VersionID
-			if key == "" {
+			if v.Key == "" {
 				continue
 			}
-			in := &s3.DeleteObjectInput{Bucket: &bucket, Key: &key}
-			if vid != "" {
-				in.VersionId = &vid
+			if v.VersionID != "" {
+				_ = c.DeleteObjectVersion(ctx, bucket, v.Key, v.VersionID)
+			} else {
+				_ = c.DeleteObject(ctx, bucket, v.Key)
 			}
-			_, _ = c.S3().DeleteObject(ctx, in)
 		}
 		for _, d := range out.DeleteMarkers {
-			key, vid := d.Key, d.VersionID
-			if key == "" {
+			if d.Key == "" {
 				continue
 			}
-			in := &s3.DeleteObjectInput{Bucket: &bucket, Key: &key}
-			if vid != "" {
-				in.VersionId = &vid
+			if d.VersionID != "" {
+				_ = c.DeleteObjectVersion(ctx, bucket, d.Key, d.VersionID)
+			} else {
+				_ = c.DeleteObject(ctx, bucket, d.Key)
 			}
-			_, _ = c.S3().DeleteObject(ctx, in)
 		}
 	}
 	// 删除当前对象（版本控制下也许有遗漏，再清一遍普通对象）
@@ -565,7 +562,7 @@ func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 	if err == nil {
 		for _, o := range page.Objects {
 			if o.Key != "" {
-				_, _ = c.S3().DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: &bucket, Key: &o.Key})
+				_ = c.DeleteObject(ctx, bucket, o.Key)
 			}
 		}
 	}

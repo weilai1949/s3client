@@ -504,19 +504,6 @@ func TestSanitizeZipNameEdges(t *testing.T) {
 	}
 }
 
-func TestCtxReader(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := (&ctxReader{ctx: ctx, r: strings.NewReader("x")}).Read(make([]byte, 4)); err == nil {
-		t.Fatal("cancelled ctx should error on read")
-	}
-	buf := make([]byte, 2)
-	n, err := (&ctxReader{ctx: context.Background(), r: strings.NewReader("ok")}).Read(buf)
-	if err != nil || string(buf[:n]) != "ok" {
-		t.Fatalf("ctxReader passthrough = %q err=%v", buf[:n], err)
-	}
-}
-
 // failWriter 所有 Write 立即失败：覆盖 zip 头创建失败与 Close 失败兜底。
 type failWriter struct{}
 

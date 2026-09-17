@@ -78,13 +78,13 @@ func TestNewRejectsInvalidAccounts(t *testing.T) {
 	}
 }
 
-// TestNewBuildsUsableClient 合法账号应得到可用的 S3 客户端（高级用法出口 S3()）。
+// TestNewBuildsUsableClient 合法账号应得到已装配底层 SDK 句柄的客户端。
 func TestNewBuildsUsableClient(t *testing.T) {
 	cl, err := New(fakeAccount("http://127.0.0.1:9000"))
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	if cl == nil || cl.S3() == nil {
+	if cl == nil || cl.s3 == nil {
 		t.Fatal("expected non-nil client and SDK handle")
 	}
 }

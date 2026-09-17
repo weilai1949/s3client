@@ -238,7 +238,7 @@ func TestNewWithEmptyRegionFallsBackToDefault(t *testing.T) {
 	c, _ := newFakeS3Account(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), func(a *model.Account) {
 		a.Region = ""
 	})
-	if c == nil || c.S3() == nil {
+	if c == nil || c.s3 == nil {
 		t.Fatal("expected usable client with default region")
 	}
 }

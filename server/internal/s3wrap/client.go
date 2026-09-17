@@ -167,6 +167,3 @@ func normalizeEndpoint(endpoint string, useSSL bool) string {
 	}
 	return scheme + "://" + strings.TrimRight(endpoint, "/")
 }
-
-// S3 returns the underlying SDK client (advanced use).
-func (c *Client) S3() *s3.Client { return c.s3 }

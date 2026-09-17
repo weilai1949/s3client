@@ -41,11 +41,3 @@ func TestS3UserMessage(t *testing.T) {
 		t.Fatalf("unknown = %q", got)
 	}
 }
-
-func TestBatchItemError(t *testing.T) {
-	got := batchItemError("a.txt", fakeAPIError{code: "AccessDenied"})
-	want := "failed at a.txt: access denied"
-	if got != want {
-		t.Fatalf("got %q want %q", got, want)
-	}
-}
