@@ -1,0 +1,4 @@
+# gitlab-ci-local 默认 CLI 选项（cwd 下此文件会被自动加载，见 firecow/gitlab-ci-local README）。
+# 与正式 runner 的 runners.docker.volumes 对齐：docker job 走宿主 daemon，必须挂 socket。
+# 有此文件后无需再手写 --volume /var/run/docker.sock:/var/run/docker.sock。
+VOLUME=/var/run/docker.sock:/var/run/docker.sock

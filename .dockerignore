@@ -2,10 +2,10 @@
 **/dist
 **/target
 **/.git
-server/data
-server/s3clinet-server
-server/*.log
-desktop/src-tauri/gen
-desktop/src-tauri/icons/source.png
+apps/server/data
+apps/server/s3clinet-server
+apps/server/*.log
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/icons/source.png
 .env
 .env.*

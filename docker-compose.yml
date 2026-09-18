@@ -2,7 +2,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: server/Dockerfile
+      dockerfile: apps/server/Dockerfile
       args:
         # 国内网络可覆盖：GOPROXY=https://goproxy.io,direct  NPM_REGISTRY=https://registry.npmmirror.com
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}

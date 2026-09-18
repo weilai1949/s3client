@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'server/internal/s3wrap/**'
-      - 'server/go.mod'
-      - 'server/go.sum'
+      - 'apps/server/internal/s3wrap/**'
+      - 'apps/server/go.mod'
+      - 'apps/server/go.sum'
       - 'docker-compose.yml'
       - '.github/workflows/e2e.yml'
   schedule:
@@ -30,9 +30,9 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: server/go.mod
+          go-version-file: apps/server/go.mod
           cache: true
-          cache-dependency-path: server/go.sum
+          cache-dependency-path: apps/server/go.sum
 
       - name: Prepare .env for compose
         run: |
@@ -54,7 +54,7 @@ jobs:
           exit 1
 
       - name: E2E test
-        working-directory: server
+        working-directory: apps/server
         env:
           S3CLINET_E2E: "1"
           S3CLINET_ENDPOINT: http://127.0.0.1:9000

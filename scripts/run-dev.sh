@@ -20,7 +20,7 @@ done
 
 start_server() {
   graceful_stop server "$(shutdown_timeout)"
-  cd "$ROOT/server"
+  cd "$ROOT/apps/server"
   go mod tidy
   go build -o s3clinet-server .
   if (( USE_NGINX )); then
@@ -38,7 +38,7 @@ start_server() {
 
 start_web() {
   graceful_stop web 15
-  cd "$ROOT/web"
+  cd "$ROOT/apps/web"
   pnpm install --silent
   pnpm dev >>"$RUN_DIR/web.log" 2>&1 &
   write_pid web $!

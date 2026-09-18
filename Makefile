@@ -2,65 +2,81 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0-rc1
 
-.PHONY: server server-build tidy web web-build web-typecheck desktop-dev desktop-build test web-test test-all vet docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status
+.PHONY: server server-build tidy web web-build web-typecheck desktop-dev desktop-build test web-test test-all vet docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+
+# Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
+GCL ?= npx --yes gitlab-ci-local@4.75.1
+GCL_JOBS ?=
+GCL_EXTRA ?=
+
+# 本地跑 GitLab 流水线（docker executor，无需 GitLab 实例）
+gcl-list:
+	$(GCL) --list $(GCL_EXTRA)
+
+gcl:
+	$(GCL) $(GCL_JOBS) $(GCL_EXTRA)
+
+gcl-docker:
+	$(GCL) docker $(GCL_EXTRA)
 
 # Go 后端（构建并运行）
 # 不在每次启动时跑 `go mod tidy`，避免依赖被无意识升级导致开发与 CI 漂移；
 # 依赖更新请显式执行 `make tidy`。
 server:
-	cd server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server . && ./s3clinet-server
+	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server . && ./s3clinet-server
 
 # 显式同步依赖（开发者升级依赖或 PR 触发 CI 前的统一入口）
 tidy:
-	cd server && go mod tidy
+	cd apps/server && go mod tidy
 
 # 构建 Go 二进制（注入版本号）
 server-build:
-	cd server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server .
+	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server .
 
 # Web 前端开发
 web:
-	cd web && pnpm install && pnpm dev
+	cd apps/web && pnpm install && pnpm dev
 
 # 构建 web 产物（含类型检查）
 web-build:
-	cd web && pnpm install && pnpm build
+	cd apps/web && pnpm install && pnpm build
 
 # 前端类型检查
 web-typecheck:
-	cd web && pnpm install && pnpm typecheck
+	cd apps/web && pnpm install && pnpm typecheck
 
 # 桌面端开发（Tauri）
 desktop-dev:
-	cd desktop && pnpm install && pnpm tauri dev
+	cd apps/desktop && pnpm install && pnpm tauri dev
 
 # 打包桌面端
 desktop-build:
-	cd web && pnpm install && pnpm build
-	cd desktop && pnpm install && pnpm tauri build
+	cd apps/web && pnpm install && pnpm build
+	cd apps/desktop && pnpm install && pnpm tauri build
 
 # 后端测试（含 -race，检测数据竞争；CI 亦复用此目标）
 test:
-	cd server && go test -race -count=1 -timeout 600s ./...
+	cd apps/server && go test -race -count=1 -timeout 600s ./...
 
-# 后端测试 + 覆盖率报告
+# 后端测试 + 覆盖率报告（100% 门禁：profile 中任何 count==0 的语句块即失败，与前端同级）
 test-cover:
-	cd server && go test -race -count=1 -timeout 600s -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+	cd apps/server && go test -race -count=1 -timeout 600s -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | tail -1
+	cd apps/server && awk 'NR > 1 && $$NF == 0 { print "uncovered block: " $$0; bad = 1 } END { if (bad) exit 1 }' coverage.out
 
 # 前端单元测试
 web-test:
-	cd web && pnpm install && pnpm test
+	cd apps/web && pnpm install && pnpm test
 
 # 前端单元测试 + 覆盖率（vitest v8）
 web-test-cover:
-	cd web && pnpm install && pnpm test:coverage
+	cd apps/web && pnpm install && pnpm test:coverage
 
 # 后端 + 前端单测
 test-all: test web-test
 
 # 后端静态检查
 vet:
-	cd server && go vet ./...
+	cd apps/server && go vet ./...
 
 # 安装 git pre-commit hook（静态检查：gofmt / go vet / 前端 typecheck）
 install-hooks:
@@ -69,7 +85,7 @@ install-hooks:
 
 # 构建 Docker 镜像（注入版本号）
 docker:
-	docker build -f server/Dockerfile -t s3clinet/server:$(VERSION) --build-arg VERSION=$(VERSION) .
+	docker build -f apps/server/Dockerfile -t s3clinet/server:$(VERSION) --build-arg VERSION=$(VERSION) .
 
 # 一键构建全部
 all: server-build web-build

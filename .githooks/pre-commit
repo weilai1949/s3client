@@ -21,11 +21,11 @@ fi
 
 # 2) Go：vet（增量编译，通常 <5s）
 if [ -n "$GO_FILES" ]; then
-    (cd server && go vet ./...) || fail "go vet 失败"
+    (cd apps/server && go vet ./...) || fail "go vet 失败"
 fi
 
 # 3) 前端：typecheck（仅 web 文件变更时）
-WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^web/' || true)
-if [ -n "$WEB_FILES" ] && [ -f web/package.json ]; then
-    (cd web && pnpm exec vue-tsc --noEmit >/dev/null 2>&1) || fail "前端 typecheck 失败（vue-tsc --noEmit）"
+WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '^apps/web/' || true)
+if [ -n "$WEB_FILES" ] && [ -f apps/web/package.json ]; then
+    (cd apps/web && pnpm exec vue-tsc --noEmit >/dev/null 2>&1) || fail "前端 typecheck 失败（vue-tsc --noEmit）"
 fi

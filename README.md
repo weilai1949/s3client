@@ -52,9 +52,10 @@ S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提�
 ## 目录
 
 ```
-server/      Go 后端（AWS SDK for Go v2）+ 静态托管
-web/         Vue 3 + Vite + TS 前端
-desktop/     Tauri 2 桌面壳（src-tauri，无 IPC）
+apps/
+  server/    Go 后端（AWS SDK for Go v2）+ 静态托管
+  web/       Vue 3 + Vite + TS 前端
+  desktop/   Tauri 2 桌面壳（src-tauri，无 IPC）
 docs/        文档（API 参考等）
 docker-compose.yml   一键起 server + RustFS
 ```
@@ -68,7 +69,7 @@ docker-compose.yml   一键起 server + RustFS
 
 ## 配置（服务端）
 
-所有配置通过环境变量注入，支持 `.env`（见 `server/.env.example`）。  
+所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
 `.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
 | 变量 | 默认值 | 说明 |
@@ -76,7 +77,7 @@ docker-compose.yml   一键起 server + RustFS
 | `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选 |
 | `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080` |
 | `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`） |
-| `S3C_STATIC_DIR` | `./web/dist` | Web 静态资源目录 |
+| `S3C_STATIC_DIR` | `../web/dist` | Web 静态资源目录（相对进程工作目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist`） |
 | `S3C_REGION` | `us-east-1` | 账号缺省 region |
 | `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换（以最短者判定长度） |
 | `S3C_CORS_ORIGINS` | 空 | CORS 白名单；留空=仅同源 + localhost/127.0.0.1/tauri |
@@ -92,7 +93,7 @@ docker-compose.yml   一键起 server + RustFS
 
 ### 方式一：容器部署（Docker）
 
-后端提供多阶段 `server/Dockerfile`，产出**非 root**、带健康检查、数据持久化的镜像。
+后端提供多阶段 `apps/server/Dockerfile`，产出**非 root**、带健康检查、数据持久化的镜像。
 
 ```bash
 # 复制环境变量（必填 S3C_TOKEN / RUSTFS_*）
@@ -106,7 +107,7 @@ docker compose up -d --build
 docker compose -f docker-compose.prod.yml up -d --build
 
 # 仅运行服务端（外部 S3）
-docker build -f server/Dockerfile -t s3clinet/server:v1.0.0-rc1 --build-arg GOPROXY=https://goproxy.io,direct .
+docker build -f apps/server/Dockerfile -t s3clinet/server:v1.0.0-rc1 --build-arg GOPROXY=https://goproxy.io,direct .
 docker run -d --name s3clinet -p 127.0.0.1:8080:8080 -e S3C_TOKEN="$(openssl rand -hex 32)" -v s3c-data:/data s3clinet/server:v1.0.0-rc1
 ```
 
@@ -133,7 +134,7 @@ make stop && make status
 **镜像特性**
 - 非 root 用户 `app` 运行；`/data` 已授权，账号数据持久化到卷。
 - `HEALTHCHECK` 通过 `/s3clinet-server -healthcheck` 自检 `/api/health`。
-- 配置通过 `S3C_*` 环境变量注入（见上表）；中文 `.env.example` 见 `server/.env.example`。
+- 配置通过 `S3C_*` 环境变量注入（见上表）；中文 `.env.example` 见 `apps/server/.env.example`。
 - 构建参数 `GOPROXY` / `NPM_REGISTRY` 可覆盖，便于国内网络。
 
 > ⚠️ **前端直传的端点可达性**：直传使用预签名 URL，其 S3 端点必须能被**浏览器**解析。
@@ -146,15 +147,15 @@ make stop && make status
 ### 方式二：本地
 
 ```bash
-# 1) Go 后端（默认 :8080，托管 web/dist）
-cd server && go run .
+# 1) Go 后端（默认 :8080，托管 apps/web/dist）
+cd apps/server && go run .
 
 # 2) Web 前端（开发）
-cd web && pnpm install && pnpm dev     # 代理 /api → 127.0.0.1:8080
+cd apps/web && pnpm install && pnpm dev     # 代理 /api → 127.0.0.1:8080
 pnpm build                            # 产物 dist/，由 Go 后端托管
 
 # 3) 桌面端（Tauri 2）
-cd desktop && pnpm install
+cd apps/desktop && pnpm install
 pnpm tauri dev
 pnpm tauri build
 ```
@@ -164,10 +165,11 @@ Web 端直接访问 `http://127.0.0.1:8080`（同源）即可。桌面端打开�
 ## 测试
 
 ```bash
-cd server && go test ./...        # 后端单元测试
-cd web && pnpm test                 # 前端单元测试（Vitest）
-cd web && pnpm test:coverage       # 带覆盖率运行：四指标（statements/functions/branches/lines）门槛均为 100%，生成 HTML 报告 web/coverage/index.html 与 lcov.info（已 gitignore，CI 中作为 100% 回归护栏）
-cd web && pnpm typecheck          # 前端类型检查（vue-tsc）
+cd apps/server && go test ./...   # 后端单元测试
+make test-cover                    # 后端覆盖率：100% 门禁（profile 中不允许存在未覆盖语句块）
+cd apps/web && pnpm test          # 前端单元测试（Vitest）
+cd apps/web && pnpm test:coverage # 带覆盖率运行：四指标（statements/functions/branches/lines）门槛均为 100%，生成 HTML 报告 apps/web/coverage/index.html 与 lcov.info（已 gitignore，CI 中作为 100% 回归护栏）
+cd apps/web && pnpm typecheck     # 前端类型检查（vue-tsc）
 ```
 
 一键同步版本号（自 v1.0.0 起的时间戳格式）：
@@ -183,11 +185,21 @@ cd web && pnpm typecheck          # 前端类型检查（vue-tsc）
 真实 RustFS 端到端联调（`s3wrap` E2E，默认指向本地 RustFS，验证建桶/预签名直传/分段上传/复制/标签/版本控制）：
 
 ```bash
-cd server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 # 可选环境变量：S3CLINET_ENDPOINT / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY
 ```
 
 CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/test/build、Web typecheck/build 与 Docker 镜像构建。推送 `v*` tag（或手动 `workflow_dispatch`）时，`.github/workflows/release-desktop.yml` 会在 Windows / Linux / macOS 分别打出 `.exe`（NSIS）、`.deb`、`.dmg`，并挂到该 tag 对应的 [GitHub Release](https://github.com/weilai1949/s3clinet/releases)（Tags 页可看到 Assets）。
+
+同一套门禁（server / web / docker / desktop + RustFS E2E + Playwright E2E）也镜像在 [`.gitlab-ci.yml`](.gitlab-ci.yml)，供 GitLab 侧流水线使用；本地可无 GitLab 实例直接跑：
+
+```bash
+make gcl-list          # 列出 job（pin 的 gitlab-ci-local）
+make gcl GCL_JOBS=web  # 跑单个 job（web / server / rustfs-e2e …）
+make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
+```
+
+两侧对照表与执行器差异（含 Trivy DB 镜像变量）见 [`docs/development.md`](docs/development.md) §3「CI 双平台一致性」。
 
 ## 用到的 S3 SDK for Go v2 接口
 
@@ -196,16 +208,17 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 ## 文档
 
 - [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
-- [REST API 参考](docs/API.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
-- [错误约定](docs/ERRORS.md) — S3 错误 → HTTP 状态映射
-- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
+- [REST API 参考](docs/api.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
+- [功能大全（Features）](docs/features.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
 - [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）
-- [综合评估报告](docs/ASSESSMENT.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
-- [路线图（Roadmap）](ROADMAP.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
-- [安全设计](docs/security.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](SECURITY.md)
+- [综合评估报告](docs/assessment.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
+- [路线图（Roadmap）](docs/roadmap.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
+- [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
 - [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维
 - [开发指南（TDD 优先）](docs/development.md) — 测试规范 / 验收清单 / 技术债
-- [贡献指南](CONTRIBUTING.md) · [行为准则](CODE_OF_CONDUCT.md) · [安全策略](SECURITY.md)
+- [贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md)
+- [AI 代理入口](AGENTS.md) — Agent 工具自动加载的仓库级硬约束（详细规范见 [docs/development.md](docs/development.md)）
 - 配置见上文矩阵。
 
 ## 安全说明
@@ -215,7 +228,7 @@ CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/
 - 默认回环绑定、CORS 白名单、可选 Bearer 鉴权；S3C_TOKEN 短口令（< 16 字符）拒绝启动。
 - `/api/metrics` 默认 404，scrape 需显式 `S3C_EXPOSE_METRICS=1`。
 - 前端 Bearer Token 默认存 sessionStorage（关标签即清）；勾选「跨会话保留」才写 localStorage。
-- 生产部署请参考 [docs/deployment.md](docs/deployment.md) 与 [docs/security.md](docs/security.md)。
+- 生产部署请参考 [docs/deployment.md](docs/deployment.md) 与 [docs/threat-model.md](docs/threat-model.md)。
 
 ## License
 

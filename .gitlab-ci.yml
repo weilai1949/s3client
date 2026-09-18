@@ -1,0 +1,436 @@
+# s3clinet · GitLab CI
+#
+# 与 GitHub Actions **同门禁、同命令**，逐项对应关系：
+#
+#   .github/workflows/ci.yml               → 本文件 stage: ci（server / web / docker / desktop）
+#   .github/workflows/e2e.yml              → 本文件 stage: e2e 的 rustfs-e2e
+#   .github/workflows/e2e-playwright.yml   → 本文件 stage: e2e 的 playwright-e2e
+#   .github/workflows/release-desktop.yml  → 不在本文件镜像（见下方「未镜像项」）
+#
+# 改动任一侧门禁时必须同步另一侧，否则两套 CI 会漂移。对应关系与理由见
+# docs/development.md §3「CI 双平台一致性」。
+#
+# 本地执行（gitlab-ci-local，pin 版本见 Makefile 的 GCL）：
+#   make gcl-list                                    # 列出将要运行的 job
+#   make gcl                                         # 全量
+#   make gcl GCL_JOBS='server web'                   # 指定 job
+#   make gcl GCL_JOBS='--stage ci'                   # 指定 stage
+#   make gcl-docker                                  # docker job（.gitlab-ci-local-env 已挂 socket）
+#   # 国内镜像 / Trivy DB 超时：复制示例变量文件，或一次性传变量
+#   cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
+#   make gcl-docker GCL_EXTRA='--variable TRIVY_DB_REPOSITORY=ghcr.io/aquasecurity/trivy-db:2'
+#
+# `.gitlab-ci-local-env`（已提交）默认 VOLUME=/var/run/docker.sock:...，对齐正式 runner。
+# gitlab-ci-local 用 docker executor 跑 job：项目文件被同步进容器，**未跟踪（untracked）
+# 的文件不会同步**——新增被 job 读取的文件后请先 `git add`，否则本地会与 CI 结果不一致。
+#
+# 未镜像项（有意为之，不是遗漏）：
+#   - release-desktop.yml：发布目标是 GitHub Release（tauri-action + gh release upload），
+#     且需要 Windows/macOS runner 与 GITHUB_TOKEN；GitLab 侧若要做等价物，应改用
+#     GitLab Release + `generic` 包，属独立发版设计而非「CI 一致性」，故不在本文件。
+#     （其中 ci.yml 的 desktop-build 虽仅手动触发，仍照搬为 when: manual，见下方该 job。）
+
+stages:
+  - ci
+  - e2e
+
+workflow:
+  # 对应 GitHub 的 on.push.branches + on.pull_request + on.workflow_dispatch + on.schedule。
+  # 注意：这里只决定「是否建流水线」；「哪些 job 该出现」由各 job 的 rules 决定
+  # （见下方 .ci-trigger / .e2e-*-trigger），因为三套 GitHub workflow 的事件并不相同。
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop")'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    # 其它来源（tag、外部触发等）不建流水线——GitHub 侧同样只在上述四类事件触发。
+    - when: never
+
+default:
+  interruptible: true
+
+variables:
+  # 镜像源可用变量覆盖（本地 gitlab-ci-local / 正式 runner 均可）：
+  #   --variable GOPROXY=https://goproxy.cn,direct
+  #   --variable NPM_REGISTRY=https://registry.npmmirror.com
+  #   --variable TRIVY_DB_REPOSITORY=ghcr.io/aquasecurity/trivy-db:2
+  # 本地亦可把上述键写入 .gitlab-ci-local-variables.yml（见同名 .example；已 gitignore）。
+  GOPROXY: "https://proxy.golang.org,direct"
+  NPM_REGISTRY: "https://registry.npmjs.org"
+  PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
+
+# ---------------------------------------------------------------- 基础模板 ----
+
+# Go 后端各 job 的公共底座：镜像、缓存、before_script（还原依赖）。
+# 对应 GitHub ci.yml 的 actions/setup-go（go-version-file: apps/server/go.mod + 缓存）。
+#
+# 用 Debian 版而非 alpine 版：`go test -race` 需要 cgo（CGO_ENABLED=1）+ C 编译器，
+# alpine 镜像两者都没有，`-race` 会直接报 "requires cgo" 而失败。Debian 镜像自带 gcc，
+# 也与 GitHub 的 ubuntu-latest 运行环境更接近。
+.go-base:
+  image: golang:1.26.6-bookworm
+  variables:
+    GOPATH: "$CI_PROJECT_DIR/.go"
+    GOCACHE: "$CI_PROJECT_DIR/.gocache"
+    CGO_ENABLED: "1"
+  cache:
+    key:
+      files:
+        - apps/server/go.sum
+    paths:
+      - .go/pkg/mod/
+      - .gocache/
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+    - cd apps/server
+    - go mod download
+
+# 前端各 job 的公共底座：镜像、缓存、before_script（安装依赖）。
+# 对应 GitHub ci.yml 的 pnpm/action-setup@v4 + actions/setup-node@v4（node 24 + pnpm 缓存）。
+.web-base:
+  image: node:24-bookworm
+  cache:
+    key:
+      files:
+        - apps/web/pnpm-lock.yaml
+    paths:
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@9.15.0 --activate
+    - pnpm config set store-dir "$PNPM_STORE_DIR"
+    - cd apps/web
+    - pnpm install --frozen-lockfile
+
+# 触发规则模板：GitHub 侧三套 workflow 的事件并不相同，必须逐 job 对齐，
+# 否则 GitLab 会在某类事件上多跑或少跑 job（例如「push 也跑 E2E」或「定时也跑全量构建」）。
+#
+#   ci.yml              → push(main/develop) + pull_request + workflow_dispatch（**无 schedule**）
+#   e2e.yml             → pull_request(paths) + workflow_dispatch + schedule（**无 push**）
+#   e2e-playwright.yml  → pull_request(paths) + workflow_dispatch + schedule（**无 push**）
+#
+# 注：GitHub 的 paths 过滤只在 pull_request 上生效；workflow_dispatch / schedule 一律跑全量。
+# GitLab 的 `changes:` 在非 push/MR 上下文下恒为真，故这里把 web / schedule 显式排在前面，
+# 不依赖该副作用。
+.ci-trigger:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - when: on_success
+
+# desktop-build 专用：GitHub 侧它的条件是 `if: github.event_name == 'workflow_dispatch'`，
+# 即**只在手动触发时存在**（push / PR 流水线里根本没有这个 job）。
+# 对应 GitLab 的 web 源 + when: manual。
+#
+# 注意：一旦 job 写了 `rules:`，job 级的 `when: manual` 会被 rules 覆盖——所以 manual
+# 必须写在 rules 里，否则该 job 会变成自动执行的重负载构建。
+.ci-manual-only-trigger:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - when: never
+
+.e2e-rustfs-trigger:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+      when: on_success
+    - changes:
+        - apps/server/internal/s3wrap/**
+        - apps/server/go.mod
+        - apps/server/go.sum
+        - docker-compose.yml
+        - .gitlab-ci.yml
+      when: on_success
+    - when: never
+
+.e2e-playwright-trigger:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+      when: on_success
+    - changes:
+        - apps/web/**
+        - apps/server/internal/handler/**
+        - .gitlab-ci.yml
+      when: on_success
+    - when: never
+
+# -------------------------------------------------------------------- ci ----
+
+# ← ci.yml job `server`（Go 后端：gofmt / vet / race / cover / build）
+server:
+  extends:
+    - .go-base
+    - .ci-trigger
+  stage: ci
+  timeout: 20 minutes
+  script:
+    # gofmt
+    - |
+      out=$(gofmt -l .)
+      if [ -n "$out" ]; then
+        echo "gofmt needed on:" >&2
+        echo "$out" >&2
+        exit 1
+      fi
+    # Vet
+    - go vet ./...
+    # stdlib 漏洞门禁：Trivy 只扫容器 OS/库，拦不住 Go 标准库 CVE。
+    # govulncheck 基于调用链分析，仅对「代码确实可达」的漏洞失败，版本固定以复现构建。
+    - go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+    - '"$(go env GOPATH)/bin/govulncheck" ./...'
+    # golangci-lint（GitHub 侧用 golangci/golangci-lint-action@v8，版本 v2.13.2）。
+    # 用 `go install` 而非官方 install.sh：后者从 raw.githubusercontent.com 取脚本，
+    # 走 GOPROXY 无法覆盖该域名；go install 与 GOPROXY 同源，镜像/代理配置一处生效。
+    - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+    - '"$(go env GOPATH)/bin/golangci-lint" run --timeout=5m'
+    # Test (race + cover)
+    - go test -race -count=1 -coverprofile=coverage.out ./...
+    - go tool cover -func=coverage.out | tee coverage.txt
+    # 覆盖率 100% 门禁（与前端同级）：直接检查 profile 里是否存在 count==0 的语句块，
+    # 而不是比较 total 百分比——后者只有 1 位小数，99.96% 会被四舍五入显示成 100.0%。
+    - |
+      awk 'NR > 1 && $NF == 0 { print "uncovered block: " $0; bad = 1 } END { if (bad) exit 1 }' coverage.out
+    # Build
+    - go build -ldflags="-X main.version=ci" -o /dev/null .
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - apps/server/coverage.txt
+      - apps/server/coverage.out
+
+# ← ci.yml job `web`（Web 前端：lint / typecheck / test+coverage / build）
+web:
+  extends:
+    - .web-base
+    - .ci-trigger
+  stage: ci
+  timeout: 15 minutes
+  script:
+    - pnpm lint
+    - pnpm typecheck
+    # 覆盖率 100% 门禁：阈值在 apps/web/vite.config.ts 中配置（istanbul，
+    # statements/functions/branches/lines 均为 100%），低于 100% 时非零码退出。
+    - pnpm test:coverage
+    - pnpm build
+  artifacts:
+    # 对应 ci.yml 的 upload-artifact（web-coverage，7 天）
+    when: always
+    expire_in: 7 days
+    paths:
+      - apps/web/coverage/
+
+# ← ci.yml job `docker`（Docker 镜像构建 + Trivy CRITICAL/HIGH 门禁）
+# 走宿主 docker daemon（无 dind）：runner 需把 /var/run/docker.sock 挂进 job 容器，
+# 本仓库部署的 runner 已如此配置；本地由已提交的 `.gitlab-ci-local-env` 默认挂同路径
+# （亦可 `make gcl-docker`）。Trivy 漏洞库默认拉 mirror.gcr.io；不可达时设
+# TRIVY_DB_REPOSITORY（trivy 读该环境变量，无需改 script）。
+docker:
+  extends: .ci-trigger
+  stage: ci
+  timeout: 30 minutes
+  image: docker:29-cli
+  variables:
+    IMAGE_TAG: "s3clinet/server:ci"
+  script:
+    # Build image（对应 docker/build-push-action@v6，push: false；此处未使用 gha 层缓存）
+    - |
+      docker build \
+        --build-arg "GOPROXY=$GOPROXY" \
+        --build-arg "NPM_REGISTRY=$NPM_REGISTRY" \
+        --build-arg "VERSION=ci" \
+        -f apps/server/Dockerfile \
+        -t "$IMAGE_TAG" \
+        .
+    # Trivy image scan（CRITICAL/HIGH 失败门禁）
+    # 用 Trivy 官方镜像（Docker Hub 仓库名是 aquasec/trivy；aquasecurity/trivy 只存在于
+    # ghcr.io，写成后者会因拉不到镜像而以 exit 125 失败——不是扫出了漏洞）。
+    #
+    # 关键：把 trivy 二进制取到 **job 容器内**执行，而不是 `docker run -v "$CI_PROJECT_DIR/..."`。
+    # 因为 $CI_PROJECT_DIR 是 job 容器内的路径，宿主 daemon 看不到它（正式 runner 上
+    # /builds/... 是容器卷，宿主无此路径），挂载 .trivyignore 会以
+    # "ignore file not found" 失败。在 job 容器内执行时，trivy 经挂载的 docker.sock
+    # 访问宿主 daemon 扫描镜像，--ignorefile 则用容器内可见的相对路径。
+    # 二进制来自固定版本镜像，无需额外下载，版本与 GitHub 侧一致。
+    - |
+      cid=$(docker create aquasec/trivy:0.58.1)
+      docker cp "$cid:/usr/local/bin/trivy" /usr/local/bin/trivy
+      docker rm "$cid" >/dev/null
+      trivy image \
+        --severity CRITICAL,HIGH \
+        --vuln-type os,library \
+        --exit-code 1 \
+        --no-progress \
+        --ignore-unfixed \
+        --ignorefile .trivyignore \
+        "$IMAGE_TAG"
+
+# ← ci.yml job `desktop`（Desktop：cargo check）
+desktop:
+  extends: .ci-trigger
+  stage: ci
+  timeout: 30 minutes
+  image: rust:1-bookworm
+  cache:
+    key:
+      files:
+        - apps/desktop/src-tauri/Cargo.lock
+    paths:
+      - .cargo/registry/
+      - apps/desktop/src-tauri/target/
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  before_script:
+    # System deps (webkit/gtk for tauri/wry)，对应 GitHub 的 apt-get install
+    - apt-get update
+    - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+  script:
+    # Placeholder frontendDist for tauri generate_context
+    - mkdir -p apps/web/dist
+    - printf '%s\n' '<!doctype html><title>ci</title>' > apps/web/dist/index.html
+    - cd apps/desktop/src-tauri
+    - cargo check --locked
+
+# ← ci.yml job `desktop-build`（完整 Tauri 链接较重，仅手动触发，不阻塞 PR）
+desktop-build:
+  extends: .ci-manual-only-trigger
+  stage: ci
+  timeout: 60 minutes
+  image: rust:1-bookworm
+  cache:
+    key:
+      files:
+        - apps/desktop/src-tauri/Cargo.lock
+        - apps/web/pnpm-lock.yaml
+    paths:
+      - .cargo/registry/
+      - apps/desktop/src-tauri/target/
+  variables:
+    CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+    PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
+  before_script:
+    - apt-get update
+    - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf curl
+    # Node 24 + pnpm 9.15.0（对应 actions/setup-node@v4 + pnpm/action-setup@v4）
+    - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+    - apt-get install -y nodejs
+    - corepack enable
+    - corepack prepare pnpm@9.15.0 --activate
+  script:
+    # Build web
+    - cd apps/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
+    # Install tauri-cli
+    - cargo install tauri-cli --version "^2" --locked
+    # tauri build --no-bundle
+    - cd apps/desktop
+    - pnpm install --frozen-lockfile
+    - cd src-tauri && cargo tauri build --no-bundle
+
+# ------------------------------------------------------------------- e2e ----
+
+# ← e2e.yml（RustFS 端到端联调）
+# 差异说明：GitHub 侧用 `docker compose up -d rustfs` 起真对端；这里改用 GitLab 的
+# service 容器，避免 CI 里再嵌套 compose。同一镜像、同一端口、同一凭据。
+# GitLab service 的 healthcheck 只认镜像自带 HEALTHCHECK（本镜像没有），所以照搬
+# GitHub 的「轮询 /health 最多 40 次 × 2s」等待逻辑。
+rustfs-e2e:
+  extends:
+    - .go-base
+    - .e2e-rustfs-trigger
+  stage: e2e
+  timeout: 25 minutes
+  services:
+    - name: rustfs/rustfs:1.0.0-rc.3
+      alias: rustfs
+      variables:
+        RUSTFS_VOLUMES: /data
+        RUSTFS_ADDRESS: 0.0.0.0:9000
+        RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+        RUSTFS_CONSOLE_ENABLE: "true"
+        RUSTFS_ACCESS_KEY: rustfsadmin
+        RUSTFS_SECRET_KEY: rustfsadmin
+        RUSTFS_OBS_LOGGER_LEVEL: error
+  variables:
+    # 正式 runner 与 gitlab-ci-local 行为一致：service 是**独立容器**，用别名 + 容器内
+    # 端口 9000 访问（实测 gitlab-ci-local 会把 service 放进同一 docker network 并注册
+    # 别名，`rustfs:9000` 可达，而 `127.0.0.1:9000` **不可达**——不要改成回环地址）。
+    RUSTFS_WAIT_HOST: "rustfs"
+    S3CLINET_E2E: "1"
+    S3CLINET_ENDPOINT: "http://rustfs:9000"
+    S3CLINET_ACCESS_KEY: rustfsadmin
+    S3CLINET_SECRET_KEY: rustfsadmin
+  script:
+    # Wait for RustFS：照搬 GitHub 的「轮询 /health 最多 40 次 × 2s」。
+    # 不依赖 service 的 healthcheck：rustfs 镜像本身没有 HEALTHCHECK（已确认），
+    # 正式 runner 上 GitLab 只认镜像自带 HEALTHCHECK，不会替它探测端口。
+    #
+    # 注意用「置标志位 + break」而不是 GitHub 那样的 `&& exit 0`：GitLab 把整个 script
+    # 拼成一个 shell 脚本执行，`exit 0` 会直接结束**整个 job**，导致下面的 go test 根本
+    # 不执行却报 PASS（GitHub 每个 step 独立，所以那边写法没问题）。末尾的 `exit 1` 仍
+    # 保留——失败时本就该中断 job。
+    - |
+      ready=""
+      for i in $(seq 1 40); do
+        if wget -q -O- "http://${RUSTFS_WAIT_HOST}:9000/health" >/dev/null 2>&1; then
+          ready=1
+          break
+        fi
+        sleep 2
+      done
+      if [ -z "$ready" ]; then
+        echo "RustFS not ready" >&2
+        exit 1
+      fi
+    # E2E test
+    - go test ./internal/s3wrap/ -run 'TestE2E' -v -count=1
+
+# ← e2e-playwright.yml（浏览器侧端到端）
+# 对应 GitHub 的 PLAYWRIGHT_NO_WEBSERVER=1 + CI=1：workflow 显式起 vite preview，
+# playwright.config.ts 不再自拉 webServer。
+playwright-e2e:
+  extends:
+    - .web-base
+    - .e2e-playwright-trigger
+  stage: e2e
+  timeout: 25 minutes
+  variables:
+    PLAYWRIGHT_NO_WEBSERVER: "1"
+    CI: "1"
+  script:
+    - pnpm build
+    # 对应 GitHub 的 `pnpm exec playwright install chromium --with-deps`。
+    # 拆成两步是因为 GitLab 的 script 里不方便传 --with-deps（它等价于先跑 install-deps）；
+    # node:24-bookworm 基于 Debian，apt 源已配置，install-deps 会装齐 chromium 的系统库。
+    - pnpm exec playwright install-deps chromium
+    - pnpm exec playwright install chromium
+    # Start vite preview + 轮询就绪。
+    # 用「置标志位 + break」而不是 GitHub 的 `&& exit 0`：GitLab 把整个 script 拼成一个
+    # shell 脚本，`exit 0` 会结束**整个 job**，后面的 pnpm e2e:ci 不会执行却报 PASS。
+    - |
+      pnpm preview --port 4173 &
+      ready=""
+      for i in $(seq 1 30); do
+        if curl -sf http://127.0.0.1:4173/ >/dev/null; then
+          ready=1
+          break
+        fi
+        sleep 2
+      done
+      if [ -z "$ready" ]; then
+        echo "vite preview not ready" >&2
+        exit 1
+      fi
+    # Run Playwright tests
+    - pnpm e2e:ci
+  artifacts:
+    # 对应 e2e-playwright.yml 的 upload-artifact（playwright-report，失败时上传）
+    when: on_failure
+    expire_in: 7 days
+    paths:
+      - apps/web/playwright-report/
+      - apps/web/test-results/

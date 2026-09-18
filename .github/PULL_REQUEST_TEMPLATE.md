@@ -6,6 +6,9 @@ labels: ''
 assignees: ''
 ---
 
+> 提交前请先读 **[贡献指南](CONTRIBUTING.md)**（分支 / 提交规范 / 开发环境）与 **[开发规范](../docs/development.md)**（TDD 优先 / 门禁 / 验收清单 / Red Flags）。
+> 改动涉及的文档必须与本 PR **同一个提交**同步更新，对照表见 [docs/development.md](../docs/development.md) §4。
+
 ## 变更内容
 
 描述本次变更做了什么、为什么。
@@ -26,7 +29,7 @@ assignees: ''
 ## 门禁（CI 自动检查）
 
 - [ ] `go vet ./...` / `gofmt`
-- [ ] 后端覆盖率 ≥ 90% / 前端 ≥ 100%
+- [ ] 后端覆盖率 100%（`make test-cover`，profile 中不得有 `count==0` 语句块）/ 前端 ≥ 100%
 - [ ] Docker 构建 + Trivy（CRITICAL/HIGH 失败）
 - [ ] Playwright E2E（web 变更时）
 

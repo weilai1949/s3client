@@ -25,36 +25,32 @@ echo "Syncing version: display=$DISPLAY machine=$MACHINE"
 sed -i "s/^VERSION ?= .*/VERSION ?= $DISPLAY/" Makefile
 
 # Go main + Dockerfile ARG
-sed -i "s/var version = \"v[^\"]*\"/var version = \"$DISPLAY\"/" server/main.go
-sed -i "s/^ARG VERSION=.*/ARG VERSION=$DISPLAY/" server/Dockerfile
+sed -i "s/var version = \"v[^\"]*\"/var version = \"$DISPLAY\"/" apps/server/main.go
+sed -i "s/^ARG VERSION=.*/ARG VERSION=$DISPLAY/" apps/server/Dockerfile
 
 # docker-compose image tag
 sed -i "s|image: s3clinet/server:v[^\"]*|image: s3clinet/server:$DISPLAY|" docker-compose.yml
 sed -i "s|S3C_IMAGE_TAG:-v[^}]*}|S3C_IMAGE_TAG:-$DISPLAY}|" docker-compose.prod.yml
 
 # npm / cargo machine semver
-for f in web/package.json desktop/package.json; do
+for f in apps/web/package.json apps/desktop/package.json; do
   sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$MACHINE\"/" "$f"
 done
-sed -i "s/^version = \"[^\"]*\"/version = \"$MACHINE\"/" desktop/src-tauri/Cargo.toml
-sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$MACHINE\"/" desktop/src-tauri/tauri.conf.json
+sed -i "s/^version = \"[^\"]*\"/version = \"$MACHINE\"/" apps/desktop/src-tauri/Cargo.toml
+sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$MACHINE\"/" apps/desktop/src-tauri/tauri.conf.json
 
 # Cargo.lock：本包版本（与 Cargo.toml 对齐）
-if [[ -f desktop/src-tauri/Cargo.lock ]]; then
+if [[ -f apps/desktop/src-tauri/Cargo.lock ]]; then
   # 仅替换 name = "s3clinet-desktop" 或项目包名附近的 version；用宽松匹配本仓库旧版本串
-  sed -i "s/version = \"1\\.0\\.0-[^\"]*\"/version = \"$MACHINE\"/" desktop/src-tauri/Cargo.lock
+  sed -i "s/version = \"1\\.0\\.0-[^\"]*\"/version = \"$MACHINE\"/" apps/desktop/src-tauri/Cargo.lock
 fi
 
 # README docker 镜像 tag
 sed -i "s|s3clinet/server:v[0-9a-zA-Z.-]*|s3clinet/server:$DISPLAY|g" README.md
 sed -i "s/当前版本 \`v1\\.0\\.0-[^\`]*\`/当前版本 \`$DISPLAY\`/" README.md
 
-# docs/API.md health example
-sed -i "s/\"version\":\"v[^\"]*\"/\"version\":\"$DISPLAY\"/" docs/API.md
-
-# agents.md 示例版本（保留格式说明，仅替换「例如」后的字面量）
-sed -i "s/例如 \`v1\\.0\\.0-[^\`]*\`/例如 \`$DISPLAY\`/" agents.md
-sed -i "s/（如 \`1\\.0\\.0-[^\`]*\`）/（如 \`$MACHINE\`）/" agents.md
+# docs/api.md health example
+sed -i "s/\"version\":\"v[^\"]*\"/\"version\":\"$DISPLAY\"/" docs/api.md
 
 echo "Done. Files updated under $ROOT"
 echo "Remember to add a CHANGELOG.md entry for [$DISPLAY]"

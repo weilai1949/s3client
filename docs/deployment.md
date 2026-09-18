@@ -10,7 +10,7 @@
 | Docker Compose（base） | 本地联调（server + RustFS + nginx） | `docker compose up -d` |
 | Docker Compose（prod） | 生产（server + nginx，无 RustFS） | `docker compose -f docker-compose.prod.yml up -d` |
 | Docker Compose（prod + TLS） | 生产 + HTTPS | `docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d` |
-| 本机直接运行 | 开发 / 单机 | `make dev` 或 `cd server && go run .` |
+| 本机直接运行 | 开发 / 单机 | `make dev` 或 `cd apps/server && go run .` |
 | 桌面端 | 桌面 GUI | GitHub Release 安装包（.exe / .deb / .dmg） |
 
 ## 2. 生产部署（推荐）
@@ -33,7 +33,7 @@ S3C_LOG_JSON=1
 ```
 
 > ⚠️ **安全提醒**：`sqlite` 驱动当前将 `secretKey` **明文**落盘；生产请使用 `encrypted` 驱动
-> （AES-256-GCM + Argon2id）或配合磁盘级加密。详见 [security.md](security.md)。
+> （AES-256-GCM + Argon2id）或配合磁盘级加密。详见 [threat-model.md](threat-model.md)。
 
 ### 2.2 生产 compose
 
@@ -67,8 +67,8 @@ make dev            # server(8081) + web(5173)
 make dev-nginx      # 加 nginx(8080)
 
 # 分开跑
-cd server && go run .      # 后端 127.0.0.1:8080
-cd web && pnpm dev         # 前端 5173（Vite 代理到后端）
+cd apps/server && go run .      # 后端 127.0.0.1:8080
+cd apps/web && pnpm dev         # 前端 5173（Vite 代理到后端）
 ```
 
 ## 5. 桌面端分发

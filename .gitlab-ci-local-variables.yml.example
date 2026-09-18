@@ -1,0 +1,13 @@
+---
+# 本地网络拉不到默认镜像源时使用。
+# 复制为会被 gitignore 的本地文件（勿提交真实/个人偏好以外的机密）：
+#   cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
+# 或一次性：
+#   make gcl-docker GCL_EXTRA='--variable TRIVY_DB_REPOSITORY=ghcr.io/aquasecurity/trivy-db:2'
+#
+# 下列值为国内常用替代源；正式 GitLab / GitHub runner 仍用流水线默认值，不受本文件影响。
+
+GOPROXY: "https://goproxy.cn,direct"
+NPM_REGISTRY: "https://registry.npmmirror.com"
+# Trivy 默认 DB 是 mirror.gcr.io/aquasec/trivy-db:2，国内常超时；改走 ghcr 同源库。
+TRIVY_DB_REPOSITORY: "ghcr.io/aquasecurity/trivy-db:2"

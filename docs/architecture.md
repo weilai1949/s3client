@@ -36,22 +36,22 @@ s3clinet 采用 **B/S（Browser/Server）架构 + Tauri 2 桌面壳（无 IPC）
 ## 2. 后端分层
 
 ```
-web/src (Vue 3)
+apps/web/src (Vue 3)
    │  HTTP + JSON
    ▼
-server/internal/handler    HTTP 层：路由、参数校验、错误映射、DTO 转换
+apps/server/internal/handler    HTTP 层：路由、参数校验、错误映射、DTO 转换
    │
    ▼
-server/internal/service    批量/迁移/异步任务/zip 等业务编排
+apps/server/internal/service    批量/迁移/异步任务/zip 等业务编排
    │
    ▼
-server/internal/s3wrap      AWS SDK v2 封装 + SSRF 防护 + 预签名（防腐层）
+apps/server/internal/s3wrap      AWS SDK v2 封装 + SSRF 防护 + 预签名（防腐层）
    │
    ▼
-server/internal/store       账号存储（json / sqlite / encrypted，统一入口）
+apps/server/internal/store       账号存储（json / sqlite / encrypted，统一入口）
    ▲
    │
-server/internal/model        领域模型（Account / AccountView）
+apps/server/internal/model        领域模型（Account / AccountView）
 ```
 
 - **依赖方向**：`handler → service → s3wrap`、`handler/store → model`，无反向依赖、无循环。
@@ -74,7 +74,7 @@ server/internal/model        领域模型（Account / AccountView）
 ## 3. 前端架构
 
 ```
-web/src/
+apps/web/src/
   api.ts             API 客户端 + token 存储 + 多服务器 profile
   store.ts           全局状态（账号 / tab / toast）
   types.ts           与后端契约对齐的类型定义

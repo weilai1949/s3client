@@ -31,7 +31,7 @@ restart_server() {
   local t
   t="$(shutdown_timeout)"
   graceful_stop server "$t"
-  cd "$ROOT/server"
+  cd "$ROOT/apps/server"
   if [[ ! -x ./s3clinet-server ]]; then
     go mod tidy
     go build -o s3clinet-server .
@@ -47,7 +47,7 @@ restart_server() {
 
 restart_web() {
   graceful_stop web 15
-  cd "$ROOT/web"
+  cd "$ROOT/apps/web"
   pnpm dev >>"$RUN_DIR/web.log" 2>&1 &
   write_pid web $!
   wait_http "http://127.0.0.1:1949/" 60
@@ -56,7 +56,7 @@ restart_web() {
 
 restart_desktop() {
   graceful_stop desktop 20
-  cd "$ROOT/desktop"
+  cd "$ROOT/apps/desktop"
   pnpm tauri dev >>"$RUN_DIR/desktop.log" 2>&1 &
   write_pid desktop $!
   echo "[desktop] 已启动 pid=$(read_pid desktop)（日志: $RUN_DIR/desktop.log）"

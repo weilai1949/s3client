@@ -74,8 +74,8 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: |
-            web/pnpm-lock.yaml
-            desktop/pnpm-lock.yaml
+            apps/web/pnpm-lock.yaml
+            apps/desktop/pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
@@ -90,11 +90,11 @@ jobs:
             patchelf
 
       - name: Install web
-        working-directory: web
+        working-directory: apps/web
         run: pnpm install --frozen-lockfile
 
       - name: Install desktop
-        working-directory: desktop
+        working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
 
       - name: Build & upload to GitHub Release
@@ -102,7 +102,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: desktop
+          projectPath: apps/desktop
           tagName: ${{ steps.meta.outputs.tag }}
           releaseName: s3clinet ${{ steps.meta.outputs.tag }}
           releaseBody: |
@@ -126,7 +126,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
         run: |
-          cd desktop/src-tauri/target/release/bundle
+          cd apps/desktop/src-tauri/target/release/bundle
           files=$(find . -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.dmg' -o -name '*.msi' -o -name '*.rpm' -o -name '*.AppImage' \) | sed 's|^\./||')
           if [ -z "$files" ]; then
             echo "no bundle artifacts found" >&2
