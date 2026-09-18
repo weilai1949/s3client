@@ -18,19 +18,20 @@ import (
 
 // Handler 承载 HTTP 接口逻辑。
 type Handler struct {
-	store         store.AccountStore
-	log           *slog.Logger
-	staticDir     string
-	corsOrigins   []string // CORS 白名单；空 = 仅同源 + localhost/tauri
-	tokens        []string // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
-	version       string   // 服务端版本号（ldflags 注入），用于 /api/health 上报
-	exposeMetrics bool     // 是否暴露 /api/metrics（默认 false：404 假装不存在）
-	exposeOpenAPI bool     // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
-	cspConnectSrc string   // CSP connect-src 白名单
-	clients       *clientCache
-	migrateJobs   *service.JobRegistry
-	limiter       *ipLimiter
-	openapi       *openapi.Registry // 路由旁登记；/api/openapi.json 直接复用
+	store          store.AccountStore
+	log            *slog.Logger
+	staticDir      string
+	corsOrigins    []string // CORS 白名单；空 = 仅同源 + localhost/tauri
+	tokens         []string // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
+	version        string   // 服务端版本号（ldflags 注入），用于 /api/health 上报
+	exposeMetrics  bool     // 是否暴露 /api/metrics（默认 false：404 假装不存在）
+	exposeOpenAPI  bool     // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
+	cspConnectSrc  string   // CSP connect-src 白名单
+	trustedProxies []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
+	clients        *clientCache
+	migrateJobs    *service.JobRegistry
+	limiter        *ipLimiter
+	openapi        *openapi.Registry // 路由旁登记；/api/openapi.json 直接复用
 }
 
 // New 构造 handler。token 支持逗号分隔多值（轮换/吊销：去掉旧 token 即可）。
@@ -71,6 +72,13 @@ func (h *Handler) SetCSPConnectSrc(src string) {
 	if src != "" {
 		h.cspConnectSrc = src
 	}
+}
+
+// SetTrustedProxies 设置可信反向代理 IP 列表；仅来自这些对端的
+// X-Forwarded-For 才会被采信（否则回退 RemoteAddr，防直连伪造绕过限速）。
+// 需在 Routes() 前调用；不调用则完全不信任 XFF。
+func (h *Handler) SetTrustedProxies(proxies []string) {
+	h.trustedProxies = proxies
 }
 
 // SetJobPersister 替换任务清单持久化器，并立即按历史清单恢复任务（未完成 → interrupted）。

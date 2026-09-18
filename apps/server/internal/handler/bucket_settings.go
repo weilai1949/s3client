@@ -282,6 +282,7 @@ func (h *Handler) putBucketPolicy(w http.ResponseWriter, r *http.Request) {
 			h.writeInternalErr(w, err, "bucket settings operation failed")
 			return
 		}
+		h.audit(r, auditBucketPolicyClear, "bucket", bucket)
 		h.writeJSON(w, http.StatusOK, map[string]any{"deleted": bucket})
 		return
 	}
@@ -293,6 +294,7 @@ func (h *Handler) putBucketPolicy(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "bucket settings operation failed")
 		return
 	}
+	h.audit(r, auditBucketPolicySet, "bucket", bucket)
 	h.writeJSON(w, http.StatusOK, map[string]any{"configured": true})
 }
 
@@ -309,6 +311,7 @@ func (h *Handler) deleteBucketPolicy(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "bucket settings operation failed")
 		return
 	}
+	h.audit(r, auditBucketPolicyClear, "bucket", bucket)
 	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": bucket})
 }
 

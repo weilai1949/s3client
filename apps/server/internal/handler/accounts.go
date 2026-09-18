@@ -43,6 +43,7 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to create account")
 		return
 	}
+	h.audit(r, auditAccountCreate, "id", created.ID, "name", created.Name)
 	h.writeJSON(w, http.StatusCreated, created.View())
 }
 
@@ -87,6 +88,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.clients.evict(id)
+	h.audit(r, auditAccountUpdate, "id", id)
 	h.writeJSON(w, http.StatusOK, updated.View())
 }
 
@@ -101,6 +103,7 @@ func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.clients.evict(id)
+	h.audit(r, auditAccountDelete, "id", id)
 	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": id})
 }
 

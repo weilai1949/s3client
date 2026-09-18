@@ -147,11 +147,12 @@ func TestGapEncryptedNewErrors(t *testing.T) {
 	}
 }
 
-// writeEnvelope 手工构造 S3C2 信封（salt + AES-GCM(plain)）。
+// writeEnvelope 手工构造 S3C2 旧格式信封（salt + AES-GCM(plain)），
+// 用于验证新代码仍能读取升级前的既有加密库。
 func writeEnvelope(t *testing.T, path, password string, plain []byte, corruptSalt bool) {
 	t.Helper()
 	salt := []byte("0123456789abcdef")
-	key := deriveKey(password, salt)
+	key := deriveKeyLegacy(password, salt)
 	blob, err := encryptAESGCM(key, plain)
 	if err != nil {
 		t.Fatal(err)
@@ -261,7 +262,7 @@ func TestGapAESGCMEdge(t *testing.T) {
 	if _, err := decryptAESGCM([]byte("short"), []byte("xx")); err == nil {
 		t.Fatal("decrypt: 8-byte key must fail")
 	}
-	key := deriveKey("pw", []byte("0123456789abcdef"))
+	key := deriveKeyLegacy("pw", []byte("0123456789abcdef"))
 	if _, err := decryptAESGCM(key, []byte("n")); err == nil || !strings.Contains(err.Error(), "too short") {
 		t.Fatalf("short blob = %v", err)
 	}
@@ -279,7 +280,7 @@ func TestGapAESGCMEdge(t *testing.T) {
 // ---- sqlite：关库错误路径 + 迁移幂等 + openSQLite 失败 ----
 
 func TestGapSQLiteClosedErrors(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +313,7 @@ func TestGapSQLiteClosedErrors(t *testing.T) {
 
 func TestGapSQLiteReopenIdempotentAndCRUD(t *testing.T) {
 	dir := t.TempDir()
-	st1, err := openSQLite(filepath.Join(dir, "accounts.db"))
+	st1, err := openSQLite(filepath.Join(dir, "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +325,7 @@ func TestGapSQLiteReopenIdempotentAndCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 重开：migrate user_version 已 ≥1 → no-op 分支
-	st2, err := openSQLite(filepath.Join(dir, "accounts.db"))
+	st2, err := openSQLite(filepath.Join(dir, "accounts.db"), "")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -369,7 +370,7 @@ func TestGapOpenSQLitePathIsDir(t *testing.T) {
 	if err := os.Mkdir(p, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openSQLite(p); err == nil {
+	if _, err := openSQLite(p, ""); err == nil {
 		t.Fatal("openSQLite on directory must fail (ping error)")
 	}
 }
@@ -492,7 +493,7 @@ func TestGapOpenMkdirAllFails(t *testing.T) {
 
 // TestGapSQLiteTableDroppedErrors DROP TABLE 后各方法必须报错而非伪装成功/NotFound。
 func TestGapSQLiteTableDroppedErrors(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -593,13 +594,13 @@ func TestGapOpenSQLiteMkdirAllFails(t *testing.T) {
 	if err := os.WriteFile(occupied, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openSQLite(filepath.Join(occupied, "sub", "accounts.db")); err == nil {
+	if _, err := openSQLite(filepath.Join(occupied, "sub", "accounts.db"), ""); err == nil {
 		t.Fatal("openSQLite must fail when dir cannot be created")
 	}
 }
 
 func TestGapSQLiteDuplicateIDConstraint(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,7 +621,7 @@ func TestGapSQLiteDuplicateIDConstraint(t *testing.T) {
 }
 
 func TestGapSQLiteScanNullRow(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,7 +747,7 @@ func TestGapEncryptedDeleteSuccess(t *testing.T) {
 
 // TestGapSQLiteUpdatePreservesSecretKey 显式设置非掩码 SecretKey 时应原样保留。
 func TestGapSQLiteUpdatePreservesSecretKey(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,8 +14,15 @@ import (
 // 启动时硬失败（生产推荐 openssl rand -hex 32 / 64）。
 const MinTokenLength = 16
 
+// MinStoreKeyLength 是 S3C_STORE_KEY 允许的最小字符数。该口令是账号密钥落盘加密
+// 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（roadmap #2）。
+const MinStoreKeyLength = 16
+
 // ErrShortToken 表示 S3C_TOKEN 长度低于 MinTokenLength。
 var ErrShortToken = errors.New("S3C_TOKEN too short")
+
+// ErrShortStoreKey 表示 S3C_STORE_KEY 长度低于 MinStoreKeyLength。
+var ErrShortStoreKey = errors.New("S3C_STORE_KEY too short")
 
 // ErrTokenRequiredNonLoopback 表示非回环监听必须设置 S3C_TOKEN。
 var ErrTokenRequiredNonLoopback = errors.New("S3C_TOKEN required for non-loopback listen address")
@@ -92,6 +99,7 @@ type Config struct {
 	ExposeMetrics      bool     // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
 	ExposeOpenAPI      bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
 	CSPConnectSrc      string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
+	TrustedProxies     []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
 }
 
 func envOr(key, def string) string {
@@ -131,6 +139,7 @@ func FromEnv() Config {
 		ExposeMetrics:      envTruthy("S3C_EXPOSE_METRICS"),
 		ExposeOpenAPI:      envTruthy("S3C_EXPOSE_OPENAPI"),
 		CSPConnectSrc:      envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
+		TrustedProxies:     splitList(envOr("S3C_TRUSTED_PROXIES", "")),
 	}
 }
 
@@ -165,7 +174,8 @@ func IsLoopbackAddr(addr string) bool {
 
 // Validate 对配置做安全校验：
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
-//   - 非回环监听必须设置 S3C_TOKEN。
+//   - 非回环监听必须设置 S3C_TOKEN；
+//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，roadmap #2）。
 //
 // 多 token 时以单 token 最短者判定长度。
 func (c Config) Validate() error {
@@ -183,6 +193,9 @@ func (c Config) Validate() error {
 	}
 	if c.Token == "" && !IsLoopbackAddr(c.Addr) {
 		return fmt.Errorf("%w: 监听 %s 必须设置 S3C_TOKEN", ErrTokenRequiredNonLoopback, c.Addr)
+	}
+	if c.StoreKey != "" && len(c.StoreKey) < MinStoreKeyLength {
+		return fmt.Errorf("%w: got %d chars, need >= %d (建议 openssl rand -hex 32)", ErrShortStoreKey, len(c.StoreKey), MinStoreKeyLength)
 	}
 	return nil
 }

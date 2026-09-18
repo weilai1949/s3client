@@ -288,6 +288,11 @@ export const api = {
     return isTauri()
   },
 
+  /** 探测后端健康（/api/health，免鉴权）；用于不可用后的自动恢复轮询。 */
+  health(): Promise<{ status: string; version: string; store?: { ok: boolean } }> {
+    return request<{ status: string; version: string; store?: { ok: boolean } }>('/api/health')
+  },
+
   listServers(): ServerProfile[] {
     return readServers()
   },

@@ -69,6 +69,8 @@ func runServer(ctx context.Context) int {
 
 	h := handler.New(st, logger, cfg.StaticDir, cfg.CORSOrigins, cfg.Token, version, cfg.ExposeMetrics, cfg.ExposeOpenAPI)
 	h.SetCSPConnectSrc(cfg.CSPConnectSrc)
+	// 仅信任显式配置的反向代理 IP 的 X-Forwarded-For（默认不信任，防直连伪造绕过限速）。
+	h.SetTrustedProxies(cfg.TrustedProxies)
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
 	// 「复制成功但源未删除」的移动任务（todolist #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))

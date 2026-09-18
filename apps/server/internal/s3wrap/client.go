@@ -96,10 +96,18 @@ func newS3FromConfig(cfg aws.Config, acc *model.Account, endpoint string) *s3.Cl
 		o.UsePathStyle = acc.PathStyle
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
-		o.APIOptions = append(o.APIOptions, func(stack *middleware.Stack) error {
-			return stack.Finalize.Insert(&unsignedPayloadSetter{}, "ResolveEndpointV2", middleware.After)
-		})
+		o.APIOptions = append(o.APIOptions, registerMiddlewares)
 	})
+}
+
+// registerMiddlewares 在 smithy 栈上注册本项目的中间件：
+//   - unsignedPayloadSetter 置于 ResolveEndpointV2 之后（注入 UNSIGNED-PAYLOAD）；
+//   - metricsMiddleware 置于 Finalize 最外层（覆盖每次 S3 调用，含传输错误）。
+func registerMiddlewares(stack *middleware.Stack) error {
+	if err := stack.Finalize.Insert(&unsignedPayloadSetter{}, "ResolveEndpointV2", middleware.After); err != nil {
+		return err
+	}
+	return stack.Finalize.Add(&metricsMiddleware{}, middleware.Before)
 }
 
 const unsignedPayload = "UNSIGNED-PAYLOAD"

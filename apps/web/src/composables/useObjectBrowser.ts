@@ -78,6 +78,21 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   const fileObjects = computed(() => objects.value.filter((o) => !o.isDir))
   const allSelected = computed(() => fileObjects.value.length > 0 && selected.value.size === fileObjects.value.length)
 
+  /** 条目比较器：文件夹恒在前；文件按当前列/方向排序。 */
+  function compareEntries(a: Entry, b: Entry): number {
+    const ra = a.kind === 'folder' ? 0 : 1
+    const rb = b.kind === 'folder' ? 0 : 1
+    if (ra !== rb) return ra - rb
+    if (a.kind === 'folder') return a.name.localeCompare(b.name, undefined, { numeric: true })
+    let r: number
+    if (sortKey.value === 'name') r = a.name.localeCompare(b.name, undefined, { numeric: true })
+    else if (sortKey.value === 'size') r = (a.size ?? 0) - (b.size ?? 0)
+    else r = (a.lastModified ?? '').localeCompare(b.lastModified ?? '')
+    return r * sortDir.value
+  }
+
+  // 单次排序：entries 已按当前列排好（文件夹恒在前），visibleEntries 只做过滤。
+  // 此前 entries 只排文件夹、visibleEntries 再排文件，过滤态下会重复排序（todolist #11）。
   const entries = computed<Entry[]>(() => {
     const folders: Entry[] = commonPrefixes.value.map((p) => ({
       kind: 'folder',
@@ -92,26 +107,14 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
       lastModified: o.lastModified,
       object: o,
     }))
-    folders.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
-    // files 不在此排序：唯一消费方 visibleEntries 总会按 sortKey 重排文件
-    return [...folders, ...files]
+    return [...folders, ...files].sort(compareEntries)
   })
 
-  /* 过滤 + 排序后的可见条目（文件夹恒在前） */
+  /* 过滤后的可见条目：过滤保持 entries 的既有顺序，因此无需二次排序。 */
   const visibleEntries = computed<Entry[]>(() => {
     const kw = filter.value.trim().toLowerCase()
-    const pool = kw ? entries.value.filter((e) => e.name.toLowerCase().includes(kw)) : entries.value
-    const dirs = pool.filter((e) => e.kind === 'folder')
-    const files = pool.filter((e) => e.kind === 'file')
-    const cmp = (a: Entry, b: Entry): number => {
-      let r: number
-      if (sortKey.value === 'name') r = a.name.localeCompare(b.name, undefined, { numeric: true })
-      else if (sortKey.value === 'size') r = (a.size ?? 0) - (b.size ?? 0)
-      else r = (a.lastModified ?? '').localeCompare(b.lastModified ?? '')
-      return r * sortDir.value
-    }
-    files.sort(cmp)
-    return [...dirs, ...files]
+    if (!kw) return entries.value
+    return entries.value.filter((e) => e.name.toLowerCase().includes(kw))
   })
 
   const filterActive = computed(() => filter.value.trim() !== '')

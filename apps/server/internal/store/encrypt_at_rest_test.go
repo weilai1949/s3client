@@ -15,15 +15,15 @@ func setStoreKey(t *testing.T, key string) {
 	t.Setenv("S3C_STORE_KEY", key)
 }
 
-// assertEncryptedFile 断言 path 的磁盘内容以 S3C2 魔数开头。
+// assertEncryptedFile 断言 path 的磁盘内容以受支持的加密魔数（S3C2/S3C3）开头。
 func assertEncryptedFile(t *testing.T, path string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	if len(raw) < 4 || string(raw[:4]) != string(encMagicV2) {
-		t.Fatalf("file %s should start with S3C2 magic, got %q", path, raw)
+	if !isEncryptedBlob(raw) {
+		t.Fatalf("file %s should start with an encrypted magic, got %q", path, raw)
 	}
 }
 
@@ -34,8 +34,8 @@ func assertPlaintextFile(t *testing.T, path string) {
 	if err != nil {
 		t.Fatalf("read %s: %v", path, err)
 	}
-	if strings.HasPrefix(string(raw), string(encMagicV2)) {
-		t.Fatalf("file %s should be plaintext JSON, got S3C2 header", path)
+	if isEncryptedBlob(raw) {
+		t.Fatalf("file %s should be plaintext JSON, got encrypted header", path)
 	}
 }
 
@@ -241,7 +241,7 @@ func TestStorePersistPlaintextOnDisk(t *testing.T) {
 // getLocked(SELECT) 成功但 UPDATE 失败：BEFORE UPDATE 触发器 RAISE(FAIL)，
 // 使 Exec 返回错误，命中 Update 的「sqlite update」错误分支。
 func TestSQLiteUpdateExecError(t *testing.T) {
-	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"))
+	st, err := openSQLite(filepath.Join(t.TempDir(), "accounts.db"), "")
 	if err != nil {
 		t.Fatal(err)
 	}

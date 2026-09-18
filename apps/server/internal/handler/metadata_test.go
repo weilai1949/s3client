@@ -491,20 +491,27 @@ func TestSetHeadersInvalidUserMetadata400(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	longKey := strings.Repeat("k", 200)
+	longVal := strings.Repeat("v", 300)
 	cases := []struct {
 		name string
 		body string
+		// echo 是绝不应出现在响应体中的用户输入片段（错误文案不回显用户输入，L2）。
+		echo string
 	}{
-		{"empty key", `{"key":"a","metadata":{"":"v"}}`},
-		{"non-ascii key", `{"key":"a","metadata":{"环境":"v"}}`},
-		{"key too long", `{"key":"a","metadata":{"` + strings.Repeat("k", 200) + `":"v"}}`},
-		{"value too long", `{"key":"a","metadata":{"k":"` + strings.Repeat("v", 300) + `"}}`},
+		{"empty key", `{"key":"a","metadata":{"":"v"}}`, ""},
+		{"non-ascii key", `{"key":"a","metadata":{"环境":"v"}}`, "环境"},
+		{"key too long", `{"key":"a","metadata":{"` + longKey + `":"v"}}`, longKey},
+		{"value too long", `{"key":"a","metadata":{"k":"` + longVal + `"}}`, longVal},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			rr := doJSON(t, h, "POST", "/api/accounts/"+acc.ID+"/set-headers", c.body)
 			if rr.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400; body = %s", rr.Code, rr.Body.String())
+			}
+			if c.echo != "" && strings.Contains(rr.Body.String(), c.echo) {
+				t.Fatalf("response echoes user input %q: %s", c.echo, rr.Body.String())
 			}
 		})
 	}

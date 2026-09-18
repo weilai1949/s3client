@@ -29,7 +29,12 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		t.Fatalf("status=%d", rr.Code)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"s3c_http_requests_total", "s3c_uptime_seconds", "s3c_build_info", "s3c_stream_interrupted_total"} {
+	for _, want := range []string{
+		"s3c_http_requests_total", "s3c_uptime_seconds", "s3c_build_info", "s3c_stream_interrupted_total",
+		// 上游与 ZIP 可观测性（roadmap #4/#5）。
+		"s3c_s3_calls_total", "s3c_s3_call_duration_seconds_bucket", "s3c_s3_stream_bytes_total",
+		"s3c_zip_partial_failures_total", "s3c_zip_failed_keys_total", "s3c_zip_failed_total",
+	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
 		}

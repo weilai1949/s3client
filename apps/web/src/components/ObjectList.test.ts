@@ -320,4 +320,20 @@ describe('ObjectList', () => {
     const w = mountList({ entries: [file('a.txt')] })
     expect(() => w.unmount()).not.toThrow()
   })
+
+  it('grid 视图窗口化：超过上限时只渲染前 N 项并显示截断提示', () => {
+    const many = Array.from({ length: 350 }, (_, i) => file(`g${String(i).padStart(3, '0')}.txt`))
+    const w = mountList({ bucketView: 'grid', entries: many })
+    expect(w.findAll('.grid-item')).toHaveLength(300)
+    const more = w.find('.grid-more')
+    expect(more.exists()).toBe(true)
+    expect(more.text()).toBe('objects.gridTruncated')
+  })
+
+  it('grid 视图条目在上限内时不显示截断提示', () => {
+    const few = Array.from({ length: 5 }, (_, i) => file(`g${i}.txt`))
+    const w = mountList({ bucketView: 'grid', entries: few })
+    expect(w.findAll('.grid-item')).toHaveLength(5)
+    expect(w.find('.grid-more').exists()).toBe(false)
+  })
 })

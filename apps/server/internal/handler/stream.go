@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
 )
 
 // 流式响应（proxy / download-zip / migrate）并发与写超时保护。
@@ -58,6 +60,10 @@ func copyStream(w http.ResponseWriter, r *http.Request, src io.Reader) (int64, e
 // s3c_stream_interrupted_total 并 Warn；客户端主动断开（ctx 已取消）属正常路径，
 // 仅 Debug，避免用户取消下载就刷出告警（todolist #20）。
 func (h *Handler) recordStreamOutcome(ctx context.Context, bucket, key string, n int64, err error) {
+	if n > 0 {
+		// 成功读出的字节数计入上游流字节指标（roadmap #5）；即使随后写失败也反映已读量。
+		s3wrap.RecordStreamBytes(n)
+	}
 	if err == nil {
 		return
 	}

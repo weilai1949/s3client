@@ -22,7 +22,11 @@ GET /api/health
 ```
 GET /api/metrics
 ```
-Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_stream_interrupted_total`（流式传输在完成前中断的次数：上游读失败 / 写超时 / 客户端断开）。
+Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及：
+- `s3c_stream_interrupted_total`：流式传输在完成前中断的次数（上游读失败 / 写超时 / 客户端断开）。
+- `s3c_s3_calls_total` / `s3c_s3_call_errors_total{code=...}` / `s3c_s3_call_duration_seconds`：S3 上游调用总数、按错误码分类的失败数、耗时直方图（非 API 错误归入 `transport`/`canceled`/`timeout`）。
+- `s3c_s3_stream_bytes_total`：经本服务从 S3 流式读出的字节数。
+- `s3c_zip_partial_failures_total` / `s3c_zip_failed_keys_total` / `s3c_zip_failed_total`：ZIP 打包部分失败次数、失败对象累计数、整体失败次数。
 
 ## 账号
 
@@ -490,7 +494,7 @@ POST /api/accounts/{id}/download-zip
 ```json
 {"bucket":"B(可选)","keys":["a.txt","dir/b.txt"]}
 ```
-服务端流式打包 ZIP（不落盘），响应 `Content-Type: application/zip`；获取失败的对象写入包内 `_下载失败清单.txt`。
+服务端流式打包 ZIP（不落盘），响应 `Content-Type: application/zip`；获取失败的对象写入包内 `_下载失败清单.txt`，同时在服务端记录 Warn 日志并计入 `s3c_zip_partial_failures_total` / `s3c_zip_failed_keys_total`（失败率可观测）。
 
 ### 安全代理（下载 / 预览）
 ```

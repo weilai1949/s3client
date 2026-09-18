@@ -32,8 +32,11 @@ S3C_ADDR=0.0.0.0:8080
 S3C_LOG_JSON=1
 ```
 
-> ⚠️ **安全提醒**：`sqlite` 驱动当前将 `secretKey` **明文**落盘；生产请使用 `encrypted` 驱动
-> （AES-256-GCM + Argon2id）或配合磁盘级加密。详见 [threat-model.md](threat-model.md)。
+> **安全提醒**：`sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时才会把 `secretKey` 加密落盘
+> （AES-256-GCM）；不设 key 即为明文，仅限本地联调。生产推荐 `encrypted` 驱动（整文件加密）
+> 或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，`openssl rand -hex 32`）。
+> 加密文件格式为 S3C3（Argon2id 参数随文件头保存），并兼容读取旧的 S3C2 库。
+> 详见 [threat-model.md](threat-model.md)。
 
 ### 2.2 生产 compose
 

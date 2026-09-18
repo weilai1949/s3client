@@ -31,8 +31,10 @@ func (h *Handler) setHeaders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// user metadata 在 API 边界校验：S3 限制的 key/value/total 长度，避免落到 S3 端以 500 返回。
+	// 详细原因（含用户提交的 key）只进服务端日志，不回显给客户端（L2：错误文案不回显用户输入）。
 	if err := s3wrap.ValidateUserMetadata(req.Metadata); err != nil {
-		h.writeErr(w, http.StatusBadRequest, err.Error())
+		h.log.Debug("invalid user metadata", "err", err, "bucket", bucket, "key", req.Key)
+		h.writeErr(w, http.StatusBadRequest, "invalid user metadata")
 		return
 	}
 	if err := client.CopyObjectWithMeta(r.Context(), bucket, req.Key, bucket, req.Key, req.ContentType, req.Metadata); err != nil {

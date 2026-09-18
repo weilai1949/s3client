@@ -363,6 +363,18 @@ describe('api getter/setter', () => {
 
 // ── request / requestResponse ──────────────────────────────────────────────
 describe('request / requestResponse', () => {
+  it('api.health() 请求 /api/health 并返回解析结果', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ status: 'ok', version: 'v1' })))
+    const { api } = await loadApi()
+    api.base = 'https://s3.example.com'
+    const res = await api.health()
+    expect(res).toEqual({ status: 'ok', version: 'v1' })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      'https://s3.example.com/api/health',
+      expect.objectContaining({ headers: {} }),
+    )
+  })
+
   it('request 成功返回 json', async () => {
     stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
     const { api } = await loadApi()

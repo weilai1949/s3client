@@ -79,5 +79,6 @@ func (h *Handler) purgeTrashObject(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "trash operation failed")
 		return
 	}
+	h.audit(r, auditTrashPurge, "bucket", bucket, "key", req.Key, "deleted", n)
 	h.writeJSON(w, http.StatusOK, map[string]any{"purged": req.Key, "deleted": n})
 }

@@ -96,15 +96,15 @@ func TestAccRateLimiterReapOnOverflow(t *testing.T) {
 	}
 }
 
-// TestAccClientIPNoPort 补测 clientIP：RemoteAddr 无端口时原样返回。
+// TestAccClientIPNoPort 补测 clientIP：RemoteAddr 无端口时原样返回；无可信代理时不信任 XFF。
 func TestAccClientIPNoPort(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.RemoteAddr = "203.0.113.9:5555"
-	if got := clientIP(req); got != "203.0.113.9" {
+	if got := clientIPWithProxies(req, nil); got != "203.0.113.9" {
 		t.Fatalf("clientIP=%q, want 203.0.113.9", got)
 	}
 	req.RemoteAddr = "opaque-addr"
-	if got := clientIP(req); got != "opaque-addr" {
+	if got := clientIPWithProxies(req, nil); got != "opaque-addr" {
 		t.Fatalf("clientIP=%q, want 原样返回", got)
 	}
 }

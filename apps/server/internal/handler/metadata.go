@@ -71,7 +71,9 @@ func (h *Handler) putObjectAcl(w http.ResponseWriter, r *http.Request) {
 	switch req.ACL {
 	case "private", "public-read", "public-read-write", "authenticated-read", "aws-exec-read":
 	default:
-		h.writeErr(w, http.StatusBadRequest, "unsupported acl: "+req.ACL)
+		// 不回显用户提交的 acl（L2）。
+		h.log.Debug("unsupported acl", "acl", req.ACL, "bucket", req.Bucket, "key", req.Key)
+		h.writeErr(w, http.StatusBadRequest, "unsupported acl")
 		return
 	}
 	bucket := req.Bucket
@@ -153,7 +155,9 @@ func (h *Handler) putObjectTags(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, dup := tags[t.Key]; dup {
-			h.writeErr(w, http.StatusBadRequest, "duplicate tag key: "+t.Key)
+			// 不回显用户提交的 tag key（L2）。
+			h.log.Debug("duplicate tag key", "tagKey", t.Key, "key", req.Key)
+			h.writeErr(w, http.StatusBadRequest, "duplicate tag key")
 			return
 		}
 		tags[t.Key] = t.Value
@@ -233,7 +237,9 @@ func (h *Handler) putLifecycle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if seen[rl.ID] {
-			h.writeErr(w, http.StatusBadRequest, "duplicate rule id: "+rl.ID)
+			// 不回显用户提交的规则 id（L2）。
+			h.log.Debug("duplicate rule id", "ruleId", rl.ID, "bucket", bucket)
+			h.writeErr(w, http.StatusBadRequest, "duplicate rule id")
 			return
 		}
 		seen[rl.ID] = true

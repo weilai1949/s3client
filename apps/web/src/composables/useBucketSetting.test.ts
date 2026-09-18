@@ -79,6 +79,33 @@ describe('useBucketSetting', () => {
     resolveFn()
     await first
   })
+
+  it('reload 竞态守卫：慢的旧请求失败不覆盖新请求的结果/错误', async () => {
+    const onError = vi.fn()
+    // 用空桶避免 watch immediate 触发首次加载，从而精确控制两次 reload。
+    const deferreds: { resolve: () => void; reject: (e: Error) => void }[] = []
+    const load = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          deferreds.push({ resolve, reject })
+        }),
+    )
+    const result = useBucketSetting({ bucket: () => '', load, onError })
+
+    const slow = result.reload() // seq=1（旧）
+    const fast = result.reload() // seq=2（新，后发起）
+    expect(deferreds).toHaveLength(2)
+
+    deferreds[1].resolve()
+    await fast
+    expect(result.loading.value).toBe(false)
+
+    // 旧请求随后失败：必须被守卫丢弃，不得上报错误或改动 loading。
+    deferreds[0].reject(new Error('stale failure'))
+    await slow
+    expect(onError).not.toHaveBeenCalled()
+    expect(result.loading.value).toBe(false)
+  })
 })
 
 describe('useBucketSetting watch (host mounted)', () => {

@@ -41,11 +41,29 @@ func (h *Handler) downloadZip(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="objects-%d.zip"`, time.Now().Unix()))
 	beginStreamResponse(w)
 
-	_, _ = service.WriteObjectsZip(r.Context(), func(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	failKeys, zipErr := service.WriteObjectsZip(r.Context(), func(ctx context.Context, key string) (io.ReadCloser, string, error) {
 		out, err := client.GetObjectStream(ctx, bucket, key, "", "")
 		if err != nil {
 			return nil, "", err
 		}
 		return out.Body, out.ContentType, nil
 	}, req.Keys, w)
+	// ZIP 部分失败此前不可观测（失败清单只写进包内，handler 忽略返回值）。
+	// 这里落服务端日志并计入指标，使批量下载失败率可见（roadmap #4 / ASSESSMENT S6）。
+	h.recordZipOutcome(bucket, len(req.Keys), failKeys, zipErr)
+}
+
+// recordZipOutcome 记录一次 ZIP 打包的结果：部分失败与整体失败都留痕。
+func (h *Handler) recordZipOutcome(bucket string, total int, failKeys []string, err error) {
+	if err != nil {
+		metricZipFailed.Add(1)
+		h.log.Error("zip packaging failed", "bucket", bucket, "total", total, "err", err)
+		return
+	}
+	if len(failKeys) == 0 {
+		return
+	}
+	metricZipPartialFailures.Add(1)
+	metricZipFailedKeys.Add(int64(len(failKeys)))
+	h.log.Warn("zip partial failure", "bucket", bucket, "total", total, "failed", len(failKeys), "failedKeys", failKeys)
 }

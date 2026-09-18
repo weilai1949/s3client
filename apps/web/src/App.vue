@@ -8,6 +8,7 @@ import { state, rememberedAccountId, selectAccount, tabRequest, accountFormReque
 import { readTheme, resolvedTheme, cycleTheme, systemThemeTick, type Theme } from './theme'
 import { tabFromHash, setTabHash, onTabHashChange, type TabKey } from './router'
 import { t, cycleLocale, i18nState } from './i18n'
+import { useHealthPoll } from './composables/useHealthPoll'
 import AccountsPanel from './components/AccountsPanel.vue'
 import ObjectsPanel from './components/ObjectsPanel.vue'
 import UploadPanel from './components/UploadPanel.vue'
@@ -98,6 +99,8 @@ async function loadAccounts() {
       selectAccount(state.accounts[0]?.id ?? '')
     }
     serverError.value = ''
+    // 后端恢复：停止轮询。
+    healthPoll.stop()
     if (first) {
       const hashTab = tabFromHash()
       tab.value = hashTab ?? (state.accounts.length ? 'objects' : 'accounts')
@@ -105,8 +108,15 @@ async function loadAccounts() {
     }
   } catch (e) {
     serverError.value = toErrorMessage(e)
+    // 后端不可用：开始健康轮询，恢复后自动重载账号并清除错误（roadmap #8）。
+    healthPoll.start()
   }
 }
+
+// 后端不可用后的自动恢复：每 5s 探测一次 /api/health，成功即重新拉取账号。
+const healthPoll = useHealthPoll({
+  onRecover: () => loadAccounts(),
+})
 
 onMounted(loadAccounts)
 

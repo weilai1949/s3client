@@ -63,18 +63,40 @@ func (l *ipLimiter) reapLocked(now time.Time) {
 	}
 }
 
-func clientIP(r *http.Request) string {
-	// 优先 X-Forwarded-For（需信任反向代理），回退 RemoteAddr。
-	// 生产环境应仅信任已知代理 IP，避免 XFF 伪造。
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.Index(xff, ","); i >= 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return strings.TrimSpace(xff)
+// clientIP 按 handler 配置的可信代理列表解析客户端 IP。
+func (h *Handler) clientIP(r *http.Request) string {
+	return clientIPWithProxies(r, h.trustedProxies)
+}
+
+// clientIPWithProxies 解析客户端 IP：仅当直连对端（RemoteAddr）在可信代理列表中时
+// 才采信 X-Forwarded-For 的首段，否则一律回退 RemoteAddr。
+//
+// 为什么不能无条件信任 XFF：直连部署（未过代理）时任何客户端都能伪造该头，
+// 从而为每个请求换一个「IP」绕过限速（roadmap #3 / ASSESSMENT M4）。
+func clientIPWithProxies(r *http.Request, trusted []string) string {
+	remote := remoteHost(r.RemoteAddr)
+	if len(trusted) == 0 {
+		return remote
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	for _, p := range trusted {
+		if p == remote {
+			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+				if i := strings.Index(xff, ","); i >= 0 {
+					return strings.TrimSpace(xff[:i])
+				}
+				return strings.TrimSpace(xff)
+			}
+			return remote
+		}
+	}
+	return remote
+}
+
+// remoteHost 从 RemoteAddr 提取主机部分；无法解析时原样返回。
+func remoteHost(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		return remoteAddr
 	}
 	return host
 }
@@ -93,8 +115,9 @@ func (h *Handler) withRateLimit(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		ip := clientIP(r)
+		ip := h.clientIP(r)
 		if !h.limiter.allow(ip) {
+			h.audit(r, auditRateLimited, "ip", ip)
 			w.Header().Set("Retry-After", "5")
 			h.writeErr(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return

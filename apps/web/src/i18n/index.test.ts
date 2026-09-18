@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { i18nKeyCount, setLocale, t, tf } from './index'
+import { describe, expect, it, vi } from 'vitest'
+import { cycleLocale, i18nKeyCount, locale, setLocale, t, tf } from './index'
 
 describe('i18n', () => {
   it('translates nav keys', () => {
@@ -88,6 +88,8 @@ describe('i18n', () => {
     const en = i18nKeyCount('en-US')
     expect(zh).toBe(en)
     expect(zh).toBeGreaterThanOrEqual(640)
+    // 缺省参数分支：不传 locale 时统计 zh-CN。
+    expect(i18nKeyCount()).toBe(zh)
   })
 
   it('tf replaces placeholders', () => {
@@ -107,6 +109,85 @@ describe('i18n', () => {
         expect(t(key).length).toBeGreaterThan(0)
       }
     }
+    setLocale('zh-CN')
+  })
+
+  // 覆盖率门禁去水分（roadmap #11）：i18n 纳入统计后，这些分支必须有行为断言，
+  // 而非靠排除目录「注水」。
+  it('locale() 反映 setLocale 的当前语言', () => {
+    setLocale('en-US')
+    expect(locale()).toBe('en-US')
+    setLocale('zh-CN')
+    expect(locale()).toBe('zh-CN')
+  })
+
+  it('cycleLocale 在 zh-CN → en-US → zh-CN 之间循环', () => {
+    setLocale('zh-CN')
+    expect(cycleLocale()).toBe('en-US')
+    expect(locale()).toBe('en-US')
+    expect(cycleLocale()).toBe('zh-CN')
+    expect(locale()).toBe('zh-CN')
+  })
+
+  it('t() 对未知 key 回退为 key 本身（缺省兜底分支）', () => {
+    setLocale('zh-CN')
+    expect(t('definitely.not.defined')).toBe('definitely.not.defined')
+    setLocale('en-US')
+    expect(t('definitely.not.defined')).toBe('definitely.not.defined')
+  })
+
+  it('readLocale：localStorage 抛错时回退默认 zh-CN（异常分支）', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('blocked')
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    })
+    vi.resetModules()
+    const mod = await import('./index')
+    expect(mod.locale()).toBe('zh-CN')
+    vi.unstubAllGlobals()
+    vi.resetModules()
+  })
+
+  it('readLocale：localStorage 返回非法值时回退默认 zh-CN（校验分支）', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => 'fr-FR',
+      setItem: () => {},
+      removeItem: () => {},
+    })
+    vi.resetModules()
+    const mod = await import('./index')
+    expect(mod.locale()).toBe('zh-CN')
+    vi.unstubAllGlobals()
+    vi.resetModules()
+  })
+
+  it('readLocale：localStorage 中的合法语言被采用', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => 'en-US',
+      setItem: () => {},
+      removeItem: () => {},
+    })
+    vi.resetModules()
+    const mod = await import('./index')
+    expect(mod.locale()).toBe('en-US')
+    vi.unstubAllGlobals()
+    vi.resetModules()
+  })
+
+  it('setLocale：localStorage 写入抛错被吞掉，内存态仍生效', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('quota')
+      },
+      removeItem: () => {},
+    })
+    setLocale('en-US')
+    expect(locale()).toBe('en-US')
+    vi.unstubAllGlobals()
     setLocale('zh-CN')
   })
 })

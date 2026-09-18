@@ -10,7 +10,7 @@ import (
 func TestSQLiteStoreCRUD(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "accounts.db")
-	s, err := openSQLite(dbPath)
+	s, err := openSQLite(dbPath, "")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

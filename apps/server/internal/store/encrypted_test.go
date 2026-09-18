@@ -31,8 +31,8 @@ func TestEncryptedStoreRoundTrip(t *testing.T) {
 		t.Fatalf("get = %+v err=%v", got, err)
 	}
 	raw, err := os.ReadFile(encPath)
-	if err != nil || len(raw) < 4 || string(raw[:4]) != string(encMagicV2) {
-		t.Fatalf("expected v2 magic header, err=%v len=%d", err, len(raw))
+	if err != nil || !isEncryptedBlob(raw) {
+		t.Fatalf("expected S3C2/S3C3 magic header, err=%v len=%d", err, len(raw))
 	}
 }
 

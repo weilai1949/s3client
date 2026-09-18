@@ -118,7 +118,9 @@ func (h *Handler) changeStorageClass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.StorageClass == "" || !allowedStorageClasses[req.StorageClass] {
-		h.writeErr(w, http.StatusBadRequest, "unsupported storageClass: "+req.StorageClass)
+		// 不回显用户提交的 storageClass（L2）。
+		h.log.Debug("unsupported storageClass", "storageClass", req.StorageClass, "key", req.Key)
+		h.writeErr(w, http.StatusBadRequest, "unsupported storageClass")
 		return
 	}
 	bucket, ok := h.bucketOr(w, acc, req.Bucket)
@@ -252,6 +254,7 @@ func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "delete objects failed")
 		return
 	}
+	h.audit(r, auditObjectsDelete, "bucket", bucket, "count", len(req.Keys))
 	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": len(req.Keys)})
 }
 
@@ -282,6 +285,7 @@ func (h *Handler) deletePrefix(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "delete prefix failed")
 		return
 	}
+	h.audit(r, auditDeletePrefix, "bucket", bucket, "prefix", req.Prefix, "deleted", deleted)
 	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": deleted, "truncated": truncated})
 }
 

@@ -518,6 +518,23 @@
 | L3 | `ObjectList.vue` 未使用的 `visibleCount` prop（D8） | ✅ | 父组件 `ObjectsPanel.vue` 传入、组件内从不读取（空态判断实际用 `totalCount`）。连同父组件绑定与 `ObjectList.test.ts` fixture 一并删除。`ObjectToolbar` 的同名 prop **保留**——真实用于 `{{ visibleCount }}/{{ totalCount }}` 计数展示。**剩余**：grid 视图 `v-for` 全量渲染未窗口化（D8 另一半） |
 | L4 | `.gitignore` 冗余与无关条目 | ✅ | 202 行 → 80 行。删去 28 行与本站技术栈无关的脚手架模板条目（Bower / jspm / Snowpack、Next/Nuxt/Gatsby、SvelteKit、Docusaurus、VitePress、Serverless、FuseBox、DynamoDB、Firebase、Yarn、`.tern-port` 等），并按**实测**（逐条注释该规则后 `git check-ignore` 复查）删除 4 条被通用规则覆盖的冗余项（`apps/server/data/` ← `data/`；`apps/web/node_modules/`、`apps/desktop/node_modules/` ← `node_modules/`；`apps/web/dist/` ← `dist/`）。删除前后 `git status --ignored` 忽略集合逐行比对一致，唯一差异是把过窄的 `.cache/` 收敛为 `.cargo/`（前者会顺带忽略任意层级 `.cache/`，后者才是桌面端构建真实产物；已确认 `.cargo/` 下无可提交的 `config.toml`）。已确认无任何**已跟踪**文件落入新规则 |
 
+### M. 2026-09-17 路线图 v1.0.0 / v1.0.x / v1.1.0 收口（#1–#8、#10、#11）
+
+> 来源：[`roadmap.md`](roadmap.md) 三～五章。除 #12（桌面端签名）外的开放条目全部落地。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | `docs/api.md` 自动化校验 | ✅ | 新增 `handler/api_doc_test.go`：从 `docs/api.md` 解析 `METHOD /api/...` 行，与 `routes.go` 注册表做**双向 diff**（文档多写 / 少写均红灯）。已注入漂移实测两侧变红后还原 |
+| 2 | SQLite 密钥加密 + Argon2 加强 | ✅ | 新加密格式 **S3C3**：`magic + time(4,BE) + memory(4,BE) + threads(1) + salt(16) + ciphertext`，把 KDF 参数写进文件头，读取按文件参数派生 → 可在不影响既有库的前提下调参。`argonTimeV3=2`（OWASP 建议 ≥2）。**双版本读取**：S3C2 旧库（t=1）仍可解。`SQLiteStore` 新增 `storeKey`，`secret_key` 列以 S3C3 密文落盘、读时解密、历史明文行原样兼容；无 key 读密文行显式报错。`config.MinStoreKeyLength = 16` 校验 `S3C_STORE_KEY` |
+| 3 | 安全审计日志 + XFF 可信代理 | ✅ | 新增 `handler/audit.go`：稳定事件常量 + `h.audit(r, event, ...)`，覆盖 401（含 malformed/bad_token 原因）、账号 CRUD、桶策略设置/清除、对象删除/前缀删除、回收站清空、限速命中。`clientIPWithProxies` 仅在直连对端命中 `S3C_TRUSTED_PROXIES` 时才采信 XFF 首段，否则回退 `RemoteAddr`（防伪造 XFF 绕过限速，已有集成用例）。`S3C_TRUSTED_PROXIES` 默认空 |
+| 4 | ZIP 部分失败可见 | ✅ | `zip.go` 不再丢弃 `WriteObjectsZip` 的 `failKeys`：部分失败落 Warn 日志并计入 `s3c_zip_partial_failures_total` / `s3c_zip_failed_keys_total`，整体失败计入 `s3c_zip_failed_total` |
+| 5 | S3 上游指标 | ✅ | 新增 `s3wrap/metrics.go`：smithy `Finalize` 中间件采集调用数、耗时直方图（11 桶）、错误按码分类（API code / `canceled` / `timeout` / `transport`，基数有界）、流字节数。`/api/metrics` 输出 `s3c_s3_*` 系列；`copyStream` 回传字节数计入 `s3c_s3_stream_bytes_total` |
+| 6 | 错误文案不回显用户输入 | ✅ | `headers.go` 的 `ValidateUserMetadata` 错误改为固定文案 + `Debug` 日志（原样回传含用户 key 的错误串）；`metadata.go` / `objects.go` / `multipart.go` 的 `unsupported acl: <值>`、`duplicate tag key`、`unsupported storageClass` 等一并改为固定文案。新增 `error_echo_gate_test.go` 源码级门禁防复发 |
+| 7 | grid 视图窗口化 | ✅ | `ObjectList.vue` 的 grid 分支改为渲染 `gridItems`（上限 300 条），超出时显示截断提示（`objects.gridTruncated`）；列表视图此前已有窗口化 |
+| 8 | 前端健康轮询与自动恢复 | ✅ | 新增 `composables/useHealthPoll.ts`：后端出错后每 5s 探测 `/api/health`，成功即回调 `loadAccounts` 重载并清除错误横幅；未出错时不轮询。`useBucketSetting.reload()` 加 seq 竞态守卫（旧请求的失败/loading 不覆盖新请求） |
+| 10 | `entries` / `visibleEntries` 单次排序 | ✅ | `useObjectBrowser.ts` 抽出 `compareEntries`，`entries` 一次排序（文件夹恒在前），`visibleEntries` 只做过滤、保持顺序，消除过滤态下的重复排序 |
+| 11 | 覆盖率门禁去「注水」 | ✅ | 前端 `vite.config.ts` 不再整体排除 `src/i18n/**`，只排除纯数据模块 `src/i18n/messages/**`；`index.ts` 纳入统计后补齐 `readLocale` 回退/异常、`setLocale` 写入失败、`cycleLocale`、`locale()`、`i18nKeyCount` 缺省参数等行为测试，四指标仍 100%。后端把确实不可达的防御分支删除（`encryptSecret` 的 AES 错误分支、`os.MkdirAll` 冗余判断），改为行为断言而非 gap 测试；`make test-cover` 的 `count==0` 检查归零 |
+
 ---
 
 ## 三、质量与覆盖率现状
@@ -532,8 +549,8 @@
 | `go test -race -count=1 ./...` | 8/8 包通过 |
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 62 文件 / 967 测试全绿（2026-09-17 新增 i18n 反向门禁 1 例） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%** |
+| 前端 `pnpm test` | 63 文件 / 983 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`） |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（~355KB，gzip ~109KB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |

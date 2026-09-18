@@ -351,11 +351,14 @@ func TestJSONDriverEncryptedByteFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if len(raw) < 4+encSaltLen || string(raw[:4]) != string(encMagicV2) {
-		t.Fatalf("missing S3C2 envelope: %q", raw)
+	if len(raw) < 4+4+4+1+encSaltLen || string(raw[:4]) != string(encMagicV3) {
+		t.Fatalf("missing S3C3 envelope: %q", raw)
 	}
-	salt := raw[4 : 4+encSaltLen]
-	plain, err := decryptAESGCM(deriveKey("key-A", salt), raw[4+encSaltLen:])
+	params, salt, ciphertext, err := parseEnvelope(raw)
+	if err != nil {
+		t.Fatalf("parse S3C3 envelope: %v", err)
+	}
+	plain, err := decryptAESGCM(deriveKey("key-A", salt, params), ciphertext)
 	if err != nil {
 		t.Fatalf("envelope does not decrypt with file salt: %v", err)
 	}

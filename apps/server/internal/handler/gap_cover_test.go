@@ -72,17 +72,20 @@ func TestDescNilAndSet(t *testing.T) {
 	}
 }
 
-// clientIP XFF 分支（ratelimit.go 69-73）：带逗号取第一个、无逗号整体 trim。
+// clientIP XFF 分支（ratelimit.go）：可信代理时带逗号取第一个、无逗号整体 trim。
 func TestClientIPXFFBranches(t *testing.T) {
+	trusted := []string{"10.0.0.1"}
 	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
 	r.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
-	if got := clientIP(r); got != "1.2.3.4" {
+	if got := clientIPWithProxies(r, trusted); got != "1.2.3.4" {
 		t.Fatalf("clientIP(comma) = %q, want 1.2.3.4", got)
 	}
 
 	r2 := httptest.NewRequest("GET", "/", nil)
+	r2.RemoteAddr = "10.0.0.1:1234"
 	r2.Header.Set("X-Forwarded-For", "  1.2.3.4  ")
-	if got := clientIP(r2); got != "1.2.3.4" {
+	if got := clientIPWithProxies(r2, trusted); got != "1.2.3.4" {
 		t.Fatalf("clientIP(single) = %q, want 1.2.3.4", got)
 	}
 }

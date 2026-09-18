@@ -16,10 +16,15 @@ import (
 )
 
 // SQLiteStore 基于 SQLite 的账号存储（modernc.org/sqlite，纯 Go 无 CGO）。
+//
+// secret_key 列在 S3C_STORE_KEY 非空时以 AES-256-GCM 密文落盘（S3C3 参数），
+// 空 key 时保持明文（向后兼容既有库与无 key 的本地开发）。读取时按魔数判别，
+// 因此升级前写入的明文行仍可读，写回时自动加密（roadmap #2 / ASSESSMENT M1）。
 type SQLiteStore struct {
-	mu   sync.RWMutex
-	db   *sql.DB
-	path string
+	mu       sync.RWMutex
+	db       *sql.DB
+	path     string
+	storeKey string
 }
 
 const sqliteSchema = `
@@ -41,7 +46,38 @@ CREATE TABLE IF NOT EXISTS accounts (
 CREATE INDEX IF NOT EXISTS idx_accounts_sort ON accounts(sort_order);
 `
 
-func openSQLite(dbPath string) (*SQLiteStore, error) {
+// encryptSecret 在配置了 storeKey 时把明文密钥加密为 S3C3 列值；空 key 原样返回。
+// deriveKey 恒返回 32 字节合法密钥，故 AES-GCM 加密不会失败（无冗余错误分支）。
+func (s *SQLiteStore) encryptSecret(secret string) string {
+	if s.storeKey == "" || secret == "" {
+		return secret
+	}
+	salt := randomSalt()
+	enc, _ := encryptAESGCM(deriveKey(s.storeKey, salt, currentParams), []byte(secret))
+	return string(envelope(encMagicV3, salt, enc))
+}
+
+// decryptSecret 解析库中的 secret_key 列：S3C2/S3C3 密文按 storeKey 解密，
+// 其余（历史明文行）原样返回。密文但缺 key 或密钥不符时返回错误。
+func (s *SQLiteStore) decryptSecret(raw string) (string, error) {
+	if !isEncryptedBlob([]byte(raw)) {
+		return raw, nil
+	}
+	if s.storeKey == "" {
+		return "", errors.New("encrypted secret_key found but S3C_STORE_KEY is not set")
+	}
+	params, salt, ciphertext, err := parseEnvelope([]byte(raw))
+	if err != nil {
+		return "", fmt.Errorf("parse encrypted secret_key: %w", err)
+	}
+	plain, err := decryptAESGCM(deriveKey(s.storeKey, salt, params), ciphertext)
+	if err != nil {
+		return "", fmt.Errorf("decrypt secret_key: %w", err)
+	}
+	return string(plain), nil
+}
+
+func openSQLite(dbPath, storeKey string) (*SQLiteStore, error) {
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return nil, err
 	}
@@ -56,7 +92,7 @@ func openSQLite(dbPath string) (*SQLiteStore, error) {
 	// sqliteSchema/migrateSQLiteSchema 对合法 DSN + 空白文件不会失败（PRAGMA 等于初始值时 no-op）。
 	_, _ = db.Exec(sqliteSchema)
 	_ = migrateSQLiteSchema(db)
-	s := &SQLiteStore{db: db, path: dbPath}
+	s := &SQLiteStore{db: db, path: dbPath, storeKey: storeKey}
 	_ = os.Chmod(dbPath, 0o600)
 	return s, nil
 }
@@ -89,6 +125,13 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	return err
 }
 
+// insertAccount 加密 secret_key 后写入。
+func (s *SQLiteStore) insertAccount(a *model.Account, sortOrder int) error {
+	stored := *a
+	stored.SecretKey = s.encryptSecret(a.SecretKey)
+	return insertAccountExec(s.db, &stored, sortOrder)
+}
+
 func sqliteBool(b bool) int {
 	if b {
 		return 1
@@ -96,7 +139,8 @@ func sqliteBool(b bool) int {
 	return 0
 }
 
-func sqliteScan(row interface{ Scan(...any) error }) (*model.Account, error) {
+// sqliteScan 扫描一行并解密 secret_key（历史明文行原样通过）。
+func (s *SQLiteStore) sqliteScan(row interface{ Scan(...any) error }) (*model.Account, error) {
 	var a model.Account
 	var pathStyle, useSSL int
 	var created, updated string
@@ -106,6 +150,11 @@ func sqliteScan(row interface{ Scan(...any) error }) (*model.Account, error) {
 	); err != nil {
 		return nil, err
 	}
+	secret, err := s.decryptSecret(a.SecretKey)
+	if err != nil {
+		return nil, err
+	}
+	a.SecretKey = secret
 	a.PathStyle = pathStyle != 0
 	a.UseSSL = useSSL != 0
 	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
@@ -130,7 +179,7 @@ func (s *SQLiteStore) List() ([]*model.Account, error) {
 	defer rows.Close()
 	out := make([]*model.Account, 0)
 	for rows.Next() {
-		a, err := sqliteScan(rows)
+		a, err := s.sqliteScan(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan account row: %w", err)
 		}
@@ -152,7 +201,7 @@ func (s *SQLiteStore) Get(id string) (*model.Account, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	row := s.db.QueryRow(`SELECT `+sqliteAccountCols+` FROM accounts WHERE id = ?`, id)
-	a, err := sqliteScan(row)
+	a, err := s.sqliteScan(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -187,7 +236,7 @@ func (s *SQLiteStore) Create(a *model.Account) (*model.Account, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := insertAccountExec(s.db, a, ord); err != nil {
+	if err := s.insertAccount(a, ord); err != nil {
 		return nil, err
 	}
 	return a.Sanitized(), nil
@@ -212,10 +261,11 @@ func (s *SQLiteStore) Update(id string, a *model.Account) (*model.Account, error
 	cur.PathStyle = a.PathStyle
 	cur.UseSSL = a.UseSSL
 	cur.UpdatedAt = time.Now().UTC()
+	secret := s.encryptSecret(cur.SecretKey)
 	if _, err := s.db.Exec(`
 UPDATE accounts SET name=?,endpoint=?,public_endpoint=?,region=?,access_key=?,secret_key=?,bucket=?,path_style=?,use_ssl=?,updated_at=?
 WHERE id=?`,
-		cur.Name, cur.Endpoint, cur.PublicEndpoint, cur.Region, cur.AccessKey, cur.SecretKey, cur.Bucket,
+		cur.Name, cur.Endpoint, cur.PublicEndpoint, cur.Region, cur.AccessKey, secret, cur.Bucket,
 		sqliteBool(cur.PathStyle), sqliteBool(cur.UseSSL), cur.UpdatedAt.UTC().Format(time.RFC3339Nano), id,
 	); err != nil {
 		return nil, fmt.Errorf("sqlite update: %w", err)
@@ -225,7 +275,7 @@ WHERE id=?`,
 
 func (s *SQLiteStore) getLocked(id string) (*model.Account, error) {
 	row := s.db.QueryRow(`SELECT `+sqliteAccountCols+` FROM accounts WHERE id = ?`, id)
-	a, err := sqliteScan(row)
+	a, err := s.sqliteScan(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

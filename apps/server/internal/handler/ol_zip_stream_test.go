@@ -11,8 +11,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
 
 // TestOlZipValidation 打包接口：404 / 非法 JSON / 缺桶 / 超过 1000 keys。
@@ -65,6 +68,60 @@ func TestOlZipPartialFailure(t *testing.T) {
 	if !names["good"] || !names["_下载失败清单.txt"] || names["bad"] {
 		t.Fatalf("zip entries = %v", names)
 	}
+}
+
+// TestOlZipPartialFailureObservable ZIP 部分失败必须在服务端指标中可见（roadmap #4）。
+func TestOlZipPartialFailureObservable(t *testing.T) {
+	beforePartial := metricZipPartialFailures.Load()
+	beforeKeys := metricZipFailedKeys.Load()
+	srv := olFake(t, func(r *http.Request) olResp {
+		if strings.HasSuffix(r.URL.Path, "bad") {
+			return olErr(http.StatusNotFound, "NoSuchKey")
+		}
+		return olResp{status: http.StatusOK, headers: map[string]string{"Content-Type": "text/plain"}, body: "data"}
+	})
+	env := accNewEnv(t, srv.URL, "b")
+	rr := env.accDoRec("POST", "/api/accounts/"+env.acc.ID+"/download-zip", `{"bucket":"b","keys":["good","bad"]}`)
+	olExpectStatus(t, rr, http.StatusOK, "zip partial")
+
+	if got := metricZipPartialFailures.Load() - beforePartial; got != 1 {
+		t.Fatalf("s3c_zip_partial_failures_total delta = %d, want 1", got)
+	}
+	if got := metricZipFailedKeys.Load() - beforeKeys; got != 1 {
+		t.Fatalf("s3c_zip_failed_keys_total delta = %d, want 1", got)
+	}
+}
+
+// TestOlZipAllGoodNoPartialMetric 全部成功时不计入部分失败指标（避免虚假告警）。
+func TestOlZipAllGoodNoPartialMetric(t *testing.T) {
+	beforePartial := metricZipPartialFailures.Load()
+	srv := olFake(t, func(r *http.Request) olResp { return olPlain(http.StatusOK) })
+	env := accNewEnv(t, srv.URL, "b")
+	rr := env.accDoRec("POST", "/api/accounts/"+env.acc.ID+"/download-zip", `{"bucket":"b","keys":["a","b"]}`)
+	olExpectStatus(t, rr, http.StatusOK, "zip all good")
+	if got := metricZipPartialFailures.Load() - beforePartial; got != 0 {
+		t.Fatalf("partial failures delta = %d, want 0", got)
+	}
+}
+
+// TestRecordZipOutcomeFailed 整体失败（zipErr 非空）必须计入 s3c_zip_failed_total 并留错误日志。
+func TestRecordZipOutcomeFailed(t *testing.T) {
+	before := metricZipFailed.Load()
+	h := accNewHandler(t, mustStore(t), nil, "")
+	h.recordZipOutcome("b", 3, nil, errors.New("writer exploded"))
+	if got := metricZipFailed.Load() - before; got != 1 {
+		t.Fatalf("s3c_zip_failed_total delta = %d, want 1", got)
+	}
+}
+
+// mustStore 建一个空的临时文件 store（供只调用内部方法的白盒测试使用）。
+func mustStore(t *testing.T) store.AccountStore {
+	t.Helper()
+	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	return st
 }
 
 // TestOlStreamLimit503 流式并发槽占满 → 503。

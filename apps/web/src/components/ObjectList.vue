@@ -80,6 +80,13 @@ function measureViewport() {
   if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || 480
 }
 
+/* 网格视图窗口化：网格是 CSS grid 自适应列数，无法用固定行高做精确窗口化，
+   因此按「最大渲染条数」设上限：超出部分显示提示条，用户可切列表视图或翻页。
+   这避免 grid 视图对万级条目全量渲染 DOM（todolist #11 / ASSESSMENT D8）。 */
+const GRID_MAX_ITEMS = 300
+const gridItems = computed(() => props.entries.slice(0, GRID_MAX_ITEMS))
+const gridHiddenCount = computed(() => Math.max(0, props.entries.length - GRID_MAX_ITEMS))
+
 let resizeObs: ResizeObserver | undefined
 onMounted(() => {
   measureViewport()
@@ -108,10 +115,10 @@ function iconFor(e: Entry): string {
     <div v-for="i in 6" :key="i" class="skel-row" />
   </div>
 
-  <!-- 网格视图 -->
+  <!-- 网格视图（窗口化：最多渲染 GRID_MAX_ITEMS 个，其余提示） -->
   <div v-else-if="bucketView === 'grid'" class="grid-view">
     <div
-      v-for="e in entries"
+      v-for="e in gridItems"
       :key="e.key"
       class="grid-item"
       :class="{ selected: e.kind === 'file' && selected.has(e.key) }"
@@ -126,6 +133,9 @@ function iconFor(e: Entry): string {
       <div class="gi-icon" aria-hidden="true">{{ e.kind === 'folder' ? '📁' : iconFor(e) }}</div>
       <div class="gi-name" :title="e.key">{{ e.name }}</div>
       <div class="gi-meta">{{ e.kind === 'folder' ? t('objects.folder') : (fmtSize(e.size ?? 0) + (e.object?.storageClass ? ' · ' + e.object.storageClass : '')) }}</div>
+    </div>
+    <div v-if="gridHiddenCount > 0" class="grid-more" style="grid-column:1/-1" role="status">
+      {{ tf('objects.gridTruncated', { shown: gridItems.length, total: entries.length }) }}
     </div>
     <div v-if="!entries.length && !loading" class="empty" style="grid-column:1/-1">
       <span class="empty-icon" aria-hidden="true">{{ filterActive ? '🔍' : '📭' }}</span>
@@ -305,6 +315,12 @@ function iconFor(e: Entry): string {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gi-meta { font-size: 11px; color: var(--muted); }
+.grid-more {
+  padding: 8px 0 2px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
 
 .folder-link {
   display: inline-flex; align-items: center; gap: 8px;

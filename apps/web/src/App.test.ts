@@ -11,6 +11,7 @@ vi.mock('./api', () => ({
   api: {
     isTauri: false,
     getActiveServer: vi.fn(() => undefined),
+    health: vi.fn(async () => ({ status: 'ok', version: 'v1' })),
   },
 }))
 
@@ -114,6 +115,27 @@ describe('App', () => {
     await goto!.trigger('click')
     // switchTab('server') + setTabHash
     w.unmount()
+  })
+
+  it('后端不可用后轮询 /api/health，恢复时自动重载并清除错误（roadmap #8）', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(s3api.listAccounts).mockRejectedValueOnce(new Error('boom'))
+      const w = mountApp()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(w.text()).toContain('conn.fail')
+
+      // 后端恢复：下一次探测成功后重新拉取账号并清掉错误横幅。
+      vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
+      await vi.advanceTimersByTimeAsync(5000)
+      await flushPromises()
+      expect(vi.mocked(api.health)).toHaveBeenCalled()
+      expect(vi.mocked(s3api.listAccounts)).toHaveBeenCalledTimes(2)
+      expect(w.text()).not.toContain('conn.fail')
+      w.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('tab switches via nav, hash listener, tabRequest and accountFormRequest', async () => {

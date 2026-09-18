@@ -26,11 +26,13 @@
 
 | 驱动 | 落盘 | 说明 |
 |---|---|---|
-| `json` | 明文 JSON 或 S3C2 加密 | 配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id；permissive 兼容读旧明文 |
-| `sqlite` | **secret_key 明文** | ⚠️ 生产勿用或配合磁盘级加密（todo #16） |
-| `encrypted` | S3C2 加密（严格） | ✅ 生产推荐；文件盐建时随机并复用 |
+| `json` | 明文 JSON 或 S3C3 加密 | 配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id（参数随文件版本）；permissive 兼容读旧明文与旧 S3C2 |
+| `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（roadmap #2） |
+| `encrypted` | S3C3 加密（严格） | ✅ 生产推荐；文件盐建时随机并复用；可读旧 S3C2 库 |
 
 所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。
+加密文件格式：S3C3 头部内嵌 Argon2id 参数（time/memory/threads），因此可在不破坏既有库的前提下调参；
+S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 16 字符。
 
 ### 边界 D：S3 上游（SSRF）
 
@@ -90,7 +92,7 @@
 > 完整清单见 [todolist.md](todolist.md)「四、安全 / 供应链待办」与 [assessment.md](assessment.md) §二。
 
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
-- SQLite 明文密钥（生产改 encrypted）
+- ~~SQLite 明文密钥~~ ✅ 已修：设 `S3C_STORE_KEY` 时 secret_key 列加密；`S3C_STORE_KEY` 最短 16 字符
 - 安全审计日志缺失
 - XFF 伪造绕过限速（JobRegistry 上限已加：256 个未终结任务，超限 503）
 - ~~TLS 前置无 HSTS~~ ✅ 已在 TLS 示例配置加 HSTS + Permissions-Policy

@@ -21,6 +21,11 @@ func TestValidate(t *testing.T) {
 		{"multi token shortest applies", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + ",short"}, ErrShortToken},
 		{"multi token all long ok", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + "," + strings.Repeat("b", MinTokenLength+5)}, nil},
 		{"empty token piece ignored in shortest", Config{Addr: "127.0.0.1:8080", Token: "," + strings.Repeat("a", MinTokenLength)}, nil},
+		// S3C_STORE_KEY 最短长度校验（roadmap #2）：短口令会被 Argon2 暴力破解。
+		{"short store key rejected", Config{Addr: "127.0.0.1:8080", StoreKey: "short"}, ErrShortStoreKey},
+		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
+		{"empty store key ok (json driver)", Config{Addr: "127.0.0.1:8080", StoreKey: ""}, nil},
+		{"long store key ok", Config{Addr: "127.0.0.1:8080", StoreKey: strings.Repeat("k", MinStoreKeyLength)}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -84,8 +84,9 @@ docker-compose.yml   一键起 server + RustFS
 | `S3C_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 | `S3C_SHUTDOWN_TIMEOUT` | `30` | 收到 SIGTERM 后等待活跃连接结束的最长时间（秒） |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
-| `S3C_STORE_KEY` | 空 | `encrypted` 模式必填；Argon2id+盐派生，文件格式仅 `S3C2` |
+| `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`） |
 | `S3C_EXPOSE_METRICS` | 空 | `1`/`true`/`yes`/`on` 时暴露 `GET /api/metrics`（Prometheus 文本）；默认 404，避免公网被 scrape |
+| `S3C_TRUSTED_PROXIES` | 空 | 可信反向代理 IP（逗号分隔）；仅这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速 |
 
 **安全默认值**：回环绑定 + CORS 白名单 + 可选鉴权 + 短 token 拒绝启动 + 指标端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN` 时进程**拒绝启动**。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
 

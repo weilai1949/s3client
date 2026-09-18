@@ -89,33 +89,31 @@ func (c *storeCodec) readError(err error) error {
 }
 
 func (c *storeCodec) decode(data []byte) ([]*model.Account, error) {
-	// strict（encrypted）：必须 S3C2 信封；错误文案保持历史语义。
+	// strict（encrypted）：必须是受支持的加密信封（S3C2 旧格式或 S3C3 当前格式）。
 	if c.strict {
-		if len(data) < len(encMagicV2)+encSaltLen {
-			return nil, errors.New("encrypted account file too short or not S3C2")
-		}
-		if string(data[:len(encMagicV2)]) != string(encMagicV2) {
-			return nil, fmt.Errorf("encrypted account file magic %q is not S3C2", string(data[:len(encMagicV2)]))
-		}
-		salt := make([]byte, encSaltLen)
-		copy(salt, data[len(encMagicV2):len(encMagicV2)+encSaltLen])
-		c.salt = salt
-		plain, err := decryptAESGCM(deriveKey(c.password, c.salt), data[len(encMagicV2)+encSaltLen:])
+		params, salt, ciphertext, err := parseEnvelope(data)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt accounts: %w", err)
+			if strings.Contains(err.Error(), "too short") {
+				return nil, errors.New("encrypted account file too short or not S3C2")
+			}
+			return nil, fmt.Errorf("encrypted account file magic %q is not S3C2", string(data[:min(4, len(data))]))
+		}
+		c.salt = salt
+		plain, derr := decryptAESGCM(deriveKey(c.password, salt, params), ciphertext)
+		if derr != nil {
+			return nil, fmt.Errorf("decrypt accounts: %w", derr)
 		}
 		return unmarshalAccounts(plain)
 	}
 
-	// permissive（json）：无 key 时视为明文；有 key 时按 S3C2 魔数判别，
+	// permissive（json）：无 key 时视为明文；有 key 时按加密魔数判别，
 	// 兼容历史明文文件（向后兼容）。
-	if c.password != "" && strings.HasPrefix(string(data), string(encMagicV2)) {
-		if len(data) < len(encMagicV2)+encSaltLen {
+	if c.password != "" && isEncryptedBlob(data) {
+		params, salt, ciphertext, err := parseEnvelope(data)
+		if err != nil {
 			return nil, errors.New("encrypted account file too short")
 		}
-		salt := make([]byte, encSaltLen)
-		copy(salt, data[len(encMagicV2):len(encMagicV2)+encSaltLen])
-		plain, derr := decryptAESGCM(deriveKey(c.password, salt), data[len(encMagicV2)+encSaltLen:])
+		plain, derr := decryptAESGCM(deriveKey(c.password, salt, params), ciphertext)
 		if derr != nil {
 			return nil, fmt.Errorf("decrypt account file: %w", derr)
 		}
@@ -128,16 +126,16 @@ func (c *storeCodec) encode(list []*model.Account) []byte {
 	plain := marshalAccounts(list)
 	// strict（encrypted）：复用文件盐（missing/decode 时确定）。
 	if c.strict {
-		enc, _ := encryptAESGCM(deriveKey(c.password, c.salt), plain)
-		return envelope(c.salt, enc)
+		enc, _ := encryptAESGCM(deriveKey(c.password, c.salt, currentParams), plain)
+		return envelope(encMagicV3, c.salt, enc)
 	}
 	// permissive（json）：无 key 时明文落盘；有 key 时每次写盘换新盐。
 	if c.password == "" {
 		return plain
 	}
 	salt := randomSalt()
-	enc, _ := encryptAESGCM(deriveKey(c.password, salt), plain)
-	return envelope(salt, enc)
+	enc, _ := encryptAESGCM(deriveKey(c.password, salt, currentParams), plain)
+	return envelope(encMagicV3, salt, enc)
 }
 
 // randomSalt 生成 encSaltLen 字节的随机盐（crypto/rand 在 Linux 上不会失败）。

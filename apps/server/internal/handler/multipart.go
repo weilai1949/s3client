@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
@@ -115,7 +114,9 @@ func (h *Handler) multipartComplete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if seen[p.PartNumber] {
-			h.writeErr(w, http.StatusBadRequest, "duplicate partNumber: "+strconv.Itoa(int(p.PartNumber)))
+			// 不回显用户提交的 partNumber（L2）。
+			h.log.Debug("duplicate partNumber", "partNumber", p.PartNumber, "key", req.Key)
+			h.writeErr(w, http.StatusBadRequest, "duplicate partNumber")
 			return
 		}
 		seen[p.PartNumber] = true

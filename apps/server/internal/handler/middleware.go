@@ -222,6 +222,7 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 		// RFC 7235：auth-scheme 大小写不敏感；凭证本身仍按常量时间比较。
 		scheme, cred, ok := strings.Cut(auth, " ")
 		if !ok || !strings.EqualFold(scheme, "bearer") {
+			h.audit(r, auditAuthDenied, "reason", "malformed")
 			h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -231,6 +232,8 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 				return
 			}
 		}
+		// 审计：鉴权失败（不记录提交的凭证值）。
+		h.audit(r, auditAuthDenied, "reason", "bad_token")
 		h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 	})
 }

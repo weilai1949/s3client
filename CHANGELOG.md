@@ -26,6 +26,31 @@
 - **`apps/web/src/styles.css` 中失效的 `.popover*` 规则块**：设置弹层已改为整页 `ServerPanel.vue`，`popover-wrap` / `.popover`（含 `h4` / `.field + .field` / `.actions`）与 `.popover-backdrop` 共 6 条规则，以及媒体查询里的 `.popover` 宽度覆盖，在 `src/` 中**已无任何模板引用**（全仓 grep `popover` 仅命中这些定义本身）。已删除该块；同段的 `@keyframes pop-in` **保留**——它仍被 `ObjectContextMenu.vue:105` 复用（该组件测试 9 项通过）。
 
 
+### 新增（2026-09-17 路线图迭代 #1–#8、#10、#11）
+- **`docs/api.md` 自动化校验（roadmap #1 / todolist #8）**：新增 `apps/server/internal/handler/api_doc_test.go`，从 `docs/api.md` 解析 `METHOD /api/...` 行并与 `routes.go` 注册表做**双向 diff**——文档多写一个端点或漏写一个端点都会让 `go test ./...` 变红。此前 `docs/api.md` 与路由的同步完全靠人工维护，70 个端点里任何一个改名/新增都可能静默漂移。已注入两侧漂移实测变红后还原，当前 70 ↔ 70 完全一致。
+- **S3C3 加密格式：KDF 参数写入文件头（roadmap #2 / todolist #16）**：S3C2 信封只存 `magic + salt`，Argon2 参数硬编码（`t=1`），因此直接调参会让既有加密库**永久无法解密**。新格式 `S3C3` 为 `magic(4) + time(4,BE) + memory(4,BE) + threads(1) + salt(16) + ciphertext`，读取时按**文件头里的参数**派生密钥，从而可以在不影响旧库的前提下逐步加强。`argonTimeV3 = 2`（OWASP 建议 Argon2id time cost ≥ 2）。**双版本读取**：`parseEnvelope` 同时识别 S3C2（沿用 `legacyParams = {1, 64MiB, 4}`）与 S3C3；S3C3 头部参数为 0 视为损坏并报错（不静默降级为弱密钥）。新写入一律 S3C3。
+- **SQLite 驱动 `secret_key` 列加密（roadmap #2 / ASSESSMENT M1）**：`SQLiteStore` 新增 `storeKey`，写入时 `encryptSecret` 以 S3C3 密文落盘、读取时 `decryptSecret` 解密；**历史明文行仍可读**（按魔数判别），写回时自动加密。库中已是密文但进程未配置 `S3C_STORE_KEY` 时显式报错，绝不把密文当明文返回。`config.MinStoreKeyLength = 16` 对 `S3C_STORE_KEY` 做最短长度校验（`ErrShortStoreKey`）。
+- **安全审计日志（roadmap #3 / ASSESSMENT M3）**：新增 `apps/server/internal/handler/audit.go`，以稳定事件常量 + `h.audit(r, event, extra...)` 记录 `audit` / `ip` / `method` / `path`。覆盖：鉴权失败（401，含 `malformed` / `bad_token` 原因）、账号创建/更新/删除、桶策略设置/清除、对象删除、前缀删除、回收站清空、限速命中。
+- **可信代理 XFF 解析（roadmap #3 / ASSESSMENT M5）**：新增配置 `S3C_TRUSTED_PROXIES`（默认空）。`clientIPWithProxies` **仅当直连对端命中白名单**时才采信 `X-Forwarded-For` 首段，否则一律回退 `RemoteAddr`。此前无条件信任 XFF，直连部署下任何客户端都能为每个请求伪造一个新 IP 绕过限速。
+- **S3 上游调用指标（roadmap #5 / todolist #21）**：新增 `apps/server/internal/s3wrap/metrics.go`，用 smithy `Finalize` 中间件统一采集（覆盖全部 SDK 调用，无需逐方法埋点）：`s3c_s3_calls_total`、`s3c_s3_call_errors_total{code=...}`（API 错误码，非 API 错误归 `canceled` / `timeout` / `transport`，基数有界）、`s3c_s3_call_duration_seconds` 直方图（11 桶）、`s3c_s3_stream_bytes_total`。经 `/api/metrics` 输出。
+- **ZIP 部分失败可见（roadmap #4 / ASSESSMENT S6）**：`zip.go` 不再丢弃 `service.WriteObjectsZip` 返回的 `failKeys`——部分失败落 Warn 日志（含失败 key 清单）并计入 `s3c_zip_partial_failures_total` / `s3c_zip_failed_keys_total`，整体失败计入 `s3c_zip_failed_total`。此前失败信息只写进包内 `_下载失败清单.txt`，服务端完全无法观测批量下载失败率。
+- **前端后端健康轮询与自动恢复（roadmap #8 / todolist #22）**：新增 `apps/web/src/composables/useHealthPoll.ts`，后端不可用后每 5s 探测 `/api/health`，一旦恢复即回调 `loadAccounts` 重新拉取数据并清除错误横幅；未出错时不轮询（不做无谓请求）。新增 `api.health()`。
+- **grid 视图渲染上限（roadmap #7 / ASSESSMENT D8）**：`ObjectList.vue` 的 grid 分支改为渲染 `gridItems`（上限 300 条），超出时显示截断提示（新增 i18n 键 `objects.gridTruncated`）。此前 grid 的 `v-for` 对万级条目全量渲染 DOM（列表视图早已窗口化）。
+- **错误文案源码级门禁（roadmap #6 / todolist #23）**：新增 `apps/server/internal/handler/error_echo_gate_test.go`，扫描生产 `.go` 文件（剔除注释与 `_test.go`），禁止 `writeErr(..., StatusBadRequest, "..." +` 这类把用户输入拼进响应文案的写法。
+
+### 修复（2026-09-17 路线图迭代）
+- **客户端错误消息不再回显用户输入（roadmap #6 / ASSESSMENT L2）**：`headers.go` 把 `ValidateUserMetadata` 的 `err.Error()` 直接回传客户端，而该错误串含用户提交的 metadata key（形如 `key %q length %d > %d`）。现改为固定文案 `invalid user metadata` + 服务端 `Debug` 日志（记录 bucket / key）。同类问题一并修复：`metadata.go` 的 `unsupported acl: <值>` → `unsupported acl`、`duplicate tag key`、`duplicate rule id`；`objects.go` 的 `unsupported storageClass`；`multipart.go` 的 `duplicate partNumber`。`TestSetHeadersInvalidUserMetadata400` 增加 `echo` 断言，确保响应体不含用户输入（含中文与超长 key/value）。
+- **`useBucketSetting.reload()` 竞态守卫（roadmap #8 / ASSESSMENT S8）**：快速切桶或保存后刷新会让多个 reload 并发，旧请求的响应/失败会覆盖新请求的状态。现加 `reloadSeq` 序号，只有最后一次发起的请求才允许写 `loading` 或上报错误。
+- **`entries` / `visibleEntries` 重复排序（roadmap #10 / ASSESSMENT D9）**：`useObjectBrowser.ts` 抽出 `compareEntries`（文件夹恒在前、文件按当前列与方向），`entries` 一次排序到位，`visibleEntries` 只做过滤并保持顺序。此前过滤态下会先排文件夹、再排一次文件。
+
+### 测试与质量门禁（2026-09-17 路线图迭代）
+- **覆盖率门禁去「注水」：前端纳入 `src/i18n/index.ts`（roadmap #11 / todolist #12）**：`vite.config.ts` 不再整体排除 `src/i18n/**`，改为只排除纯数据模块 `src/i18n/messages/**`（其完整性由 `i18n/coverage.test.ts` 的键门禁保证）。纳入后 `index.ts` 的 `readLocale` 回退/异常、`setLocale` 写入失败、`cycleLocale`、`locale()`、`i18nKeyCount` 缺省参数等分支补齐了**行为测试**（非 gap 测试），四指标仍为 100%。
+- **后端删除不可达防御分支，`count==0` 检查归零**：`SQLiteStore.encryptSecret` 的 AES 加密错误分支（`deriveKey` 恒返回 32 字节合法密钥）与 `openSQLite` 中冗余的 `os.MkdirAll` 判断属确实不可达的防御代码，已删除而非写测试凑覆盖；`registerMiddlewares` 从内联闭包抽为命名函数以便直接测试锚点缺失时的错误上抛。`make test-cover` 的 `count==0` 扫描现无任何输出，8 个包语句覆盖率均 100%。
+- **新增前端测试**：`useHealthPoll.test.ts`（轮询节奏 / 恢复回调 / start 幂等 / 卸载停止）、`useBucketSetting` 竞态守卫用例、`ObjectList` grid 截断用例、`App.vue` 恢复路径集成用例、`api.health()` 用例、i18n 分支用例。前端 63 文件 / 983 测试全绿。
+
+### 文档（2026-09-17 路线图迭代）
+- **路线图 v1.0.0 / v1.0.x / v1.1.0 收口（roadmap #1–#8、#10、#11）**：三个里程碑的开放条目全部完成并从 `docs/roadmap.md` 移除（长期项重编号为 #1–#3），`docs/todolist.md` 五个分类均归零，完成证据归档至 `docs/features.md` §M。`docs/api.md` 补充 `/api/metrics` 的 S3 上游指标与 ZIP 失败指标说明、ZIP 端点部分失败可观测说明。`README.md` / `.env.example` / `apps/server/.env.example` / `docs/deployment.md` 补充 `S3C_STORE_KEY`（≥16）与 `S3C_TRUSTED_PROXIES`；`docs/threat-model.md` 边界 C 表与已知风险同步更新。
+
 ### 新增
 - **GitLab CI（`.gitlab-ci.yml`），与 GitHub Actions 同门禁**：把 `.github/workflows/` 的 `ci.yml`、`e2e.yml`、`e2e-playwright.yml` 逐 job 镜像为 `server` / `web` / `docker` / `desktop` / `desktop-build`（`when: manual`）与 `rustfs-e2e` / `playwright-e2e`，命令与阈值完全一致（gofmt、`go vet`、govulncheck v1.8.0、golangci-lint v2.13.2、`go test -race` + 覆盖率 100%、`pnpm lint/typecheck/test:coverage/build`、`docker build` + Trivy CRITICAL/HIGH、`cargo check --locked`、RustFS 真对端 E2E、Playwright chromium E2E）。触发规则对应 GitHub 的 push（main/develop）+ pull_request + 手动 + 定时。`release-desktop.yml` **有意不镜像**——它发布到 GitHub Release（tauri-action + `gh release upload`）且需 Windows/macOS runner 与 `GITHUB_TOKEN`，属发版设计而非 CI 一致性。`rustfs-e2e` 用 GitLab service 容器替代 compose 起对端，镜像/端口/凭据不变，并照搬 GitHub 的 `/health` 轮询等待（正式 runner 的 service healthcheck 只认镜像自带 HEALTHCHECK，rustfs 镜像没有）。新增 `.gitlab-ci-local/` 到 `.gitignore`（本地执行状态目录）。本地无 GitLab 实例即可用 `npx --yes gitlab-ci-local` 跑真实 job；两侧对照表与执行器差异（tracked-only 同步、`docker` job 需挂宿主 socket）记入 [`docs/development.md`](docs/development.md) §3。
 

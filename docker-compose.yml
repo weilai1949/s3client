@@ -29,7 +29,9 @@ services:
       S3C_ADDR: "0.0.0.0:8080"
       S3C_SHUTDOWN_TIMEOUT: "${S3C_SHUTDOWN_TIMEOUT:-30}"
       S3C_DATA_DIR: "/data"
-      # 生产推荐 sqlite 或 encrypted（encrypted 需 S3C_STORE_KEY）
+      # 生产推荐 encrypted（整文件加密，需 S3C_STORE_KEY）。默认 sqlite：
+      # 只要设置了 S3C_STORE_KEY，secret_key 列即以 AES-256-GCM 密文落盘（roadmap #2）。
+      # 两者都不设置 key 时为明文，仅适用于本地联调。
       S3C_STORE_DRIVER: "${S3C_STORE_DRIVER:-sqlite}"
       S3C_STORE_KEY: "${S3C_STORE_KEY:-}"
       S3C_STATIC_DIR: "/web/dist"
