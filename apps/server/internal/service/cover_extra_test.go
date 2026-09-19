@@ -61,9 +61,12 @@ func TestSync_WorkersDefaultAndProgress(t *testing.T) {
 
 	var progress []Progress
 	// workers = 0 → should default to 4 (lines 43-45). onProgress non-nil → first callback (52-54).
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 0, func(p Progress) {
+	out, err := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 0, func(p Progress) {
 		progress = append(progress, p)
 	})
+	if err != nil {
+		t.Fatalf("SyncKeys: %v", err)
+	}
 	if out.Copied != 1 || out.Failed != 0 {
 		t.Fatalf("result = %+v", out)
 	}
@@ -90,9 +93,12 @@ func TestSync_EmptyToCopyProgress(t *testing.T) {
 	defer closer()
 
 	var progress []Progress
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2, func(p Progress) {
+	out, err := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2, func(p Progress) {
 		progress = append(progress, p)
 	})
+	if err != nil {
+		t.Fatalf("SyncKeys: %v", err)
+	}
 	if out.Skipped != 1 || out.Copied != 0 {
 		t.Fatalf("result = %+v", out)
 	}
@@ -153,7 +159,12 @@ func TestStripPrefixNoMatch(t *testing.T) {
 		{"ba.txt", "a/", "ba.txt"}, // starts with different chars, prefix present
 		{"a/b.txt", "a/", "b.txt"}, // sanity: matching case still works
 		{"foo", "foo", ""},         // prefix == key entirely
-		{"foobar", "foo", "bar"},   // prefix matches, no slash
+		// 段边界：前缀 "foo" 未结束在 "/" 上，且 "foobar" 的下一段不是 "/"，
+		// 因此不算命中，原样返回（旧实现会削成 "bar"，使目标侧出现永不复位的错位 key）。
+		{"foobar", "foo", "foobar"},
+		// 段边界命中：前缀无尾斜杠但紧随其后是 "/"，剥掉前缀与分隔符。
+		{"foo/bar", "foo", "bar"},
+		{"foo/bar", "foo/", "bar"},
 	}
 	for _, c := range cases {
 		if got := stripPrefix(c.in, c.prefix); got != c.want {
@@ -262,7 +273,10 @@ func TestListAllPaginates(t *testing.T) {
 	f.keys[listFakeBucket] = []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	f.pageSize = 2
 
-	got := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("listAll: %v", err)
+	}
 	want := []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	if len(got) != len(want) {
 		t.Fatalf("listAll returned %d keys, want %d: %v", len(got), len(want), got)
@@ -285,7 +299,10 @@ func TestListAllTruncationStopsWithoutToken(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	keys := listAll(context.Background(), newTestClient(t, srv.URL), listFakeBucket, "")
+	keys, err := listAll(context.Background(), newTestClient(t, srv.URL), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("listAll: %v", err)
+	}
 	if len(keys) != 1 {
 		t.Fatalf("len = %d, want 1", len(keys))
 	}
@@ -294,7 +311,10 @@ func TestListAllTruncationStopsWithoutToken(t *testing.T) {
 func TestListAllError(t *testing.T) {
 	f := newListFake(t)
 	f.failList = true
-	got := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	if err == nil {
+		t.Fatal("listAll must surface the list error instead of reporting an empty result")
+	}
 	if len(got) != 0 {
 		t.Fatalf("listAll on error = %d keys, want 0", len(got))
 	}
@@ -310,7 +330,10 @@ func TestListAllHardCap(t *testing.T) {
 	f.keys[listFakeBucket] = keys
 	f.pageSize = total + 1 // single page returns everything
 
-	got := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("listAll: %v", err)
+	}
 	if len(got) != total {
 		t.Fatalf("listAll hard cap returned %d, want %d", len(got), total)
 	}
@@ -323,7 +346,10 @@ func TestIndexDstPaginates(t *testing.T) {
 	f.keys[listFakeBucket] = []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	f.pageSize = 3
 
-	idx := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("indexDst: %v", err)
+	}
 	if len(idx) != 5 {
 		t.Fatalf("indexDst size = %d, want 5", len(idx))
 	}
@@ -340,7 +366,10 @@ func TestIndexDstPaginates(t *testing.T) {
 func TestIndexDstError(t *testing.T) {
 	f := newListFake(t)
 	f.failList = true
-	idx := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	if err == nil {
+		t.Fatal("indexDst must surface the list error instead of reporting an empty index")
+	}
 	if len(idx) != 0 {
 		t.Fatalf("indexDst on error = %d entries, want 0", len(idx))
 	}
@@ -436,7 +465,9 @@ func TestWriteObjectsZipCreateHeaderError(t *testing.T) {
 	}
 }
 
-// ---- SyncKeys: ctx canceled after src listing (sync.go lines 56-58) ----
+// ---- SyncKeys: ctx canceled before/during src listing ----
+// 语义：客户端放弃（ctx 取消）不算错误——返回已完成的部分结果即可（review §B5 只要求
+// 「真实的列举错误」不得被吞掉，取消是另一回事）。
 
 func TestSync_CtxCanceledAfterSrcList(t *testing.T) {
 	s3FakeMu.Lock()
@@ -448,9 +479,12 @@ func TestSync_CtxCanceledAfterSrcList(t *testing.T) {
 	defer closer()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // 取消后 listAll 快速失败，SyncKeys 直接返回已扫结果
+	cancel() // 取消后 listAll 立即失败
 
-	out := SyncKeys(ctx, src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	out, err := SyncKeys(ctx, src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	if err != nil {
+		t.Fatalf("ctx 取消不应作为错误上报，得到 %v", err)
+	}
 	if out.Scanned != 0 || out.Copied != 0 {
 		t.Fatalf("canceled ctx result = %+v, want Scanned=0 Copied=0", out)
 	}
@@ -501,15 +535,16 @@ func TestSync_CtxCanceledDuringIndexDst(t *testing.T) {
 	s3FakeStore = map[string][]string{"src-bucket": {"x.txt"}, "dst-bucket": {}}
 	s3FakeMu.Unlock()
 
-	out := SyncKeys(ctx, c1, c2, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	out, err := SyncKeys(ctx, c1, c2, "src-bucket", "", "dst-bucket", "", CompareETag, 4, nil)
+	if err != nil {
+		t.Fatalf("ctx 取消不应作为错误上报，得到 %v", err)
+	}
 	if out.Scanned != 1 || out.Copied != 0 {
 		t.Fatalf("canceled-during-index result = %+v, want Scanned=1 Copied=0", out)
 	}
 }
 
-// ---- indexDst: hard cap (sync.go lines 135-136, 148-149) ----
-// 100001 keys + pageSize=100000 → 第 1 页填满后内层 break（148），
-// 第 2 页开头外层 cap 检查（135）再 break。
+// ---- indexDst: hard cap（页数/总量双层上限，见 review §B6）----
 
 func TestIndexDstHardCap(t *testing.T) {
 	const total = 100_000
@@ -519,9 +554,12 @@ func TestIndexDstHardCap(t *testing.T) {
 		keys[i] = "obj" + strconv.Itoa(i)
 	}
 	f.keys[listFakeBucket] = keys
-	f.pageSize = total
+	f.pageSize = total + 1 // 单页超过总量上限 → 命中内层 break
 
-	idx := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("indexDst: %v", err)
+	}
 	if len(idx) != total {
 		t.Fatalf("indexDst hard cap = %d, want %d", len(idx), total)
 	}

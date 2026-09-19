@@ -1,10 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -61,10 +61,21 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 		}
 		defer out.Body.Close()
 		buf := make([]byte, maxBytes+1)
-		n, _ := io.ReadFull(out.Body, buf)
+		n, readErr := io.ReadFull(out.Body, buf)
+		// 读取错误必须上报：忽略它会把「上游传输中断」渲染成「内容只有这么多」的 200（review §B10④）。
+		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+			h.proxyErr(w, readErr)
+			return
+		}
 		truncated := n > maxBytes
 		if truncated {
 			n = maxBytes
+		}
+		// ErrUnexpectedEOF 有两种来源：对象本身短于上限（正常），或流被中途切断。
+		// 有 Content-Length 时以它为准，避免把被截断的预览当完整内容返回。
+		if !truncated && out.ContentLength != nil && int64(n) < *out.ContentLength {
+			h.proxyErr(w, errPreviewShortRead)
+			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -99,7 +110,7 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Accept-Ranges", "bytes")
 		w.Header().Set("Content-Disposition",
-			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, disp, name, url.QueryEscape(name)))
+			fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, disp, name, rfc5987Escape(name)))
 		if out.ContentLength != nil {
 			w.Header().Set("Content-Length", strconv.FormatInt(*out.ContentLength, 10))
 		}
@@ -161,4 +172,27 @@ func sanitizeFilename(name string) string {
 		return "download"
 	}
 	return name
+}
+
+// errPreviewShortRead 表示 text 预览时上游返回的字节数少于 Content-Length（流传到一半被切断）。
+var errPreviewShortRead = errors.New("preview body shorter than content-length")
+
+// rfc5987Escape 按 RFC 5987 的 attr-char 集合编码 `filename*=UTF-8”…` 的值。
+//
+// 不能用 url.QueryEscape：它把空格编成 "+"，而 RFC 5987 的百分号编码里 "+" 是字面加号，
+// 浏览器会把 "my file.txt" 存成 "my+file.txt"（review §B10②）。非 ASCII 字节按 UTF-8 逐字节百分号编码。
+func rfc5987Escape(s string) string {
+	const attrChar = "!#$&+-.^_`|~"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9',
+			strings.IndexByte(attrChar, c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
 }

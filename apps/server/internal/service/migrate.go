@@ -8,6 +8,7 @@ import (
 )
 
 // MigrateKeys 跨账号/桶迁移：同端点优先 CopyObject（EntityTooLarge 回退流式），异端点走 StreamCopy。
+// 目标 key 为裸前缀拼接（targetPrefix + 源 key）；需要别的映射语义请用 migrateKeys。
 func MigrateKeys(
 	ctx context.Context,
 	src, dst *s3wrap.Client,
@@ -18,13 +19,32 @@ func MigrateKeys(
 	workers int,
 	onProgress func(Progress),
 ) BatchResult {
+	return migrateKeys(ctx, src, dst, srcBucket, dstBucket, keys,
+		func(k string) string { return targetPrefix + k }, sameEP, workers, onProgress)
+}
+
+// migrateKeys 是 MigrateKeys 与 SyncKeys 共用的复制内核。
+//
+// 目标 key 必须由 dstKeyFor 决定（而不是在此处裸拼接目标前缀）：增量同步的目标 key 是
+// 「目标前缀 + 相对路径」，与源 key 不是同一个字符串——把两处映射写成两个表达式正是
+// P0-3（review-2026-09-19.md §B2）永不收敛的根因。
+func migrateKeys(
+	ctx context.Context,
+	src, dst *s3wrap.Client,
+	srcBucket, dstBucket string,
+	keys []string,
+	dstKeyFor func(string) string,
+	sameEP bool,
+	workers int,
+	onProgress func(Progress),
+) BatchResult {
 	if workers < 1 {
 		workers = 4
 	}
 	return RunBatch(ctx, keys, workers,
 		func(k string) string { return k },
 		func(ctx context.Context, k string) error {
-			dstKey := targetPrefix + k
+			dstKey := dstKeyFor(k)
 			var merr error
 			if sameEP {
 				merr = src.CopyObject(ctx, srcBucket, k, dstBucket, dstKey)

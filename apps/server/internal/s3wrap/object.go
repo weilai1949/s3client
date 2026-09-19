@@ -2,6 +2,7 @@ package s3wrap
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 
@@ -44,9 +45,23 @@ func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
 	return err
 }
 
+// DeleteFailure 描述批量删除中被服务端逐 key 拒绝的条目。
+//
+// S3 对「部分 key 删不掉」（桶策略、保留期、MFA Delete）仍返回 200，只在响应体内列 <Error>；
+// 调用方必须据此把失败 key 从「已删除」中剔除，否则会向用户误报删除成功。
+type DeleteFailure struct {
+	Key     string
+	Code    string
+	Message string
+}
+
 // DeleteObjects 批量删除（SDK 单次上限 1000 个）。分批处理。
-func (c *Client) DeleteObjects(ctx context.Context, bucket string, keys []string) error {
+//
+// 返回的 error 仅表示传输/协议层失败（该批 key 的结果未知）；逐 key 的服务端拒绝通过
+// 返回的 []DeleteFailure 表达。两者可同时非空：前面的批次已确定失败，后面的批次传输中断。
+func (c *Client) DeleteObjects(ctx context.Context, bucket string, keys []string) ([]DeleteFailure, error) {
 	const batchSize = 1000
+	var failures []DeleteFailure
 	for i := 0; i < len(keys); i += batchSize {
 		end := i + batchSize
 		if end > len(keys) {
@@ -56,15 +71,22 @@ func (c *Client) DeleteObjects(ctx context.Context, bucket string, keys []string
 		for _, k := range keys[i:end] {
 			objs = append(objs, types.ObjectIdentifier{Key: aws.String(k)})
 		}
-		_, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		out, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 			Bucket: aws.String(bucket),
 			Delete: &types.Delete{Objects: objs},
 		})
 		if err != nil {
-			return err
+			return failures, err
+		}
+		for _, e := range out.Errors {
+			failures = append(failures, DeleteFailure{
+				Key:     aws.ToString(e.Key),
+				Code:    aws.ToString(e.Code),
+				Message: aws.ToString(e.Message),
+			})
 		}
 	}
-	return nil
+	return failures, nil
 }
 
 // CopyObject 在服务端复制对象（同 endpoint 使用 CopyObject 接口）。
@@ -298,13 +320,21 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 				if end > len(ids) {
 					end = len(ids)
 				}
-				if _, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				out, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 					Bucket: aws.String(bucket),
 					Delete: &types.Delete{Objects: ids[i:end]},
-				}); err != nil {
+				})
+				if err != nil {
 					return deleted, err
 				}
-				deleted += end - i
+				// 200 响应体里的逐版本 <Error> 同样算失败：把被拒版本计入「已删除」会让
+				// 回收站 UI 显示「已彻底清除」而版本仍然存在（review §B3 第 4 个受影响点）。
+				deleted += end - i - len(out.Errors)
+				if len(out.Errors) > 0 {
+					first := out.Errors[0]
+					return deleted, fmt.Errorf("%w: %s (%s)", ErrPartialDelete,
+						aws.ToString(first.Key), aws.ToString(first.Code))
+				}
 			}
 		}
 		if !out.IsTruncated || out.NextKeyMarker == "" {

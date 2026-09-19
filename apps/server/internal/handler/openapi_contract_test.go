@@ -949,6 +949,42 @@ func TestOpenAPI_ContractRequestBodyMatchesHandlers(t *testing.T) {
 			t.Errorf("%s POST schema 声明 items，真实 handler 只解析 keys", path)
 		}
 	}
+
+	// 8. 契约幻影字段（2026-09-19 审查 §7.2 / P0-5）：注册表 + docs/api.md 都声明、
+	//    但 handler 的请求结构体（readJSON 目标）**不含**该字段。因为 readJSON 用
+	//    DisallowUnknownFields，按文档示例体调用必然 400。这里按「注册表 props 与 handler
+	//    实际解析的字段集合**完全相等**」断言，两端任一侧漂移都会变红。
+	//
+	//    这四个端点的期望集合 = handler 的结构体 json tag，也正好等于前端 API 类型的入参
+	//    （accounts 走 model.Account，故为 AccountInput 的字段集）。
+	exact := []struct {
+		path, method string
+		fields       []string
+	}{
+		{"/api/accounts", "post", []string{
+			"name", "endpoint", "publicEndpoint", "region", "accessKey", "secretKey", "bucket", "pathStyle", "useSSL",
+		}},
+		{"/api/accounts/{id}/rename", "post", []string{"bucket", "key", "newKey", "newBucket"}},
+		{"/api/accounts/{id}/set-headers", "post", []string{"bucket", "key", "contentType", "metadata"}},
+		{"/api/accounts/{id}/multipart/init", "post", []string{"bucket", "key", "contentType"}},
+	}
+	for _, tc := range exact {
+		got := requestBodyProps(t, doc, tc.path, tc.method)
+		want := map[string]bool{}
+		for _, f := range tc.fields {
+			want[f] = true
+			if !got[f] {
+				t.Errorf("%s %s schema 缺少字段 %q（真实 handler 解析；不声明则 OpenAPI 客户端不会发送）",
+					tc.method, tc.path, f)
+			}
+		}
+		for f := range got {
+			if !want[f] {
+				t.Errorf("%s %s schema 多出字段 %q：真实 handler 的结构体不解析它，按文档发送会被 DisallowUnknownFields 拒绝（400）",
+					tc.method, tc.path, f)
+			}
+		}
+	}
 }
 
 // docHasEnumValue 检查指定操作 schema 中字段的 enum 是否包含给定值。

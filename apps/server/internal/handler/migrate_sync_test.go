@@ -272,7 +272,9 @@ func TestMigrateSync_CompareSizeTime(t *testing.T) {
 	}
 }
 
-// TestMigrateSync_PrefixFilter 验证 sourcePrefix 过滤：仅同步 prefix 下的对象。
+// TestMigrateSync_PrefixFilter 验证 sourcePrefix 过滤：仅同步 prefix 下的对象，
+// 且目标 key 是「targetPrefix + 相对路径」——与比对用的 key 必须同一个表达式，
+// 否则增量同步永不收敛（docs/review-2026-09-19.md §B2）。
 func TestMigrateSync_PrefixFilter(t *testing.T) {
 	syncStore = map[string]map[string]syncEntry{
 		"src-bucket": {
@@ -285,20 +287,30 @@ func TestMigrateSync_PrefixFilter(t *testing.T) {
 	endpoint := syncFakeS3(t).URL
 	srcID, dstID, base := newSyncEnv(t, endpoint, endpoint)
 
-	out := doSync(t, base, map[string]any{
+	body := map[string]any{
 		"sourceAccountId": srcID, "sourceBucket": "src-bucket", "sourcePrefix": "dir/",
 		"targetAccountId": dstID, "targetBucket": "dst-bucket", "mode": "etag",
-	})
+	}
+	out := doSync(t, base, body)
 	if out["scanned"].(float64) != 2 || out["copied"].(float64) != 2 {
 		t.Errorf("prefix: %+v", out)
 	}
-	for _, k := range []string{"dir/a.txt", "dir/sub/b.txt"} {
+	// 目标 key 是剥掉 sourcePrefix 后的相对路径（targetPrefix 为空 = 目标桶根目录）。
+	for _, k := range []string{"a.txt", "sub/b.txt"} {
 		if _, ok := syncStore["dst-bucket"][k]; !ok {
 			t.Errorf("%s missing in dst after prefixed sync", k)
 		}
 	}
+	if _, ok := syncStore["dst-bucket"]["dir/a.txt"]; ok {
+		t.Errorf("dir/a.txt should NOT exist: sourcePrefix 应被剥掉（否则永不收敛）")
+	}
 	if _, ok := syncStore["dst-bucket"]["other.txt"]; ok {
 		t.Errorf("other.txt should NOT be synced (outside prefix)")
+	}
+
+	// 验收：同一请求再跑一次必须收敛（copied == 0）。
+	if second := doSync(t, base, body); second["copied"].(float64) != 0 {
+		t.Errorf("二次同步 copied=%v, want 0（增量同步未收敛）", second["copied"])
 	}
 }
 

@@ -17,8 +17,15 @@ import (
 	"github.com/aws/smithy-go/middleware"
 )
 
+// resetMetrics 清零进程级 S3 指标，避免用例之间相互污染。
+// 定义在测试包内：清零是纯测试需求，不应作为生产 API 暴露（原 `ResetMetrics`
+// 见 docs/review-2026-09-19.md §A2）。
+func resetMetrics() {
+	globalS3Metrics = newS3Metrics()
+}
+
 func TestS3MetricsRecordsSuccess(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -38,7 +45,7 @@ func TestS3MetricsRecordsSuccess(t *testing.T) {
 }
 
 func TestS3MetricsRecordsErrorCode(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeS3Error(w, http.StatusForbidden, "AccessDenied", "denied")
 	}))
@@ -56,7 +63,7 @@ func TestS3MetricsRecordsErrorCode(t *testing.T) {
 
 // TestS3MetricsTransportError 非 API 错误（连接失败）归入 transport 桶，避免无界基数。
 func TestS3MetricsTransportError(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	c, srv := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -71,7 +78,7 @@ func TestS3MetricsTransportError(t *testing.T) {
 }
 
 func TestS3MetricsStreamBytes(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	RecordStreamBytes(1024)
 	RecordStreamBytes(24)
 	if got := MetricsSnapshot().StreamBytes; got != 1048 {
@@ -80,9 +87,9 @@ func TestS3MetricsStreamBytes(t *testing.T) {
 }
 
 func TestS3MetricsReset(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	RecordStreamBytes(5)
-	ResetMetrics()
+	resetMetrics()
 	snap := MetricsSnapshot()
 	if snap.Calls != 0 || snap.StreamBytes != 0 || len(snap.ErrorsByCode) != 0 {
 		t.Fatalf("snapshot after reset = %+v, want zeroed", snap)
@@ -126,7 +133,7 @@ func TestS3MetricsCanceledAndTimeoutClass(t *testing.T) {
 
 // TestS3MetricsLatencyBuckets 每次调用必须落入恰好一个桶，且桶标签与快照一一对应。
 func TestS3MetricsLatencyBuckets(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	globalS3Metrics.observe(15*time.Millisecond, nil) // 落在 0.05 桶
 	snap := MetricsSnapshot()
 	if total := bucketTotal(snap); total != 1 {
@@ -143,7 +150,7 @@ func TestS3MetricsLatencyBuckets(t *testing.T) {
 		t.Fatalf("last bucket must be +Inf: label=%q inf=%v", labels[len(labels)-1], snap.Latency[len(snap.Latency)-1].Inf)
 	}
 	// 超过最大上界的耗时必须落入 +Inf 桶。
-	ResetMetrics()
+	resetMetrics()
 	globalS3Metrics.observe(time.Minute, nil)
 	snap = MetricsSnapshot()
 	if got := snap.Latency[len(snap.Latency)-1].Count; got != 1 {
@@ -193,7 +200,7 @@ func containsStr(list []string, want string) bool {
 
 // TestRecordStreamBytesIgnoresNonPositive 非正字节数不计入（避免负数污染累计值）。
 func TestRecordStreamBytesIgnoresNonPositive(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	RecordStreamBytes(0)
 	RecordStreamBytes(-5)
 	if got := MetricsSnapshot().StreamBytes; got != 0 {
@@ -203,12 +210,31 @@ func TestRecordStreamBytesIgnoresNonPositive(t *testing.T) {
 
 // TestMetricsSnapshotIsCopy 快照与内部状态隔离：修改快照的 map 不影响后续读取。
 func TestMetricsSnapshotIsCopy(t *testing.T) {
-	ResetMetrics()
+	resetMetrics()
 	globalS3Metrics.observe(time.Millisecond, errors.New("boom"))
 	snap := MetricsSnapshot()
 	snap.ErrorsByCode["injected"] = 99
 	if _, ok := MetricsSnapshot().ErrorsByCode["injected"]; ok {
 		t.Fatal("snapshot map must be a copy")
+	}
+}
+
+// TestErrorClassUnknownCodeFoldsToOther 白名单之外的服务端错误码必须归入 "other"：
+// 不可信对端可以用任意 Code 撑爆指标标签基数（review §B10⑥ / §S5）。
+func TestErrorClassUnknownCodeFoldsToOther(t *testing.T) {
+	resetMetrics()
+	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeS3Error(w, http.StatusBadRequest, "TotallyMadeUpCode123", "x")
+	}))
+	if _, err := c.ListBuckets(context.Background()); err == nil {
+		t.Fatal("expected ListBuckets to fail")
+	}
+	snap := MetricsSnapshot()
+	if _, ok := snap.ErrorsByCode["TotallyMadeUpCode123"]; ok {
+		t.Fatalf("原始错误码不得成为指标标签：%v", snap.ErrorsByCode)
+	}
+	if snap.ErrorsByCode["other"] != 1 {
+		t.Fatalf("ErrorsByCode = %v, want other=1", snap.ErrorsByCode)
 	}
 }
 

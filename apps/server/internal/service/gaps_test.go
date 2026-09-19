@@ -287,19 +287,8 @@ func TestMultipartStreamCopyFailures(t *testing.T) {
 			t.Fatalf("aborts = %d, want 1", f.aborts)
 		}
 	})
-	t.Run("part limit aborts", func(t *testing.T) {
-		old := multipartPartSize
-		multipartPartSize = 1
-		t.Cleanup(func() { multipartPartSize = old })
-		f := newSvcFake(t)
-		err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", strings.NewReader(strings.Repeat("a", 10_005)))
-		if err == nil || !strings.Contains(err.Error(), "10000") {
-			t.Fatalf("expected part-limit error, got %v", err)
-		}
-		if f.aborts != 1 {
-			t.Fatalf("aborts = %d, want 1", f.aborts)
-		}
-	})
+	// 「段号超上限」的边界用例见 stream_copy_parts_test.go：那里注入小上限，
+	// 既快（无需真的跑 10000 次 UploadPart）又能断言第 N+1 段根本没发出。
 }
 
 // cancelReader 首次 Read 即取消 ctx 并返回其错误（确定性触发 ctx 分支）。
@@ -396,7 +385,7 @@ func TestJobReapUnsubscribeSnapshotCancel(t *testing.T) {
 	}
 	// Unsubscribe：未订阅的 channel 也可安全移除
 	j.Unsubscribe(make(chan JobProgress, 1))
-	ch := j.Subscribe()
+	ch, _ := j.Subscribe()
 	j.Unsubscribe(ch)
 	// Emit 慢订阅者丢帧：先灌满缓冲
 	for i := 0; i < 20; i++ {
@@ -414,7 +403,8 @@ func TestJobReapUnsubscribeSnapshotCancel(t *testing.T) {
 		t.Fatalf("cancel after done = %v %v", cancelled, alreadyDone)
 	}
 	// 完成后 Subscribe 立即收终态并关闭
-	final, ok := <-j.Subscribe()
+	doneSub, _ := j.Subscribe()
+	final, ok := <-doneSub
 	if !ok || final.Status == "" {
 		t.Fatalf("subscribe after done = %+v ok=%v", final, ok)
 	}
@@ -731,7 +721,7 @@ func TestJobEmitDrop(t *testing.T) {
 	r := NewJobRegistry()
 	defer r.Stop()
 	j := r.Create(1, nil)
-	sub := j.Subscribe()
+	sub, _ := j.Subscribe()
 	go func() {
 		for range sub {
 		}
@@ -805,7 +795,9 @@ func TestFinishSendTimeout(t *testing.T) {
 	defer r.Stop()
 	j := r.Create(1, nil)
 	// 订阅但故意不消费，令 buffer 被填满后触发 Finish 的发送超时路径。
-	j.Subscribe()
+	if _, ok := j.Subscribe(); !ok {
+		t.Fatal("订阅必须成功")
+	}
 	// 填满 16 个缓冲
 	for i := 0; i < 16; i++ {
 		j.Emit(JobProgress{Done: i, Total: 100, Key: "k", Status: "running"})

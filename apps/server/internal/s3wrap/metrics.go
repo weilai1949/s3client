@@ -101,11 +101,6 @@ func RecordStreamBytes(n int64) {
 	}
 }
 
-// ResetMetrics 清零所有 S3 指标（仅测试使用）。
-func ResetMetrics() {
-	globalS3Metrics = newS3Metrics()
-}
-
 func (m *s3Metrics) observe(d time.Duration, err error) {
 	m.calls.Add(1)
 	m.sumNanos.Add(d.Nanoseconds())
@@ -126,13 +121,45 @@ func (m *s3Metrics) observe(d time.Duration, err error) {
 	m.mu.Unlock()
 }
 
+// metricErrorCodes 是允许作为指标标签的错误码白名单。
+//
+// 服务端返回的 `<Code>` 来自用户配置的（不可信）S3 端点：直接把原始 Code 当标签会让
+// `s3c_s3_call_errors_total` 的标签基数无界——恶意/不规范对端每次返回不同的 Code 即可
+// 让指标内存与 Prometheus 序列数无限增长（review §B10⑥ / §S5）。
+// 白名单覆盖 UserMessage / HTTPStatus / IsNotFound 已识别的码；其余一律归 "other"。
+var metricErrorCodes = map[string]struct{}{
+	"AccessDenied":          {},
+	"BucketNotEmpty":        {},
+	"EntityTooLarge":        {},
+	"InvalidAccessKeyId":    {},
+	"InvalidArgument":       {},
+	"InvalidPartOrder":      {},
+	"InvalidRange":          {},
+	"InvalidRequest":        {},
+	"InvalidStorageClass":   {},
+	"MalformedPolicy":       {},
+	"MalformedXML":          {},
+	"NoSuchBucket":          {},
+	"NoSuchKey":             {},
+	"NoSuchUpload":          {},
+	"NoSuchVersion":         {},
+	"NotFound":              {},
+	"RequestTimeout":        {},
+	"ServiceUnavailable":    {},
+	"SignatureDoesNotMatch": {},
+	"SlowDown":              {},
+}
+
 // errorClass 把错误归一为有限集合的类别，避免高基数标签。
 func errorClass(err error) string {
 	if err == nil {
 		return ""
 	}
 	if code := ErrorCode(err); code != "" {
-		return code
+		if _, ok := metricErrorCodes[code]; ok {
+			return code
+		}
+		return "other"
 	}
 	// 非 API 错误：上下文取消/超时单列，其余归 transport。
 	if errors.Is(err, context.Canceled) {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -135,6 +137,94 @@ func simpleHash(s string) uint64 {
 	return h
 }
 
+// TestSync_PrefixMappingConverges 复现并锁死 P0-3（docs/review-2026-09-19.md §B2）。
+//
+// 过滤阶段用相对 key 判定（dstPrefix + stripPrefix(so.Key, srcPrefix)），复制阶段却把
+// **完整源 key** 交给 MigrateKeys（后者裸拼接 targetPrefix + k）——两处映射表达式不一致：
+// 源 p/a.txt、srcPrefix=p/、dstPrefix=q/ 会实际写到 q/p/a.txt，而比较仍在看 q/a.txt，
+// 于是二次同步依旧认为「缺失」→ 永远 copied>0，增量同步永不收敛。
+func TestSync_PrefixMappingConverges(t *testing.T) {
+	s3FakeMu.Lock()
+	s3FakeStore = map[string][]string{
+		"src-bucket": {"p/a.txt", "p/dir/b.txt"},
+		"dst-bucket": {},
+	}
+	s3FakeSize = map[string]int64{
+		"src-bucket/p/a.txt": 10, "src-bucket/p/dir/b.txt": 20,
+	}
+	s3FakeEtag = map[string]uint64{
+		"src-bucket/p/a.txt": 0xaa, "src-bucket/p/dir/b.txt": 0xbb,
+	}
+	s3FakeMu.Unlock()
+
+	src, dst, closer := makeFakePair(t)
+	defer closer()
+
+	run := func() SyncResult {
+		return mustSync(t, context.Background(), src, dst, "src-bucket", "p/", "dst-bucket", "q/", CompareETag, 2)
+	}
+
+	out := run()
+	if out.Copied != 2 || out.Failed != 0 {
+		t.Fatalf("首次同步 copied=%d failed=%d, want 2/0", out.Copied, out.Failed)
+	}
+
+	// 目标 key 必须是「相对 key 映射」的结果，而不是 q/ + 完整源 key。
+	s3FakeMu.Lock()
+	got := append([]string(nil), s3FakeStore["dst-bucket"]...)
+	s3FakeMu.Unlock()
+	sort.Strings(got)
+	want := []string{"q/a.txt", "q/dir/b.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("目标 key = %v, want %v（源 key 未被正确映射）", got, want)
+	}
+
+	// 验收：二次同步必须收敛（copied == 0）。
+	if second := run(); second.Copied != 0 {
+		t.Fatalf("二次同步 copied=%d, want 0（增量同步未收敛）", second.Copied)
+	}
+}
+
+// TestSync_PrefixSegmentBoundary 前缀必须落在段边界上：
+// srcPrefix="p" 不得命中 prefix/x.txt（旧实现 stripPrefix 会产出 refix/x.txt 这种被削掉首字母的 key）。
+func TestSync_PrefixSegmentBoundary(t *testing.T) {
+	s3FakeMu.Lock()
+	s3FakeStore = map[string][]string{
+		"src-bucket": {"p/a.txt", "prefix/x.txt"},
+		"dst-bucket": {},
+	}
+	s3FakeSize = map[string]int64{
+		"src-bucket/p/a.txt": 10, "src-bucket/prefix/x.txt": 30,
+	}
+	s3FakeEtag = map[string]uint64{
+		"src-bucket/p/a.txt": 0xaa, "src-bucket/prefix/x.txt": 0xcc,
+	}
+	s3FakeMu.Unlock()
+
+	src, dst, closer := makeFakePair(t)
+	defer closer()
+
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "p", "dst-bucket", "q/", CompareETag, 2)
+	if out.Copied != 2 || out.Failed != 0 {
+		t.Fatalf("copied=%d failed=%d, want 2/0", out.Copied, out.Failed)
+	}
+
+	s3FakeMu.Lock()
+	got := append([]string(nil), s3FakeStore["dst-bucket"]...)
+	s3FakeMu.Unlock()
+	sort.Strings(got)
+	// p/a.txt → q/a.txt（段边界命中，剥掉前缀）；prefix/x.txt 不在 "p" 段下 → 原样保留，绝不被削成 "refix/x.txt"。
+	want := []string{"q/a.txt", "q/prefix/x.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("目标 key = %v, want %v", got, want)
+	}
+
+	// 旧实现下 prefix/x.txt 的比较 key 被削成 q/refix/x.txt（永不存在）→ 每次都重拷。
+	if second := mustSync(t, context.Background(), src, dst, "src-bucket", "p", "dst-bucket", "q/", CompareETag, 2); second.Copied != 0 {
+		t.Fatalf("二次同步 copied=%d, want 0（段边界前缀导致永不收敛）", second.Copied)
+	}
+}
+
 func TestSync_SkipsEqualByETag(t *testing.T) {
 	s3FakeMu.Lock()
 	s3FakeStore = map[string][]string{
@@ -155,7 +245,7 @@ func TestSync_SkipsEqualByETag(t *testing.T) {
 	src, dst, closer := makeFakePair(t)
 	defer closer()
 
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2, nil)
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2)
 	if out.Scanned != 2 {
 		t.Errorf("scanned = %d, want 2", out.Scanned)
 	}
@@ -187,12 +277,12 @@ func TestSync_AlwaysCopies(t *testing.T) {
 	src, dst, closer := makeFakePair(t)
 	defer closer()
 
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2, nil)
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2)
 	if out.Copied != 1 {
 		t.Errorf("ETag differ → copied = %d, want 1", out.Copied)
 	}
 
-	out2 := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareAlways, 2, nil)
+	out2 := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareAlways, 2)
 	if out2.Copied != 1 {
 		t.Errorf("CompareAlways → copied = %d, want 1", out2.Copied)
 	}
@@ -211,7 +301,7 @@ func TestSync_EmptySrc(t *testing.T) {
 	src, dst, closer := makeFakePair(t)
 	defer closer()
 
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2, nil)
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareETag, 2)
 	if out.Scanned != 0 || out.Skipped != 0 || out.Copied != 0 {
 		t.Errorf("empty src: %+v", out)
 	}
@@ -227,7 +317,7 @@ func TestSync_DefaultModeIsETag(t *testing.T) {
 	src, dst, closer := makeFakePair(t)
 	defer closer()
 
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", "", 2, nil)
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", "", 2)
 	if out.Skipped != 1 {
 		t.Errorf("default mode skipped = %d, want 1", out.Skipped)
 	}
@@ -251,7 +341,7 @@ func TestSync_SizeMTimeMode(t *testing.T) {
 	src, dst, closer := makeFakePair(t)
 	defer closer()
 
-	out := SyncKeys(context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareSizeTime, 2, nil)
+	out := mustSync(t, context.Background(), src, dst, "src-bucket", "", "dst-bucket", "", CompareSizeTime, 2)
 	if out.Skipped != 1 {
 		t.Errorf("size_mtime skipped = %d, want 1", out.Skipped)
 	}
@@ -272,4 +362,19 @@ func TestStripPrefix(t *testing.T) {
 			t.Errorf("stripPrefix(%q, %q) = %q, want %q", c.in, c.prefix, got, c.want)
 		}
 	}
+}
+
+// mustSync 调 SyncKeys 并在列举失败时终止测试；多数用例只关心复制/比对语义。
+func mustSync(
+	t *testing.T, ctx context.Context,
+	src, dst *s3wrap.Client,
+	srcBucket, srcPrefix, dstBucket, dstPrefix string,
+	mode CompareMode, workers int,
+) SyncResult {
+	t.Helper()
+	out, err := SyncKeys(ctx, src, dst, srcBucket, srcPrefix, dstBucket, dstPrefix, mode, workers, nil)
+	if err != nil {
+		t.Fatalf("SyncKeys: %v", err)
+	}
+	return out
 }

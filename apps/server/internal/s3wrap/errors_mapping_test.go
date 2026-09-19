@@ -67,6 +67,7 @@ func TestHTTPStatusCoversAllBranches(t *testing.T) {
 		{"MalformedXML", fakeAPIError{code: "MalformedXML"}, 400},
 		{"EntityTooLarge", fakeAPIError{code: "EntityTooLarge"}, 400},
 		{"InvalidStorageClass", fakeAPIError{code: "InvalidStorageClass"}, 400},
+		{"InvalidPartOrder", fakeAPIError{code: "InvalidPartOrder"}, 400},
 		{"BucketNotEmpty", fakeAPIError{code: "BucketNotEmpty"}, 409},
 		{"InvalidRange", fakeAPIError{code: "InvalidRange"}, 416},
 		{"SlowDown", fakeAPIError{code: "SlowDown"}, 503},

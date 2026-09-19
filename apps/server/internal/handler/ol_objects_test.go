@@ -312,12 +312,12 @@ func TestOlRunDeletePrefixTruncateExact(t *testing.T) {
 	srv := olListPagesFake(t, pages)
 	env := accNewEnv(t, srv.URL, "b")
 	client := olClient(t, env)
-	deleted, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
+	counts, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
 	if err != nil {
 		t.Fatalf("runDeletePrefix: %v", err)
 	}
-	if deleted != 100_000 || !truncated {
-		t.Fatalf("deleted=%d truncated=%v, want 100000 true", deleted, truncated)
+	if counts.Deleted != 100_000 || counts.Failed != 0 || !truncated {
+		t.Fatalf("counts=%+v truncated=%v, want deleted 100000 failed 0 true", counts, truncated)
 	}
 }
 
@@ -332,12 +332,12 @@ func TestOlRunDeletePrefixCrossLimit(t *testing.T) {
 	srv := olListPagesFake(t, pages)
 	env := accNewEnv(t, srv.URL, "b")
 	client := olClient(t, env)
-	deleted, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
+	counts, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
 	if err != nil {
 		t.Fatalf("runDeletePrefix: %v", err)
 	}
-	if deleted != 100_000 || !truncated {
-		t.Fatalf("deleted=%d truncated=%v, want 100000 true", deleted, truncated)
+	if counts.Deleted != 100_000 || counts.Failed != 0 || !truncated {
+		t.Fatalf("counts=%+v truncated=%v, want deleted 100000 failed 0 true", counts, truncated)
 	}
 }
 

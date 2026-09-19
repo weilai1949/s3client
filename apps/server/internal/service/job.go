@@ -63,18 +63,37 @@ type Job struct {
 	lastSave time.Time
 }
 
-// JobRegistry 任务注册表（reap + 关停取消 + 可选落盘）。
+// JobRegistry 任务注册表（reap + 关停取消 + 可选落盘 + 在册上限）。
 type JobRegistry struct {
 	mu        sync.Mutex
 	jobs      map[string]*Job
 	stopCh    chan struct{}
 	once      sync.Once
 	persister JobPersister
+	maxJobs   int
+}
+
+// defaultMaxJobs 是在册任务上限：每个任务持有 goroutine、SSE 订阅与落盘条目，
+// 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（todolist #17 / ASSESSMENT M4）。
+const defaultMaxJobs = 256
+
+// RegistryOption 在构造注册表时调整其行为；当前只有「在册任务上限」一项。
+// 用构造期选项而非可变全局：上限是每个注册表实例的属性，改全局会影响所有实例
+// 并与并发测试相互干扰（原 `SetMaxJobsForTest` 见 docs/review-2026-09-19.md §A2）。
+type RegistryOption func(*JobRegistry)
+
+// WithMaxJobs 覆盖该注册表的在册任务上限（<=0 视为未设置，保持默认）。
+func WithMaxJobs(n int) RegistryOption {
+	return func(r *JobRegistry) {
+		if n > 0 {
+			r.maxJobs = n
+		}
+	}
 }
 
 // NewJobRegistry 创建纯内存注册表（不落盘，与历史行为一致）并启动 reap 循环。
-func NewJobRegistry() *JobRegistry {
-	return NewJobRegistryWithPersister(nil)
+func NewJobRegistry(opts ...RegistryOption) *JobRegistry {
+	return NewJobRegistryWithPersister(nil, opts...)
 }
 
 // NewJobRegistryWithPersister 创建注册表并恢复既有任务清单（persister 为 nil 时纯内存）。
@@ -85,11 +104,15 @@ func NewJobRegistry() *JobRegistry {
 //
 // 任务清单属于辅助信息：Load/Save 失败只降级为内存态，不影响服务启动
 // （与账号存储「不可用则硬失败」的取舍不同，见 ADR-002）。
-func NewJobRegistryWithPersister(p JobPersister) *JobRegistry {
+func NewJobRegistryWithPersister(p JobPersister, opts ...RegistryOption) *JobRegistry {
 	r := &JobRegistry{
 		jobs:      make(map[string]*Job),
 		stopCh:    make(chan struct{}),
 		persister: p,
+		maxJobs:   defaultMaxJobs,
+	}
+	for _, opt := range opts {
+		opt(r)
 	}
 	r.restore()
 	go r.reapLoop()
@@ -273,11 +296,6 @@ func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
 // ErrTooManyJobs 表示在册（未终结）任务数已达上限。
 var ErrTooManyJobs = errors.New("too many running jobs")
 
-// maxJobs 是在册任务上限：每个任务持有 goroutine、SSE 订阅与落盘条目，
-// 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（todolist #17 / ASSESSMENT M4）。
-// 暴露为包级变量以便测试收紧。
-var maxJobs = 256
-
 // TryCreate 在容量允许时注册新任务；超限返回 ErrTooManyJobs 且不产生任何副作用。
 //
 // 上限只统计「未终结」任务：已 done/cancelled/interrupted 的历史任务不应
@@ -296,7 +314,7 @@ func (r *JobRegistry) TryCreate(total int, cancel context.CancelFunc) (*Job, err
 		j.persist = r.persistJobs
 	}
 	r.mu.Lock()
-	if r.runningCountLocked() >= maxJobs {
+	if r.runningCountLocked() >= r.maxJobs {
 		r.mu.Unlock()
 		return nil, ErrTooManyJobs
 	}
@@ -328,19 +346,32 @@ func (r *JobRegistry) Get(id string) (*Job, bool) {
 	return j, ok
 }
 
+// maxSubscribersPerJob 单个任务的并发订阅上限。
+//
+// 为什么需要：SSE 路由的 withStreamLimit 管的是「全局并发流」，同一任务仍可被反复订阅；
+// 而 Finish 对每个订阅者都要投递（带上限），订阅数无界时终态关闭的最坏耗时随之线性增长。
+const maxSubscribersPerJob = 16
+
 // Subscribe 订阅进度；已结束则立即推送终态并关闭 channel。
-func (j *Job) Subscribe() chan JobProgress {
+//
+// 第二个返回值为 false 表示该任务的订阅位已满（见 maxSubscribersPerJob），
+// 调用方应回 503 而不是继续接受——Finish 对每个订阅者都要投递（带超时），
+// 无上限会让终态关闭的最坏耗时随订阅数线性增长。
+func (j *Job) Subscribe() (chan JobProgress, bool) {
 	ch := make(chan JobProgress, 16)
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.done {
 		ch <- j.progress
 		close(ch)
-		return ch
+		return ch, true
+	}
+	if len(j.subs) >= maxSubscribersPerJob {
+		return nil, false
 	}
 	j.subs[ch] = struct{}{}
 	ch <- j.progress
-	return ch
+	return ch, true
 }
 
 // Unsubscribe 取消订阅。
@@ -351,27 +382,29 @@ func (j *Job) Unsubscribe(ch chan JobProgress) {
 }
 
 // Emit 广播中间进度（慢订阅者可丢中间帧）；落盘按 jobProgressPersistEvery 节流。
+//
+// **投递必须在锁内完成**：Finish 在同一把锁下清空订阅表、解锁后才 close 这些 channel。
+// 旧实现「锁内快照、解锁后发送」与 Finish 的 close 之间没有互斥，一旦并发就会
+// send on closed channel → panic（进程不 recover，直接退出）。
+// 发送都是非阻塞的（default 分支丢帧），持锁时间有界。
 func (j *Job) Emit(p JobProgress) {
 	j.mu.Lock()
 	j.progress = p
-	subs := make([]chan JobProgress, 0, len(j.subs))
-	for ch := range j.subs {
-		subs = append(subs, ch)
-	}
 	shouldPersist := j.persist != nil && time.Since(j.lastSave) >= jobProgressPersistEvery
 	if shouldPersist {
 		j.lastSave = time.Now()
 	}
-	j.mu.Unlock()
-
-	if shouldPersist {
-		j.persist()
-	}
-	for _, ch := range subs {
+	for ch := range j.subs {
 		select {
 		case ch <- p:
 		default:
 		}
+	}
+	j.mu.Unlock()
+
+	// 落盘在锁外做：I/O 不应拖长与 Finish/Subscribe 的互斥窗口。
+	if shouldPersist {
+		j.persist()
 	}
 }
 
@@ -447,12 +480,4 @@ func ResultFromBatch(out BatchResult) JobResult {
 	return JobResult{
 		Migrated: out.OK, Failed: out.Failed, LastError: out.LastError, FailKeys: out.FailKeys,
 	}
-}
-
-// SetMaxJobsForTest 临时调整在册任务上限并返回旧值，仅供测试使用。
-// 生产代码不应调用（上限是编译期常量语义的配置）。
-func SetMaxJobsForTest(n int) int {
-	old := maxJobs
-	maxJobs = n
-	return old
 }

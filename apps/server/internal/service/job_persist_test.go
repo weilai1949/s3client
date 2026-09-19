@@ -231,7 +231,7 @@ func TestJobRegistryRecoversInterruptedJobs(t *testing.T) {
 	if !done || prog.Status != JobStatusInterrupted {
 		t.Fatalf("snapshot = %+v done=%v, want interrupted/done", prog, done)
 	}
-	ch := j.Subscribe()
+	ch, _ := j.Subscribe()
 	select {
 	case p := <-ch:
 		if p.Status != JobStatusInterrupted {

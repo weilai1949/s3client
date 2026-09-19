@@ -17,6 +17,10 @@ const MaxSinglePutBytes int64 = 5_000_000_000
 // multipartPartSize 分段大小（64MB）；var 以便单测注入小值覆盖多段路径。
 var multipartPartSize int64 = 64 << 20
 
+// maxMultipartParts 是 S3 分段上传的段号上限（段号 1..10000，第 10000 段合法）。
+// var 以便单测注入小值精确覆盖边界；默认值即协议上限（测试断言其未被改动）。
+var maxMultipartParts int32 = 10_000
+
 // maxIdlePartBufs 是池中可驻留的空闲分段缓冲数量上限。
 //
 // 内存预算：server 容器上限 512M（docker-compose*.yml 的 deploy.resources.limits.memory），
@@ -90,6 +94,12 @@ func MultipartStreamCopy(ctx context.Context, dst *s3wrap.Client, bucket, key, c
 		// 上游 ReadFull 不会感知 ctx；UploadPart 用 ctx；这里仅在 UploadPart 返回后判断退出。
 		n, readErr := io.ReadFull(body, buf)
 		if n > 0 {
+			// 段号上限必须在**上传前**判断：段号 10000 是合法的最后一段，
+			// 上传后再判 partNum > 10000 会把「正好 10000 段」的合法对象误判为超限并 abort。
+			if partNum > maxMultipartParts {
+				abort()
+				return fmt.Errorf("object exceeds multipart part limit (%d parts)", maxMultipartParts)
+			}
 			etag, uerr := dst.UploadPart(ctx, bucket, key, uploadID, partNum, bytes.NewReader(buf[:n]))
 			if uerr != nil {
 				abort()
@@ -97,10 +107,6 @@ func MultipartStreamCopy(ctx context.Context, dst *s3wrap.Client, bucket, key, c
 			}
 			parts = append(parts, s3wrap.UploadPartSpec{PartNumber: partNum, ETag: etag})
 			partNum++
-			if partNum > 10_000 {
-				abort()
-				return fmt.Errorf("object exceeds multipart part limit (10000 parts)")
-			}
 		}
 		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
 			break

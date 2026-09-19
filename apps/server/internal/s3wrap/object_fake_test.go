@@ -116,7 +116,7 @@ func TestDeleteObjectsBatchesAtThousand(t *testing.T) {
 		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><DeleteResult ` + xmlNS + `></DeleteResult>`))
 	}))
 	ctx := context.Background()
-	if err := c.DeleteObjects(ctx, "bkt", []string{"a", "b", "c"}); err != nil {
+	if _, err := c.DeleteObjects(ctx, "bkt", []string{"a", "b", "c"}); err != nil {
 		t.Fatalf("DeleteObjects(3): %v", err)
 	}
 	if len(batchSizes) != 1 || batchSizes[0] != 3 {
@@ -124,7 +124,7 @@ func TestDeleteObjectsBatchesAtThousand(t *testing.T) {
 	}
 
 	batchSizes = nil
-	if err := c.DeleteObjects(ctx, "bkt", keys); err != nil {
+	if _, err := c.DeleteObjects(ctx, "bkt", keys); err != nil {
 		t.Fatalf("DeleteObjects(1001): %v", err)
 	}
 	if len(batchSizes) != 2 || batchSizes[0] != 1000 || batchSizes[1] != 1 {
@@ -132,7 +132,7 @@ func TestDeleteObjectsBatchesAtThousand(t *testing.T) {
 	}
 
 	batchSizes = nil
-	if err := c.DeleteObjects(ctx, "bkt", nil); err != nil {
+	if _, err := c.DeleteObjects(ctx, "bkt", nil); err != nil {
 		t.Fatalf("DeleteObjects(empty): %v", err)
 	}
 	if len(batchSizes) != 0 {
@@ -141,7 +141,7 @@ func TestDeleteObjectsBatchesAtThousand(t *testing.T) {
 
 	batchSizes = nil
 	failAll = true
-	if err := c.DeleteObjects(ctx, "bkt", []string{"x"}); err == nil {
+	if _, err := c.DeleteObjects(ctx, "bkt", []string{"x"}); err == nil {
 		t.Fatal("expected error when server rejects batch")
 	} else if got := HTTPStatus(err); got != 403 {
 		t.Fatalf("HTTPStatus = %d, want 403", got)

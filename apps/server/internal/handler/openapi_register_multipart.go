@@ -14,7 +14,6 @@ func registerMultipart(r *openapi.Registry) {
 				"bucket":      openapi.Str(),
 				"key":         openapi.Str(),
 				"contentType": openapi.Str(),
-				"metadata":    openapi.Obj(),
 			}, "bucket", "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 uploadId", JSON: openapi.Obj()}},

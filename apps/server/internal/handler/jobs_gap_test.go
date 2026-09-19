@@ -18,9 +18,6 @@ import (
 // TestAsyncEndpointsReturn503AtCapacity 占满唯一在册名额后，四个异步端点
 // 均须返回 503，且不得注册新任务。
 func TestAsyncEndpointsReturn503AtCapacity(t *testing.T) {
-	old := service.SetMaxJobsForTest(1)
-	t.Cleanup(func() { service.SetMaxJobsForTest(old) })
-
 	srv := olFake(t, func(r *http.Request) olResp {
 		if r.URL.Query().Has("list-type") {
 			return olXML(http.StatusOK, listBucketXML([]string{"p/1"}, false, ""))
@@ -29,6 +26,7 @@ func TestAsyncEndpointsReturn503AtCapacity(t *testing.T) {
 	})
 	env := accNewEnv(t, srv.URL, "b")
 	t.Cleanup(env.hnd.Shutdown)
+	SetJobCapForTest(env.hnd, 1)
 
 	dst := olCreateAccount(t, env, "dst", srv.URL, "ak", "db")
 

@@ -99,7 +99,11 @@ func (h *Handler) migrateJobEvents(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusInternalServerError, "streaming not supported")
 		return
 	}
-	ch := job.Subscribe()
+	ch, ok := job.Subscribe()
+	if !ok {
+		h.writeErr(w, http.StatusServiceUnavailable, "too many subscribers for this job")
+		return
+	}
 	defer job.Unsubscribe(ch)
 	// 初始写超时：依赖 statusRecorder.Unwrap 触达底层 conn。
 	rc := http.NewResponseController(w)
@@ -135,13 +139,19 @@ func (h *Handler) migrateJobEvents(w http.ResponseWriter, r *http.Request) {
 			if !writeSSE("ping", []byte(`{"ok":true}`)) {
 				return
 			}
-		case p := <-ch:
-			// job.Finish 先推送终态再关闭 channel；通道关闭永远在循环 return 之后。
+		case p, open := <-ch:
+			// 通道关闭 = 任务已终结（Subscribe 对已结束任务推一帧后立即 close）。
+			// 缺这个判断会让已关闭的 channel「永远就绪」，把终态帧之后变成死循环刷零值帧。
+			if !open {
+				return
+			}
 			b, _ := json.Marshal(p)
 			if !writeSSE("", b) {
 				return
 			}
-			if p.Status == "done" || p.Status == "cancelled" {
+			// 终态判定必须与 service 的终态定义一致——interrupted（重启恢复标记）
+			// 同样是终态，漏判会让客户端永不断流。
+			if service.IsTerminalJobStatus(p.Status) {
 				return
 			}
 		}

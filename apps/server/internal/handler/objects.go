@@ -224,6 +224,37 @@ func (h *Handler) renameObject(w http.ResponseWriter, r *http.Request) {
 // 大量删除请走 delete-prefix（异步 + 自动分页）。
 const maxDeleteKeys = 1000
 
+// maxJobFailKeys 异步任务结果里保留的失败 key 上限：避免 10 万个全失败时把
+// 结果 JSON（进而 jobs.json）撑到数十 MB。
+const maxJobFailKeys = 200
+
+// deleteCounts 批量删除的累计结果，同时是 POST …/delete 的 200 响应体。
+//
+// S3 的 DeleteObjects 对逐 key 失败仍返回 200，只在响应体内列 <Error>；把「请求数」当作
+// 「已删除数」会向用户误报（review §B3）。此处统一按「请求数 − 逐 key 失败数」记账。
+type deleteCounts struct {
+	Deleted   int    `json:"deleted"`
+	Failed    int    `json:"failed"`
+	LastError string `json:"lastError,omitempty"`
+}
+
+// observe 记入一批删除结果：requested 为本批提交的 key 数，failures 为服务端逐 key 拒绝的条目。
+func (c *deleteCounts) observe(requested int, failures []s3wrap.DeleteFailure) {
+	c.Deleted += requested - len(failures)
+	c.Failed += len(failures)
+	if c.LastError == "" && len(failures) > 0 {
+		c.LastError = s3UserMessageForCode(failures[0].Code)
+	}
+}
+
+// deletePrefixResult 是 POST …/delete-prefix 的 200 响应体（比 deleteCounts 多一个 truncated）。
+type deletePrefixResult struct {
+	Deleted   int    `json:"deleted"`
+	Failed    int    `json:"failed"`
+	Truncated bool   `json:"truncated"`
+	LastError string `json:"lastError,omitempty"`
+}
+
 // deleteObjects 批量删除。
 func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	client, acc, ok := h.accountClient(w, r)
@@ -250,12 +281,15 @@ func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
-	if err := client.DeleteObjects(r.Context(), bucket, req.Keys); err != nil {
+	failures, err := client.DeleteObjects(r.Context(), bucket, req.Keys)
+	if err != nil {
 		h.writeInternalErr(w, err, "delete objects failed")
 		return
 	}
-	h.audit(r, auditObjectsDelete, "bucket", bucket, "count", len(req.Keys))
-	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": len(req.Keys)})
+	var counts deleteCounts
+	counts.observe(len(req.Keys), failures)
+	h.audit(r, auditObjectsDelete, "bucket", bucket, "deleted", counts.Deleted, "failed", counts.Failed)
+	h.writeJSON(w, http.StatusOK, counts)
 }
 
 // deletePrefix 递归删除前缀下的全部对象（循环 ListObjectsV2 + 批量 DeleteObjects）。
@@ -280,13 +314,16 @@ func (h *Handler) deletePrefix(w http.ResponseWriter, r *http.Request) {
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
-	deleted, truncated, err := runDeletePrefix(r.Context(), client, bucket, req.Prefix)
+	counts, truncated, err := runDeletePrefix(r.Context(), client, bucket, req.Prefix)
 	if err != nil {
 		h.writeInternalErr(w, err, "delete prefix failed")
 		return
 	}
-	h.audit(r, auditDeletePrefix, "bucket", bucket, "prefix", req.Prefix, "deleted", deleted)
-	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": deleted, "truncated": truncated})
+	h.audit(r, auditDeletePrefix, "bucket", bucket, "prefix", req.Prefix,
+		"deleted", counts.Deleted, "failed", counts.Failed)
+	h.writeJSON(w, http.StatusOK, deletePrefixResult{
+		Deleted: counts.Deleted, Failed: counts.Failed, Truncated: truncated, LastError: counts.LastError,
+	})
 }
 
 // deletePrefixAsync 异步递归删除前缀；进度复用 migrate jobs（migrated=已删除数）。
@@ -324,8 +361,7 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		defer cancel()
-		deleted, failed := 0, 0
-		var lastErr string
+		var counts deleteCounts
 		var failKeys []string
 		const batch = 1000
 		for i := 0; i < len(keys); i += batch {
@@ -337,22 +373,31 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 				end = len(keys)
 			}
 			chunk := keys[i:end]
-			if err := client.DeleteObjects(ctx, bucket, chunk); err != nil {
-				failed += len(chunk)
-				if lastErr == "" {
-					lastErr = s3UserMessage(err)
+			// chunk ≤ 1000 → 单次 SDK 调用，failures 只可能属于本批。
+			failures, delErr := client.DeleteObjects(ctx, bucket, chunk)
+			if delErr != nil {
+				// 传输层失败：本批 key 的结果未知，全部计入失败。
+				counts.Failed += len(chunk)
+				if counts.LastError == "" {
+					counts.LastError = s3UserMessage(delErr)
 				}
 				for _, k := range chunk {
-					if len(failKeys) < 200 {
+					if len(failKeys) < maxJobFailKeys {
 						failKeys = append(failKeys, k)
 					}
 				}
 			} else {
-				deleted += len(chunk)
+				counts.observe(len(chunk), failures)
+				for _, f := range failures {
+					if len(failKeys) < maxJobFailKeys {
+						failKeys = append(failKeys, f.Key)
+					}
+				}
 			}
 			job.Emit(service.JobProgress{
-				Done: deleted + failed, Total: len(keys), Migrated: deleted, Failed: failed,
-				Error: lastErr, Status: "running",
+				Done: counts.Deleted + counts.Failed, Total: len(keys),
+				Migrated: counts.Deleted, Failed: counts.Failed,
+				Error: counts.LastError, Status: "running",
 			})
 		}
 		status := "done"
@@ -360,7 +405,7 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 			status = "cancelled"
 		}
 		job.Finish(service.JobResult{
-			Migrated: deleted, Failed: failed, LastError: lastErr, FailKeys: failKeys,
+			Migrated: counts.Deleted, Failed: counts.Failed, LastError: counts.LastError, FailKeys: failKeys,
 		}, status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
@@ -368,40 +413,45 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// runDeletePrefix 循环列举 + 批量删除前缀下的全部对象。
+//
+// 进度以「已处理数」（成功 + 逐 key 失败）为准而不是「已删除数」：桶策略/保留期让删除全部
+// 失败时，只看 deleted 会让循环永不前进（同一页反复列出、反复失败直到 2h 任务超时）。
 func runDeletePrefix(
 	ctx context.Context, client *s3wrap.Client, bucket, prefix string,
-) (deleted int, truncated bool, err error) {
+) (counts deleteCounts, truncated bool, err error) {
 	const maxDelete = 100_000
 	token := ""
 	for {
-		if deleted >= maxDelete {
+		if counts.Deleted+counts.Failed >= maxDelete {
 			truncated = true
 			break
 		}
 		page, listErr := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", 1000)
 		if listErr != nil {
-			return deleted, truncated, listErr
+			return counts, truncated, listErr
 		}
 		keys := make([]string, 0, len(page.Objects))
 		for _, o := range page.Objects {
 			keys = append(keys, o.Key)
 		}
 		if len(keys) > 0 {
-			if deleted+len(keys) > maxDelete {
-				keys = keys[:maxDelete-deleted]
+			if counts.Deleted+counts.Failed+len(keys) > maxDelete {
+				keys = keys[:maxDelete-counts.Deleted-counts.Failed]
 				truncated = true
 			}
-			if delErr := client.DeleteObjects(ctx, bucket, keys); delErr != nil {
-				return deleted, truncated, delErr
+			failures, delErr := client.DeleteObjects(ctx, bucket, keys)
+			if delErr != nil {
+				return counts, truncated, delErr
 			}
-			deleted += len(keys)
+			counts.observe(len(keys), failures)
 		}
 		if truncated || !page.IsTruncated || page.NextToken == "" {
 			break
 		}
 		token = page.NextToken
 	}
-	return deleted, truncated, nil
+	return counts, truncated, nil
 }
 
 // presign 生成 v4 签名 URL（get/put/post）。

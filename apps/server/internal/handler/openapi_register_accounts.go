@@ -23,7 +23,6 @@ func registerAccounts(r *openapi.Registry) {
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"name":           openapi.Str(),
-				"provider":       openapi.Str(),
 				"endpoint":       openapi.Str(),
 				"publicEndpoint": openapi.Str(),
 				"region":         openapi.Str(),
@@ -31,6 +30,7 @@ func registerAccounts(r *openapi.Registry) {
 				"secretKey":      openapi.Str(),
 				"bucket":         openapi.Str(),
 				"pathStyle":      openapi.Bool(),
+				"useSSL":         openapi.Bool(),
 			}, "name", "endpoint", "accessKey", "secretKey")},
 		},
 		Responses: map[string]openapi.Response{

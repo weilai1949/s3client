@@ -18,7 +18,7 @@ func TestJobRegistryLifecycle(t *testing.T) {
 	if !ok || got != job {
 		t.Fatal("get")
 	}
-	ch := job.Subscribe()
+	ch, _ := job.Subscribe()
 	job.Emit(JobProgress{Done: 1, Total: 2, Migrated: 1, Status: "running"})
 	select {
 	case p := <-ch:
