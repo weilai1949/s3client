@@ -385,6 +385,22 @@ describe('useObjectBrowser gaps', () => {
     expect(browser.hintsHidden.value).toBe(true)
   })
 
+  it('存储不可用时提示条读写降级（不抛错，默认未隐藏）', () => {
+    const boom = () => { throw new DOMException('SecurityError', 'SecurityError') }
+    const throwing = { getItem: boom, setItem: boom, removeItem: boom }
+    Object.defineProperty(globalThis, 'localStorage', { value: throwing, configurable: true })
+    Object.defineProperty(window, 'localStorage', { value: throwing, configurable: true })
+    try {
+      const browser = useObjectBrowser(makeBindings())
+      expect(browser.hintsHidden.value).toBe(false)
+      expect(() => browser.hideHints()).not.toThrow()
+      expect(browser.hintsHidden.value).toBe(true)
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, configurable: true })
+      Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })
+    }
+  })
+
   it('openCtxFromButton anchors below the button', () => {
     const browser = useObjectBrowser(makeBindings())
     const fakeTarget = { getBoundingClientRect: () => ({ right: 200, bottom: 100, left: 0, top: 0, width: 0, height: 0 }) }

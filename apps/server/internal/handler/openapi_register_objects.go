@@ -46,14 +46,10 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":       openapi.Str(),
-				"key":          openapi.Str(),
-				"contentType":  openapi.Str(),
-				"contentLang":  openapi.Str(),
-				"contentEnc":   openapi.Str(),
-				"cacheControl": openapi.Str(),
-				"disposition":  openapi.Str(),
-				"metadata":     openapi.Obj(),
+				"bucket":      openapi.Str(),
+				"key":         openapi.Str(),
+				"contentType": openapi.Str(),
+				"metadata":    openapi.Obj(),
 			}, "bucket", "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "metadata 校验失败", JSON: refSchema("Error")}},
@@ -109,11 +105,10 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":      openapi.Str(),
-				"key":         openapi.Str(),
-				"newBucket":   openapi.Str("可选；省略=同桶"),
-				"newKey":      openapi.Str(),
-				"replaceTags": desc(openapi.Bool(), "保留标签"),
+				"bucket":    openapi.Str(),
+				"key":       openapi.Str(),
+				"newBucket": openapi.Str("可选；省略=同桶"),
+				"newKey":    openapi.Str(),
 			}, "bucket", "key", "newKey")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
@@ -172,7 +167,7 @@ func registerObjects(r *openapi.Registry) {
 				// 指定版本删除走 DELETE /api/accounts/{id}/version。
 			}, "bucket", "keys")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError", JSON: openapi.Obj()}, "400": {Description: "key 数>1000", JSON: refSchema("Error")}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError；S3 逐 key 失败仍返回 200，deleted 只计成功数", JSON: openapi.Obj()}, "400": {Description: "key 数>1000", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/delete-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归删除前缀（同步流式）", OperationID: "deletePrefix",
@@ -184,7 +179,7 @@ func registerObjects(r *openapi.Registry) {
 				"prefix": openapi.Str(),
 			}, "bucket", "prefix")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/lastError", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/truncated/lastError", JSON: openapi.Obj()}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/delete-prefix/async", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归删除前缀（异步）", OperationID: "deletePrefixAsync",

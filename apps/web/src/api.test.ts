@@ -232,6 +232,56 @@ describe('servers', () => {
     expect(mod.api.activeServerId()).toBe(mod.api.listServers()[0].id)
   })
 
+  // P0-2（docs/review-2026-09-19.md §F1）：s3c.servers 被外部写坏时整站白屏。
+  // 读路径在渲染期被 App.vue 调用，抛异常 = 白屏且 UI 无法自救（连修复它的 Server 面板都不可达）。
+  describe('存储被写坏时不得抛异常 / 不得产生幽灵 server', () => {
+    const corrupt: Array<{ name: string; raw: string }> = [
+      { name: '[null]（元素为 null）', raw: '[null]' },
+      { name: '[1]（元素为数字）', raw: '[1]' },
+      { name: '["x"]（元素为字符串）', raw: '["x"]' },
+      { name: '[{}]（元素缺 id）', raw: '[{}]' },
+      { name: '[{"base":{}}]（base 非字符串）', raw: '[{"base":{}}]' },
+    ]
+
+    for (const c of corrupt) {
+      it(`${c.name} → listServers/getActiveServer 正常返回且不残留坏条目`, async () => {
+        memLocal.setItem('s3c.servers', c.raw)
+        const { api } = await loadApi()
+
+        // 读取路径（App.vue 渲染期调用）必须不抛。
+        let list: unknown[] = []
+        expect(() => { list = api.listServers() }).not.toThrow()
+        expect(() => api.getActiveServer()).not.toThrow()
+        expect(() => api.activeServerId()).not.toThrow()
+
+        // 坏条目不得变成 id:'' 的幽灵 server。
+        expect(list.every((s) => typeof (s as { id: string }).id === 'string' && (s as { id: string }).id !== '')).toBe(true)
+        // 且存储被修复（不把坏数据留在 localStorage 里反复踩）。
+        const stored = JSON.parse(memLocal.getItem('s3c.servers') ?? 'null') as unknown[] | null
+        expect(Array.isArray(stored)).toBe(true)
+        expect(JSON.stringify(stored)).not.toContain('null')
+      })
+    }
+
+    it('坏条目与合法条目混合时保留合法的那些', async () => {
+      memLocal.setItem('s3c.servers', '[null,{"id":"keep","name":"ok","base":"http://ok"},7]')
+      const { api } = await loadApi()
+      const list = api.listServers()
+      expect(list.map((s) => s.id)).toEqual(['keep'])
+      expect(api.getActiveServer()?.name).toBe('ok')
+    })
+
+    it('存储完全不可用时 getActiveServer() 返回 undefined 而不是抛出（渲染期不得白屏）', async () => {
+      const { api } = await loadApi()
+      const boom = () => { throw new Error('SecurityError: storage disabled') }
+      vi.spyOn(memLocal, 'getItem').mockImplementation(boom)
+      vi.spyOn(memLocal, 'setItem').mockImplementation(boom)
+
+      expect(() => api.getActiveServer()).not.toThrow()
+      expect(api.getActiveServer()).toBeUndefined()
+    })
+  })
+
   it('selectServer() 生效并同步', async () => {
     const { api } = await loadApi()
     const list = api.listServers()
@@ -391,7 +441,8 @@ describe('request / requestResponse', () => {
 
   it('requestResponse 不带 opts：默认参数 `= {}` 生效，无 Content-Type', async () => {
     stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
-    const { requestResponse, api } = await loadApi()
+    const { api } = await loadApi()
+    const { requestResponse } = await import('./api/http')
     api.base = 'https://s3.example.com'
     const res = await requestResponse('/test')
     expect(res.ok).toBe(true)
@@ -400,7 +451,8 @@ describe('request / requestResponse', () => {
 
   it('requestResponse 带 opts 但无 body：不设置 Content-Type', async () => {
     stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
-    const { requestResponse, api } = await loadApi()
+    const { api } = await loadApi()
+    const { requestResponse } = await import('./api/http')
     api.base = 'https://s3.example.com'
     await requestResponse('/test', { method: 'GET' })
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
@@ -413,6 +465,39 @@ describe('request / requestResponse', () => {
     stubFetch(() => Promise.resolve(makeErrorResponse(403, 'Forbidden', 'bad token')))
     const { api } = await loadApi()
     api.base = 'https://s3.example.com'
+  })
+
+  it('调用方自带 headers 时与默认 Authorization/Content-Type 合并（默认值不丢）', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
+    const { api } = await loadApi()
+    api.token = 'tok-abc'
+    api.base = 'https://s3.example.com'
+    const { request } = await import('./api/http')
+    await request('/test', { method: 'POST', body: '{}', headers: { 'X-Trace': 't1', 'Content-Type': 'text/csv' } })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      'https://s3.example.com/test',
+      expect.objectContaining({
+        method: 'POST',
+        body: '{}',
+        headers: {
+          'X-Trace': 't1',
+          // 调用方同名 header 优先
+          'Content-Type': 'text/csv',
+          Authorization: 'Bearer tok-abc',
+        },
+      }),
+    )
+  })
+
+  it('requestResponse 同样合并 headers（授权头不被调用方 headers 覆盖掉）', async () => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({ ok: true })))
+    const { api } = await loadApi()
+    api.token = 'tok-xyz'
+    api.base = 'https://s3.example.com'
+    const { requestResponse } = await import('./api/http')
+    await requestResponse('/stream', { headers: { Accept: 'application/zip' } })
+    const init = vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit
+    expect(init.headers).toEqual({ Accept: 'application/zip', Authorization: 'Bearer tok-xyz' })
   })
 })
 
@@ -513,12 +598,6 @@ describe('s3api', () => {
     const { s3api } = await import('./api')
     await s3api.copyObject('id1', { bucket: 'b', key: 'k', newKey: 'kk' })
     expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/copy-object', expect.objectContaining({ method: 'POST' }))
-  })
-
-  it('copyFiles', async () => {
-    const { s3api } = await import('./api')
-    await s3api.copyFiles('id1', { bucket: 'b', targetBucket: 'tb', keys: ['k'] })
-    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/copy-objects', expect.objectContaining({ method: 'POST' }))
   })
 
   it('copyFilesAsync', async () => {
@@ -634,27 +713,23 @@ describe('s3api', () => {
     await s3api.multipartAbort('id1', { bucket: 'b', key: 'k', uploadId: 'u' })
   })
 
-  it('deleteObjects / deletePrefix / deletePrefixAsync', async () => {
+  it('deleteObjects / deletePrefixAsync', async () => {
     const { s3api } = await import('./api')
     await s3api.deleteObjects('id1', { bucket: 'b', keys: ['k'] })
-    await s3api.deletePrefix('id1', { bucket: 'b', prefix: 'p' })
     await s3api.deletePrefixAsync('id1', { bucket: 'b', prefix: 'p' })
   })
 
-  it('copyPrefix / copyPrefixAsync', async () => {
+  it('copyPrefixAsync', async () => {
     const { s3api } = await import('./api')
-    await s3api.copyPrefix('id1', { bucket: 'b', prefix: 'p', targetBucket: 'tb', targetPrefix: 'tp' })
     await s3api.copyPrefixAsync('id1', { bucket: 'b', prefix: 'p', targetBucket: 'tb', targetPrefix: 'tp' })
   })
 
-  it('migrate / migrateAsync / migrateJobs / migrateJobStatus / migrateJobCancel / migrateSync', async () => {
+  it('migrateAsync / migrateJobs / migrateJobStatus / migrateJobCancel', async () => {
     const { s3api } = await import('./api')
-    await s3api.migrate({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
     await s3api.migrateAsync({ sourceAccountId: 'a1', sourceKeys: ['k'], targetAccountId: 'a2' })
     await s3api.migrateJobs()
     await s3api.migrateJobStatus('job1')
     await s3api.migrateJobCancel('job1')
-    await s3api.migrateSync({ sourceAccountId: 'a1', sourcePrefix: 'p/', targetAccountId: 'a2' })
   })
 
   it('downloadZipToDisk blob fallback success', async () => {
@@ -668,7 +743,7 @@ describe('s3api', () => {
         body: null,
       })
     )
-    const { downloadZipToDisk } = await import('./api')
+    const { downloadZipToDisk } = await import('./api/download')
     await downloadZipToDisk('id1', { keys: ['a.txt'] })
     expect(fetch).toHaveBeenCalled()
   })
@@ -684,7 +759,7 @@ describe('s3api', () => {
         body: null,
       })
     )
-    const { downloadZipToDisk } = await import('./api')
+    const { downloadZipToDisk } = await import('./api/download')
     const create = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:zip')
     const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
     vi.useFakeTimers()
@@ -710,7 +785,7 @@ describe('s3api', () => {
         body: null,
       })
     )
-    const { downloadZipToDisk } = await import('./api')
+    const { downloadZipToDisk } = await import('./api/download')
     const keys = Array.from({ length: 51 }, (_, i) => `key-${i}.txt`)
     await expect(downloadZipToDisk('id1', { keys })).rejects.toThrow()
   })
@@ -725,7 +800,7 @@ describe('s3api', () => {
         body: null,
       })
     )
-    const { downloadZipToDisk } = await import('./api')
+    const { downloadZipToDisk } = await import('./api/download')
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow()
   })
 
@@ -740,7 +815,8 @@ describe('s3api', () => {
         body: null,
       })
     )
-    const { api, downloadZipToDisk } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.token = 'tok-123'
     await downloadZipToDisk('id1', { keys: ['a.txt'] })
     expect(globalThis.fetch).toHaveBeenCalledWith(
@@ -911,6 +987,109 @@ describe('subscribeMigrateEvents', () => {
     expect(terminal).toBeTruthy()
     expect(onError).not.toHaveBeenCalled()
   })
+
+  it('SSE 静默挂起（连接不断但无任何事件）：空闲超时触发 onError，不永久占用按钮', async () => {
+    vi.useFakeTimers()
+    try {
+      let cancelled = false
+      stubFetch(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({
+              read: () => new Promise(() => {}), // 永久挂起
+              cancel: () => {
+                cancelled = true
+                return Promise.resolve()
+              },
+            }),
+          },
+        }),
+      )
+      const { subscribeMigrateEvents } = await import('./api')
+      const onProgress = vi.fn()
+      const onError = vi.fn()
+      subscribeMigrateEvents('job1', onProgress, onError)
+      await vi.advanceTimersByTimeAsync(46_000)
+      expect(onError).toHaveBeenCalled()
+      expect(onProgress).not.toHaveBeenCalled()
+      expect(cancelled).toBe(true) // 超时必须主动断开流，不留悬挂连接
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('SSE 空闲超时会主动关闭底层流（不留悬挂连接）', async () => {
+    vi.useFakeTimers()
+    try {
+      const cancel = vi.fn(() => Promise.resolve())
+      stubFetch(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Map<string, string>(),
+          body: {
+            getReader: () => ({ read: () => new Promise(() => {}), cancel }), // 永久挂起
+          },
+        }),
+      )
+      const { subscribeMigrateEvents } = await import('./api')
+      const onError = vi.fn()
+      subscribeMigrateEvents('job1', vi.fn(), onError)
+      await vi.advanceTimersByTimeAsync(46_000)
+      expect(onError).toHaveBeenCalled()
+      expect(cancel).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('SSE 心跳持续到达时不误判空闲；终态到达后不触发空闲超时', async () => {
+    let cancelled = false
+    let reads = 0
+    stubFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Map<string, string>(),
+        body: {
+          getReader: () => ({
+            read: async () => {
+              reads++
+              if (reads === 1) return { done: false, value: new TextEncoder().encode('event: ping\ndata: {}\n\n') }
+              if (reads === 2) {
+                // 两次心跳间隔 40ms < 60ms 空闲阈值 → 不得超时
+                await new Promise((r) => setTimeout(r, 40))
+                return { done: false, value: new TextEncoder().encode('event: ping\ndata: {}\n\n') }
+              }
+              await new Promise((r) => setTimeout(r, 40))
+              return {
+                done: false,
+                value: new TextEncoder().encode('event: progress\ndata: {"done":1,"total":1,"migrated":1,"status":"done"}\n\n'),
+              }
+            },
+            cancel: () => {
+              cancelled = true
+              return Promise.resolve()
+            },
+          }),
+        },
+      }),
+    )
+    const { subscribeMigrateEvents } = await import('./api')
+    const onProgress = vi.fn()
+    const onError = vi.fn()
+    const abort = subscribeMigrateEvents('job1', onProgress, onError, 60)
+    await vi.waitFor(() => expect(onProgress.mock.calls.some(([p]) => p.status === 'done')).toBe(true))
+    abort()
+    expect(onError).not.toHaveBeenCalled()
+    expect(cancelled).toBe(false)
+  })
 })
 
 // ── directUpload ────────────────────────────────────────────────────────────
@@ -1054,7 +1233,8 @@ describe('api gaps', () => {
 
   it('requestResponse 非 ok 解析 JSON error', async () => {
     stubFetch(() => Promise.resolve(makeErrorResponse(401, 'Unauthorized', 'expired')))
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('401 expired')
   })
@@ -1067,7 +1247,8 @@ describe('api gaps', () => {
     }))
     const picker = vi.fn().mockResolvedValue({ createWritable: async () => ({ abort: vi.fn() }) })
     Object.defineProperty(window, 'showSaveFilePicker', { value: picker, configurable: true })
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await downloadZipToDisk('id1', { keys: ['a.txt'] })
     expect(picker).toHaveBeenCalled()
@@ -1083,7 +1264,8 @@ describe('api gaps', () => {
       headers: new Map<string, string>(),
     }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
     expect(cancel).toHaveBeenCalled()
@@ -1098,7 +1280,8 @@ describe('api gaps', () => {
       headers: new Map<string, string>(),
     }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockResolvedValue({ createWritable: async () => ({ abort }) }), configurable: true })
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('pipe broke')
     expect(abort).toHaveBeenCalled()
@@ -1387,7 +1570,8 @@ describe('api gaps: s3api bucket 可选参数', () => {
 describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
   it('requestResponse 错误体无 error 字段 → 回退 statusText（line 275 假分支）', async () => {
     stubFetch(() => Promise.resolve(makeErrorResponse(500, 'boom')))
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('500 boom')
   })
@@ -1400,7 +1584,8 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
       headers: new Map<string, string>(),
     }))
     Object.defineProperty(window, 'showSaveFilePicker', { value: vi.fn().mockRejectedValue(new Error('user cancelled')), configurable: true })
-    const { downloadZipToDisk, api } = await loadApi()
+    const { api } = await loadApi()
+    const { downloadZipToDisk } = await import('./api/download')
     api.base = 'https://s3.example.com'
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('user cancelled')
     expect(cancel).toHaveBeenCalledTimes(1)
@@ -1414,7 +1599,7 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
       headers: new Map<string, string>([['Content-Length', '600000000']]),
       body: { cancel },
     }))
-    const { downloadZipToDisk } = await import('./api')
+    const { downloadZipToDisk } = await import('./api/download')
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('api.zipTooLarge')
     expect(cancel).toHaveBeenCalledTimes(1)
   })
@@ -1629,18 +1814,24 @@ describe('api gaps: per-server token 持久化与迁移回退', () => {
     memLocal.getItem = orig
   })
 
-  it('迁移旧条目缺 id/name/base 时补空串，且无 activeServerId 时回退空串', async () => {
-    // 极旧格式：条目只有 token（正常路径下应已含 id/name/base），触发全部 ?? 兜底
-    memLocal.setItem('s3c.servers', JSON.stringify([{ token: 'legacy-partial-tok' }]))
+  it('迁移旧条目缺 name/base 时补空串；缺 id 的条目无法寻址 → 丢弃并修复存储', async () => {
+    // 极旧格式：条目有 id + token 但缺 name/base，应补空串并完成 token 迁移。
+    memLocal.setItem('s3c.servers', JSON.stringify([{ id: 'legacy-partial', token: 'legacy-partial-tok' }]))
     const { api } = await loadApi()
     const list = api.listServers()
-    expect(list[0]?.id).toBe('')
+    expect(list.map((s) => s.id)).toEqual(['legacy-partial'])
     expect(list[0]?.name).toBe('')
     expect(list[0]?.base).toBe('')
-    // token 已迁移到 per-server 存储（id 为空串）
+    // token 已迁移到 per-server 存储
     expect(list[0]?.token).toBe('legacy-partial-tok')
     // s3c.servers 已重写为无 token 形态
     expect(memLocal.getItem('s3c.servers')).not.toContain('legacy-partial-tok')
+
+    // 缺 id 的条目无法被 activeServerId / per-server token 寻址，保留只会变成幽灵 server（id:''）→ 丢弃。
+    memLocal.setItem('s3c.servers', JSON.stringify([{ token: 'orphan-tok' }]))
+    const orphan = api.listServers()
+    expect(orphan.map((s) => s.id)).not.toContain('')
+    expect(memLocal.getItem('s3c.servers')).not.toContain('orphan-tok')
   })
 })
 

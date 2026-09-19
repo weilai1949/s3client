@@ -88,6 +88,14 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Write 必须覆写：只 Write 不 WriteHeader 时 Go 会隐式发出 200，
+// 若不在这里标记 written，后续显式 WriteHeader 会再次透传（Go 打 superfluous 日志），
+// 并把日志/指标里的状态改写成与实际响应不符的值（review §B11）。
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	r.written = true
+	return r.ResponseWriter.Write(b)
+}
+
 func (r *statusRecorder) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()

@@ -132,7 +132,15 @@ func fromS3Object(o s3wrap.ObjectItem) objectItem {
 
 // ---- helpers ----
 
-const maxBody = 8 << 20 // 8MB request body cap（批量删除/复制可含大量长 key）
+// maxBody 请求体上限。
+//
+// 取值必须容得下文档承诺的最大批量：批量端点允许 10 000 个 key，1 KB/key 的合法请求约
+// 10.3 MB，旧的 8 MiB 会把这种请求截断成 JSON 语法错误并回 400「invalid request body」。
+// 超限时 readJSON 返回 errBodyTooLarge，由 writeBadJSON 回 413（review-2026-09-19.md §B9）。
+const maxBody = 16 << 20 // 16MB request body cap（批量删除/复制可含大量长 key）
+
+// errBodyTooLarge 表示请求体超过了 maxBody；调用方应回 413 而不是「JSON 无效」的 400。
+var errBodyTooLarge = errors.New("request body exceeds limit")
 
 // maxZipKeys 限制单次打包的对象数，防止一次请求无界流式输出。
 const maxZipKeys = 1000
@@ -152,8 +160,13 @@ func (h *Handler) writeErr(w http.ResponseWriter, status int, msg string) {
 	h.writeJSON(w, status, map[string]any{"error": msg})
 }
 
-// writeBadJSON 记录解析失败详情，向客户端返回固定消息。
+// writeBadJSON 记录解析失败详情：请求体超限回 413，其余（含截断造成的语法错误）回 400。
 func (h *Handler) writeBadJSON(w http.ResponseWriter, err error) {
+	if errors.Is(err, errBodyTooLarge) {
+		h.log.Debug("request body too large", "limit", maxBody)
+		h.writeErr(w, http.StatusRequestEntityTooLarge, "request body too large (max 16MB)")
+		return
+	}
 	h.log.Debug("invalid request body", "err", err)
 	h.writeErr(w, http.StatusBadRequest, "invalid request body")
 }
@@ -183,14 +196,23 @@ func (h *Handler) readJSON(r *http.Request, v any) error {
 	if ct := r.Header.Get("Content-Type"); ct != "" && !strings.HasPrefix(strings.ToLower(ct), "application/json") {
 		return errors.New("Content-Type must be application/json")
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBody))
+	// 多读 1 字节：能读到第 maxBody+1 个字节即证明请求体超限（与「JSON 语法错误」区分开）。
+	lr := &io.LimitedReader{R: r.Body, N: maxBody + 1}
+	dec := json.NewDecoder(lr)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
+		if lr.N <= 0 {
+			return errBodyTooLarge
+		}
 		return err
 	}
 	// 拒绝 JSON 之后的尾部数据，避免歧义请求体。
 	if dec.More() {
 		return errors.New("unexpected trailing data after JSON body")
+	}
+	// 解出完整 JSON 却已读满上限：多读的那 1 个字节证明请求体超过 maxBody（合法 JSON 本身超限）。
+	if lr.N <= 0 {
+		return errBodyTooLarge
 	}
 	return nil
 }

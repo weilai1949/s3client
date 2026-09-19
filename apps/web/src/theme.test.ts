@@ -144,3 +144,28 @@ describe('theme remaining branches', () => {
     expect(dataset['theme']).toBe(before)
   })
 })
+
+describe('存储不可用（隐私模式/配额异常）时主题模块不抛错', () => {
+  it('模块初始化 + 读/写主题都在 localStorage 抛异常时降级而不是崩溃', async () => {
+    const getSpy = vi.spyOn(globalThis.localStorage, 'getItem').mockImplementation(() => {
+      throw new DOMException('SecurityError', 'SecurityError')
+    })
+    const setSpy = vi.spyOn(globalThis.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError')
+    })
+    try {
+      vi.resetModules()
+      darkMatches = true
+      // 模块级 applyTheme() 过去会直接抛出 → 整个前端启动失败
+      const mod = await import('./theme')
+      expect(mod.readTheme()).toBe('auto')
+      expect(mod.resolvedTheme()).toBe('dark')
+      expect(() => mod.applyTheme('light')).not.toThrow()
+      expect(dataset['theme']).toBe('light')
+      expect(() => mod.cycleTheme()).not.toThrow()
+    } finally {
+      getSpy.mockRestore()
+      setSpy.mockRestore()
+    }
+  })
+})

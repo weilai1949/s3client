@@ -118,6 +118,21 @@ describe('AccountsPanel', () => {
     expect(w.find('.empty').exists()).toBe(false)
   })
 
+  it('加载账号失败：渲染错误与「重试」，不再抛未捕获 rejection（可重试恢复）', async () => {
+    vi.mocked(s3api.listAccounts).mockRejectedValueOnce(new Error('backend down'))
+    const w = mountPanel()
+    await flushPromises()
+    // 后端不可用时页面不得崩溃，且必须给出可操作的重试入口
+    expect(w.find('.msg.err').text()).toContain('accounts.loadFailed')
+    expect(findButton(w, 'common.retry')).toBeTruthy()
+
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1] })
+    await findButton(w, 'common.retry').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('MyAcc')
+    expect(w.find('.msg.err').exists()).toBe(false)
+  })
+
   it('空态提示 + 添加按钮打开新增表单（s3 默认值）', async () => {
     vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
     const w = mountPanel()

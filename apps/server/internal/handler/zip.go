@@ -32,6 +32,14 @@ func (h *Handler) downloadZip(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, fmt.Sprintf("too many keys, max %d", maxZipKeys))
 		return
 	}
+	// 空 key 必须拒绝：GET /bucket/?key="" 会被 S3 当成「列举桶」并返回 ListBucket XML，
+	// 于是桶清单会被当成对象内容塞进 ZIP 包（review §B10③）。
+	for _, k := range req.Keys {
+		if k == "" {
+			h.writeErr(w, http.StatusBadRequest, "keys must not contain empty entries")
+			return
+		}
+	}
 	bucket := req.Bucket
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return

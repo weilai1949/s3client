@@ -7,34 +7,26 @@ import { toErrorMessage } from '../errors'
 import { s3api, subscribeMigrateEvents } from '../api'
 import { state, currentAccount, toast, selectAccount, requestTab } from '../store'
 import { fmtSize } from '../format'
+import { MIGRATE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
+import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import type { BucketItem, JobRecord, ObjectItem } from '../types'
 
 // 大对象列表（listAll 上限 200×1000）走窗口化渲染，避免数十万行直接 v-for 冻结页面。
-const ROW_HEIGHT = 38
-const OVERSCAN = 12
+// 行高常量与模板 CSS（.tbl-virtual .v-row { height: 42px }）共用同一来源，避免漂移。
 const scrollEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
-const viewportH = ref(480)
+const viewportH = ref(DEFAULT_VIEWPORT_H)
 const windowed = computed(() => {
-  const total = objects.value.length
-  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN)
-  const count = Math.ceil(viewportH.value / ROW_HEIGHT) + OVERSCAN * 2
-  const end = Math.min(total, start + count)
-  return {
-    start,
-    end,
-    items: objects.value.slice(start, end),
-    padTop: start * ROW_HEIGHT,
-    padBottom: Math.max(0, (total - end) * ROW_HEIGHT),
-  }
+  const win = virtualWindow(objects.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
+  return { ...win, items: objects.value.slice(win.start, win.end) }
 })
 function onListScroll() {
   if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
 }
 function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || 480
+  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
 }
 let resizeObs: ResizeObserver | undefined
 // 虚拟列表在组件挂载后才随对象数据渲染，scrollEl 的 ref 绑定晚于 onMounted：
@@ -47,6 +39,15 @@ watch(scrollEl, (el) => {
   resizeObs = new ResizeObserver(measureViewport)
   resizeObs.observe(el)
 })
+
+// 窗口起点必须随 objects 变化重置：重新列出/切换前缀后旧的 scrollTop 会让
+// objects.slice(start, end) 为空 → 空白表（review §F2）。同步写回真实 DOM scrollTop
+// （浏览器在内容缩短时也会钳制，此处显式归零避免依赖钳制时机）。
+function resetWindowScroll() {
+  scrollTop.value = 0
+  if (scrollEl.value) scrollEl.value.scrollTop = 0
+}
+
 onBeforeUnmount(() => {
   resizeObs?.disconnect()
   // 组件卸载时若仍有进行中的 SSE 订阅，立即断开（避免后台 goroutine 持续推事件）。
@@ -71,9 +72,17 @@ const sourceBuckets = ref<BucketItem[]>([])
 const targetBuckets = ref<BucketItem[]>([])
 const loadingBuckets = ref(false)
 
+// 见上：objects 变化（重新列出/切换前缀）后虚拟窗口必须回到顶部。
+watch(objects, resetWindowScroll)
+
 /* ---- 迁移进度 ---- */
 const progress = reactive({ done: 0, total: 0 })
-const progressPct = computed(() => (progress.total ? Math.round((progress.done / progress.total) * 100) : 0))
+/** 进度百分比。
+ *
+ * 不变量：`migrate()` 在等待事件流之前就把 progress.total 设为本次选中数，
+ * 且进度条仅在 busy 时渲染，因此渲染期 total 恒 > 0。
+ */
+const progressPct = computed(() => Math.round((progress.done / progress.total) * 100))
 const activeJobId = ref('')
 // 组件级 SSE 取消器：保证 onBeforeUnmount 一定能断开正在进行的迁移事件流。
 let activeUnsub: (() => void) | undefined
@@ -159,29 +168,43 @@ function ensureTargetAccount() {
   targetAccountId.value = other?.id ?? srcId ?? state.accounts[0].id
 }
 
-async function loadSourceObjects() {
-  const acc = sourceAccount.value
-  if (!acc) return
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await s3api.listObjects(acc.id, { bucket: sourceBucket.value, prefix: sourcePrefix.value, delimiter: '/', maxKeys: '200' })
-    objects.value = res.objects.filter((o) => !o.isDir)
-    selected.value = new Set()
-  } catch (e) {
-    error.value = toErrorMessage(e)
-  } finally {
-    loading.value = false
-  }
-}
-
 /** 列出前缀下全部文件（含子目录）：循环分页，delimiter 置空不分目录。 */
 const loadingAll = ref(false)
 const MAX_ALL_PAGES = 200 // 单页 1000 → 最多 20 万个对象
 
+/** 列举代次：每次列举（本函数 / loadAllSourceObjects）自增，用于丢弃过期响应
+ *  （否则先后两次列举的结果会互相覆盖）。非响应式：只作比较，不驱动渲染。 */
+let listGen = 0
+
+async function loadSourceObjects() {
+  const acc = sourceAccount.value
+  if (!acc) return
+  const gen = ++listGen
+  loading.value = true
+  error.value = ''
+  const bucket = sourceBucket.value
+  const prefix = sourcePrefix.value
+  try {
+    const res = await s3api.listObjects(acc.id, { bucket, prefix, delimiter: '/', maxKeys: '200' })
+    if (gen !== listGen) return
+    objects.value = res.objects.filter((o) => !o.isDir)
+    selected.value = new Set()
+  } catch (e) {
+    if (gen !== listGen) return
+    error.value = toErrorMessage(e)
+  } finally {
+    if (gen === listGen) loading.value = false
+  }
+}
+
 async function loadAllSourceObjects() {
   const acc = sourceAccount.value
   if (!acc) return
+  const gen = ++listGen
+  // 快照：分页循环内不得读实时 sourceBucket/sourcePrefix——用户在续页之间改前缀会把
+  // 旧前缀的 continuationToken 带到新前缀上，列表混两个前缀（review §F5）。
+  const bucket = sourceBucket.value
+  const prefix = sourcePrefix.value
   loadingAll.value = true
   error.value = ''
   try {
@@ -189,9 +212,11 @@ async function loadAllSourceObjects() {
     let token = ''
     let guard = 0
     for (;;) {
-      const q: Record<string, string> = { bucket: sourceBucket.value, prefix: sourcePrefix.value, maxKeys: '1000' }
+      const q: Record<string, string> = { bucket, prefix, maxKeys: '1000' }
       if (token) q.continuationToken = token
       const res = await s3api.listObjects(acc.id, q)
+      // 代次守卫：期间用户重新列出（或切换账号/前缀）→ 丢弃本次全部结果。
+      if (gen !== listGen) return
       all.push(...res.objects.filter((o) => !o.isDir))
       if (!res.isTruncated || !res.nextToken) break
       if (++guard >= MAX_ALL_PAGES) {
@@ -204,9 +229,10 @@ async function loadAllSourceObjects() {
     selected.value = new Set()
     toast(tf('migrate.listedAll', { n: all.length }))
   } catch (e) {
+    if (gen !== listGen) return
     error.value = toErrorMessage(e)
   } finally {
-    loadingAll.value = false
+    if (gen === listGen) loadingAll.value = false
   }
 }
 
@@ -235,50 +261,86 @@ async function migrate() {
   progress.done = 0
   progress.total = selected.value.size
   const keys = [...selected.value]
+  // 服务端单次请求最多 10000 个 key（handler/migrate.go），选中量可远超（loadAll 20 万）：
+  // 不分片会整批 400、一个都不迁移（review §F3）。分片串行提交并聚合结果。
+  const chunks = batchKeys(keys, MIGRATE_MAX_KEYS_PER_REQUEST)
   let unsub: (() => void) | undefined
   let finalStatus = ''
+  let migrated = 0
+  let failed = 0
+  let lastError = ''
+  const failedKeys: string[] = []
   try {
-    const { jobId } = await s3api.migrateAsync({
-      sourceAccountId: src.id,
-      sourceBucket: sourceBucket.value || undefined,
-      sourceKeys: keys,
-      targetAccountId: targetAccountId.value,
-      targetBucket: targetBucket.value || undefined,
-      targetPrefix: targetPrefix.value,
-    })
-    activeJobId.value = jobId
-    activeUnsub = undefined
-    await new Promise<void>((resolve, reject) => {
-      unsub = subscribeMigrateEvents(
-        jobId,
-        (p) => {
-          progress.done = p.done
-          progress.total = p.total
-          if (p.status === 'done' || p.status === 'cancelled') {
-            finalStatus = p.status
-            resolve()
-          }
-        },
-        reject,
-      )
-      activeUnsub = unsub
-    })
-    const st = await s3api.migrateJobStatus(jobId)
-    const r = st.result ?? { migrated: 0, failed: 0 }
+    for (let i = 0; i < chunks.length; i++) {
+      const doneBase = progress.done
+      const chunk = chunks[i]
+      const { jobId } = await s3api.migrateAsync({
+        sourceAccountId: src.id,
+        sourceBucket: sourceBucket.value || undefined,
+        sourceKeys: chunk,
+        targetAccountId: targetAccountId.value,
+        targetBucket: targetBucket.value || undefined,
+        targetPrefix: targetPrefix.value,
+      })
+      activeJobId.value = jobId
+      activeUnsub = undefined
+      finalStatus = ''
+      await new Promise<void>((resolve, reject) => {
+        unsub = subscribeMigrateEvents(
+          jobId,
+          (p) => {
+            // 多分片：进度按已完成分片数累加，进度条不因切换 job 而回退。
+            progress.done = doneBase + p.done
+            progress.total = keys.length
+            if (p.status === 'done' || p.status === 'cancelled') {
+              finalStatus = p.status
+              resolve()
+            }
+          },
+          reject,
+        )
+        activeUnsub = unsub
+      })
+      unsub?.()
+      unsub = undefined
+      activeUnsub = undefined
+      const st = await s3api.migrateJobStatus(jobId)
+      const r = st.result ?? { migrated: 0, failed: 0 }
+      migrated += r.migrated
+      failed += r.failed
+      if (!lastError && r.lastError) lastError = r.lastError
+      for (const k of r.failedKeys ?? []) {
+        if (failedKeys.length < 200) failedKeys.push(k)
+      }
+      if (finalStatus === 'cancelled' || st.progress.status === 'cancelled') {
+        finalStatus = 'cancelled'
+        break
+      }
+    }
     resultTargetId.value = targetAccountId.value
     resultDialog.open = true
-    resultDialog.migrated = r.migrated
-    resultDialog.failed = r.failed
-    resultDialog.failedKeys = (r.failedKeys ?? []).slice(0, 200)
-    resultDialog.lastError = r.lastError ?? ''
-    if (finalStatus === 'cancelled' || st.progress.status === 'cancelled') {
-      toast(tf('migrate.toastCancelled', { ok: r.migrated, fail: r.failed }), 'err')
-    } else if (r.failed) {
-      toast(tf('migrate.toastPartial', { ok: r.migrated, fail: r.failed }), 'err')
+    resultDialog.migrated = migrated
+    resultDialog.failed = failed
+    resultDialog.failedKeys = failedKeys
+    resultDialog.lastError = lastError
+    if (finalStatus === 'cancelled') {
+      toast(tf('migrate.toastCancelled', { ok: migrated, fail: failed }), 'err')
+    } else if (failed) {
+      toast(tf('migrate.toastPartial', { ok: migrated, fail: failed }), 'err')
     } else {
-      toast(tf('migrate.toastOk', { n: r.migrated }))
+      toast(tf('migrate.toastOk', { n: migrated }))
     }
   } catch (e) {
+    // 分片失败：不吞掉已完成分片的结果，让用户看到真实的「已迁移 N / 失败 M」。
+    if (migrated || failed) {
+      resultTargetId.value = targetAccountId.value
+      resultDialog.open = true
+      resultDialog.migrated = migrated
+      resultDialog.failed = failed
+      resultDialog.failedKeys = failedKeys
+      resultDialog.lastError = lastError || toErrorMessage(e)
+      toast(tf('migrate.toastPartial', { ok: migrated, fail: failed }), 'err')
+    }
     error.value = toErrorMessage(e)
   } finally {
     unsub?.()
@@ -309,14 +371,15 @@ function gotoTargetObjects() {
   requestTab('objects')
 }
 
-watch(() => state.currentAccountId, async () => {
+watch(() => state.currentAccountId, () => {
   sourceBucket.value = ''
   targetAccountId.value = ''
   objects.value = []
   selected.value = new Set()
   ensureTargetAccount()
-  await loadSourceBuckets()
-  await loadTargetBuckets()
+  // onMounted 已 await 过这两个加载，这里无需再等（watcher 里的 Promise 无人消费）。
+  void loadSourceBuckets()
+  void loadTargetBuckets()
   loadSourceObjects()
 })
 

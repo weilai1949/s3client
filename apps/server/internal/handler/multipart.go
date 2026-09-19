@@ -119,6 +119,12 @@ func (h *Handler) multipartComplete(w http.ResponseWriter, r *http.Request) {
 			h.writeErr(w, http.StatusBadRequest, "duplicate partNumber")
 			return
 		}
+		// 段号必须严格递增：S3 要求 CompleteMultipartUpload 的 Parts 按 PartNumber 升序，
+		// 顺序错了会回 InvalidPartOrder —— 那本是客户端请求错误，不该由后端把它变成 500。
+		if n := len(specs); n > 0 && p.PartNumber <= specs[n-1].PartNumber {
+			h.writeErr(w, http.StatusBadRequest, "parts must be ordered by ascending partNumber")
+			return
+		}
 		seen[p.PartNumber] = true
 		specs = append(specs, s3wrap.UploadPartSpec{PartNumber: p.PartNumber, ETag: p.ETag})
 	}

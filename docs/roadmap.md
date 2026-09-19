@@ -86,7 +86,7 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint` | ✅ 0 error / 0 warning |
 | 前端类型 | `vue-tsc --noEmit` | ✅ exit 0 |
-| 前端测试 | `pnpm test` | ✅ 984 例全绿（63 文件） |
+| 前端测试 | `pnpm test` | ✅ 986 例全绿（64 文件） |
 | 前端覆盖率 | statements / branches / functions / lines | ✅ 100%（含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验 |

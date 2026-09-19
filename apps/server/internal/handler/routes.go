@@ -84,7 +84,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/migrate/jobs", h.jobsList)
 	mux.HandleFunc("GET /api/migrate/jobs/{id}", h.migrateJobStatus)
 	mux.HandleFunc("POST /api/migrate/jobs/{id}/cancel", h.migrateJobCancel)
-	mux.HandleFunc("GET /api/migrate/jobs/{id}/events", h.migrateJobEvents)
+	mux.HandleFunc("GET /api/migrate/jobs/{id}/events", h.withStreamLimit(h.migrateJobEvents))
 
 	// 静态资源（SPA）
 	spa := http.FileServer(http.Dir(h.staticDir))

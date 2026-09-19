@@ -77,7 +77,12 @@ func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "mode must be etag, size_mtime or always")
 		return
 	}
-	out := service.SyncKeys(r.Context(), srcClient, dstClient, srcBucket, req.SourcePrefix, targetBucket, req.TargetPrefix, mode, 4, nil)
+	out, err := service.SyncKeys(r.Context(), srcClient, dstClient, srcBucket, req.SourcePrefix, targetBucket, req.TargetPrefix, mode, 4, nil)
+	if err != nil {
+		// 列举失败必须让用户看见：源端 403/5xx 回 200 {scanned:0} 会被读成「无事可做」（review §B5）。
+		h.writeInternalErr(w, err, "sync list failed")
+		return
+	}
 	resp := migrateSyncResponse{
 		Scanned: out.Scanned, Skipped: out.Skipped, Copied: out.Copied, Failed: out.Failed,
 		FailKeys: out.FailKeys, LastError: out.LastError,

@@ -19,28 +19,32 @@ export function useHealthPoll(opts: HealthPollOptions) {
   const intervalMs = opts.intervalMs ?? 5000
   const polling = ref(false)
   let timer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
+  /** 在途探测的代次：stop() / 恢复后自增，使迟到的失败响应不能续跑（review §F9①）。 */
+  let gen = 0
 
-  async function probeOnce() {
+  async function probeOnce(myGen: number) {
     try {
       await api.health()
+      if (myGen !== gen) return
       stop()
       await opts.onRecover()
     } catch {
-      // 仍不可用：安排下一次探测。timer 在触发前已清空，故此处不会叠加定时器。
-      schedule()
+      // 已停止/已卸载（代次已变）：丢弃这次探测结果，不再续跑
+      if (myGen === gen) schedule()
     }
   }
 
   function schedule() {
     timer = setTimeout(() => {
       timer = undefined
-      void probeOnce()
+      void probeOnce(gen)
     }, intervalMs)
   }
 
   /** 后端出错后调用：开始轮询直到恢复。 */
   function start() {
-    if (polling.value) return
+    if (polling.value || disposed) return
     polling.value = true
     schedule()
   }
@@ -48,13 +52,17 @@ export function useHealthPoll(opts: HealthPollOptions) {
   /** 停止轮询（恢复成功或组件卸载）。 */
   function stop() {
     polling.value = false
+    gen++
     if (timer !== undefined) {
       clearTimeout(timer)
       timer = undefined
     }
   }
 
-  onBeforeUnmount(stop)
+  onBeforeUnmount(() => {
+    disposed = true
+    stop()
+  })
 
   return { polling, start, stop }
 }

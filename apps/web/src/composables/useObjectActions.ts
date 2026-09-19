@@ -7,6 +7,8 @@ import { confirmDialog } from '../confirm'
 import { promptDialog } from '../prompt'
 import { copyText } from '../clipboard'
 import { proxyUrl } from '../proxy'
+import { BATCH_META_CONCURRENCY, boundedPool } from '../batchMetadata'
+import { DELETE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { t, tf } from '../i18n'
 import { useUploadQueue } from './useUploadQueue'
 import type { Account, ObjectItem, ObjectMeta } from '../types'
@@ -145,15 +147,40 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       message: tf('objects.deleteSelectedConfirm', { n: keys.length }),
     })
     if (!ok) return
+    // 服务端单次最多 1000 个 key（handler/objects.go）：选中量可远超（loadAll 2 万、全选），
+    // 整批提交会 400 且一个都没删（review §F3）。按上限分片串行提交，失败不吞掉已成功的部分。
+    const chunks = batchKeys(keys, DELETE_MAX_KEYS_PER_REQUEST)
+    let deleted = 0
+    let failed = 0
+    let lastError = ''
     try {
-      const r = await s3api.deleteObjects(requireAccId(), { bucket: ctx.currentBucket.value, keys })
-      toast(tf('objects.toastDeleted', { n: r.deleted }))
+      for (const chunk of chunks) {
+        try {
+          const r = await s3api.deleteObjects(requireAccId(), { bucket: ctx.currentBucket.value, keys: chunk })
+          deleted += r.deleted
+          failed += r.failed ?? 0
+          if (!lastError && r.lastError) lastError = r.lastError
+        } catch (e) {
+          // 单片传输失败不中止其余分片：该片整片计入失败并保留原因，
+          // 继续提交后面的分片（否则一次抖动会让剩余对象一个都不删）。
+          failed += chunk.length
+          if (!lastError) lastError = toErrorMessage(e)
+        }
+      }
+      if (!failed) {
+        toast(tf('objects.toastDeleted', { n: deleted }))
+      } else if (chunks.length === 1 && !deleted) {
+        // 单次提交整体失败：保持既有提示语义（与分片前的行为一致）
+        ctx.error.value = lastError
+        toast(tf('objects.toastDeleteFailed', { msg: lastError }), 'err')
+      } else {
+        ctx.error.value = lastError
+        toast(tf('objects.toastDeletePartial', { ok: deleted, fail: failed, msg: lastError }), 'err')
+      }
+    } finally {
+      // 无论成败都刷新列表：失败分片里的对象可能已经删掉，选中态必须复位
       ctx.selected.value = new Set()
       await ctx.load(true)
-    } catch (e) {
-      const msg = toErrorMessage(e)
-      ctx.error.value = msg
-      toast(tf('objects.toastDeleteFailed', { msg }), 'err')
     }
   }
 
@@ -369,25 +396,28 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     const keys = ctx.fileObjects.value.filter((o) => ctx.selected.value.has(o.key))
     if (!keys.length) return
     try {
-      const results = await Promise.allSettled(
-        keys.map((o) =>
-          s3api.presign(requireAccId(), {
+      // 逐 key 预签名走有界并发池（复用 batchMetadata 的 4 路实现）：5000 选中
+      // 若全部并发会瞬时打出 5000 个请求（review §F7）。
+      const results = await boundedPool(keys, BATCH_META_CONCURRENCY, async (o) => {
+        // 取账号 id 放在 worker 内：账号丢失时异常向外传播（与既有行为一致）。
+        const accId = requireAccId()
+        try {
+          const r = await s3api.presign(accId, {
             method: 'get',
             key: o.key,
             bucket: ctx.currentBucket.value,
             expiresIn: 3600,
-          }),
-        ),
-      )
+          })
+          return { url: r.url, failed: false }
+        } catch {
+          return { url: '', failed: true }
+        }
+      })
       const urls: string[] = []
       const failed: string[] = []
       for (let i = 0; i < results.length; i++) {
-        const r = results[i]
-        if (r.status === 'fulfilled') {
-          urls.push(r.value.url)
-        } else {
-          failed.push(keys[i].key)
-        }
+        if (results[i].failed) failed.push(keys[i].key)
+        else urls.push(results[i].url)
       }
       if (urls.length) copyTextAndToast(urls.join('\n'), tf('objects.toastCopiedLinks', { n: urls.length }))
       if (failed.length) ctx.error.value = tf('objects.toastCopyFailed', { n: failed.join(', ') })

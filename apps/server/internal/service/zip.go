@@ -133,8 +133,11 @@ func WriteObjectsZip(
 		_, copyErr := io.Copy(f, newCancelReader(ctx, item.body))
 		_ = item.body.Close()
 		if copyErr != nil {
+			// 必须 continue 而不是 break：results 无缓冲，一旦停止消费，其余 worker 会永久
+			// 阻塞在发送上（wg.Wait 永不返回、已取回的 body 不关闭）。用户取消下载
+			// （ctxCancelReader 让 io.Copy 报错）正走这条路（review §B4）。
 			failKeys = append(failKeys, item.key)
-			break
+			continue
 		}
 	}
 

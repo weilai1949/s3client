@@ -146,7 +146,10 @@ async function submitDest() {
         toast(
           result.failed
             ? tf('dest.toastCopiedPartial', { n: result.ok, fail: result.failed })
-            : tf('dest.toastCopiedN', { n: result.ok }),
+            : start.truncated
+              // 源前缀对象数超过服务端列举上限：只复制了上限内的部分，不能报「全部成功」
+              ? tf('dest.toastCopiedTruncated', { n: result.ok })
+              : tf('dest.toastCopiedN', { n: result.ok }),
         )
       } else {
         if (result.failed) {

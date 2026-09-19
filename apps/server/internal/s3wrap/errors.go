@@ -16,6 +16,8 @@ var (
 	ErrObjectTooLarge = errors.New("object exceeds single-put limit")
 	// ErrSourceDeleteFailed 表示复制成功但删除源对象失败（移动半成功）。
 	ErrSourceDeleteFailed = errors.New("copied but failed to delete source")
+	// ErrPartialDelete 表示批量删除的 200 响应体内有逐 key 被服务端拒绝的条目（其余已删除）。
+	ErrPartialDelete = errors.New("partially deleted")
 )
 
 // wrapObjectTooLarge 把 S3 的 EntityTooLarge 归一为 ErrObjectTooLarge，
@@ -38,20 +40,32 @@ func UserMessage(err error) string {
 	if errors.Is(err, ErrSourceDeleteFailed) {
 		return "copied but failed to delete source"
 	}
+	if errors.Is(err, ErrPartialDelete) {
+		return "some objects could not be deleted"
+	}
 	if IsNotFound(err) {
 		if HasErrorCode(err, "NoSuchBucket") {
 			return "bucket not found"
 		}
 		return "object not found"
 	}
-	switch ErrorCode(err) {
+	return UserMessageForCode(ErrorCode(err))
+}
+
+// UserMessageForCode 把 S3 错误码映射为面向用户的短消息，与 UserMessage 共用同一张映射表。
+//
+// 用于「错误只以响应体形式出现、拿不到 error 值」的场景——例如 DeleteObjects 在 200 响应体内
+// 逐 key 返回的 <Error>（review §B3）。未收录的码统一归为 "storage operation failed"，
+// 与 UserMessage 的兜底一致。
+func UserMessageForCode(code string) string {
+	switch code {
 	case "AccessDenied":
 		return "access denied"
 	case "InvalidAccessKeyId", "SignatureDoesNotMatch":
 		return "invalid credentials"
 	case "BucketNotEmpty":
 		return "bucket not empty"
-	case "InvalidRequest", "InvalidArgument", "MalformedPolicy", "MalformedXML", "InvalidStorageClass":
+	case "InvalidRequest", "InvalidArgument", "MalformedPolicy", "MalformedXML", "InvalidStorageClass", "InvalidPartOrder":
 		return "invalid request"
 	case "EntityTooLarge":
 		return "entity too large"
@@ -74,7 +88,7 @@ func HTTPStatus(err error) int {
 	switch ErrorCode(err) {
 	case "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch":
 		return 403
-	case "InvalidRequest", "InvalidArgument", "MalformedPolicy", "MalformedXML", "EntityTooLarge", "InvalidStorageClass":
+	case "InvalidRequest", "InvalidArgument", "MalformedPolicy", "MalformedXML", "EntityTooLarge", "InvalidStorageClass", "InvalidPartOrder":
 		return 400
 	case "BucketNotEmpty":
 		return 409

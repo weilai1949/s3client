@@ -136,9 +136,18 @@ jobs:
           context: .
           file: apps/server/Dockerfile
           push: false
+          # 必须 load：setup-buildx-action 默认 driver=docker-container，镜像只留在 builder
+          # 缓存里；Trivy 通过 docker.sock 扫的是**本地 daemon**，不 load 就永远找不到该镜像
+          # （表现为 Trivy 报错，而不是扫出漏洞）。GitLab 侧用原生 docker build，故无此问题。
+          load: true
           tags: s3clinet/server:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify image is loadable by Trivy
+        # 把「镜像没进本地 daemon」这一结构性失败与「真的扫出漏洞」区分开：
+        # 先显式 inspect，失败信息才指向构建/load 而不是安全问题。
+        run: docker image inspect s3clinet/server:ci > /dev/null
 
       - name: Trivy image scan (CRITICAL/HIGH 失败门禁)
         # 直接使用 Trivy 官方镜像避免第三方 action 供应链风险；

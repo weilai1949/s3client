@@ -10,7 +10,7 @@
 | 威胁 | 缓解 | 状态 |
 |---|---|---|
 | **S**poofing 仿冒 | Bearer 常量时间比较（sha256+subtle）、scheme 大小写不敏感（RFC 7235）、多 token 轮换、最短 16 字符 | ✅ 已缓解 |
-| **T**ampering 篡改 | 强制 `application/json` + `DisallowUnknownFields` + 8MB body cap；配合 CORS 使跨域变更必预检 | ✅ 已缓解 |
+| **T**ampering 篡改 | 强制 `application/json` + `DisallowUnknownFields` + 16MB body cap（超限回 413）；配合 CORS 使跨域变更必预检 | ✅ 已缓解 |
 | **R**epudiation 抵赖 | ⚠️ 仅通用 access log，**无安全审计日志**（todo #17） | ❌ 未缓解 |
 | **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey | ✅ 已缓解 |
 | **D**oS 拒绝服务 | IP 令牌桶 120/min、流式并发 32、批量上限齐备 | ⚠️ 部分缓解（XFF 伪造、job 无上限，todo #17） |
@@ -79,7 +79,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 对象 key | 禁控制字符（代理层） | `proxy.go:36-41` |
 | ZIP 条目名 | 防 zip-slip（trim + `..`→`_` + path.Clean） | `zip.go:149-168` |
 | 批量 key | delete ≤1000 / copy ≤10000 / zip ≤1000 / migrate ≤10000 | `handler.go:118-122` 等 |
-| 请求体 | 8MB cap + `DisallowUnknownFields` + 尾部数据拒绝 | `handler.go:161-177` |
+| 请求体 | 16MB cap（超限回 413 而非 400）+ `DisallowUnknownFields` + 尾部数据拒绝 | `handler.go:193-222` |
 | X-Request-ID | ≤128 可见 ASCII（防日志/响应头注入） | `middleware.go:35-50` |
 | 元数据 | 键值长度/字节总长边界（400 非 500） | `metadata.go:151-163` |
 

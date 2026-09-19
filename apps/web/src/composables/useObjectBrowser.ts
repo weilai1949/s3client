@@ -336,11 +336,22 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   /* ---- 快捷键提示条（可关闭） ---- */
   const LS_HINTS = 's3c.hintsHidden'
-  const hintsHidden = ref(localStorage.getItem(LS_HINTS) === '1')
+  // 存储不可用（隐私模式/配额异常）时按「未隐藏」处理，不得让面板初始化失败。
+  let hintsStored = false
+  try {
+    hintsStored = localStorage.getItem(LS_HINTS) === '1'
+  } catch {
+    /* ignore */
+  }
+  const hintsHidden = ref(hintsStored)
 
   function hideHints() {
     hintsHidden.value = true
-    localStorage.setItem(LS_HINTS, '1')
+    try {
+      localStorage.setItem(LS_HINTS, '1')
+    } catch {
+      /* ignore：本次会话内仍然隐藏 */
+    }
   }
 
   /* ---- 耗时操作统一 busy 防重复提交 ---- */

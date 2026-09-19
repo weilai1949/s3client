@@ -289,6 +289,16 @@ describe('DestDialog', () => {
     expect(toast).toHaveBeenLastCalledWith('dest.toastCopiedPartial')
   })
 
+  it('folder copy with truncated listing warns instead of reporting full success', async () => {
+    vi.mocked(s3api.copyPrefixAsync).mockResolvedValueOnce({ jobId: 'job-copy', total: 100000, truncated: true })
+    const w = mountDest({ kind: 'folder' })
+    await openDialog(w)
+    clickBody('common.copy')
+    await flushPromises()
+    // 只复制了上限内的对象：必须提示「未复制全部」，不能只报成功
+    expect(toast).toHaveBeenLastCalledWith('dest.toastCopiedTruncated')
+  })
+
   it('folder move partial keeps sources and deletes nothing', async () => {
     vi.mocked(subscribeMigrateEvents).mockImplementation(((_jobId: string, onProgress: (p: MigrateProgress) => void) => {
       queueMicrotask(() => onProgress({ status: 'done', migrated: 0, failed: 2, done: 0, total: 2 }))

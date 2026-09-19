@@ -11,10 +11,18 @@ const mq = window.matchMedia('(prefers-color-scheme: dark)')
 /** 系统主题变化时自增，供 UI 响应式刷新（matchMedia 本身非响应式）。 */
 export const systemThemeTick = ref(0)
 
-/** 读取用户选择（默认 auto）。 */
+/** 读取用户选择（默认 auto）。
+ *
+ * 存储不可用（隐私模式 / 配额异常 / 存储被禁用）时必须降级而不是抛错：
+ * 本模块在**模块初始化**阶段就会调用 applyTheme()，抛出即整站启动失败（review §F9④）。
+ */
 export function readTheme(): Theme {
-  const v = localStorage.getItem(LS_THEME)
-  if (v === 'light' || v === 'dark' || v === 'auto') return v
+  try {
+    const v = localStorage.getItem(LS_THEME)
+    if (v === 'light' || v === 'dark' || v === 'auto') return v
+  } catch {
+    /* ignore */
+  }
   return 'auto'
 }
 
@@ -28,7 +36,11 @@ export function resolvedTheme(): 'light' | 'dark' {
 export function applyTheme(t: Theme = readTheme()) {
   const resolved = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t
   document.documentElement.dataset.theme = resolved
-  localStorage.setItem(LS_THEME, t)
+  try {
+    localStorage.setItem(LS_THEME, t)
+  } catch {
+    /* ignore：本次会话仍按所选主题渲染 */
+  }
 }
 
 /** 切换并返回新主题（auto → light → dark → auto 循环）。 */
