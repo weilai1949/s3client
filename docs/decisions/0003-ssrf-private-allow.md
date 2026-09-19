@@ -36,3 +36,13 @@ SSRF 防护**拦截链路本地与云元数据地址，放行私网 / 回环**�
 - 认证用户可让服务器访问任意私网服务（仅依赖鉴权兜底）——已文档化为设计取舍。
 - 攻击面：未配置 `S3C_TOKEN` 时服务默认仅回环监听，外部不可达（`config.go:120`）。
 - 若需更严格部署，可结合网络层隔离（防火墙 / nginx 访问控制）。
+
+## Update（2026-09-19）
+
+默认策略不变（仍放行私网 / 回环），但补齐了「更严格部署」的进程内开关：
+
+- 新增 `S3C_SSRF_DENY_PRIVATE`（`config.SSRFDenyPrivate` → `s3wrap.SetDenyPrivateNetworks`）。
+  置 `1` 后 `ValidateEndpoint` 与 `dialContextSSRF` 双重校验一并拒绝 RFC1918 / ULA / 回环 / 未指定地址；
+  公网端点、IMDS 与链路本地拦截逻辑不变。
+- 该开关是进程级策略（S3 HTTP 客户端共享），只在启动时设置一次。
+- 覆盖：`TestDenyPrivateNetworksOptIn` / `TestDenyPrivateNetworksDialGuard`（默认放行 + 开启后创建期与拨号期均拒绝）。

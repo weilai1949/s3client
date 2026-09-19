@@ -23,6 +23,8 @@ GET /api/health
 GET /api/metrics
 ```
 Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及：
+- `s3c_store_up`：账号存储可达性（1 / 0）。store 掉线时 `/api/health` 返回 503 且本指标为 0——硬失败不降级（ADR-002），建议据此告警。
+- `s3c_ssrf_deny_private`：SSRF 生效策略（1 = 拒绝私网 / 回环 S3 端点，0 = 默认放行）。用于核对 `S3C_SSRF_DENY_PRIVATE` 是否真的生效（ADR-003）。
 - `s3c_stream_interrupted_total`：流式传输在完成前中断的次数（上游读失败 / 写超时 / 客户端断开）。
 - `s3c_s3_calls_total` / `s3c_s3_call_errors_total{code=...}` / `s3c_s3_call_duration_seconds`：S3 上游调用总数、按错误码分类的失败数、耗时直方图（非 API 错误归入 `transport`/`canceled`/`timeout`）。
 - `s3c_s3_stream_bytes_total`：经本服务从 S3 流式读出的字节数。
@@ -44,9 +46,9 @@ GET /api/accounts
 POST /api/accounts
 ```
 ```json
-{"name":"minio","endpoint":"http://localhost:9000","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
+{"name":"minio","provider":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
 ```
-必填：`name`、`endpoint`、`accessKey`、`secretKey`。`pathStyle` 用于 MinIO/OSS 等第三方。
+必填：`name`、`endpoint`、`accessKey`、`secretKey`。`pathStyle` 用于 MinIO/OSS 等第三方；`provider` 为展示用标签；`publicEndpoint` 是浏览器直传/预签名使用的对外端点（留空则用 `endpoint`）。
 
 ### 获取
 ```
@@ -162,7 +164,7 @@ S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结�
 POST /api/accounts/{id}/rename
 ```
 ```json
-{"bucket":"B(可选)","key":"a.txt","newKey":"dir/b.txt","newBucket":"B2(可选)"}
+{"bucket":"B(可选)","key":"a.txt","newKey":"dir/b.txt","newBucket":"B2(可选)","replaceTags":false}
 ```
 先 `CopyObject` 到新 key，成功后才删除源（复制失败不丢数据）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同拒绝，跨桶同名移动允许。
 ```json
@@ -196,7 +198,7 @@ POST /api/accounts/{id}/copy-objects
 ```
 POST /api/accounts/{id}/copy-objects/async
 ```
-请求体与 `copy-objects` 相同。立即返回 `jobId`，进度通过既有迁移任务接口查询（`progress.migrated` = 已复制/移动成功数）。
+请求体与 `POST /api/accounts/{id}/copy-objects` 相同。立即返回 `jobId`，进度通过既有迁移任务接口查询（`progress.migrated` = 已复制/移动成功数）。
 ```json
 202 {"jobId":"uuid","total":2}
 ```
@@ -238,7 +240,7 @@ POST /api/accounts/{id}/copy-prefix
 POST /api/accounts/{id}/set-headers
 ```
 ```json
-{"bucket":"B(可选)","key":"a.txt","contentType":"text/markdown","metadata":{"owner":"alice"}}
+{"bucket":"B(可选)","key":"a.txt","contentType":"text/markdown","contentLang":"zh-CN","contentEnc":"gzip","cacheControl":"max-age=3600","disposition":"attachment; filename=\"a.txt\"","metadata":{"owner":"alice"}}
 ```
 `CopyObject` 复制到自己并 `MetadataDirective: REPLACE`；`contentType` 留空不修改，`metadata` 整体覆盖（传空对象则清空）。
 ```json
@@ -527,7 +529,7 @@ post: {"method":"post","bucket":"B","key":"k","url":"https://...","fields":{"X-A
 用于大文件（前端 `≥100MB` 自动使用；<100MB 走单 PUT）。四步：
 ```
 POST /api/accounts/{id}/multipart/init
-{"bucket":"B(可选)","key":"big.bin","contentType":"application/octet-stream(可选)"}
+{"bucket":"B(可选)","key":"big.bin","contentType":"application/octet-stream(可选)","metadata":{"owner":"alice"}(可选)}
 200 {"uploadId":"UPLOAD123","key":"big.bin","bucket":"B"}
 ```
 ```

@@ -19,7 +19,7 @@ export function useBucketSetting(opts: {
   const loading = ref(false)
   const saving = ref(false)
   // reload 竞态守卫：快速切桶/保存后刷新会让多个请求并发，
-  // 只有最后一次发起的响应才允许写入状态（roadmap #8 / ASSESSMENT S8）。
+  // 只有最后一次发起的响应才允许写入状态（ASSESSMENT S8）。
   let reloadSeq = 0
 
   async function reload() {

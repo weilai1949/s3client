@@ -1,6 +1,6 @@
 package handler
 
-// error_echo_gate_test.go —— 错误文案不回显用户输入（roadmap #6 / ASSESSMENT L2）。
+// error_echo_gate_test.go —— 错误文案不回显用户输入（ASSESSMENT L2）。
 //
 // 背景：`headers.go` 曾把 `ValidateUserMetadata` 的 `err.Error()` 直接回传客户端，
 // 消息里带着用户提交的 metadata key（如 `key %q length %d > %d`）；metadata.go /

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,8 +17,20 @@ var (
 	errEndpointBlocked = errors.New("endpoint host is blocked (link-local / cloud metadata)")
 )
 
+// denyPrivateNetworks 是 S3C_SSRF_DENY_PRIVATE 的进程级开关：默认 false，保留 ADR-003 的
+// 自托管主场景（MinIO / RustFS / 局域网放行）；开启后私网、回环与未指定地址一并拒绝。
+// S3 HTTP 客户端是进程级共享的，因此策略按进程生效，只在启动时设置一次。
+var denyPrivateNetworks atomic.Bool
+
+// SetDenyPrivateNetworks 设置「拒绝私网 / 回环端点」策略（只应在进程启动时调用一次）。
+func SetDenyPrivateNetworks(v bool) { denyPrivateNetworks.Store(v) }
+
+// DenyPrivateNetworks 返回当前生效策略，供启动日志与 /api/metrics 反映实际值（便于运维核对部署配置）。
+func DenyPrivateNetworks() bool { return denyPrivateNetworks.Load() }
+
 // ValidateEndpoint 校验账号 Endpoint / PublicEndpoint：禁止指向云元数据与链路本地地址。
-// 私网 / 回环（MinIO、RustFS、局域网）仍允许，因自托管是主场景；SSRF 主防线是鉴权 + 禁重定向 + 禁 IMDS。
+// 私网 / 回环（MinIO、RustFS、局域网）默认允许，因自托管是主场景；SSRF 主防线是鉴权 + 禁重定向 + 禁 IMDS。
+// 需要更严策略时用 SetDenyPrivateNetworks(true)（S3C_SSRF_DENY_PRIVATE=1）连私网一并拒绝。
 func ValidateEndpoint(endpoint string) error {
 	// 空值代表「使用 S3 默认端点」，合法豁免。
 	if strings.TrimSpace(endpoint) == "" {
@@ -79,6 +92,10 @@ func isBlockedIP(ip net.IP) bool {
 		if ip.Equal(net.ParseIP(s)) {
 			return true
 		}
+	}
+	// S3C_SSRF_DENY_PRIVATE=1：连自托管私网/回环也拒绝（可选加固，默认关闭见 ADR-003）。
+	if denyPrivateNetworks.Load() && (ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified()) {
+		return true
 	}
 	return false
 }

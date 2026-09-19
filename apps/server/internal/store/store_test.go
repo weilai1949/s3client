@@ -84,8 +84,7 @@ func TestDelete(t *testing.T) {
 func TestPersistRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "accounts.json")
 	s, _ := New(p)
-	a, _ := s.Create(sample())
-	_ = a
+	_, _ = s.Create(sample())
 
 	// 重新从磁盘加载
 	s2, err := New(p)

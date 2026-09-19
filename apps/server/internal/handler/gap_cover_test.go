@@ -40,9 +40,7 @@ func TestCSPOverrideAndDefaultBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	_ = body
 	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "https://oss.example.com") {
 		t.Fatalf("CSP after override = %q, want custom src", csp)
 	}

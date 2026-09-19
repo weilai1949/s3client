@@ -26,6 +26,19 @@ func TestSplitList(t *testing.T) {
 	}
 }
 
+// TestFromEnvSSRFDenyPrivate 可选 SSRF 加固开关（roadmap §5.1 R8）：默认关闭，
+// 仅显式 truthy 时开启；开启后连私网/回环端点也拒绝（s3wrap 侧生效）。
+func TestFromEnvSSRFDenyPrivate(t *testing.T) {
+	t.Setenv("S3C_SSRF_DENY_PRIVATE", "")
+	if FromEnv().SSRFDenyPrivate {
+		t.Error("默认应为关闭（ADR-003 自托管放行私网）")
+	}
+	t.Setenv("S3C_SSRF_DENY_PRIVATE", "1")
+	if !FromEnv().SSRFDenyPrivate {
+		t.Error("S3C_SSRF_DENY_PRIVATE=1 应开启")
+	}
+}
+
 // TestFromEnvDefaults 验证安全默认值（回环绑定、无鉴权、无 CORS 白名单）。
 func TestFromEnvDefaults(t *testing.T) {
 	for _, k := range []string{"S3C_ADDR", "S3C_DATA_DIR", "S3C_STATIC_DIR", "S3C_REGION", "S3C_TOKEN", "S3C_CORS_ORIGINS", "S3C_LOG_LEVEL", "S3C_LOG_JSON", "S3C_STORE_DRIVER", "S3C_STORE_KEY", "S3C_SHUTDOWN_TIMEOUT", "S3C_EXPOSE_METRICS"} {

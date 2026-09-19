@@ -1,6 +1,6 @@
 package handler
 
-// api_doc_test.go —— docs/api.md 与 routes.go 的漂移门禁（roadmap #1 / ASSESSMENT I2）。
+// api_doc_test.go —— docs/api.md 与 routes.go 的漂移门禁（ASSESSMENT I2）。
 //
 // 既有契约测试（openapi_contract_test.go）只保证 routes.go ↔ OpenAPI 注册表一致；
 // 手写的 docs/api.md 长期没有自动化校验，删改路由时容易留下陈旧条目或漏记新端点。
@@ -13,6 +13,7 @@ package handler
 // 它随 `go test ./...` 在 CI 中执行，因此「文档即契约」不再依赖人工维护。
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,5 +92,156 @@ func TestAPIDocMatchesRoutes(t *testing.T) {
 	}
 	for _, s := range stale {
 		t.Errorf("docs/api.md 记录了 %s，但 routes.go 未注册（陈旧条目，请删文档）", s)
+	}
+}
+
+// apiDocSectionRe 匹配 api.md 里的「请求体与 `METHOD /api/x` 相同」别名声明。
+var apiDocSectionRe = regexp.MustCompile("请求体与\\s*`?(GET|POST|PUT|DELETE|PATCH)\\s+(/api\\S+?)`?\\s*相同")
+
+// apiDocSections 解析 api.md，返回 "METHOD /path" -> 该路由条目到下一个路由条目之间的正文。
+// 行首路由行是既有排版约定（见 apiDocRoutes 的解析口径）。
+func apiDocSections(t *testing.T) map[string]string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller 失败，无法定位 docs/api.md")
+	}
+	docPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "docs", "api.md")
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", docPath, err)
+	}
+
+	sections := map[string]string{}
+	var key string
+	var buf []string
+	flush := func() {
+		if key != "" {
+			sections[key] = strings.Join(buf, "\n")
+		}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		m := apiDocRouteRe.FindStringSubmatch(line)
+		if m == nil {
+			if key != "" {
+				buf = append(buf, line)
+			}
+			continue
+		}
+		flush()
+		path := m[2]
+		if i := strings.IndexByte(path, '?'); i >= 0 {
+			path = path[:i]
+		}
+		key = m[1] + " " + strings.TrimRight(path, "`")
+		buf = nil
+	}
+	flush()
+	if len(sections) == 0 {
+		t.Fatal("docs/api.md: 未解析到任何「METHOD /api」正文段")
+	}
+	return sections
+}
+
+// sectionText 返回某路由的正文；若该段声明「请求体与 `METHOD /path` 相同」则跟随别名
+// （如 POST /api/migrate/async 复用 /api/migrate 的字段说明），seen 防环。
+func sectionText(sections map[string]string, key string, seen map[string]bool) string {
+	if seen[key] {
+		return ""
+	}
+	seen[key] = true
+	body := sections[key]
+	if m := apiDocSectionRe.FindStringSubmatch(body); m != nil {
+		return sectionText(sections, m[1]+" "+strings.TrimRight(m[2], "`"), seen)
+	}
+	return body
+}
+
+// openAPIRequestFields 从运行中的规范取回每个 operation 的 application/json 请求体字段名。
+// 值为 nil 表示该端点没有请求体。
+func openAPIRequestFields(t *testing.T) map[string][]string {
+	t.Helper()
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody *struct {
+				Content map[string]struct {
+					Schema json.RawMessage `json:"schema"`
+				} `json:"content"`
+			} `json:"requestBody"`
+		} `json:"paths"`
+		Components struct {
+			Schemas map[string]json.RawMessage `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(fetchOpenAPIJSON(t), &spec); err != nil {
+		t.Fatalf("解析 openapi.json: %v", err)
+	}
+
+	deref := func(raw json.RawMessage) map[string]any {
+		var m map[string]any
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("解析 schema: %v", err)
+		}
+		if ref, ok := m["$ref"].(string); ok {
+			name := ref[strings.LastIndex(ref, "/")+1:]
+			raw, ok := spec.Components.Schemas[name]
+			if !ok {
+				t.Fatalf("$ref 指向不存在的 schema: %s", ref)
+			}
+			if err := json.Unmarshal(raw, &m); err != nil {
+				t.Fatalf("解析 $ref %s: %v", ref, err)
+			}
+		}
+		return m
+	}
+
+	out := map[string][]string{}
+	for path, ops := range spec.Paths {
+		for method, op := range ops {
+			if op.RequestBody == nil {
+				continue
+			}
+			mt, ok := op.RequestBody.Content["application/json"]
+			if !ok {
+				continue
+			}
+			schema := deref(mt.Schema)
+			props, _ := schema["properties"].(map[string]any)
+			var fields []string
+			for name := range props {
+				fields = append(fields, name)
+			}
+			sort.Strings(fields)
+			out[strings.ToUpper(method)+" "+path] = fields
+		}
+	}
+	return out
+}
+
+// TestAPIDocDocumentsRequestBodyFields docs/api.md 必须出现 OpenAPI 注册表里每个
+// 请求体字段名（ASSESSMENT H1 的残留面：端点漂移已有 TestAPIDocMatchesRoutes 兜底，
+// 字段级漂移——文档写旧字段名、代码改新字段名——此前无人校验）。
+// 别名段（「请求体与 `POST /api/x` 相同」）按被引用端点校验。
+func TestAPIDocDocumentsRequestBodyFields(t *testing.T) {
+	t.Parallel()
+	fields := openAPIRequestFields(t)
+	sections := apiDocSections(t)
+
+	var missing []string
+	for key, names := range fields {
+		body := sectionText(sections, key, map[string]bool{})
+		if body == "" {
+			missing = append(missing, key+"（docs/api.md 无该端点正文）")
+			continue
+		}
+		for _, name := range names {
+			if !strings.Contains(body, name) {
+				missing = append(missing, key+" 缺少请求体字段 `"+name+"`")
+			}
+		}
+	}
+	sort.Strings(missing)
+	for _, s := range missing {
+		t.Errorf("docs/api.md 与 OpenAPI 注册表字段漂移：%s", s)
 	}
 }

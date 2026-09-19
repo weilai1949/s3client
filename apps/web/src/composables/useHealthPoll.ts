@@ -2,7 +2,7 @@ import { onBeforeUnmount, ref } from 'vue'
 import { api } from '../api'
 
 /**
- * 后端健康轮询与自动恢复（roadmap #8 / ASSESSMENT S5）。
+ * 后端健康轮询与自动恢复（ASSESSMENT S5）。
  *
  * 此前仅在挂载时 load 一次：后端重启或网络抖动后前端一直停留在错误态，必须手动刷新。
  * 本组合式在「已知后端不可用」时按固定间隔探测 /api/health，一旦恢复即回调

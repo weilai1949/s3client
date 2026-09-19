@@ -117,7 +117,7 @@ describe('App', () => {
     w.unmount()
   })
 
-  it('后端不可用后轮询 /api/health，恢复时自动重载并清除错误（roadmap #8）', async () => {
+  it('后端不可用后轮询 /api/health，恢复时自动重载并清除错误（已闭环：features.md §M）', async () => {
     vi.useFakeTimers()
     try {
       vi.mocked(s3api.listAccounts).mockRejectedValueOnce(new Error('boom'))

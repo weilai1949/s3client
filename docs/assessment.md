@@ -4,6 +4,11 @@
 > 评估方法：4 个并行深度审查（后端 Go / 前端 Vue-TS / 安全威胁与依赖 / SRE 可靠性）× 全部质量门禁实跑
 > （`go vet`、`go test -race`、`pnpm lint`、`vue-tsc`、覆盖率）× 关键发现人工复核。
 > 评估结论已回写至 [`todolist.md`](todolist.md) 作为后续迭代的待办来源。
+>
+> **后续处置（不改写本报告的历史结论）**：2026-09-17 完成 P0/P1/P2 与路线图 v1.0.0–v1.1.0 收口
+> （证据见 [`features.md`](features.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
+> （证据见 [`features.md`](features.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
+> `DELETE /version` 三处 OpenAPI 注册表失真。
 
 ---
 

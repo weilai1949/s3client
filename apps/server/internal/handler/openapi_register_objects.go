@@ -98,8 +98,8 @@ func registerObjects(r *openapi.Registry) {
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
-				"prefix": openapi.Str(),
-			}, "bucket", "prefix")},
+				"key":    openapi.Str(),
+			}, "bucket", "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
@@ -132,17 +132,22 @@ func registerObjects(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
 	})
+	// copyObjectsBody 是同步 / 异步批量复制共用的请求体：两者共用 copy.go 的同一个 DTO
+	// （bucket/targetBucket/targetPrefix/keys/deleteSource），此前同步侧误写成 `items`、
+	// 异步侧写成空对象 schema，客户端按 OpenAPI 发送 `items` 会被 DisallowUnknownFields 拒绝。
+	copyObjectsBody := openapi.BuildObj(map[string]*openapi.Schema{
+		"bucket":       openapi.Str(),
+		"targetBucket": openapi.Str(),
+		"targetPrefix": openapi.Str(),
+		"keys":         openapi.Arr(openapi.Str()),
+		"deleteSource": desc(openapi.Bool(), "true=移动"),
+	}, "keys")
 	r.Operation("POST", "/api/accounts/{id}/copy-objects", openapi.Op{
 		Tags: []string{"objects"}, Summary: "批量复制（同步）", OperationID: "copyObjects",
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"items":        openapi.Arr(openapi.Obj()),
-				"targetBucket": openapi.Str(),
-				"targetPrefix": openapi.Str(),
-				"deleteSource": desc(openapi.Bool(), "true=移动"),
-			}, "items", "targetBucket")},
+			Content:  openapi.MediaType{Schema: copyObjectsBody},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 copied/failed/lastError", JSON: openapi.Obj()}},
 	})
@@ -151,7 +156,7 @@ func registerObjects(r *openapi.Registry) {
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content:  openapi.MediaType{Schema: openapi.Obj()},
+			Content:  openapi.MediaType{Schema: copyObjectsBody},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "jobId", JSON: openapi.Obj()}},
 	})

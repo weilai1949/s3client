@@ -76,7 +76,7 @@ docker-compose.yml   一键起 server + RustFS
 | --- | --- | --- |
 | `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选 |
 | `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080` |
-| `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`） |
+| `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`，以及单写者锁文件 `.s3clinet.lock`） |
 | `S3C_STATIC_DIR` | `../web/dist` | Web 静态资源目录（相对进程工作目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist`） |
 | `S3C_REGION` | `us-east-1` | 账号缺省 region |
 | `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换（以最短者判定长度） |
@@ -87,6 +87,7 @@ docker-compose.yml   一键起 server + RustFS
 | `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`） |
 | `S3C_EXPOSE_METRICS` | 空 | `1`/`true`/`yes`/`on` 时暴露 `GET /api/metrics`（Prometheus 文本）；默认 404，避免公网被 scrape |
 | `S3C_TRUSTED_PROXIES` | 空 | 可信反向代理 IP（逗号分隔）；仅这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速 |
+| `S3C_SSRF_DENY_PRIVATE` | 空 | 设为 `1` 时连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](docs/decisions/0003-ssrf-private-allow.md) |
 
 **安全默认值**：回环绑定 + CORS 白名单 + 可选鉴权 + 短 token 拒绝启动 + 指标端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN` 时进程**拒绝启动**。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
 
@@ -134,6 +135,7 @@ make stop && make status
 
 **镜像特性**
 - 非 root 用户 `app` 运行；`/data` 已授权，账号数据持久化到卷。
+- **单实例**：文件型存储 + 内存任务表只支持单副本，启动时对数据目录加 `flock` 单写者锁；同一 `/data` 卷起第二个实例会直接启动失败（水平扩容需先换外部存储）。
 - `HEALTHCHECK` 通过 `/s3clinet-server -healthcheck` 自检 `/api/health`。
 - 配置通过 `S3C_*` 环境变量注入（见上表）；中文 `.env.example` 见 `apps/server/.env.example`。
 - 构建参数 `GOPROXY` / `NPM_REGISTRY` 可覆盖，便于国内网络。
@@ -144,6 +146,17 @@ make stop && make status
 > 要让宿主浏览器也能直传，可给 server 增加 `network_mode: host`（Linux），并把账号端点配成 `http://127.0.0.1:9000`。
 
 > ⚠️ **分段上传（大文件）需要 CORS 暴露 ETag**：分段直传需从每段 PUT 响应的 `ETag` 头读取指纹以完成组装，因此 Bucket 的 CORS 配置需包含 `ExposeHeader: ETag`（AWS 控制台「跨源资源共享(CORS)」或 RustFS 控制台 / S3 API 可配置）。单文件（<100MB）直传不受此限制。
+
+各 S3 实现的兼容性要求（`ETag` 暴露是分段组装的硬前提）：
+
+| S3 服务 | 在 CORS 规则中暴露 `ETag` | 本项目自动化覆盖 |
+|---|---|---|
+| RustFS（内置 compose / 真对端 E2E） | 是 | ✅ `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E` |
+| MinIO（自托管常用） | 是 | 手动 |
+| AWS S3 | 是（`ExposeHeaders: ETag`） | 手动 |
+| 阿里云 OSS / 腾讯云 COS 等兼容实现 | 是（CORS 规则「暴露 Headers」填 `ETag`） | 手动 |
+
+未暴露时每段 PUT 仍返回 2xx，但前端读不到 `ETag`，会在**组装前**报「未读取到 ETag」并 `abort` 清理已上传分段（不留半成品），不会静默产出损坏对象。
 
 ### 方式二：本地
 

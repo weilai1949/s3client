@@ -1,6 +1,6 @@
 package store
 
-// crypto_v3_test.go —— 加密文件格式版本化（roadmap #2 / ASSESSMENT M2）。
+// crypto_v3_test.go —— 加密文件格式版本化（ASSESSMENT M2）。
 //
 // 背景：S3C2 信封只存 magic + salt，Argon2 参数硬编码在代码里（t=1），
 // 直接调参会让既有加密库无法解密。因此新格式 S3C3 必须把 KDF 参数写进文件头，

@@ -806,6 +806,37 @@ func requestBodyProps(t *testing.T, doc map[string]any, path, method string) (pr
 	return props
 }
 
+// requestQueryParams 返回某操作在 query 上的参数名集合（$ref 解析到 components.parameters）。
+func requestQueryParams(t *testing.T, doc map[string]any, path, method string) map[string]bool {
+	t.Helper()
+	paths := openAPIPaths(t, doc)
+	op, ok := paths[path][method]
+	if !ok {
+		t.Fatalf("openapi 无 %s %s", method, path)
+	}
+	out := map[string]bool{}
+	list, _ := op["parameters"].([]any)
+	for _, raw := range list {
+		p, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if ref, _ := p["$ref"].(string); ref != "" {
+			p, ok = derefComponent(doc, ref)
+			if !ok {
+				t.Fatalf("%s %s $ref 解析失败: %s", method, path, ref)
+			}
+		}
+		if in, _ := p["in"].(string); in != "query" {
+			continue
+		}
+		if name, _ := p["name"].(string); name != "" {
+			out[name] = true
+		}
+	}
+	return out
+}
+
 // TestOpenAPI_ContractRequestBodyMatchesHandlers 验证 requestBody schema 与真实 handler DTO 对齐：
 // 这是「注册表 ↔ 实际解析字段」三方一致性的最后一道防线（补 routes↔spec 双向检查覆盖不到的
 // 字段级漂移）。已知失真点（2026-09-16 评估 H1）逐一断言：
@@ -877,18 +908,45 @@ func TestOpenAPI_ContractRequestBodyMatchesHandlers(t *testing.T) {
 		}
 	}
 
-	// 6. 版本相关端点：version 删除（DELETE）与 version/restore 均以 versionId
-	//    标识版本，禁止出现 deleteMarkerId 之类未解析字段。
-	for _, tc := range []struct{ path, method string }{
-		{"/api/accounts/{id}/version", "delete"},
-		{"/api/accounts/{id}/version/restore", "post"},
-	} {
-		props := requestBodyProps(t, doc, tc.path, tc.method)
-		if !props["versionId"] {
-			t.Errorf("%s %s schema 缺少 versionId（真实 handler 解析）", tc.method, tc.path)
+	// 6. version 删除（DELETE）与 version/restore：都以 versionId 标识版本。
+	//    DELETE 走 query（handler metadata.go 只读 r.URL.Query()，曾误声明为 requestBody）；
+	//    restore（POST）走 JSON body，禁止出现 deleteMarkerId 之类未解析字段。
+	del := requestQueryParams(t, doc, "/api/accounts/{id}/version", "delete")
+	for _, field := range []string{"bucket", "key", "versionId"} {
+		if !del[field] {
+			t.Errorf("version DELETE 缺少 query 参数 %q（真实 handler 从 query 读取）", field)
 		}
-		if props["deleteMarkerId"] {
-			t.Errorf("%s %s schema 声明 deleteMarkerId，真实 handler 不解析该字段", tc.method, tc.path)
+	}
+	restore := requestBodyProps(t, doc, "/api/accounts/{id}/version/restore", "post")
+	if !restore["versionId"] {
+		t.Errorf("version/restore POST schema 缺少 versionId（真实 handler 解析）")
+	}
+	if restore["deleteMarkerId"] {
+		t.Errorf("version/restore POST schema 声明 deleteMarkerId，真实 handler 不解析该字段")
+	}
+
+	// 7. mkdir：真实 handler（objects.go mkdirObject）解析 key（写入时补 `/` 结尾），
+	//    曾误写 prefix；copy-objects 同步 + 异步：真实 handler（copy.go）解析 keys，
+	//    曾误写 items、且异步侧只声明空对象。按 OpenAPI 生成的客户端发这些字段会被
+	//    DisallowUnknownFields 直接 400（2026-09-19 由 docs↔注册表字段门禁发现）。
+	mk := requestBodyProps(t, doc, "/api/accounts/{id}/mkdir", "post")
+	for _, field := range []string{"bucket", "key"} {
+		if !mk[field] {
+			t.Errorf("mkdir POST schema 缺少字段 %q（真实 handler 解析）", field)
+		}
+	}
+	if mk["prefix"] {
+		t.Errorf("mkdir POST schema 声明 prefix，真实 handler 只解析 key")
+	}
+	for _, path := range []string{"/api/accounts/{id}/copy-objects", "/api/accounts/{id}/copy-objects/async"} {
+		props := requestBodyProps(t, doc, path, "post")
+		for _, field := range []string{"bucket", "keys", "targetBucket", "targetPrefix", "deleteSource"} {
+			if !props[field] {
+				t.Errorf("%s POST schema 缺少字段 %q（真实 handler 解析）", path, field)
+			}
+		}
+		if props["items"] {
+			t.Errorf("%s POST schema 声明 items，真实 handler 只解析 keys", path)
 		}
 	}
 }

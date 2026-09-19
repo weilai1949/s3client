@@ -22,7 +22,7 @@ var (
 	// metricStreamInterrupted 统计流式传输在写出完成前中断的次数（上游读失败、
 	// 写超时、客户端断开）。此前这类失败被 io.Copy 的返回值吞掉，无从观测（#20）。
 	metricStreamInterrupted atomic.Int64
-	// ZIP 打包可见性（roadmap #4）：部分失败次数、失败 key 累计、整体失败次数。
+	// ZIP 打包可见性（已闭环：features.md §M）：部分失败次数、失败 key 累计、整体失败次数。
 	metricZipPartialFailures atomic.Int64
 	metricZipFailedKeys      atomic.Int64
 	metricZipFailed          atomic.Int64
@@ -85,10 +85,31 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP s3c_build_info Build version\n")
 	fmt.Fprintf(w, "# TYPE s3c_build_info gauge\n")
 	fmt.Fprintf(w, "s3c_build_info{version=%q} 1\n", h.version)
+	// 存储硬失败（ADR-002）的可观测面：健康检查之外再给一个可告警的 gauge，
+	// 让「store 掉线」不必等到业务 5xx 才被发现（roadmap §5.1 R8）。
+	storeUp := 1
+	if err := h.store.Ping(); err != nil {
+		storeUp = 0
+	}
+	fmt.Fprintf(w, "# HELP s3c_store_up Account store reachable (1) or failing (0); store failure is hard-fail, not degraded (ADR-002)\n")
+	fmt.Fprintf(w, "# TYPE s3c_store_up gauge\n")
+	fmt.Fprintf(w, "s3c_store_up %d\n", storeUp)
+	// 反映 S3C_SSRF_DENY_PRIVATE 的生效值：默认 0（ADR-003 放行私网/回环），置 1 时拒绝。
+	fmt.Fprintf(w, "# HELP s3c_ssrf_deny_private Effective SSRF policy: 1 = private/loopback S3 endpoints rejected\n")
+	fmt.Fprintf(w, "# TYPE s3c_ssrf_deny_private gauge\n")
+	fmt.Fprintf(w, "s3c_ssrf_deny_private %d\n", boolToInt(s3wrap.DenyPrivateNetworks()))
 	writeS3UpstreamMetrics(w)
 }
 
-// writeS3UpstreamMetrics 输出 s3wrap 采集的上游调用指标（roadmap #5 / ASSESSMENT S3）：
+// boolToInt 把布尔策略值转成 0/1 gauge 输出。
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+// writeS3UpstreamMetrics 输出 s3wrap 采集的上游调用指标（ASSESSMENT S3）：
 // 调用总数、错误按码分类、耗时直方图、流式字节数。标签值来自有限集合，基数可控。
 func writeS3UpstreamMetrics(w io.Writer) {
 	snap := s3wrap.MetricsSnapshot()

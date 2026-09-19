@@ -70,7 +70,7 @@ func TestOlZipPartialFailure(t *testing.T) {
 	}
 }
 
-// TestOlZipPartialFailureObservable ZIP 部分失败必须在服务端指标中可见（roadmap #4）。
+// TestOlZipPartialFailureObservable ZIP 部分失败必须在服务端指标中可见（已闭环：features.md §M）。
 func TestOlZipPartialFailureObservable(t *testing.T) {
 	beforePartial := metricZipPartialFailures.Load()
 	beforeKeys := metricZipFailedKeys.Load()

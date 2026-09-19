@@ -4,7 +4,6 @@ package handler
 // 限流为纯内存令牌桶，直接白盒操作桶状态，避免真实时钟等待导致的 flaky。
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -141,7 +140,6 @@ func TestAccWithRateLimitOptionsBypass(t *testing.T) {
 // TestAccRateLimitExcludedAndTriggered 黑盒全链路：health/metrics 不限流；同 IP 打满触发 429。
 func TestAccRateLimitExcludedAndTriggered(t *testing.T) {
 	env := accNewEnv(t, "http://127.0.0.1:1", "b")
-	_ = env
 
 	// health / metrics 不限流：无论多少次都不应 429
 	for i := 0; i < 5; i++ {
@@ -284,5 +282,4 @@ func TestAccClientCacheEvict(t *testing.T) {
 	if first == second {
 		t.Fatal("evict 后应重建新实例")
 	}
-	var _ = errors.New // 保持 errors 引用位（占位说明：本文件错误断言用 err != nil）
 }

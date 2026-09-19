@@ -30,11 +30,15 @@ S3C_ADDR=0.0.0.0:8080
 
 # 日志：结构化输出便于采集
 S3C_LOG_JSON=1
+
+# 可选：SSRF 加固，拒绝私网 / 回环 S3 端点（默认关闭，自托管场景不设）
+# S3C_SSRF_DENY_PRIVATE=1
 ```
 
 > **安全提醒**：`sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时才会把 `secretKey` 加密落盘
-> （AES-256-GCM）；不设 key 即为明文，仅限本地联调。生产推荐 `encrypted` 驱动（整文件加密）
-> 或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，`openssl rand -hex 32`）。
+> （AES-256-GCM）；不设 key 即为明文，仅限本地联调——此时 `json` / `sqlite` 驱动会在启动日志打出
+> 「secretKey 将明文落盘」WARN 告警（`S3C_STORE_DRIVER=encrypted` 或设 key 后消失）。生产推荐
+> `encrypted` 驱动（整文件加密）或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，`openssl rand -hex 32`）。
 > 加密文件格式为 S3C3（Argon2id 参数随文件头保存），并兼容读取旧的 S3C2 库。
 > 详见 [threat-model.md](threat-model.md)。
 
@@ -45,6 +49,10 @@ cp .env.example .env
 # 编辑 .env 填入 S3C_TOKEN / S3C_STORE_KEY
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+> **单实例约束**：账号存储是文件型的（`json` / `sqlite`），异步任务表在内存中，因此服务启动时对
+> `S3C_DATA_DIR` 加 `flock` 单写者锁（`.s3clinet.lock`）。同一数据卷起第二个实例会立即失败并报
+> `data dir … is already in use`——不要为同一 `/data` 卷编排多副本；水平扩容需先替换外部存储（未立项）。
 
 ### 2.3 生产 + TLS（nginx 终止 TLS）
 
@@ -94,6 +102,14 @@ curl http://127.0.0.1:8080/api/health
 # store 探测失败返回 503（不做降级，见 ADR-002）
 ```
 
+`503` 时的处置顺序（硬失败设计下服务不会「假装可用」）：
+
+1. 确认现象：`/api/metrics` 的 `s3c_store_up 0`（需 `S3C_EXPOSE_METRICS=1`），服务端日志 Debug 级有 `health store ping`。
+2. 检查 `S3C_DATA_DIR` 挂载与写权限（目录 0700 / 文件 0600，运行用户 `app`），以及卷是否写满。
+3. 恢复后无需重启：下一次探测成功即回到 200，前端健康轮询会自动恢复界面。
+
+> 告警建议：`s3c_store_up == 0` 持续 1 分钟即告警；硬失败意味着此时所有写操作都在拒绝，不能等业务 5xx 才发现。
+
 ### 6.2 优雅关闭
 
 - Go server：`SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（超时 `S3C_SHUTDOWN_TIMEOUT`）
@@ -102,7 +118,7 @@ curl http://127.0.0.1:8080/api/health
 
 ### 6.3 指标
 
-`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_stream_interrupted_total`（流式传输中断计数）。后者用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
+`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`（存储可达性，掉线为 0）、`s3c_ssrf_deny_private`（SSRF 生效策略 0/1）与 `s3c_stream_interrupted_total`（流式传输中断计数）。后者用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
 
 ### 6.4 升级
 
@@ -111,4 +127,5 @@ curl http://127.0.0.1:8080/api/health
 ## 7. 回滚
 
 - Docker：`docker compose down && docker compose -f docker-compose.prod.yml up -d`（镜像 tag 指回旧版本）。
-- 数据：账号存储（`accounts.json` / `accounts.db` / `accounts.json.enc`）挂载于 `/data` 卷，回滚前先备份。
+- 数据：账号存储（`accounts.json` / `accounts.db` / `accounts.json.enc`）挂载于 `/data` 卷，回滚前先备份；
+  同目录的 `.s3clinet.lock` 只是 flock 锁文件，不需要备份（进程退出即释放）。

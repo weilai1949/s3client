@@ -1,6 +1,6 @@
 package handler
 
-// audit.go —— 安全审计日志（roadmap #3 / ASSESSMENT M3）。
+// audit.go —— 安全审计日志（ASSESSMENT M3）。
 //
 // 与通用 access log 的区别：审计日志只记录**安全敏感动作**（鉴权失败、账号 CRUD、
 // 策略与删除变更），带固定的 `audit` 事件名与操作者 IP，便于集中检索与告警。

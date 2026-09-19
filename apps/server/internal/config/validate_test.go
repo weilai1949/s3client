@@ -21,7 +21,7 @@ func TestValidate(t *testing.T) {
 		{"multi token shortest applies", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + ",short"}, ErrShortToken},
 		{"multi token all long ok", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + "," + strings.Repeat("b", MinTokenLength+5)}, nil},
 		{"empty token piece ignored in shortest", Config{Addr: "127.0.0.1:8080", Token: "," + strings.Repeat("a", MinTokenLength)}, nil},
-		// S3C_STORE_KEY 最短长度校验（roadmap #2）：短口令会被 Argon2 暴力破解。
+		// S3C_STORE_KEY 最短长度校验（已闭环：features.md §M）：短口令会被 Argon2 暴力破解。
 		{"short store key rejected", Config{Addr: "127.0.0.1:8080", StoreKey: "short"}, ErrShortStoreKey},
 		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
 		{"empty store key ok (json driver)", Config{Addr: "127.0.0.1:8080", StoreKey: ""}, nil},
@@ -41,6 +41,46 @@ func TestValidate(t *testing.T) {
 			}
 			if !errors.Is(err, c.wantErr) {
 				t.Fatalf("Validate() err=%v, want wraps %v", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestStorePlaintextWarning 落盘明文告警：json / sqlite 无 key 时给出可执行提示，
+// 加密配置（encrypted，或任意驱动 + 非空 key）不告警（roadmap §5.1 R3）。
+func TestStorePlaintextWarning(t *testing.T) {
+	key := strings.Repeat("k", MinStoreKeyLength)
+	cases := []struct {
+		name      string
+		cfg       Config
+		wantWarn  bool
+		wantParts []string
+	}{
+		{"json without key warns", Config{StoreDriver: "json", DataDir: "./data"}, true,
+			[]string{"json", "./data", "encrypted", "S3C_STORE_KEY"}},
+		{"sqlite without key warns", Config{StoreDriver: "sqlite", DataDir: "/tmp/d"}, true,
+			[]string{"sqlite", "/tmp/d"}},
+		{"json with key silent", Config{StoreDriver: "json", StoreKey: key}, false, nil},
+		{"sqlite with key silent", Config{StoreDriver: "sqlite", StoreKey: key}, false, nil},
+		{"encrypted silent", Config{StoreDriver: "encrypted"}, false, nil},
+		{"unknown driver silent", Config{StoreDriver: "pgsql"}, false, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.cfg.StorePlaintextWarning()
+			if !c.wantWarn {
+				if got != "" {
+					t.Fatalf("StorePlaintextWarning() = %q, want empty", got)
+				}
+				return
+			}
+			if got == "" {
+				t.Fatal("StorePlaintextWarning() = empty, want warning")
+			}
+			for _, p := range c.wantParts {
+				if !strings.Contains(got, p) {
+					t.Fatalf("warning %q missing %q", got, p)
+				}
 			}
 		})
 	}

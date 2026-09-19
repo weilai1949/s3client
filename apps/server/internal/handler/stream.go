@@ -61,7 +61,7 @@ func copyStream(w http.ResponseWriter, r *http.Request, src io.Reader) (int64, e
 // 仅 Debug，避免用户取消下载就刷出告警（todolist #20）。
 func (h *Handler) recordStreamOutcome(ctx context.Context, bucket, key string, n int64, err error) {
 	if n > 0 {
-		// 成功读出的字节数计入上游流字节指标（roadmap #5）；即使随后写失败也反映已读量。
+		// 成功读出的字节数计入上游流字节指标（已闭环：features.md §M）；即使随后写失败也反映已读量。
 		s3wrap.RecordStreamBytes(n)
 	}
 	if err == nil {

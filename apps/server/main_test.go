@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,11 +12,13 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/config"
+	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
 
 // TestParseLevel 日志级别解析：全部分支表驱动。
@@ -295,6 +298,72 @@ func TestMainServerSubprocess(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatal("child did not exit after SIGTERM")
+	}
+}
+
+// TestMainServerWarnsPlaintextStore 子进程跑 main()：sqlite + 空 S3C_STORE_KEY 时启动日志
+// 必须出现明文落盘告警（roadmap §5.1 R3），否则运维无从察觉生产误用明文驱动。
+func TestMainServerWarnsPlaintextStore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("依赖 SIGTERM")
+	}
+	addr := reserveLoopbackPort(t)
+	cmd := childCmd(t, "server", map[string]string{
+		"S3C_ADDR":             addr,
+		"S3C_DATA_DIR":         t.TempDir(),
+		"S3C_TOKEN":            "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":     "sqlite",
+		"S3C_STORE_KEY":        "",
+		"S3C_SHUTDOWN_TIMEOUT": "5",
+	})
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
+
+	if !pollHealth(t, fmt.Sprintf("http://%s/api/health", addr)) {
+		_ = cmd.Process.Signal(syscall.SIGKILL)
+		t.Fatalf("child server not healthy, out=%s", out.String())
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signal child: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("child did not exit after SIGTERM")
+	}
+	if !strings.Contains(out.String(), "明文落盘") {
+		t.Fatalf("startup log missing plaintext-store warning, got: %s", out.String())
+	}
+}
+
+// TestRunServerRejectsLockedDataDir 同一 DataDir 已被占用时拒绝启动并返回 1
+// （roadmap §5.1 R4：文件型 store 必须单副本，否则写覆盖 / 任务重复）。
+// 非 unix 平台的锁是 no-op，跳过。
+func TestRunServerRejectsLockedDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("非 unix 平台无跨进程文件锁（lock_other.go 为 no-op）")
+	}
+	dir := t.TempDir()
+	release, err := store.AcquireDataDirLock(dir)
+	if err != nil {
+		t.Fatalf("lock: %v", err)
+	}
+	defer release()
+
+	t.Setenv("S3C_ADDR", reserveLoopbackPort(t))
+	t.Setenv("S3C_DATA_DIR", dir)
+	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
+	t.Setenv("S3C_STORE_DRIVER", "json")
+	if code := runServer(context.Background()); code != 1 {
+		t.Fatalf("runServer(locked data dir) = %d, want 1", code)
 	}
 }
 

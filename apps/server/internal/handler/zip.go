@@ -49,7 +49,7 @@ func (h *Handler) downloadZip(w http.ResponseWriter, r *http.Request) {
 		return out.Body, out.ContentType, nil
 	}, req.Keys, w)
 	// ZIP 部分失败此前不可观测（失败清单只写进包内，handler 忽略返回值）。
-	// 这里落服务端日志并计入指标，使批量下载失败率可见（roadmap #4 / ASSESSMENT S6）。
+	// 这里落服务端日志并计入指标，使批量下载失败率可见（ASSESSMENT S6）。
 	h.recordZipOutcome(bucket, len(req.Keys), failKeys, zipErr)
 }
 

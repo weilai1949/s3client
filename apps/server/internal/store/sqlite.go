@@ -19,7 +19,7 @@ import (
 //
 // secret_key 列在 S3C_STORE_KEY 非空时以 AES-256-GCM 密文落盘（S3C3 参数），
 // 空 key 时保持明文（向后兼容既有库与无 key 的本地开发）。读取时按魔数判别，
-// 因此升级前写入的明文行仍可读，写回时自动加密（roadmap #2 / ASSESSMENT M1）。
+// 因此升级前写入的明文行仍可读，写回时自动加密（ASSESSMENT M1）。
 type SQLiteStore struct {
 	mu       sync.RWMutex
 	db       *sql.DB

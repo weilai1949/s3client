@@ -1,6 +1,6 @@
 package s3wrap
 
-// metrics_test.go —— S3 上游指标（roadmap #5 / ASSESSMENT S3）。
+// metrics_test.go —— S3 上游指标（ASSESSMENT S3）。
 //
 // 指标口径：每次 S3 API 调用计入调用数、延迟直方图与（失败时）错误码分类；
 // 流式读取的字节数由 handler 在复制完成后回报，统一计入 s3c_s3_stream_bytes_total。

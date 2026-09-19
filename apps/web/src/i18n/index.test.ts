@@ -112,7 +112,7 @@ describe('i18n', () => {
     setLocale('zh-CN')
   })
 
-  // 覆盖率门禁去水分（roadmap #11）：i18n 纳入统计后，这些分支必须有行为断言，
+  // 覆盖率门禁去水分（已闭环：features.md §M）：i18n 纳入统计后，这些分支必须有行为断言，
   // 而非靠排除目录「注水」。
   it('locale() 反映 setLocale 的当前语言', () => {
     setLocale('en-US')

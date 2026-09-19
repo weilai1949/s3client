@@ -16,6 +16,7 @@ import (
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/config"
 	"github.com/weilai1949/s3clinet/apps/server/internal/handler"
+	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
 	"github.com/weilai1949/s3clinet/apps/server/internal/service"
 	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
@@ -59,6 +60,23 @@ func runServer(ctx context.Context) int {
 		return 1
 	}
 
+	// 明文落盘告警：json / sqlite 未设 S3C_STORE_KEY 时 secretKey 明文写入 DataDir（roadmap §5.1 R3）。
+	if w := cfg.StorePlaintextWarning(); w != "" {
+		logger.Warn(w)
+	}
+
+	// 可选加固：拒绝私网 / 回环 S3 端点（默认放行，见 ADR-003；roadmap §5.1 R8）。
+	s3wrap.SetDenyPrivateNetworks(cfg.SSRFDenyPrivate)
+
+	// 单写者锁：文件型 store + 内存 JobRegistry 只支持单副本，第二个进程必须被挡住而不是
+	// 静默互相覆盖写入（roadmap §5.1 R4）。
+	releaseLock, err := store.AcquireDataDirLock(cfg.DataDir)
+	if err != nil {
+		logger.Error("data dir lock", "err", err)
+		return 1
+	}
+	defer releaseLock()
+
 	// 账号存储（json / sqlite / encrypted）
 	st, err := store.Open(cfg.DataDir, cfg.StoreDriver, cfg.StoreKey)
 	if err != nil {
@@ -99,6 +117,7 @@ func runServer(ctx context.Context) int {
 			"auth", cfg.Token != "",
 			"cors", corsSummary(cfg.CORSOrigins),
 			"region", cfg.Region,
+			"ssrfDenyPrivate", cfg.SSRFDenyPrivate,
 		)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "err", err)

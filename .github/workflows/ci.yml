@@ -179,6 +179,13 @@ jobs:
       - name: cargo check
         working-directory: apps/desktop/src-tauri
         run: cargo check --locked
+      # RustSec 审计：有已知漏洞即红灯；unmaintained/unsound 告警按
+      # docs/threat-model.md §5 逐条 triage（当前 7 条，均无 upstream 修复版本）。
+      - name: cargo audit (RustSec)
+        working-directory: apps/desktop/src-tauri
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
 
   # 完整 Tauri 链接较重（webkit 依赖 + 前端 build），仅手动触发，不阻塞 PR。
   desktop-build:

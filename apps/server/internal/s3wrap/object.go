@@ -310,11 +310,9 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 		if !out.IsTruncated || out.NextKeyMarker == "" {
 			break
 		}
+		// 分页续读：marker 写入后由下一轮 ListObjectVersions 消费（测试中不触发分页分支）。
 		keyMarker = out.NextKeyMarker
 		versionIDMarker = out.NextVersionIDMarker
-		// 上一循环已对 IsTruncated==false 提前 break；此处双保险在测试中不可达。
-		_ = keyMarker
-		_ = versionIDMarker
 	}
 	if deleted == 0 {
 		if err := c.DeleteObject(ctx, bucket, key); err != nil {

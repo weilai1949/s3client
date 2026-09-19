@@ -1,6 +1,6 @@
 package store
 
-// sqlite_crypto_test.go —— SQLite 驱动的密钥落盘加密（roadmap #2 / ASSESSMENT M1）。
+// sqlite_crypto_test.go —— SQLite 驱动的密钥落盘加密（ASSESSMENT M1）。
 //
 // 背景：sqlite 驱动的 `secret_key` 列此前明文落盘，且 docker-compose 默认就用该驱动。
 // 现在：S3C_STORE_KEY 非空时，secret_key 列以 AES-256-GCM 密文（S3C3 参数）落盘；

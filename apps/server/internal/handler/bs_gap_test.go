@@ -12,7 +12,6 @@ import (
 // 成功 / NoSuch* / 通用 S3 错误 / 参数校验失败 / 空规则走 DELETE 语义。
 func TestBucketSettingsGapMatrix(t *testing.T) {
 	var mu sync.Mutex
-	deletes := []string{}
 	notConfigured := func(w http.ResponseWriter, code string) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>` + code + `</Code><Message>nf</Message></Error>`))
@@ -115,7 +114,6 @@ func TestBucketSettingsGapMatrix(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusOK)
 		default:
-			_ = deletes
 			w.WriteHeader(http.StatusOK)
 		}
 	}))

@@ -1,6 +1,6 @@
 package handler
 
-// audit_test.go —— 安全审计日志与可信代理 XFF（roadmap #3 / ASSESSMENT M3/M4）。
+// audit_test.go —— 安全审计日志与可信代理 XFF（ASSESSMENT M3/M4）。
 //
 // 审计日志只记录「谁在何时对什么做了什么」，不记录密钥等敏感值；
 // XFF 只有在直连对端是已配置的可信代理时才被采信，否则回退 RemoteAddr，

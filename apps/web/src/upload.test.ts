@@ -242,6 +242,19 @@ describe('uploadObject', () => {
     expect(XHR_INSTANCES.length).toBeGreaterThan(0)
   })
 
+  it('part PUT 2xx 但缺 ETag → partNoEtag 报错并中止会话（Bucket CORS 未暴露 ETag）', async () => {
+    vi.useFakeTimers()
+    mockMultipartParts()
+    nextXHRConfig = (inst) => { inst.getResponseHeader = vi.fn(() => null) }
+    const p = uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'k.bin' })
+    const rejection = expect(p).rejects.toThrow(/未读取到 ETag/)
+    await vi.advanceTimersByTimeAsync(PART_RETRY_DELAYS_MS[0])
+    await vi.advanceTimersByTimeAsync(PART_RETRY_DELAYS_MS[1])
+    await vi.advanceTimersByTimeAsync(PART_RETRY_DELAYS_MS[2])
+    await rejection
+    await vi.waitFor(() => expect(s3api.multipartAbort).toHaveBeenCalled())
+  })
+
   it('part PUT non-2xx → partHttpError after retries, abort session', async () => {
     vi.useFakeTimers()
     vi.mocked(s3api.multipartInit).mockResolvedValue({ uploadId: 'up1', key: 'k.bin', bucket: 'b' })

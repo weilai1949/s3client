@@ -38,6 +38,8 @@ cd apps/web && pnpm test && pnpm build             # 前端单测 + 类型检查
 cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 # 或 make test-all（后端 + 前端单测）
 make test-cover                               # 后端覆盖率 100% 门禁（CI 同款检查）
+# 改到桌面端依赖时（需本机已装 cargo-audit）：RustSec 审计，CI desktop job 同命令
+make rust-audit
 ```
 
 ### CI 双平台一致性
@@ -50,7 +52,7 @@ make test-cover                               # 后端覆盖率 100% 门禁（CI
 | `ci.yml` · `server` | `server` | gofmt / go vet / govulncheck / golangci-lint v2.13.2（**0 issues**）/ `go test -race` + 覆盖率 100% / build |
 | `ci.yml` · `web` | `web` | `pnpm lint`（`--max-warnings 0`）/ typecheck / `test:coverage`（100%）/ build |
 | `ci.yml` · `docker` | `docker` | `docker build` + Trivy CRITICAL/HIGH 失败门禁（`.trivyignore`） |
-| `ci.yml` · `desktop` | `desktop` | `cargo check --locked`（webkit/gtk 系统依赖） |
+| `ci.yml` · `desktop` | `desktop` | `cargo check --locked` + `cargo audit`（RustSec，有漏洞即红灯；webkit/gtk 系统依赖） |
 | `ci.yml` · `desktop-build`（仅 `workflow_dispatch`） | `desktop-build`（`when: manual`，仅 `web` 源） | `tauri build --no-bundle` |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |

@@ -20,14 +20,13 @@ func registerVersions(r *openapi.Registry) {
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/version", openapi.Op{
 		Tags: []string{"versions"}, Summary: "删除指定版本", OperationID: "deleteObjectVersion",
-		Params: []openapi.Param{acctIDParam()},
-		Request: &openapi.Request{
-			Required: true,
-			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":    openapi.Str(),
-				"key":       openapi.Str(),
-				"versionId": openapi.Str(),
-			}, "bucket", "key", "versionId")},
+		// 该端点从 query 读参数（metadata.go deleteObjectVersion），此前误声明为 requestBody：
+		// 按 OpenAPI 生成的客户端会把参数放进 DELETE body，handler 收不到 key/versionId 直接 400。
+		Params: []openapi.Param{
+			acctIDParam(),
+			refParam("Bucket"),
+			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
+			openapi.Param{Name: "versionId", In: "query", Required: true, Schema: openapi.Str()},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "缺 key/versionId", JSON: refSchema("Error")}},
 	})

@@ -15,7 +15,7 @@ import (
 const MinTokenLength = 16
 
 // MinStoreKeyLength 是 S3C_STORE_KEY 允许的最小字符数。该口令是账号密钥落盘加密
-// 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（roadmap #2）。
+// 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（已闭环：features.md §M）。
 const MinStoreKeyLength = 16
 
 // ErrShortToken 表示 S3C_TOKEN 长度低于 MinTokenLength。
@@ -100,6 +100,7 @@ type Config struct {
 	ExposeOpenAPI      bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
 	CSPConnectSrc      string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
 	TrustedProxies     []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
+	SSRFDenyPrivate    bool     // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
 }
 
 func envOr(key, def string) string {
@@ -140,6 +141,7 @@ func FromEnv() Config {
 		ExposeOpenAPI:      envTruthy("S3C_EXPOSE_OPENAPI"),
 		CSPConnectSrc:      envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
 		TrustedProxies:     splitList(envOr("S3C_TRUSTED_PROXIES", "")),
+		SSRFDenyPrivate:    envTruthy("S3C_SSRF_DENY_PRIVATE"),
 	}
 }
 
@@ -175,7 +177,7 @@ func IsLoopbackAddr(addr string) bool {
 // Validate 对配置做安全校验：
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
 //   - 非回环监听必须设置 S3C_TOKEN；
-//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，roadmap #2）。
+//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：features.md §M）。
 //
 // 多 token 时以单 token 最短者判定长度。
 func (c Config) Validate() error {
@@ -198,4 +200,22 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%w: got %d chars, need >= %d (建议 openssl rand -hex 32)", ErrShortStoreKey, len(c.StoreKey), MinStoreKeyLength)
 	}
 	return nil
+}
+
+// StorePlaintextWarning 返回「账号 secretKey 将明文落盘」的启动告警文案，配置已加密时返回空串。
+// json / sqlite 驱动在 S3C_STORE_KEY 为空时把 secretKey 明文写入 DataDir，只应出现在本地联调；
+// 生产必须用 encrypted 或 sqlite + S3C_STORE_KEY（残留风险见 docs/roadmap.md §5.1 R3）。
+func (c Config) StorePlaintextWarning() string {
+	switch c.StoreDriver {
+	case "json", "sqlite":
+	default:
+		return ""
+	}
+	if c.StoreKey != "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"S3C_STORE_KEY 为空：%s 驱动的 secretKey 将明文落盘于 %s，仅限本地联调；生产请用 S3C_STORE_DRIVER=encrypted 或设置 S3C_STORE_KEY（>= %d 字符）",
+		c.StoreDriver, c.DataDir, MinStoreKeyLength,
+	)
 }

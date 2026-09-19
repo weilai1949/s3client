@@ -108,7 +108,7 @@ async function loadAccounts() {
     }
   } catch (e) {
     serverError.value = toErrorMessage(e)
-    // 后端不可用：开始健康轮询，恢复后自动重载账号并清除错误（roadmap #8）。
+    // 后端不可用：开始健康轮询，恢复后自动重载账号并清除错误（已闭环：features.md §M）。
     healthPoll.start()
   }
 }

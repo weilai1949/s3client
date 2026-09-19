@@ -82,9 +82,8 @@ func TestOlMigrateJobCancelAndStatus(t *testing.T) {
 	olExpectStatus(t, rr, http.StatusNotFound, "status unknown")
 
 	// 运行中取消 → cancelled:true
-	jctx, jcancel := context.WithCancel(context.Background())
+	_, jcancel := context.WithCancel(context.Background())
 	defer jcancel()
-	_ = jctx // ctx 仅用于派生 cancel
 	job := env.hnd.migrateJobs.Create(1, jcancel)
 	rr = env.accDoRec("POST", "/api/migrate/jobs/"+job.ID+"/cancel", "")
 	olExpectStatus(t, rr, http.StatusOK, "cancel running")
@@ -131,9 +130,8 @@ func TestOlMigrateEventsValidation(t *testing.T) {
 	olExpectStatus(t, rr, http.StatusNotFound, "events unknown")
 
 	// 非流式 writer（无 Flusher）→ 500
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_ = ctx // ctx 仅用于派生 cancel
 	job := env.hnd.migrateJobs.Create(1, cancel)
 	defer job.Finish(migrateJobResult(), "done")
 	req = httptest.NewRequest("GET", "/x", nil)
@@ -267,8 +265,7 @@ func TestOlMigrateEventsWriteErrStages(t *testing.T) {
 	env := accNewEnv(t, srv.URL, "b")
 	// 初始事件共 3 次写：data 头 / 负载 / 尾换行；第 2、3 次 Writer 失败 → 对应错误分支
 	for _, at := range []int{2, 3} {
-		ctx, cancel := context.WithCancel(context.Background())
-		_ = ctx // ctx 仅用于派生 cancel
+		_, cancel := context.WithCancel(context.Background())
 		job := env.hnd.migrateJobs.Create(1, cancel)
 		w := &olFailAtW{rr: httptest.NewRecorder(), at: at}
 		req := httptest.NewRequest(http.MethodGet, "/x", nil)

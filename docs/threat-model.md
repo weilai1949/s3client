@@ -27,10 +27,12 @@
 | 驱动 | 落盘 | 说明 |
 |---|---|---|
 | `json` | 明文 JSON 或 S3C3 加密 | 配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id（参数随文件版本）；permissive 兼容读旧明文与旧 S3C2 |
-| `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（roadmap #2） |
+| `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（已闭环，证据见 [features.md](features.md) §M；残留风险见 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3） |
 | `encrypted` | S3C3 加密（严格） | ✅ 生产推荐；文件盐建时随机并复用；可读旧 S3C2 库 |
 
-所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。
+所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。未配置 `S3C_STORE_KEY` 的
+`json` / `sqlite` 驱动会在启动日志打出「secretKey 将明文落盘」WARN（[roadmap.md](roadmap.md) §5.1「已收敛」索引 R3），
+生产必须用 `encrypted` 或 `sqlite` + key。
 加密文件格式：S3C3 头部内嵌 Argon2id 参数（time/memory/threads），因此可在不破坏既有库的前提下调参；
 S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 16 字符。
 
@@ -41,6 +43,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 - 禁重定向 + 禁 HTTP(S)_PROXY（封环境变量代理绕过）。
 - 无 `InsecureSkipVerify`。
 - **设计取舍**：私网/回环放行（自托管主场景，[ADR-003](decisions/0003-ssrf-private-allow.md)）。
+- **可选加固**：`S3C_SSRF_DENY_PRIVATE=1` 时创建期与拨号期校验连私网 / 回环 / 未指定地址一并拒绝（默认关闭）；生效值可从启动日志 `ssrfDenyPrivate` 与 `/api/metrics` 的 `s3c_ssrf_deny_private` 核对。
 
 ### 边界 E：桌面壳（Tauri 2）
 
@@ -83,7 +86,11 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 ## 5. 依赖与供应链
 
 - **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ `govulncheck@v1.8.0`（Go 可达漏洞，
-  go1.26.6 下 0 告警）+ actions 全部 pin SHA（10 个 SHA 经 GitHub API 核验有效）。
+  go1.26.6 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+ actions 全部 pin SHA
+  （10 个 SHA 经 GitHub API 核验有效）。
+- **Rust 告警 triage**：`cargo audit` 当前 7 条 unmaintained / unsound 告警（`proc-macro-error`、
+  5 个 `unic-*`、`glib 0.18.5`），均为上游尚未发布修复版本的传递依赖（tauri/wry 链路），
+  不用 `.cargo/audit.toml` ignore 清单掩盖；新增可达漏洞会让 CI 红灯。
 - `.trivyignore`：空清单（无掩盖性忽略）。
 - dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
 

@@ -9,5 +9,5 @@
 |---|---|---|
 | [ADR-001](0001-desktop-no-ipc.md) | 桌面端采用 B/S 架构、不使用 Tauri IPC | Accepted |
 | [ADR-002](0002-store-fail-closed.md) | 存储不可用时硬失败而非降级只读 | Accepted |
-| [ADR-003](0003-ssrf-private-allow.md) | SSRF 防护放行私网/回环地址 | Accepted |
+| [ADR-003](0003-ssrf-private-allow.md) | SSRF 防护放行私网/回环地址（2026-09-19 Update：新增 `S3C_SSRF_DENY_PRIVATE` 可选加固） | Accepted |
 | [ADR-004](0004-minimal-frontend-deps.md) | 前端生产依赖仅保留 vue | Accepted |

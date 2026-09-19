@@ -72,7 +72,7 @@ func (h *Handler) clientIP(r *http.Request) string {
 // 才采信 X-Forwarded-For 的首段，否则一律回退 RemoteAddr。
 //
 // 为什么不能无条件信任 XFF：直连部署（未过代理）时任何客户端都能伪造该头，
-// 从而为每个请求换一个「IP」绕过限速（roadmap #3 / ASSESSMENT M4）。
+// 从而为每个请求换一个「IP」绕过限速（ASSESSMENT M4）。
 func clientIPWithProxies(r *http.Request, trusted []string) string {
 	remote := remoteHost(r.RemoteAddr)
 	if len(trusted) == 0 {

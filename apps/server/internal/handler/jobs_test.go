@@ -133,9 +133,8 @@ func TestNewJobReturns503AtCapacity(t *testing.T) {
 	h, _ := gapStoreHandler(t)
 	t.Cleanup(h.Shutdown)
 
-	// 占满唯一名额。
-	first, ok := h.newJob(httptest.NewRecorder(), 1, func() {})
-	if !ok {
+	// 占满唯一名额（首个 job 的返回值不参与断言，只需注册成功）。
+	if _, ok := h.newJob(httptest.NewRecorder(), 1, func() {}); !ok {
 		t.Fatal("first job should be accepted")
 	}
 
@@ -152,5 +151,4 @@ func TestNewJobReturns503AtCapacity(t *testing.T) {
 	if !cancelled {
 		t.Error("cancel() must be called when registration fails")
 	}
-	_ = first
 }

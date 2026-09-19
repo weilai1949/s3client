@@ -1,6 +1,6 @@
 package s3wrap
 
-// metrics.go —— S3 上游调用指标（roadmap #5 / ASSESSMENT S3）。
+// metrics.go —— S3 上游调用指标（ASSESSMENT S3）。
 //
 // 采集三类信号，均为进程级聚合（无每请求标签，避免无界基数）：
 //   - s3c_s3_calls_total：S3 API 调用总数（成功 + 失败）

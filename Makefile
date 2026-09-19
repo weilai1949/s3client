@@ -2,7 +2,7 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0-rc1
 
-.PHONY: server server-build tidy web web-build web-typecheck desktop-dev desktop-build test web-test test-all vet docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+.PHONY: server server-build tidy web web-build web-typecheck desktop-dev desktop-build rust-audit test web-test test-all vet docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
 
 # Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
 GCL ?= npx --yes gitlab-ci-local@4.75.1
@@ -53,6 +53,10 @@ desktop-dev:
 desktop-build:
 	cd apps/web && pnpm install && pnpm build
 	cd apps/desktop && pnpm install && pnpm tauri build
+
+# RustSec 依赖审计（桌面端；与 CI desktop job 同命令，需本机已装 cargo-audit）
+rust-audit:
+	cd apps/desktop/src-tauri && cargo audit
 
 # 后端测试（含 -race，检测数据竞争；CI 亦复用此目标）
 test:

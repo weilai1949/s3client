@@ -21,7 +21,7 @@ import (
 //
 // 为什么要有 S3C3：S3C2 不存 KDF 参数，调参会让既有文件无法解密。S3C3 把参数写进
 // 文件头，读取时按文件里的参数派生密钥，因此可以在不影响旧库的前提下逐步加强参数
-// （roadmap #2 / ASSESSMENT M2）。S3C2 保持可读，新写入一律 S3C3。
+// （ASSESSMENT M2）。S3C2 保持可读，新写入一律 S3C3。
 var (
 	encMagicV2 = []byte("S3C2")
 	encMagicV3 = []byte("S3C3")
