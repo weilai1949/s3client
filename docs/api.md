@@ -46,9 +46,9 @@ GET /api/accounts
 POST /api/accounts
 ```
 ```json
-{"name":"minio","provider":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
+{"name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
 ```
-必填：`name`、`endpoint`、`accessKey`、`secretKey`。`pathStyle` 用于 MinIO/OSS 等第三方；`provider` 为展示用标签；`publicEndpoint` 是浏览器直传/预签名使用的对外端点（留空则用 `endpoint`）。
+必填：`name`、`endpoint`、`accessKey`、`secretKey`。`pathStyle` 用于 MinIO/OSS 等第三方；`useSSL` 启用 TLS；`publicEndpoint` 是浏览器直传/预签名使用的对外端点（留空则用 `endpoint`）。
 
 ### 获取
 ```
@@ -164,7 +164,7 @@ S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结�
 POST /api/accounts/{id}/rename
 ```
 ```json
-{"bucket":"B(可选)","key":"a.txt","newKey":"dir/b.txt","newBucket":"B2(可选)","replaceTags":false}
+{"bucket":"B(可选)","key":"a.txt","newKey":"dir/b.txt","newBucket":"B2(可选)"}
 ```
 先 `CopyObject` 到新 key，成功后才删除源（复制失败不丢数据）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同拒绝，跨桶同名移动允许。
 ```json
@@ -210,15 +210,15 @@ POST /api/accounts/{id}/delete-prefix
 ```json
 {"bucket":"B(可选)","prefix":"dir/"}
 ```
-循环 `ListObjectsV2` + 批量 `DeleteObjects` 删除前缀下全部对象；`prefix` 必填（空前缀拒绝，防误删全桶）；上限 10 万个对象。
+循环 `ListObjectsV2` + 批量 `DeleteObjects` 删除前缀下全部对象；`prefix` 必填（空前缀拒绝，防误删全桶）；上限 10 万个对象。`deleted` 只计成功数：S3 对逐 key 失败仍返回 200，被桶策略/保留期拒绝的对象计入 `failed` 并在 `lastError` 给出原因（截断时 `truncated=true`）。
 ```json
-200 {"deleted":12,"truncated":false}
+200 {"deleted":11,"failed":1,"truncated":false,"lastError":"access denied"}
 ```
 
 ```
 POST /api/accounts/{id}/delete-prefix/async
 ```
-请求体与 `delete-prefix` 相同。先列举再异步批量删除；`progress.migrated` 表示已删除数。
+请求体与 `delete-prefix` 相同。先列举再异步批量删除；`progress.migrated` 表示已删除数，`progress.failed` 表示被逐 key 拒绝的数量（终态 `result.failedKeys` 列出前 200 个失败 key）。
 ```json
 202 {"jobId":"uuid","total":12,"truncated":false}
 ```
@@ -240,7 +240,7 @@ POST /api/accounts/{id}/copy-prefix
 POST /api/accounts/{id}/set-headers
 ```
 ```json
-{"bucket":"B(可选)","key":"a.txt","contentType":"text/markdown","contentLang":"zh-CN","contentEnc":"gzip","cacheControl":"max-age=3600","disposition":"attachment; filename=\"a.txt\"","metadata":{"owner":"alice"}}
+{"bucket":"B(可选)","key":"a.txt","contentType":"text/markdown","metadata":{"owner":"alice"}}
 ```
 `CopyObject` 复制到自己并 `MetadataDirective: REPLACE`；`contentType` 留空不修改，`metadata` 整体覆盖（传空对象则清空）。
 ```json
@@ -529,7 +529,7 @@ post: {"method":"post","bucket":"B","key":"k","url":"https://...","fields":{"X-A
 用于大文件（前端 `≥100MB` 自动使用；<100MB 走单 PUT）。四步：
 ```
 POST /api/accounts/{id}/multipart/init
-{"bucket":"B(可选)","key":"big.bin","contentType":"application/octet-stream(可选)","metadata":{"owner":"alice"}(可选)}
+{"bucket":"B(可选)","key":"big.bin","contentType":"application/octet-stream(可选)"}
 200 {"uploadId":"UPLOAD123","key":"big.bin","bucket":"B"}
 ```
 ```
@@ -557,9 +557,9 @@ POST /api/accounts/{id}/delete
 ```json
 {"bucket":"B(可选)","keys":["a.txt","b.txt"]}
 ```
-SDK 单次最多 1000，服务端自动分批。
+SDK 单次最多 1000，服务端自动分批。`deleted` 只计成功数：S3 对逐 key 失败仍返回 200，被桶策略/保留期拒绝的对象计入 `failed` 并在 `lastError` 给出原因。
 ```json
-200 {"deleted":2}
+200 {"deleted":1,"failed":1,"lastError":"access denied"}
 ```
 
 ### 跨账号迁移
@@ -645,8 +645,11 @@ POST /api/migrate/sync
 行为：
 - 列举源 prefix 全部对象（递归，硬上限 100k 防卡死）；
 - 列举目标 prefix 全部元数据；
+- **目标 key 映射**：`targetPrefix + (源 key 去掉 sourcePrefix)`。`sourcePrefix` 必须落在 `/` 段边界上
+  才算命中（`p` 不会命中 `prefix/x.txt`）；`sourcePrefix` 留空 = 整桶、目标 key 原样保留。
+  比对与复制共用同一个映射表达式，因此重复执行必然收敛（第二次 `copied` 为 0）；
 - 按 mode 比对源/目标：相等则跳过（计入 `skipped`），不等或目标缺失则复制（计入 `copied`）；
-- 实际复制复用 `MigrateKeys`（同/异端点自动适配 CopyObject / StreamCopy）。
+- 实际复制复用 `MigrateKeys` 的复制内核（同/异端点自动适配 CopyObject / StreamCopy）。
 
 响应：
 ```json

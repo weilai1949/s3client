@@ -76,7 +76,14 @@ apps/server/internal/model        领域模型（Account / AccountView）
 
 ```
 apps/web/src/
-  api.ts             API 客户端 + token 存储 + 多服务器 profile
+  api/               API 客户端（按职责拆分的模块目录，见下）
+    storage.ts         浏览器凭据 / 多服务器 profile 存储（依赖图最底层）
+    http.ts            传输层：base + Bearer + JSON + 错误归一
+    endpoints.ts       领域端点封装（s3api，~70 个方法）
+    jobs.ts            异步任务 SSE 订阅 + EOF 后状态回读兜底
+    download.ts        ZIP 流式落盘（File System Access API + blob 兜底）
+    upload.ts          预签名直传（XHR，提供上传进度）
+    index.ts           公开面 barrel：组装 `api` 对象并重导出
   store.ts           全局状态（账号 / tab / toast）
   types.ts           与后端契约对齐的类型定义
   components/        面板与对话框组件
@@ -84,6 +91,11 @@ apps/web/src/
   i18n/messages/     按域拆分的 zh/en 消息字典
   router.ts          hash 深链接（无需 vue-router 依赖）
 ```
+
+> `api/` 原为单文件 `api.ts`（838 行，把凭据存储、传输、领域端点、SSE、上传混在一处）。
+> 拆分为目录后 `./api` / `../api` 仍解析到 `api/index.ts`，**对外契约与 import 路径不变**；
+> 模块间为单向依赖 `index → {endpoints, jobs, download, upload} → http → storage`，无环。
+> 公开面由 `src/deadcode_gate.test.ts` 守住：生产代码零引用的导出会让门禁变红。
 
 - **技术栈**：Vue 3 + Vite + TS，生产依赖**仅 `vue`**（刻意最小化供应链）。
 - **竞态防护**：`loadSeq` + `AbortController` 双保险，SSE 订阅在卸载路径全部断开。

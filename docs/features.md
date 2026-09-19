@@ -248,7 +248,7 @@
 | T-2 batchMetadata mock | ✅ | `vi.mocked` 类型化 + 签名对齐 |
 | T-3/T-4 测试全局变量 | ✅ | `syncStore` 加 mutex（`sync_test` 已有 `s3FakeMu`） |
 | T-5 同步测试缺口 | ✅ | 新增 CompareSizeTime / prefix 过滤 / 跨端点 StreamCopy 三测试 |
-| T-6 e2e 覆盖缺口 | ✅ | `e2e/features.spec.ts` 10 用例；14 passed / 1 skipped（Tauri-only 入口） |
+| T-6 e2e 覆盖缺口 | ✅ | `e2e/features.spec.ts` 10 用例；15 passed / 0 skipped |
 | T-7 Makefile | ✅ | `test` 加 `-race`；新增 `test-cover` / `web-test-cover` |
 | T-8 store 编译回归 | ✅ | 复用 `encrypted.go` 共享加密助手；store 覆盖率提升 |
 | T-9 前端覆盖率 | ✅ | 11.28% → 95.27% statements；36 组件 + 全部 composables 覆盖；顺带修 3 个缺陷（dropzone 点击递归、MigratePanel ResizeObserver 时机、deleteServer 当前服务器 applyProfile） |
@@ -553,7 +553,7 @@
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
-| 1 | R1 契约字段级门禁 + 三处注册表失真修复 | ✅ | 新增 `TestAPIDocDocumentsRequestBodyFields`（`api_doc_test.go`）：OpenAPI 每个 `requestBody` 的字段名必须出现在该端点 `docs/api.md` 正文，支持「请求体与 `POST /api/x` 相同」别名（`apiDocSections` / `sectionText`）。门禁上线即抓到三处**客户端可见**失真：`mkdir` 注册表写 `prefix`（handler/frontend/文档都是 `key`）、`copy-objects` 写 `items`（真实是 `keys`）、`DELETE /api/accounts/{id}/version` 把 query 参数误声明成 requestBody。已修注册表并加回归断言（`TestOpenAPI_ContractRequestBodyMatchesHandlers` 第 7 项 + `requestQueryParams`），`docs/api.md` 补齐 `provider`/`publicEndpoint`/`replaceTags`/`cacheControl`/`contentEnc`/`contentLang`/`disposition`/`metadata` 等漏记字段。另加**通用输入源门禁** `TestOpenAPIRequestDeclarationMatchesHandlerInput`：解析 `routes.go`（含 `h.withStreamLimit(h.x)` 包装）→ handler 方法调用闭包找 `readJSON` / `json.NewDecoder` ⇔ 注册表 `Request:` 双向比对，覆盖全部 70 条路由；已用「给 `GET /api/health` 注入假 requestBody」的变异验证过会红灯后还原 |
+| 1 | R1 契约字段级门禁 + 三处注册表失真修复 | ✅ | 新增 `TestAPIDocDocumentsRequestBodyFields`（`api_doc_test.go`）：OpenAPI 每个 `requestBody` 的字段名必须出现在该端点 `docs/api.md` 正文，支持「请求体与 `POST /api/x` 相同」别名（`apiDocSections` / `sectionText`）。门禁上线即抓到三处**客户端可见**失真：`mkdir` 注册表写 `prefix`（handler/frontend/文档都是 `key`）、`copy-objects` 写 `items`（真实是 `keys`）、`DELETE /api/accounts/{id}/version` 把 query 参数误声明成 requestBody。已修注册表并加回归断言（`TestOpenAPI_ContractRequestBodyMatchesHandlers` 第 7 项 + `requestQueryParams`），`docs/api.md` 补齐当时判定为漏记的字段。**事后更正**：其中只有 `publicEndpoint` / `metadata` 是真漏记，`provider`/`replaceTags`/`cacheControl`/`contentEnc`/`contentLang`/`disposition` 六个字段在 handler 中**并不存在**（反向漂移：文档与注册表凭空多写），按文档示例体调用会因 `DisallowUnknownFields` 直接 400。2026-09-19 P0-5 已把这六个幻影字段从注册表与 `docs/api.md` 删除，并把该端点族的断言改成**字段集完全相等**（第 8 项），同时补上真漏记的 `useSSL`。另加**通用输入源门禁** `TestOpenAPIRequestDeclarationMatchesHandlerInput`：解析 `routes.go`（含 `h.withStreamLimit(h.x)` 包装）→ handler 方法调用闭包找 `readJSON` / `json.NewDecoder` ⇔ 注册表 `Request:` 双向比对，覆盖全部 70 条路由；已用「给 `GET /api/health` 注入假 requestBody」的变异验证过会红灯后还原 |
 | 2 | R2 消音式死代码门禁 | ✅ | 实测 `golangci-lint`（`run.tests: true`）**能**报未引用的测试函数/方法，盲区只有显式消音。新增 `apps/server/deadcode_gate_test.go` 扫全仓 Go 源码禁止 `_ = ident` 与 `var _ = expr`（允许 `_ = f()` 这类显式忽略返回值），并自检扫描文件数避免路径写错静默变绿。清掉 11 处遗留消音（`acc_ratelimit_test.go` 的 `var _ = errors.New`、`bs_gap_test.go` 的只声明不用的 `deletes`、`object.go` 里 `PurgeObject` 的冗余 `_ = keyMarker` 等） |
 | 3 | R4 DataDir 单写者锁 | ✅ | 新增 `store.AcquireDataDirLock`：unix `flock(LOCK_EX\|LOCK_NB)` 锁 `<DataDir>/.s3clinet.lock`，第二个实例启动即失败（`runServer` 返回 1）；内核在进程退出时释放，无陈旧锁。`main.go` 在开 store 前加锁。测试：`TestDataDirLockExcludesSecondInstance`（互斥 + 释放后可重加）、`TestDataDirLockErrors`（目录不可建 / 锁文件被占）、`TestRunServerRejectsLockedDataDir`（端到端拒绝启动）；`GOOS=windows go build ./...` 通过（非 unix 为文档化 no-op） |
 | 4 | R6 RustSec 审计入 CI | ✅ | `cargo audit`（pin `cargo-audit 0.22.2`）加入 GitHub `ci.yml` 与 GitLab `desktop` job，新增本地 `make rust-audit`。实跑结果：**0 个漏洞**，7 条 unmaintained / unsound 告警（`proc-macro-error`、5 个 `unic-*`、`glib 0.18.5`）逐条 triage——均为上游未发修复版本的传递依赖，默认退出码策略是「漏洞红灯、告警可见」，不用 ignore 清单掩盖 |
@@ -564,6 +564,78 @@
 
 ---
 
+### P. 2026-09-19 分支状态审查 A1–A3 处置（前端 API 拆分 / 死代码门禁 / 测试接缝）
+
+> 来源：2026-09-19 分支状态审查 [`review-2026-09-19.md`](review-2026-09-19.md) 的架构项 A1–A3 与
+> 浏览器 E2E 空转用例（已在审查文档中销项——该文档按约定只保留**未闭环**的发现）。归档证据即本表。
+> 该审查登记的 P0/P1 缺陷（B1 SSE 自旋、B2 SyncKeys 前缀、F1 白名单 crash、R1 CI docker job、
+> §7.2 契约幻影字段等）**仍未处置**，不在本节范围内。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | A1 `api.ts` 838 行单文件拆分 | ✅ | 拆为 `apps/web/src/api/` 下 7 个模块：`storage.ts`(339) / `endpoints.ts`(192) / `jobs.ts`(119) / `download.ts`(85) / `index.ts`(82) / `upload.ts`(48) / `http.ts`(38)。单向依赖 `index → {endpoints,jobs,download,upload} → http → storage`，无环；`./api`、`../api` 仍解析到 `api/index.ts`，**import 路径与对外契约不变**（用 `git mv api.ts api/index.ts` 保留历史）。顺带消除 `migrateJobStatus` 在 endpoints/jobs 各写一份的重复定义。**纯搬运**：`fetch` headers 合并顺序等既有语义原样保留（审查 §F10 潜伏缺陷不混入）。验证：`vue-tsc` / `eslint` 通过、986 例（64 文件）单测全绿、覆盖率四指标 100%（statements 3941 / branches 2787 / functions 1082 / lines 3392，7 个新模块全部满覆盖）、Playwright 15 passed / 0 skipped |
+| 2 | A3 前端死代码门禁 | ✅ | 新增 `apps/web/src/deadcode_gate.test.ts`：API 公开面（`s3api.*` / `api.*` / 具名导出）每个成员必须在**至少一个非测试源文件**中被引用。eslint/vue-tsc 只报未使用的局部变量，看不见导出符号，而测试引用会让死代码"活着"——这正是本项要堵的洞。用 `import.meta.glob(?raw)` 读源码（不引入 `node:fs`/`@types/node`）；按 **import 别名精确匹配 `别名.成员`**，不做裸词/子串匹配（避免 `'migrate'` 字面量与 `migrateAsync` 前缀碰撞假绿）；三重自检（扫描文件数 ≥50 / 公开面 ≥50 / 引用总数 ≥30）防"空跑变绿"；`INTENTIONAL_UNUSED` 豁免清单附"豁免不得腐烂"检查。**变异验证**：注入 `s3api.zzDeadProbe` → 红灯；复刻历史缺陷（`s3api.copyFiles` 仅被 `api.test.ts` 调用）→ **仍红灯**（测试引用不算使用） |
+| 3 | A3 清理零生产调用的公开面 | ✅ | 删除 5 个 `s3api` 方法（`copyFiles` / `deletePrefix` / `copyPrefix` / `migrate` / `migrateSync`，全仓仅测试引用；对应后端端点保留）与 2 个无用 barrel 导出（`requestResponse` 仅 `download.ts` 内部使用、`downloadZipToDisk` 生产只走 `s3api.downloadZipToDisk`） |
+| 4 | A2 生产包剔除测试专用接缝 | ✅ | `s3wrap.ResetMetrics`（导出且自称"仅测试使用"）→ 移入 `metrics_test.go` 内的 `resetMetrics()`，不再进入生产二进制；`service.SetMaxJobsForTest` 删除，在册上限由**可变全局** `var maxJobs` 改为**每实例**构造期选项 `NewJobRegistry(WithMaxJobs(n))`（原写法跨用例/跨实例污染，并发下即数据竞争），handler 侧接缝移到 `internal/handler/export_test.go`（仅 `go test` 编译）。以行为用例替换原「钩子返回旧值」用例：`TestWithMaxJobsLimitsRegistry`（上限生效 + 实例间互不影响）、`TestWithMaxJobsIgnoresNonPositive`（非正上限回落默认） |
+| 5 | 浏览器 E2E 空转用例 | ✅ | `account-flow.spec.ts` 两个用例由「1 skipped + 1 个断言自身 fixture」改为真实 UI 驱动（`role=button` 入口、空态文案、新增表单 → POST 请求体 → 列表渲染；以及 `/api/accounts` 失败 → 断连徽标 → `/api/health` 恢复后自动重连）。Playwright 15 passed / **0 skipped** |
+
+---
+
+### Q. 2026-09-19 分支状态审查 P0 处置（5 项全部闭环）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md)。该审查登记的 P0 已全部处置并从审查文档移除
+> （该文档只保留未闭环发现）；本表即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+> 剩余的 P1/P2 发现仍开放。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | P0 SSE 对 `interrupted` 任务无限自旋 | ✅ | `case p, open := <-ch: if !open { return }` + `service.IsTerminalJobStatus(p.Status)`；SSE 路由补 `withStreamLimit`；`Job.Subscribe` 加每任务订阅上限 16（饱和回 503）。测试 `TestMigrateJobEventsInterruptedStreamCloses`（真实 `jobs.json` 恢复路径 + 真 HTTP 流，断言只 1 帧且 EOF）/ `TestMigrateJobEventsSubscriberCap`；前者经「还原旧循环」变异验证会红灯 |
+| 2 | P0 `s3c.servers` 坏数据整站白屏 | ✅ | `sanitizeServer()` 逐元素形状校验 + 回写修复清单；`getActiveServer()` 改为渲染期安全访问器。测试：`api.test.ts` 5 种坏存储 + 混合条目，`App.corruptStorage.test.ts` 用真实 `./api` 挂载真实 App 断言不白屏 |
+| 3 | P0 `SyncKeys` 目标 key 映射错误、永不收敛 | ✅ | 抽出复制内核 `migrateKeys(..., dstKeyFor, ...)`，`MigrateKeys` / `SyncKeys` 共用；`SyncKeys` 只留一个映射表达式；`stripPrefix` 补段边界校验。测试 `TestSync_PrefixMappingConverges` / `TestSync_PrefixSegmentBoundary` / `TestMigrateSync_PrefixFilter`（含二次同步 `copied:0`） |
+| 4 | P0 GitHub CI `docker` job 结构性失败 | ✅ | `build-push-action` 加 `load: true` + 新增 `docker image inspect` 前置步骤。本地 `docker-container` builder 复现：不加 `--load` 构建 exit 0 但镜像不在 daemon，加 `--load` 后可见 |
+| 5 | P0 OpenAPI 契约幻影字段（6 个） | ✅ | `provider` / `replaceTags` / `cacheControl` / `contentEnc` / `contentLang` / `disposition` 从注册表与 `docs/api.md` 删除（无实现意图，前端亦无对应入参）；补上真漏记的 `useSSL`。`TestOpenAPI_ContractRequestBodyMatchesHandlers` 第 8 项断言四个端点的**字段集完全相等** |
+
+---
+
+### R. 2026-09-19 分支状态审查 §三 正确性处置（后端 B3–B11 / 前端 F2–F10）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) 的「阶段 2 · 正确性」全部发现项。该审查文档按约定
+> 只保留**未闭环**发现，本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+> 原则：**补门禁而不只是补缺陷**——每条修复都配了会先失败的回归测试，覆盖「分支/语义正确但断言缺席」这类盲区。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | B3 `DeleteObjects` 吞掉 200 响应体内的逐 key 失败 | ✅ | `s3wrap.DeleteObjects` 改返回 `[]DeleteFailure{Key,Code,Message}`（`err` 仅表示传输/协议失败，两者可同时非空）；`POST …/delete` 回 `{deleted,failed,lastError}`、`delete-prefix`（同步/异步）与回收站 `PurgeObject` 一律按「请求数 − 逐 key 失败数」记账，新增 sentinel `ErrPartialDelete`。连带修 `runDeletePrefix` 的进度口径（只看 `deleted` 会在「全部删除失败」时空转到 2h 超时）。测试：s3wrap 3 例 + handler 4 例（含 100 页全失败仍终止） |
+| 2 | B4 ZIP 打包 `break` → 永久 goroutine + 连接泄漏 | ✅ | `service/zip.go` 的 `break` → `continue`：无缓冲 `results` 必须继续消费，否则其余 worker 永久阻塞在发送上、已取回 body 不关闭（用户取消下载即触发）。测试 `TestWriteObjectsZipCopyErrorDoesNotLeak` 断言所有取回 body 最终关闭且全部失败 key 上报（旧实现泄漏 3 个 body）。`features.md` 早先「P-3 zip goroutine 泄漏 ✅」至此才成立 |
+| 3 | B5 增量同步吞掉列举错误 | ✅ | `listAll`/`indexDst` 返回 `error`，`SyncKeys` 签名改为 `(SyncResult, error)`；`cancelOrErr` 区分「客户端取消（返回部分结果、不报错）」与「真实列举错误（上抛）」；handler 走 `writeInternalErr`（源端 AccessDenied → 403，不再回 `200 {scanned:0}`）。测试：端点级 1 例 + service 2 例 |
+| 4 | B6 `indexDst` 无页数上限、循环内不查 ctx | ✅ | `listAll`/`indexDst` 共用硬上限（100 页 × 1000 key × 10 万总量）+ 每轮 ctx 检查 + 「NextToken 未前进即停」。测试 4 例（含 5s 超时护栏：旧实现会挂死） |
+| 5 | B7 `Job.Emit` 锁外投递 vs `Finish` 关闭 channel | ✅ | 改为锁内非阻塞投递（`select`+`default`），落盘 I/O 移到锁外。测试用「节流落盘钩子」把 Emit 卡在「快照之后、投递之前」再 `Finish`：旧实现**确定性 panic（send on closed channel → 进程退出）**，新实现通过；另加 20×50 并发压测 |
+| 6 | B9 8 MB body 上限 vs 10 000 key 批量 | ✅ | 上限提到 16 MiB（10 000×1 KB ≈ 10.3 MB 必须通过），并用 `LimitedReader{N: maxBody+1}` 把「超限」与「JSON 无效」分开：超限回 **413** 而非 400。测试 4 例 |
+| 7 | B10① 第 10000 段被误判超限 | ✅ | 上限判断移到**上传前**（段号 10000 合法）；常量提为可注入的 `maxMultipartParts`（默认 10000 有断言保护），测试用小上限精确覆盖边界，避免真跑 1 万次 UploadPart |
+| 8 | B10② `filename*` 用 `QueryEscape`（空格 → `+`） | ✅ | 新增 `rfc5987Escape`（attr-char 白名单 + UTF-8 逐字节 `%XX`）。测试含中文文件名与「不得出现 `+`」断言 |
+| 9 | B10③ download-zip 不校验空 key | ✅ | 空 key 直接 400（否则 S3 把 `GET /bucket/?key=""` 当列举桶，ListBucket XML 被塞进 ZIP）。测试 1 例 |
+| 10 | B10④ `mode=text` 忽略读错误仍回 200 | ✅ | 非 `EOF`/`ErrUnexpectedEOF` 的读错误走 `proxyErr`；`ErrUnexpectedEOF` 再用 `Content-Length` 判定短读。测试 2 例（畸形 chunked / 声明长度大于实发） |
+| 11 | B10⑤ 分段顺序不校验（`InvalidPartOrder` → 500） | ✅ | handler 提交前拒绝降序/重复段号（400）；`HTTPStatus`/`UserMessageForCode` 补 `InvalidPartOrder → 400 / invalid request`。测试 2 处 |
+| 12 | B10⑥ 指标标签取服务端原始 `<Code>`（基数无界，同 §S5） | ✅ | `errorClass` 改走 20 个已识别错误码的白名单，其余归 `other`。测试 `TestErrorClassUnknownCodeFoldsToOther`（断言原始码不出现在 `ErrorsByCode`） |
+| 13 | B11 `statusRecorder` 未覆写 `Write` | ✅ | 覆写 `Write` 标记「已写出」，隐式 200 之后的多余 `WriteHeader` 不再透传、日志状态不被改写。测试 2 例 |
+| 14 | F2 虚拟列表窗口不随 `entries` 重置 → 0 行空白表 | ✅ | 抽出共用 `src/virtualList.ts`（`virtualWindow` + 单一 `ROW_HEIGHT`），两组件在 `entries` 变化时归零 `scrollTop` 并同步写回 DOM |
+| 15 | F3 客户端不分片，撞服务端上限整批失败 | ✅ | 新增 `src/limits.ts`（1000 / 10000 上限来自后端契约）+ `batchKeys`；删除与迁移改为分片串行 + 结果聚合（单片失败不中断后续），新增 i18n 键 `objects.toastDeletePartial` |
+| 16 | F4 复制文件夹忽略 `truncated` | ✅ | 按 `start.truncated` 提示「仅复制一部分」（i18n 键 `dest.toastCopiedTruncated`） |
+| 17 | F5 `loadAllSourceObjects` 分页内读实时前缀 | ✅ | 循环外快照 bucket/prefix + `listGen` 代次守卫（成功/失败/finally 三处） |
+| 18 | F6 迁移 SSE 无空闲超时 | ✅ | 45s 空闲超时（任何数据/心跳重置），超时经既有 `onError` 上报并主动释放连接；EOF 补偿轮询语义不变 |
+| 19 | F7 分享链接对全部选中并发 presign | ✅ | 复用 `batchMetadata` 的 4 路有界池 |
+| 20 | F8 `AccountsPanel.load` 无 try/catch | ✅ | 捕获并渲染带「重试」按钮的错误条（i18n 键 `accounts.loadFailed`） |
+| 21 | F9 健康轮询续跑 / RO 首屏失效 / 行高错位 / localStorage 无保护 | ✅ | ① 代次 + `disposed` 守卫；② `ObjectList` 的 ResizeObserver 改 `watch(scrollEl)`；③ 行高常量与 CSS 统一 42px；④ `theme.ts`/`store.ts`/`useObjectBrowser.ts` 全部 try/catch 降级 |
+| 22 | F10 headers 合并顺序陷阱 | ✅ | 先合成默认 headers 再 `Object.assign` 调用方 headers（默认 Authorization/Content-Type 不再被整体覆盖） |
+
+**门禁**：`go vet` / `golangci-lint run ./...` **0 issues** / `go test -race -count=1` 8/8 包 + **每包 100.0%**（
+`awk '$NF==0'` 零块）/ `gofmt -l` 干净；前端 `pnpm lint`（0 警告）/ `pnpm typecheck` /
+`pnpm test:coverage`（66 文件 / 1039 用例，四指标 100%）/ `pnpm build` 全绿；
+**真对端 RustFS E2E 4/4 通过**（`S3CLINET_E2E=1`，覆盖 12 MiB 分段组装、批量删除、桶配置、回收站 purge——
+本轮改动直接触及 `DeleteObjects` / `PurgeObject` / 分段上传，故按 `AGENTS.md` 要求追加实跑）。
+
+---
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
@@ -571,7 +643,9 @@
 > `vue-tsc` / `vite build` / `eslint` 干净。
 >
 > 2026-09-19 风险登记集中处置后复测：`make test-cover` 8/8 包 **100.0%**（含新增 `deadcode_gate_test.go`）、
-> `golangci-lint run ./...` **0 issues**、前端 63 文件 / **984** 测试全绿、`cargo audit` **0 漏洞**（7 条告警已 triage）。
+> `golangci-lint run ./...` **0 issues**、前端 64 文件 / **986** 测试全绿、`cargo audit` **0 漏洞**（7 条告警已 triage）。
+>
+> 2026-09-19 审查 §三（正确性 B3–B11 / F2–F10）处置后复测见 §R 末段：后端 8/8 包 **100.0%**、前端 66 文件 / **1039** 测试全绿。
 
 | 门禁 | 结果 |
 |---|---|
@@ -580,13 +654,13 @@
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（`unused` / `staticcheck` 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 63 文件 / 984 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例） |
+| 前端 `pnpm test` | 66 文件 / **1039** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例） |
 | 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`） |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（~355KB，gzip ~109KB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |
-| E2E（Playwright） | 14 passed / 1 skipped（Tauri-only 入口） |
+| E2E（Playwright） | 15 passed / 0 skipped |
 | E2E（真实 RustFS，`S3CLINET_E2E=1`） | 按需运行，默认不阻塞 CI |
 | Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5） |
 
