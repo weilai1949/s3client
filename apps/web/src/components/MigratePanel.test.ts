@@ -6,6 +6,7 @@ import { s3api, subscribeMigrateEvents } from '../api'
 import type { MigrateProgress } from '../api'
 import { currentAccount, requestTab, selectAccount, state, toast } from '../store'
 import { tf } from '../i18n'
+import { ROW_HEIGHT } from '../virtualList'
 import type { Account, ListObjectsResponse, ObjectItem } from '../types'
 
 /** MigratePanel 通过 defineExpose 暴露给测试的成员（组件 setup 状态无公开类型）。 */
@@ -83,6 +84,14 @@ function findButton(w: ReturnType<typeof mount>, text: string) {
   const btn = w.findAll('button').find((b) => b.text() === text)
   expect(btn, `button "${text}" should exist`).toBeTruthy()
   return btn!
+}
+
+/* 与组件共用同一行高来源（src/virtualList.ts）。 */
+const ROW = ROW_HEIGHT
+
+/** 迁移测试用对象（分页 / 分片场景批量构造）。 */
+function makeObj(key: string): ObjectItem {
+  return { key, size: 1, lastModified: '2024-01-01', etag: 'e', contentType: '', isDir: false }
 }
 
 function findButtonStartsWith(w: ReturnType<typeof mount>, prefix: string) {
@@ -257,6 +266,295 @@ describe('MigratePanel', () => {
     expect(toast).toHaveBeenCalledWith('migrate.listedCap', 'err')
     // 200 页后仍提示成功（现有行为）
     expect(toast).toHaveBeenCalledWith('migrate.listedAll')
+  })
+
+  it('listAll 续页用进入循环时的 prefix 快照，不被中途编辑污染', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReset()
+    let firstPage = true
+    vi.mocked(s3api.listObjects).mockImplementation(async () => {
+      if (firstPage) {
+        firstPage = false
+        // 第一页仍在途时用户改前缀：续页 token 属于旧前缀
+        await w.find('input[placeholder="migrate.prefixPlaceholder"]').setValue('new/')
+        return { objects: [objA], commonPrefixes: [], isTruncated: true, nextToken: 'tok-1' }
+      }
+      return { objects: [objB], commonPrefixes: [], isTruncated: false, nextToken: '' }
+    })
+    await w.find('input[placeholder="migrate.prefixPlaceholder"]').setValue('old/')
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    const calls = vi.mocked(s3api.listObjects).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][1].prefix).toBe('old/')
+    expect(calls[1][1]).toEqual({ bucket: '', prefix: 'old/', maxKeys: '1000', continuationToken: 'tok-1' })
+  })
+
+  it('listAll 期间用户重新列出：过期响应被丢弃，不混入新前缀', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    vi.mocked(s3api.listObjects).mockReset()
+    let releaseAll!: (v: ListObjectsResponse) => void
+    vi.mocked(s3api.listObjects)
+      .mockImplementationOnce(() => new Promise((res) => (releaseAll = res)))
+      .mockResolvedValueOnce({ objects: [objA, objB], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    const allClick = findButton(w, 'migrate.listAll').trigger('click')
+    // listAll 第一页仍在途 → 用户点「列出对象」切换到新前缀
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    releaseAll({ objects: [{ ...objA, key: 'stale.dat' }], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    await allClick
+    await flushPromises()
+    expect(w.text()).toContain('a.txt')
+    expect(w.text()).not.toContain('stale.dat')
+  })
+
+  it('载入完成前切换账号：过期响应被丢弃，不覆盖新账号的列表', async () => {
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    const w = mountPanel()
+    await flushPromises()
+
+    let resolveStale!: (v: ListObjectsResponse) => void
+    vi.mocked(s3api.listObjects).mockImplementationOnce(() => new Promise((res) => (resolveStale = res)))
+    const btn = findButton(w, 'migrate.listObjects')
+    await btn.trigger('click')
+    // 切换账号触发第二次列举（此时第一次仍在途）
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [objA], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    state.currentAccountId = 'acc-2'
+    await flushPromises()
+    expect(w.findAll('.v-row')).toHaveLength(1)
+
+    // 旧账号的响应迟到：必须被丢弃，不得覆盖新账号的列表
+    resolveStale({ objects: [{ ...objA, key: 'stale.dat' }], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    await flushPromises()
+    expect(w.text()).toContain('a.txt')
+    expect(w.text()).not.toContain('stale.dat')
+  })
+
+  it('列举全部期间切换账号：过期分页请求的失败被丢弃，不污染错误条', async () => {
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    const w = mountPanel()
+    await flushPromises()
+
+    let rejectStale!: (e: Error) => void
+    vi.mocked(s3api.listObjects).mockImplementationOnce(() => new Promise((_res, rej) => (rejectStale = rej)))
+    await findButton(w, 'migrate.listAll').trigger('click')
+    // 切换账号 → 新的列举代次，旧请求作废
+    state.currentAccountId = 'acc-2'
+    await flushPromises()
+
+    rejectStale(new Error('stale page failure'))
+    await flushPromises()
+    expect(w.find('.msg.err').exists()).toBe(false)
+    expect(w.find('[aria-busy="true"]').exists()).toBe(false)
+  })
+
+  it('载入完成前切换账号：过期发起方的失败被丢弃，不覆盖新账号的列表', async () => {
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.migrateAsync).mockReset()
+    vi.mocked(subscribeMigrateEvents).mockReset()
+    vi.mocked(s3api.migrateJobStatus).mockReset()
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    const w = mountPanel()
+    await flushPromises()
+
+    let rejectStale!: (e: Error) => void
+    vi.mocked(s3api.listObjects).mockImplementationOnce(() => new Promise((_res, rej) => (rejectStale = rej)))
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    // 切换账号 → 新的列举代次，旧请求作废并返回新账号的列表
+    vi.mocked(s3api.listObjects).mockResolvedValue({ objects: [objA], commonPrefixes: [], isTruncated: false, nextToken: '' })
+    state.currentAccountId = 'acc-2'
+    await flushPromises()
+    expect(w.text()).toContain('a.txt')
+
+    // 旧请求此刻才失败：必须被丢弃，不得清空/污染新账号的列表
+    rejectStale(new Error('stale failure'))
+    await flushPromises()
+    expect(w.text()).toContain('a.txt')
+    expect(w.find('.msg.err').exists()).toBe(false)
+  })
+
+  it('迁移选中超过服务端单次上限（10000）时按 10000 分片串行提交并聚合结果', async () => {
+    // 分页由 continuationToken 驱动（不依赖第几次调用）：每页 1000 条直到列举完。
+    const objs = Array.from({ length: 20001 }, (_, i) => makeObj(`f${String(i).padStart(5, '0')}.bin`))
+    vi.mocked(s3api.listObjects).mockImplementation(async (_id, q) => {
+      const from = Number((q as { continuationToken?: string }).continuationToken ?? 0)
+      const to = Math.min(objs.length, from + 1000)
+      return {
+        objects: objs.slice(from, to), commonPrefixes: [],
+        isTruncated: to < objs.length, nextToken: to < objs.length ? String(to) : '',
+      }
+    })
+    let job = 0
+    vi.mocked(s3api.migrateAsync).mockImplementation(async () => ({ jobId: `job-${++job}`, total: 1 }))
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      queueMicrotask(() => onP({ status: 'done', done: 1, total: 1, migrated: 1, failed: 0 }))
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    const calls = vi.mocked(s3api.migrateAsync).mock.calls
+    expect(calls).toHaveLength(3)
+    for (const [body] of calls) expect(body.sourceKeys!.length).toBeLessThanOrEqual(10000)
+    expect(calls[0][0].sourceKeys).toEqual(objs.slice(0, 10000).map((o) => o.key))
+    expect(calls[1][0].sourceKeys).toEqual(objs.slice(10000, 20000).map((o) => o.key))
+    expect(calls[2][0].sourceKeys).toEqual(objs.slice(20000).map((o) => o.key))
+    // 分片结果聚合进结果弹窗与 toast：3 片 × 1 条
+    expect(toast).toHaveBeenCalledWith('migrate.toastOk')
+    expect(w.text()).toContain('migrate.resultTotal')
+  })
+
+  it('分片中途失败：已完成分片的结果不被吞掉（结果弹窗 + 部分成功提示）', async () => {
+    const objs = Array.from({ length: 10001 }, (_, i) => makeObj(`f${String(i).padStart(5, '0')}.bin`))
+    vi.mocked(s3api.listObjects).mockImplementation(async (_id, q) => {
+      const from = Number((q as { continuationToken?: string }).continuationToken ?? 0)
+      const to = Math.min(objs.length, from + 1000)
+      return {
+        objects: objs.slice(from, to), commonPrefixes: [],
+        isTruncated: to < objs.length, nextToken: to < objs.length ? String(to) : '',
+      }
+    })
+    let job = 0
+    vi.mocked(s3api.migrateAsync).mockImplementation(async () => {
+      job++
+      if (job === 2) throw new Error('batch 2 rejected')
+      return { jobId: `job-${job}`, total: 1 }
+    })
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      queueMicrotask(() => onP({ status: 'done', done: 1, total: 1, migrated: 1, failed: 0 }))
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    expect(vi.mocked(s3api.migrateAsync).mock.calls).toHaveLength(2)
+    // 第 1 片成功（1 条）：结果必须如实展示，而不是只报「迁移失败」
+    expect(toast).toHaveBeenCalledWith('migrate.toastPartial', 'err')
+    expect(w.text()).toContain('migrate.resultOk')
+    expect(w.find('.msg.err').text()).toContain('batch 2 rejected')
+  })
+
+  it('多分片迁移中取消：停止提交后续分片', async () => {
+    const objs = Array.from({ length: 15000 }, (_, i) => makeObj(`f${String(i).padStart(5, '0')}.bin`))
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(s3api.listObjects).mockImplementation(async (_id, q) => {
+      const from = Number((q as { continuationToken?: string }).continuationToken ?? 0)
+      const to = Math.min(objs.length, from + 1000)
+      return {
+        objects: objs.slice(from, to), commonPrefixes: [],
+        isTruncated: to < objs.length, nextToken: to < objs.length ? String(to) : '',
+      }
+    })
+    vi.mocked(s3api.migrateAsync).mockReset()
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'job-cancel', total: 10000 } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
+    vi.mocked(s3api.migrateJobStatus).mockReset()
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'cancelled' }, result: { migrated: 0, failed: 0 },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockReset()
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      queueMicrotask(() => onP({ status: 'cancelled', done: 0, total: 10000, migrated: 0, failed: 0 }))
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    // 第 1 片被取消 → 不再提交第 2 片
+    expect(vi.mocked(s3api.migrateAsync).mock.calls).toHaveLength(1)
+    expect(toast).toHaveBeenCalledWith('migrate.toastCancelled', 'err')
+  })
+
+  it('失败 key 超过 200 条时结果弹窗只保留前 200 条', async () => {
+    const failedKeys = Array.from({ length: 250 }, (_, i) => `bad-${String(i).padStart(3, '0')}.txt`)
+    vi.mocked(s3api.migrateAsync).mockReset()
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'job-fails', total: 250 } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
+    vi.mocked(s3api.migrateJobStatus).mockReset()
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' },
+      result: { migrated: 0, failed: 250, failedKeys },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockReset()
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      queueMicrotask(() => onP({ status: 'done', done: 250, total: 250, migrated: 0, failed: 250 }))
+      return () => {}
+    })
+    const w = mountPanel()
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    const fails = w.findAll('.fail-item')
+    expect(fails).toHaveLength(200)
+    expect(fails[0].text()).toBe('bad-000.txt')
+    // 超出的失败 key 被截断，不渲染进弹窗
+    expect(w.text()).not.toContain('bad-249.txt')
+  })
+
+  it('多分片全部正常完成：继续提交后续分片（不提前中断）', async () => {
+    const objs = Array.from({ length: 15000 }, (_, i) => makeObj(`f${String(i).padStart(5, '0')}.bin`))
+    vi.mocked(s3api.listObjects).mockReset()
+    // 分页由 continuationToken 驱动，不依赖第几次调用
+    vi.mocked(s3api.listObjects).mockImplementation(async (_id, q) => {
+      const from = Number((q as { continuationToken?: string }).continuationToken ?? 0)
+      const to = Math.min(objs.length, from + 1000)
+      return {
+        objects: objs.slice(from, to), commonPrefixes: [],
+        isTruncated: to < objs.length, nextToken: to < objs.length ? String(to) : '',
+      }
+    })
+    let job = 0
+    vi.mocked(s3api.migrateAsync).mockReset()
+    vi.mocked(s3api.migrateAsync).mockImplementation(async () => ({ jobId: `job-${++job}`, total: 1 }))
+    vi.mocked(s3api.migrateJobStatus).mockReset()
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 1, failed: 0 },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockReset()
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      queueMicrotask(() => onP({ status: 'done', done: 1, total: 1, migrated: 1, failed: 0 }))
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'migrate.listAll').trigger('click')
+    await flushPromises()
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+
+    // 第 1 片（10000 条）完成且未取消 → 第 2 片（5000 条）必须继续提交
+    expect(vi.mocked(s3api.migrateAsync).mock.calls.map((c) => c[0].sourceKeys!.length)).toEqual([10000, 5000])
+    expect(w.find('.msg.err').exists()).toBe(false)
   })
 
   it('migrate runs progress, opens result dialog and goto targets', async () => {
@@ -504,18 +802,49 @@ describe('MigratePanel', () => {
     })
     const w = mountPanel()
     await flushPromises()
-    expect(w.findAll('.v-row')).toHaveLength(37)
-    // 初始 padBottom spacer（50-37 行）
+    // viewportH=480 → ceil(480/42)+24 = 36（ROW_HEIGHT 与 CSS 行高一致）
+    expect(w.findAll('.v-row')).toHaveLength(36)
+    // 初始 padBottom spacer（50-36 行）
     expect(w.findAll('tbody tr.v-spacer')).toHaveLength(1)
     const wrap = w.find('.tbl-wrap')
-    ;(wrap.element as HTMLElement).scrollTop = 38 * 30
+    ;(wrap.element as HTMLElement).scrollTop = 42 * 30
     await wrap.trigger('scroll')
     await nextTick()
-    // 滚动后 padTop 出现（18*38=684px）
+    // 滚动后 padTop 出现（18*42=756px）
     const spacer = w.find('tbody tr.v-spacer')
     expect(spacer.exists()).toBe(true)
-    expect(spacer.find('td').attributes('style')).toContain('684px')
+    expect(spacer.find('td').attributes('style')).toContain('756px')
     expect(w.findAll('.v-row')[0].text()).toContain('f18.dat')
+  })
+
+  it('重新列出对象后虚拟窗口回到顶部（不残留旧 scrollTop）', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
+      etag: 'e', contentType: '', isDir: false,
+    }))
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: many, commonPrefixes: [], isTruncated: false, nextToken: '',
+    })
+    const w = mountPanel()
+    await flushPromises()
+    const wrap = w.find('.tbl-wrap')
+    // 滚到第 30 行：窗口起点 = 30 - OVERSCAN(12) = 18
+    ;(wrap.element as HTMLElement).scrollTop = ROW * 30
+    await wrap.trigger('scroll')
+    expect(w.findAll('.v-row')[0].text()).toContain('f18.dat')
+
+    // 切到只有 3 条的另一前缀 → 窗口必须从头渲染，不能空白
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: [objA, objB], commonPrefixes: [], isTruncated: false, nextToken: '',
+    })
+    await findButton(w, 'migrate.listObjects').trigger('click')
+    await flushPromises()
+    const rows = w.findAll('.v-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('a.txt')
+    // 注意：happy-dom 不会像真实浏览器那样在内容缩短时钳制 scrollTop，
+    // 因此这里只断言「窗口回到顶部」这一外部可见行为（上面的 rows[0]）。
+    expect(w.findAll('.v-row')).toHaveLength(2)
   })
 })
 
@@ -719,7 +1048,7 @@ describe('MigratePanel remaining branches', () => {
     expect(w.text()).not.toContain('migrate.firstError')
   })
 
-  it('进度 total 为 0 时 progressPct 回退 0', async () => {
+  it('进度 done 为 0 时进度条显示 0%', async () => {
     let progressCb!: (p: MigrateProgress) => void
     vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j12' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
@@ -735,11 +1064,12 @@ describe('MigratePanel remaining branches', () => {
     await w.find('.toolbar input[type="checkbox"]').setValue(true)
     await findButton(w, 'migrate.start').trigger('click')
     await flushPromises()
-    // total=0 → progress.total 为假 → 0%
-    progressCb({ done: 0, total: 0, migrated: 0, failed: 0, status: 'running' })
+    // 已完成的 key 为 0 → 0%
+    progressCb({ done: 0, total: 4, migrated: 0, failed: 0, status: 'running' })
     await nextTick()
+    expect(w.find('.progress').attributes('aria-valuenow')).toBe('0')
     expect(w.find('.progress .bar').attributes('style')).toContain('0%')
-    progressCb({ done: 0, total: 0, migrated: 0, failed: 0, status: 'done' })
+    progressCb({ done: 4, total: 4, migrated: 4, failed: 0, status: 'done' })
     await flushPromises()
   })
 

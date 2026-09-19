@@ -104,6 +104,19 @@ describe('selectAccount', () => {
     selectAccount('')
     expect(state.currentAccountId).toBe('')
   })
+
+  it('存储不可用（写入抛异常）时切换账号仍生效，不抛出', () => {
+    const ls = {
+      getItem: () => null,
+      setItem: () => { throw new DOMException('QuotaExceededError', 'QuotaExceededError') },
+      removeItem: () => { throw new DOMException('SecurityError', 'SecurityError') },
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    expect(() => selectAccount('acc9')).not.toThrow()
+    expect(state.currentAccountId).toBe('acc9')
+    expect(() => selectAccount('')).not.toThrow()
+    expect(state.currentAccountId).toBe('')
+  })
 })
 
 describe('rememberedAccountId', () => {
@@ -122,6 +135,15 @@ describe('rememberedAccountId', () => {
       getItem: () => null,
     }
     Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    expect(rememberedAccountId()).toBe('')
+  })
+
+  it('存储不可用（读取抛异常）时降级为空串而不是中断启动', () => {
+    const ls = {
+      getItem: () => { throw new DOMException('SecurityError', 'SecurityError') },
+    }
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true, writable: true })
+    expect(() => rememberedAccountId()).not.toThrow()
     expect(rememberedAccountId()).toBe('')
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ObjectList from './ObjectList.vue'
+import { ROW_HEIGHT } from '../virtualList'
 import type { Entry, SortKey } from '../types'
 
 vi.mock('../i18n', () => ({
@@ -36,6 +37,9 @@ function file(key: string, overrides: Partial<Entry> = {}): Entry {
 }
 
 const folder: Entry = { kind: 'folder', key: 'dir/', name: 'dir' }
+
+/* 与组件共用同一行高来源（src/virtualList.ts），避免测试与实现各自硬编码。 */
+const ROW = ROW_HEIGHT
 
 const defaults = {
   entries: [] as Entry[],
@@ -303,17 +307,112 @@ describe('ObjectList', () => {
   it('virtualizes long lists: only window of rows rendered, scroll reveals spacer rows', async () => {
     const many = Array.from({ length: 60 }, (_, i) => file(`f${String(i).padStart(2, '0')}.txt`, { size: i + 1 }))
     const w = mountList({ entries: many })
-    // viewportH=480 → count = ceil(480/38)+24 = 37
-    expect(w.findAll('tbody tr.v-row')).toHaveLength(37)
+    // viewportH=480 → count = ceil(480/42)+24 = 36（ROW_HEIGHT 与 CSS 行高一致）
+    expect(w.findAll('tbody tr.v-row')).toHaveLength(36)
     const spacers = () => w.findAll('tbody tr.v-spacer')
     expect(spacers()).toHaveLength(1) // padBottom
     const el = w.find('.tbl-wrap').element as HTMLElement
-    el.scrollTop = 38 * 30
+    el.scrollTop = 42 * 30
     await w.find('.tbl-wrap').trigger('scroll')
     await w.find('.tbl-wrap').trigger('scroll') // 幂等
     expect(spacers().length).toBeGreaterThanOrEqual(1)
     const firstRow = w.findAll('tbody tr.v-row')[0].text()
     expect(firstRow).toContain('f18.txt')
+  })
+
+  it('entries 变更后虚拟窗口回到列表顶部（不残留旧 scrollTop）', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => file(`f${String(i).padStart(2, '0')}.txt`))
+    const w = mountList({ entries: many })
+    const list = w.find('.tbl-wrap')
+    const el = list.element as HTMLElement
+    // happy-dom 不会像真实浏览器那样在内容缩短时钳制 scrollTop，这里正是缺陷场景
+    el.scrollTop = ROW * 30
+    await list.trigger('scroll')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('f18.txt')
+
+    // 切换目录：新目录内容完全不同，窗口必须从头渲染
+    const next = Array.from({ length: 8 }, (_, i) => file(`g${i}.txt`))
+    await w.setProps({ entries: next })
+    expect(w.findAll('tbody tr.v-row')).toHaveLength(8)
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('g0.txt')
+    expect(w.text()).not.toContain('f18.txt')
+    // 真实 DOM 滚动位置同步归零，避免下一次滚动事件把陈旧偏移写回
+    expect(el.scrollTop).toBe(0)
+  })
+
+  it('列表项减少后再次滚动：窗口从顶部开始（偏移已被重置）', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => file(`f${String(i).padStart(2, '0')}.txt`))
+    const w = mountList({ entries: many })
+    const list = w.find('.tbl-wrap')
+    const el = list.element as HTMLElement
+    el.scrollTop = ROW * 30
+    await list.trigger('scroll')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('f18.txt')
+    await w.setProps({ entries: many.slice(0, 5) })
+    await list.trigger('scroll')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('f00.txt')
+  })
+
+  it('首屏骨架屏结束后注册 ResizeObserver，按实测视口高度渲染窗口', async () => {
+    let notify: (() => void) | undefined
+    class RecordingRO {
+      constructor(private cb: () => void) {
+        notify = () => this.cb()
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', RecordingRO)
+    try {
+      const many = Array.from({ length: 60 }, (_, i) => file(`f${String(i).padStart(2, '0')}.txt`))
+      // 首屏是骨架屏（loading 且有 totalCount），此时列表容器还没渲染
+      const w = mountList({ loading: true, totalCount: 60 })
+      await w.setProps({ loading: false, entries: many })
+      expect(w.find('.tbl-wrap').exists()).toBe(true)
+      expect(notify, '列表渲染后应注册 ResizeObserver').toBeTruthy()
+      Object.defineProperty(w.find('.tbl-wrap').element, 'clientHeight', { value: 420, configurable: true })
+      notify!()
+      await w.vm.$nextTick()
+      // 420 视口 + 24 overscan = ceil(420/42)+24 = 34 行
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(34)
+    } finally {
+      vi.stubGlobal('ResizeObserver', RO)
+    }
+  })
+
+  it('网格视图下 entries 变化：无滚动容器也不抛错（重置守卫）', async () => {
+    const w = mountList({ bucketView: 'grid', entries: [file('g0.png')] })
+    await w.setProps({ entries: [file('g1.png'), file('g2.png')] })
+    expect(w.findAll('.grid-item')).toHaveLength(2)
+  })
+
+  it('环境无 ResizeObserver 时列表仍正常渲染（不注册观察者）', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    try {
+      const w = mountList({ entries: [file('a.txt'), folder] })
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(2)
+      // 切到网格再切回：容器解绑/重绑也不抛错
+      await w.setProps({ bucketView: 'grid' })
+      await w.setProps({ bucketView: 'list' })
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(2)
+    } finally {
+      vi.stubGlobal('ResizeObserver', RO)
+    }
+  })
+
+  it('环境无 ResizeObserver 时列表仍正常渲染（不注册观察者）', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    try {
+      const w = mountList({ entries: [file('a.txt'), folder] })
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(2)
+      // 容器解绑/重绑（网格 ↔ 列表）也不抛错
+      await w.setProps({ bucketView: 'grid' })
+      await w.setProps({ bucketView: 'list' })
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(2)
+    } finally {
+      vi.stubGlobal('ResizeObserver', RO)
+    }
   })
 
   it('unmount 时安全断开 ResizeObserver（onBeforeUnmount 分支）', () => {

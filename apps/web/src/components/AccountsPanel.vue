@@ -38,6 +38,8 @@ const form = reactive<AccountInput>({
 })
 const showForm = ref(false)
 const error = ref('')
+/** 账号列表加载失败（后端不可用）：与表单 `error` 分开，避免打开表单时被清掉。 */
+const loadError = ref('')
 const bucketOptions = ref<BucketItem[]>([])
 const loadingBuckets = ref(false)
 const bucketErr = ref('')
@@ -93,8 +95,15 @@ function resetForm() {
 }
 
 async function load() {
-  const res = await s3api.listAccounts()
-  state.accounts = res.accounts
+  loadError.value = ''
+  try {
+    const res = await s3api.listAccounts()
+    state.accounts = res.accounts
+  } catch (e) {
+    // 后端不可用不再是未捕获 rejection（App.vue 的健康轮询正是为此设计）：
+    // 面板给出错误与「重试」入口，后端恢复后用户可一键重载。
+    loadError.value = toErrorMessage(e)
+  }
 }
 
 function startCreate() {
@@ -215,6 +224,10 @@ watch(accountFormRequest, () => startCreate())
     </div>
 
     <div v-if="error" class="msg err" style="margin-bottom:12px">{{ error }}</div>
+    <div v-if="loadError" class="msg err" style="margin-bottom:12px">
+      {{ tf('accounts.loadFailed', { msg: loadError }) }}
+      <button class="link" style="flex:none" @click="load">{{ t('common.retry') }}</button>
+    </div>
 
     <!-- 账号新增/编辑表单（弹窗） -->
     <ModalDialog

@@ -354,6 +354,62 @@ describe('删除对象', () => {
     expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDeleteFailed', 'err')
   })
 
+  it('removeSelected 超过服务端单次上限（1000）时按 1000 分片串行提交', async () => {
+    const keys = Array.from({ length: 2500 }, (_, i) => `f${String(i).padStart(4, '0')}.bin`)
+    const actions = makeActions({ selected: ref(new Set(keys)) })
+    vi.mocked(s3api.deleteObjects).mockResolvedValue({ deleted: 1000, failed: 0 })
+    await actions.removeSelected()
+    const calls = vi.mocked(s3api.deleteObjects).mock.calls
+    expect(calls).toHaveLength(3)
+    // 每片都不超上限，且三片不重不漏（顺序与选中顺序一致）
+    for (const [, body] of calls) expect(body.keys.length).toBeLessThanOrEqual(1000)
+    expect(calls.flatMap(([, body]) => body.keys)).toEqual(keys)
+    // 全部成功 → 走整体成功的提示（分片不改变既有提示语义）
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDeleted')
+    expect(lastCtx!.error.value).toBe('')
+    expect(lastCtx!.selected.value.size).toBe(0)
+    expect(lastCtx!.load).toHaveBeenCalledWith(true)
+  })
+
+  it('removeSelected 分片中途传输失败：已成功的分片不被吞掉（部分成功 + 失败原因）', async () => {
+    // 2500 个 key → 3 片（1000 / 1000 / 500）：第 2 片失败时第 3 片仍应继续
+    const keys = Array.from({ length: 2500 }, (_, i) => `f${String(i).padStart(4, '0')}.bin`)
+    const actions = makeActions({ selected: ref(new Set(keys)) })
+    vi.mocked(s3api.deleteObjects).mockReset()
+    vi.mocked(s3api.deleteObjects)
+      .mockResolvedValueOnce({ deleted: 998, failed: 2, lastError: 'access denied' })
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ deleted: 1, failed: 0 })
+    await actions.removeSelected()
+    expect(vi.mocked(s3api.deleteObjects).mock.calls).toHaveLength(3)
+    // 已成功 999 个 + 失败 2 个：必须报「部分成功」而不是只报失败
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDeletePartial', 'err')
+    // 失败原因同时进入面板错误条，便于用户复核
+    expect(lastCtx!.error.value).toBe('access denied')
+    expect(lastCtx!.selected.value.size).toBe(0)
+    expect(lastCtx!.load).toHaveBeenCalledWith(true)
+  })
+
+  it('removeSelected 单片即传输失败：报删除失败并刷新列表', async () => {
+    const actions = makeActions({ selected: ref(new Set(['a.txt'])) })
+    vi.mocked(s3api.deleteObjects).mockRejectedValue(new Error('boom'))
+    await actions.removeSelected()
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDeleteFailed', 'err')
+    expect(lastCtx!.error.value).toBe('boom')
+    expect(lastCtx!.selected.value.size).toBe(0)
+    expect(lastCtx!.load).toHaveBeenCalledWith(true)
+  })
+
+  it('removeSelected 逐 key 被拒但无异常：不误报全部成功', async () => {
+    const actions = makeActions({ selected: ref(new Set(['a.txt', 'b.txt'])) })
+    vi.mocked(s3api.deleteObjects).mockResolvedValue({ deleted: 1, failed: 1, lastError: 'access denied' })
+    await actions.removeSelected()
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDeletePartial', 'err')
+    expect(vi.mocked(toast)).not.toHaveBeenCalledWith('objects.toastDeleted', expect.anything())
+    expect(lastCtx!.error.value).toBe('access denied')
+    expect(lastCtx!.load).toHaveBeenCalledWith(true)
+  })
+
   it('removeOne 取消 / 成功 / 失败', async () => {
     const actions = makeActions()
     vi.mocked(confirmDialog).mockResolvedValueOnce(false)
@@ -842,6 +898,28 @@ describe('批量签名链接', () => {
     })
     await actions.copySelectedLinks()
     expect(lastCtx!.error.value).toBe('no active account')
+  })
+
+  it('copySelectedLinks 大量选中：presign 并发不超过 4（复用有界池）', async () => {
+    const objs = Array.from({ length: 12 }, (_, i) => fileObj(`k${i}.txt`))
+    const actions = makeActions({
+      fileObjects: computed(() => objs),
+      selected: ref(new Set(objs.map((o) => o.key))),
+    })
+    let active = 0
+    let peak = 0
+    vi.mocked(s3api.presign).mockImplementation(async (_id, body) => {
+      active++
+      peak = Math.max(peak, active)
+      await new Promise((r) => setTimeout(r, 5))
+      active--
+      return { method: 'get', bucket: 'b1', key: body.key, url: `https://s/${body.key}`, expiresIn: 3600 }
+    })
+    await actions.copySelectedLinks()
+    await flushPromises()
+    expect(peak).toBeLessThanOrEqual(4)
+    expect(vi.mocked(s3api.presign)).toHaveBeenCalledTimes(12)
+    expect(vi.mocked(copyText)).toHaveBeenCalledWith(objs.map((o) => `https://s/${o.key}`).join('\n'))
   })
 })
 

@@ -3,10 +3,11 @@ export type { Entry, SortKey } from '../types'
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { fmtDate, fmtSize } from '../format'
 import { t, tf } from '../i18n'
 import { previewKind } from '../preview'
+import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import type { Entry, ObjectItem, SortKey } from '../types'
 
 const props = withDefaults(
@@ -52,24 +53,13 @@ function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
 const shiftDown = ref(false)
 
 /* 列表视图窗口化：仅渲染可视区 + overscan，避免大目录万级 DOM。 */
-const ROW_HEIGHT = 38
-const OVERSCAN = 12
 const scrollEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
-const viewportH = ref(480)
+const viewportH = ref(DEFAULT_VIEWPORT_H)
 
 const windowed = computed(() => {
-  const total = props.entries.length
-  const start = Math.max(0, Math.floor(scrollTop.value / ROW_HEIGHT) - OVERSCAN)
-  const count = Math.ceil(viewportH.value / ROW_HEIGHT) + OVERSCAN * 2
-  const end = Math.min(total, start + count)
-  return {
-    start,
-    end,
-    items: props.entries.slice(start, end),
-    padTop: start * ROW_HEIGHT,
-    padBottom: Math.max(0, (total - end) * ROW_HEIGHT),
-  }
+  const win = virtualWindow(props.entries.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
+  return { ...win, items: props.entries.slice(win.start, win.end) }
 })
 
 function onListScroll() {
@@ -77,8 +67,37 @@ function onListScroll() {
 }
 
 function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || 480
+  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
 }
+
+let resizeObs: ResizeObserver | undefined
+
+/** 窗口起点回到列表顶部：entries 变化（切目录/过滤/重新列出）后必须重置，
+ *  否则 start 仍取旧偏移，`entries.slice(start, end)` 为空 → 渲染 0 行空白表
+ *  （review §F2）。同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
+function resetWindowScroll() {
+  scrollTop.value = 0
+  if (scrollEl.value) scrollEl.value.scrollTop = 0
+}
+
+/** 列表容器 ref 绑定/解绑：测量可视区并注册 ResizeObserver。
+ *
+ * 首屏是骨架屏（scrollEl 为 null），因此不能在 onMounted 里一次性挂载——
+ * 那样 ResizeObserver 永远不会注册、viewportH 恒为 480（review §F9②）。
+ */
+watch(scrollEl, (el) => {
+  resizeObs?.disconnect()
+  resizeObs = undefined
+  if (!el || typeof ResizeObserver === 'undefined') return
+  measureViewport()
+  resizeObs = new ResizeObserver(measureViewport)
+  resizeObs.observe(el)
+})
+
+watch(
+  () => props.entries,
+  () => resetWindowScroll(),
+)
 
 /* 网格视图窗口化：网格是 CSS grid 自适应列数，无法用固定行高做精确窗口化，
    因此按「最大渲染条数」设上限：超出部分显示提示条，用户可切列表视图或翻页。
@@ -87,14 +106,7 @@ const GRID_MAX_ITEMS = 300
 const gridItems = computed(() => props.entries.slice(0, GRID_MAX_ITEMS))
 const gridHiddenCount = computed(() => Math.max(0, props.entries.length - GRID_MAX_ITEMS))
 
-let resizeObs: ResizeObserver | undefined
-onMounted(() => {
-  measureViewport()
-  if (scrollEl.value && typeof ResizeObserver !== 'undefined') {
-    resizeObs = new ResizeObserver(measureViewport)
-    resizeObs.observe(scrollEl.value)
-  }
-})
+onMounted(measureViewport)
 onBeforeUnmount(() => resizeObs?.disconnect())
 
 /* 网格视图图标（按类型） */
@@ -265,12 +277,12 @@ function iconFor(e: Entry): string {
 <style scoped>
 .row-folder:hover { background: var(--row-hover); }
 
-/* 虚拟列表滚动容器：固定可视高度，行高与 ROW_HEIGHT 对齐 */
+/* 虚拟列表滚动容器：固定可视高度，行高与脚本里的 ROW_HEIGHT 对齐（42px） */
 .tbl-virtual {
   max-height: min(60vh, 640px);
   overflow: auto;
 }
-.tbl-virtual .v-row { height: 38px; }
+.tbl-virtual .v-row { height: 42px; }
 .tbl-virtual .v-spacer td {
   padding: 0 !important;
   border: none !important;

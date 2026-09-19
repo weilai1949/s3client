@@ -28,16 +28,25 @@ export function currentAccount(): Account | undefined {
   return state.accounts.find((a) => a.id === state.currentAccountId)
 }
 
-/** 切换当前账号并持久化，下次打开自动恢复。 */
+/** 切换当前账号并持久化，下次打开自动恢复。
+ *  存储不可用（隐私模式/配额异常）只影响「记住上次选择」，不得中断切换本身。 */
 export function selectAccount(id: string) {
   state.currentAccountId = id
-  if (id) localStorage.setItem(LS_CURRENT_ACCOUNT, id)
-  else localStorage.removeItem(LS_CURRENT_ACCOUNT)
+  try {
+    if (id) localStorage.setItem(LS_CURRENT_ACCOUNT, id)
+    else localStorage.removeItem(LS_CURRENT_ACCOUNT)
+  } catch {
+    /* ignore */
+  }
 }
 
 /** 读取上次选中的账号 id（可能已不存在，由调用方校验）。 */
 export function rememberedAccountId(): string {
-  return localStorage.getItem(LS_CURRENT_ACCOUNT) ?? ''
+  try {
+    return localStorage.getItem(LS_CURRENT_ACCOUNT) ?? ''
+  } catch {
+    return ''
+  }
 }
 
 /* ---- 全局 Toast 反馈（支持操作按钮） ---- */
