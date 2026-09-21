@@ -71,7 +71,7 @@ DELETE /api/accounts/{id}
 POST /api/accounts/preview-buckets
 ```
 ```json
-{"name":"N(可选)","endpoint":"http://minio:9000","region":"us-east-1","accessKey":"ak","secretKey":"sk","pathStyle":true}
+{"name":"N(可选)","endpoint":"http://minio:9000","publicEndpoint":"https://s3.example.com(可选)","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"B(可选)","pathStyle":true,"useSSL":false}
 ```
 用表单临时凭据只读列出桶（不保存账号），用于新建账号时选择默认桶；仍受 endpoint 校验与拨号期 SSRF 防护。
 ```json
@@ -517,7 +517,7 @@ POST /api/accounts/{id}/presign
 ```json
 {"method":"get|put|post","key":"dir/a.txt","bucket":"B(可选)","versionId":"V(可选,仅get)","expiresIn":3600}
 ```
-- `expiresIn` 单位秒，范围 1s–7 天（S3 上限），默认 15 分钟。
+- `expiresIn` 单位秒；缺省（或 ≤0）时**默认 1 小时**，超过 **24 小时**会被钳到 24 小时（S3 协议上限为 7 天，控制台场景收紧到 24h；见 `s3wrap/presign.go` 与 `objects.go` 的钳制）。
 - `get` / `put` 返回 `{method,url,expiresIn,...}`；`post` 额外返回 `{url,fields}`（multipart 表单字段）。
 - `get` 可传 `versionId` 生成指向指定历史版本的签名 GET（用于「版本比较/详情」拉取某个版本内容）。
 ```json
