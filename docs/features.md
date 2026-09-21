@@ -6,7 +6,7 @@
 > - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`assessment.md`](assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-16（`v1.0.0-rc1` 之后的 Unreleased 区间）
+> 最后更新：2026-09-19（`v1.0.0-rc1` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 三轮处置）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–S 各轮处置台账
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -59,7 +59,7 @@
 ### 4. 上传
 | 能力 | 说明 |
 |---|---|
-| 小文件直传 | 服务端 v4 签名 PUT URL，浏览器直传 S3（3 路并发、进度、失败重试） |
+| 小文件直传 | 服务端 v4 签名 PUT URL，浏览器直传 S3（2 路并发、进度、失败重试） |
 | 大文件分段 | `≥100MB` 自动切 10MB/段、4 路并发直传，任一段失败即 abort 清理 |
 | 上传队列 | 面板与对象区共享同一状态机；支持取消 / 重试；`cancelled` 终态不自动重启 |
 | 前缀追加 | 上传时可给 key 追加前缀 |
@@ -633,6 +633,34 @@
 `pnpm test:coverage`（66 文件 / 1039 用例，四指标 100%）/ `pnpm build` 全绿；
 **真对端 RustFS E2E 4/4 通过**（`S3CLINET_E2E=1`，覆盖 12 MiB 分段组装、批量删除、桶配置、回收站 purge——
 本轮改动直接触及 `DeleteObjects` / `PurgeObject` / 分段上传，故按 `AGENTS.md` 要求追加实跑）。
+
+---
+
+### S. 2026-09-19 分支状态审查 P1 处置（§9.2 全部闭环）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.2 的 8 项 P1。该审查文档按约定只保留
+> **未闭环**发现，本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+> 原则同 §R：**补门禁而不只是补缺陷**——每项都配了会先失败的回归测试；新增/改造的门禁在文件头
+> 写明「断言范围」，避免下轮把"有门禁"误读为"已全量收敛"。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | §7.2 修正 `components.schemas.Account` | ✅ | `internal/openapi/openapi.go` 删幻影字段 `provider`/`forcePathStyle`/`insecureSkipVerify`、补真实 `useSSL`；与 `model.AccountView` 逐字段一致 |
+| 2 | §7.2 新增**响应契约门禁** | ✅ | 新增 `openapi_response_contract_test.go`：对 `components.schemas` 每个共享 schema 用 `go/parser` 抽取对应 Go DTO 的 `json` tag，做**双向**比对（多写=幻影字段，漏写=客户端丢字段）；含 `Account` 逐字段断言与 `secretKey` 不得出现断言。上线即红灯，修正后转绿 |
+| 3 | §4.3 文档字段门禁改**双向**、去子串匹配 | ✅ | `api_doc_test.go` 的 `TestAPIDocDocumentsRequestBodyFields` 改为机械抽取 `docs/api.md` 请求体 JSON 的**顶层键**（自写容错扫描器，支持注释剥离 / 嵌套对象 / `200 {…}` 响应体区分），与注册表双向比对；彻底去掉 `strings.Contains`（原实现下 `key` 会被 `keys`/`secretKey` 满足）。别名段支持「与 `POST /api/x` 相同」与省略方法名的「与 `copy-prefix` 相同」 |
+| 4 | §4.3 请求体字段门禁改**全量遍历** | ✅ | 新增 `openapi_request_fields_test.go`：routes.go → handler 方法调用闭包 → `readJSON` 目标变量 → 结构体字段集，与注册表 requestBody schema 全量双向比对。端点专属 DTO 双向相等；共享模型走 `serverManagedFields` 白名单。**上线即抓到 3 处新漂移**：`storage-class` 漏 `versionId`、`preview-buckets` 漏 `publicEndpoint`/`useSSL`——已修注册表与 `docs/api.md` |
+| 5 | R2 tag ↔ 清单一致性 | ✅ | `release-desktop.yml` 新增 `Verify tag matches manifest versions`：tag（去 `v`）必须等于 `tauri.conf.json` 与 `Cargo.toml` 的 `version`，否则 `exit 1`。本地实测 rc1 通过、rc2 正确失败 |
+| 6 | R3 `SHA256SUMS` 竞态 | ✅ | 三平台各自上传**平台内唯一**的 `SHA256SUMS-<bundle>.txt`；新增 `aggregate-checksums` job（`needs: publish`）拉取三份合并去重为唯一 `SHA256SUMS.txt`（含行数自检），并清理中间资产 |
+| 7 | R4 Trivy DB 缓存 / 重试 | ✅ | 两套 CI 均拆出 `--download-db-only` + 4 次指数退避重试，扫描阶段加 `--skip-db-update` 复用已就绪 DB；GitHub 侧加 `actions/cache`（`.trivy-cache`），GitLab 侧加 `cache: paths`。把「网络抖动」与「真的扫出漏洞」区分开 |
+| 8 | S1 运行镜像 alpine EOL | ✅ | `apps/server/Dockerfile` 运行镜像 `alpine:3.20`（2026-04-01 EOL）→ `alpine:3.24`（支持至 2028-06-01） |
+| 9 | S2 `.env.example` 占位 token | ✅ | 根 `.env.example` 的 `S3C_TOKEN` 由 `change-me-use-openssl-rand-hex-32`（33 字符，是**有效口令**）改为置空，对齐 `apps/server/.env.example` |
+| 10 | 配置类门禁（防复发） | ✅ | 新增 `apps/server/repo_infra_gate_test.go`：`.env.example` token 不得 ≥ `MinTokenLength`、运行镜像不得是 EOL alpine、发布 workflow 必须做 tag↔清单比对与平台内唯一 checksum、两套 CI 的 Trivy 必须缓存+重试。四项均为「YAML/配置正确但断言缺席」的盲区 |
+| 11 | §7.3 文档失真 D2 / D3 / D6 / D8 / D9（同批修正） | ✅ | D2：`openapi_handler.go` 鉴权注释改为与实测一致（401/404）；D3：`release-version.sh` 正则放宽到通用 semver（接受纯 `v1.0.0`/`v1.1.0`）、同步文件补到 12 处、`Cargo.lock` 只改本包；D6：`api.md` 的 presign `expiresIn` 改为「默认 1h、上限 24h」；D8：现行能力描述「3 路并发」→ **2 路**；D9：`development.md` 存放约定改为「除根目录约定文件与 `.github/` 外统一放 `docs/`」 |
+| 12 | SSOT：`docs/todolist.md` 补登记开放项 | ✅ | 此前写着「无待办」而审查仍有大量开放发现，违反「唯一待办来源」约定；现按 #26–#46 补登记 P2 全部条目（契约残留 / 安全 / 发布链 / 可观测性 / 文档失真），编号稳定不重排 |
+
+**门禁实跑**：`gofmt -l` 干净 / `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** /
+`go test -race -count=1 ./...` 8/8 包通过且**每包 100.0% 语句覆盖**（`awk '$NF==0'` 零块）；
+新增门禁均已做「先红后绿」验证（Account schema 与 3 处注册表漂移均先失败再修绿）。
 
 ---
 
