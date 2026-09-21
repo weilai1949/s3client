@@ -37,4 +37,6 @@ git commit -m "feat: ..."
 
 ## 发布流程
 
-见 [docs/deployment.md](../docs/deployment.md) §5 与 `scripts/release-version.sh`（同步 8 处版本号）。
+见 [docs/deployment.md](../docs/deployment.md) §5 与 `scripts/release-version.sh`（实测同步 **17 个文件**：
+Makefile / Go main / Dockerfile / openapi.go / 两套 compose / npm ×2 / Cargo.toml / tauri.conf.json /
+Cargo.lock（仅本包）/ README / docs（api·deployment·roadmap·features）/ issue 模板）。

@@ -13,7 +13,7 @@ S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提�
 - 配置账号：增删改查、连通性测试（`HeadBucket`）、列出桶（`ListBuckets`）。服务商按「兼容 / 国内 / 国外」分组：MinIO 等 S3 兼容；国内（阿里 OSS、腾讯 COS、华为 OBS、火山 TOS、百度 BOS、京东云、七牛）；国外（AWS、Cloudflare R2、Wasabi、Backblaze B2、DigitalOcean Spaces、Linode/Akamai、Scaleway、Hetzner）。
 - 查看对象列表：`ListObjectsV2` 分页（「加载更多」追加），支持前缀与分隔符（目录浏览，默认 `/`）。
 - 对象下载：一键生成短时效 v4 签名 GET URL 并打开；也可生成 1 小时签名 URL 复制分享。
-- 前端直传：服务端生成 v4 签名 PUT URL → 浏览器直接上传（含进度，3 路并发，失败可一键重试）。
+- 前端直传：服务端生成 v4 签名 PUT URL → 浏览器直接上传（含进度，2 路并发，失败可一键重试）。
 - 大文件分段上传：`≥100MB` 自动切分（10MB/段、4 路并发）直传，任一段失败即中止清理。
 - 生成签名：`PresignGetObject` / `PresignPutObject` / `PresignPostObject`。
 - 删除对象：`DeleteObject` / `DeleteObjects`（批量，自动 1000 分批）。

@@ -110,7 +110,7 @@ apps/web/src/
 ## 5. 数据流示例：对象上传
 
 1. 前端 `POST /api/accounts/{id}/presign`（method=put）→ 后端 `PresignPut` 生成 v4 签名 PUT URL。
-2. 前端用 `fetch(URL, { method: 'PUT', body })` 直传 S3（3 路并发 + 进度 + 重试）。
+2. 前端用 `fetch(URL, { method: 'PUT', body })` 直传 S3（2 路并发 + 进度 + 重试）。
 3. ≥100MB 走 multipart：`/multipart/init` → `/multipart/part`（分段预签名）→ `/multipart/complete`。
 4. 后端全程不接触对象字节，仅生成签名。
 
