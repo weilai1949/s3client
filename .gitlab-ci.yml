@@ -237,6 +237,14 @@ docker:
   image: docker:29-cli
   variables:
     IMAGE_TAG: "s3clinet/server:ci"
+    # R4：Trivy DB 落在 CI 缓存目录，跨 job 复用；配合 script 里的重试与 --skip-db-update。
+    TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivy-cache"
+  cache:
+    key:
+      files:
+        - .gitlab-ci.yml
+    paths:
+      - .trivy-cache/
   script:
     # Build image（对应 docker/build-push-action@v6，push: false；此处未使用 gha 层缓存）
     - |
@@ -261,12 +269,29 @@ docker:
       cid=$(docker create aquasec/trivy:0.58.1)
       docker cp "$cid:/usr/local/bin/trivy" /usr/local/bin/trivy
       docker rm "$cid" >/dev/null
+      # R4：DB 预下载带指数退避重试（mirror.gcr.io 抖动曾导致 FATAL connection timed out），
+      # 扫描阶段 --skip-db-update 复用已就绪的 DB，把「网络抖动」与「真的扫出漏洞」区分开。
+      # TRIVY_CACHE_DIR 由上方 variables 指向 CI 缓存目录，跨 job 复用。
+      ok=0
+      for attempt in 1 2 3 4; do
+        if trivy image --download-db-only --no-progress; then
+          ok=1
+          break
+        fi
+        echo "Trivy DB download attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+        sleep $((attempt * 15))
+      done
+      if [ "$ok" -ne 1 ]; then
+        echo "Trivy DB download failed after 4 attempts" >&2
+        exit 1
+      fi
       trivy image \
         --severity CRITICAL,HIGH \
         --vuln-type os,library \
         --exit-code 1 \
         --no-progress \
         --ignore-unfixed \
+        --skip-db-update \
         --ignorefile .trivyignore \
         "$IMAGE_TAG"
 

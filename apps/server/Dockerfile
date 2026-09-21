@@ -36,12 +36,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=
 
 ###### 运行时 ######
 # 关键修复：debian:bookworm-slim 体积大、glibc + openssl 漏洞面广（Trivy 反复告警）。
-# 改用 alpine:3.20 + 仅 ca-certificates + wget（供 HEALTHCHECK）：
+# 改用 alpine + 仅 ca-certificates + wget（供 HEALTHCHECK）：
 #   - musl libc 比 glibc 漏洞面窄
 #   - alpine 的 OpenSSL 受 Alpine 安全团队快速维护
 #   - 体积约 5MB（vs debian-slim ~80MB）
 #   - 仍保留 minimal busybox 工具用于 HEALTHCHECK 与调试
-FROM alpine:3.20
+#
+# 基础版必须是**仍受安全支持**的分支：3.20 的安全支持已于 2026-04-01 结束，而 Trivy 以
+# --ignore-unfixed 运行——在 EOL 分支上「所有未来 CVE 永远无修复版」，漏洞门禁会结构性失明。
+# 当前 3.24（支持至 2028-06-01）；3.21 于 2026-11-01 EOL，届时须再抬基线。
+# 回归门禁见 apps/server/repo_infra_gate_test.go（TestRuntimeBaseImageIsSupportedAlpine）。
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates wget \
  && addgroup -g 1000 -S app \
  && adduser -u 1000 -S -G app -h /home/app app \
