@@ -98,10 +98,14 @@
 > `src/i18n/messages/**` 纯数据），四指标仍 100%。
 >
 > 本表同时是 [§5.1](#51-风险登记) 末尾「已收敛」索引中各守卫的落地：R1（契约漂移）由
-> `handler/api_doc_test.go`（端点 + 字段级）与 `openapi_inputsource_test.go` 守住，R2（覆盖率掩盖
+> `handler/api_doc_test.go`（端点 + 请求体字段级**双向**）· `openapi_inputsource_test.go`（输入源）·
+> `openapi_request_fields_test.go`（注册表字段集 ⇔ handler 解码结构体字段集**全量遍历**）·
+> `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO **响应**字段双向）守住，R2（覆盖率掩盖
 > 死代码）由 `count==0` + `golangci-lint` 零告警 + `deadcode_gate_test.go` 守住，R3（明文落盘）由
 > `config.StorePlaintextWarning` 单测 + 子进程日志断言守住，R4（单副本）由 `TestDataDirLock*` +
 > `TestRunServerRejectsLockedDataDir` 守住，R6（Rust 供应链）由本表的 `cargo audit` 守住。
+> 发布链与安全基线（tag↔清单、平台内唯一 checksum、Trivy DB 缓存/重试、alpine 版本、`.env.example`
+> token）由 `repo_infra_gate_test.go` 守住。
 > 门禁变红即对应风险回归，按 §5 的复审规则回写状态。
 
 ---
@@ -131,12 +135,17 @@
 
 | # | 原风险 | 现守卫（回归即红灯） | 处置证据 |
 |---|---|---|---|
-| R1 | OpenAPI 契约漂移（字段名 / 输入源位置） | `api_doc_test.go`（端点双向 diff + 请求体字段级）· `openapi_inputsource_test.go`（输入源）· `openapi_contract_test.go`（handler DTO 断言） | [`features.md`](features.md) §O-1 |
+| R1 | OpenAPI 契约漂移（字段名 / 输入源位置 / **响应 schema**） | `api_doc_test.go`（端点双向 diff + 请求体字段级双向）· `openapi_inputsource_test.go`（输入源）· `openapi_request_fields_test.go`（注册表 ⇔ handler 字段集全量遍历）· `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO 响应字段双向） | [`features.md`](features.md) §O-1 · §S |
 | R2 | 覆盖率掩盖死代码 / `_ = x` 消音 | 覆盖率门禁 `count==0` · `golangci-lint`（`unused`/`staticcheck`）· `deadcode_gate_test.go` | [`features.md`](features.md) §O-2 |
 | R3 | 明文密钥落盘（`sqlite`/`json` + 空 `S3C_STORE_KEY`） | `Config.StorePlaintextWarning` 启动告警 + 表驱动单测 + 子进程日志断言 | [`features.md`](features.md) §N-1 |
 | R4 | 多副本共享同一 `DataDir` | `store.AcquireDataDirLock`（unix flock；**非 unix 为 no-op，已知残留**） | [`features.md`](features.md) §O-3 |
 | R6 | Rust 依赖审计缺口 | 两套 CI 的 `cargo audit` + `make rust-audit`（当前 0 漏洞，7 条告警已 triage） | [`features.md`](features.md) §O-4 |
 | R7 | 分段上传缺 `ETag` 不可见 | `upload.test.ts`（缺 ETag → 报错 + `multipartAbort`）· README 兼容性矩阵 | [`features.md`](features.md) §O-6 |
+| R9 | 发布产物版本与 tag 不一致（tag↔清单无门禁） | `release-desktop.yml` 的 tag↔`tauri.conf.json`/`Cargo.toml` 比对 + `repo_infra_gate_test.go` | [`features.md`](features.md) §S |
+| R10 | 三平台校验清单互相覆盖（`SHA256SUMS` 竞态） | 平台内唯一 `SHA256SUMS-<bundle>.txt` + `aggregate-checksums` 聚合 job + `repo_infra_gate_test.go` | [`features.md`](features.md) §S |
+| R11 | 安全门禁因 Trivy DB 下载失败而结构性变红/失明 | 两套 CI 的 DB 预下载 + 退避重试 + `--skip-db-update` + 缓存 + `repo_infra_gate_test.go` | [`features.md`](features.md) §S |
+| R12 | 运行镜像基础版 EOL（叠加 `--ignore-unfixed` 致漏洞门禁失明） | `Dockerfile` 抬到受支持 alpine + `repo_infra_gate_test.go`（含 EOL 时抬基线的说明） | [`features.md`](features.md) §S |
+| R13 | `.env.example` 占位 token 是「有效口令」 | token 置空 + `TestEnvExampleTokenIsNotAValidCredential` | [`features.md`](features.md) §S |
 
 **已决策接受（不修，ADR 兜底；不再占用登记行）**
 

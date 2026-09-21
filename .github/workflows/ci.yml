@@ -149,6 +149,17 @@ jobs:
         # 先显式 inspect，失败信息才指向构建/load 而不是安全问题。
         run: docker image inspect s3clinet/server:ci > /dev/null
 
+      - name: Cache Trivy DB
+        # R4：Trivy 漏洞库此前每次 job 都从 mirror.gcr.io 现拉，仓库自带日志记录过
+        # `FATAL … connection timed out`（6m44s 后失败），且无缓存、无重试。
+        # 缓存 DB 目录可让命中时免下载；未命中时由下方「预下载」带重试补齐。
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ github.workspace }}/.trivy-cache
+          key: trivy-db-${{ runner.os }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
       - name: Trivy image scan (CRITICAL/HIGH 失败门禁)
         # 直接使用 Trivy 官方镜像避免第三方 action 供应链风险；
         # 注意 Docker Hub 上的仓库名是 aquasec/trivy（aquasecurity/trivy 只存在于
@@ -157,9 +168,34 @@ jobs:
         # 范围：只扫 OS 与库（不扫语言包，alpine musl 无此问题）；
         # 只关注已发布修复的漏洞（--ignore-unfixed）；
         # .trivyignore 集中收纳极少数确认可忽略的 CVE。
+        #
+        # R4：DB 下载拆成独立步骤并带指数退避重试；扫描阶段 --skip-db-update 复用已就绪的
+        # DB，从而把「网络抖动」与「真的扫出漏洞」区分开（此前网络失败会表现为 job 红）。
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
         run: |
+          set -euo pipefail
+          mkdir -p "$TRIVY_CACHE_DIR"
+          ok=0
+          for attempt in 1 2 3 4; do
+            if docker run --rm \
+                 -v "$TRIVY_CACHE_DIR:/root/.cache/trivy" \
+                 aquasec/trivy:0.58.1 image \
+                 --download-db-only --no-progress; then
+              ok=1
+              break
+            fi
+            echo "Trivy DB download attempt $attempt failed; retrying in $((attempt * 15))s" >&2
+            sleep $((attempt * 15))
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "Trivy DB download failed after 4 attempts" >&2
+            exit 1
+          fi
+
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE_DIR:/root/.cache/trivy" \
             -v "${{ github.workspace }}/.trivyignore:/trivy/.trivyignore:ro" \
             aquasec/trivy:0.58.1 image \
             --severity CRITICAL,HIGH \
@@ -167,6 +203,7 @@ jobs:
             --exit-code 1 \
             --no-progress \
             --ignore-unfixed \
+            --skip-db-update \
             --ignorefile /trivy/.trivyignore \
             s3clinet/server:ci
 

@@ -95,8 +95,12 @@ func TestAPIDocMatchesRoutes(t *testing.T) {
 	}
 }
 
-// apiDocSectionRe 匹配 api.md 里的「请求体与 `METHOD /api/x` 相同」别名声明。
-var apiDocSectionRe = regexp.MustCompile("请求体与\\s*`?(GET|POST|PUT|DELETE|PATCH)\\s+(/api\\S+?)`?\\s*相同")
+// apiDocAliasRe 匹配「请求体与 `METHOD /api/x` 相同」或「请求体与 `copy-prefix` 相同」两种别名。
+// 后者省略方法名与 /api 前缀（文档既有排版），故方法组可选、路径允许裸名。
+var apiDocAliasRe = regexp.MustCompile("请求体与\\s*`?((?:GET|POST|PUT|DELETE|PATCH)\\s+)?`?(/api\\S+?|[a-z0-9-]+)`?\\s*相同")
+
+// apiDocSectionRe 保留旧名（sectionText 使用），语义与 apiDocAliasRe 一致。
+var apiDocSectionRe = apiDocAliasRe
 
 // apiDocSections 解析 api.md，返回 "METHOD /path" -> 该路由条目到下一个路由条目之间的正文。
 // 行首路由行是既有排版约定（见 apiDocRoutes 的解析口径）。
@@ -143,7 +147,23 @@ func apiDocSections(t *testing.T) map[string]string {
 	return sections
 }
 
-// sectionText 返回某路由的正文；若该段声明「请求体与 `METHOD /path` 相同」则跟随别名
+// resolveAliasKey 把别名引用（可能省略方法名 / 带 /api 前缀）解析为真实路由 key。
+// 解析不到时返回 ""。
+func resolveAliasKey(sections map[string]string, method, ref string) string {
+	ref = strings.TrimRight(ref, "`")
+	if method = strings.TrimSpace(method); method != "" {
+		return strings.ToUpper(method) + " " + ref
+	}
+	for k := range sections {
+		path := strings.SplitN(k, " ", 2)[1]
+		if path == ref || strings.HasSuffix(path, "/"+ref) {
+			return k
+		}
+	}
+	return ""
+}
+
+// sectionText 返回某路由的正文；若该段声明「请求体与 … 相同」则跟随别名
 // （如 POST /api/migrate/async 复用 /api/migrate 的字段说明），seen 防环。
 func sectionText(sections map[string]string, key string, seen map[string]bool) string {
 	if seen[key] {
@@ -152,7 +172,11 @@ func sectionText(sections map[string]string, key string, seen map[string]bool) s
 	seen[key] = true
 	body := sections[key]
 	if m := apiDocSectionRe.FindStringSubmatch(body); m != nil {
-		return sectionText(sections, m[1]+" "+strings.TrimRight(m[2], "`"), seen)
+		ref := resolveAliasKey(sections, m[1], m[2])
+		if ref == "" {
+			return body
+		}
+		return sectionText(sections, ref, seen)
 	}
 	return body
 }
@@ -218,30 +242,222 @@ func openAPIRequestFields(t *testing.T) map[string][]string {
 	return out
 }
 
-// TestAPIDocDocumentsRequestBodyFields docs/api.md 必须出现 OpenAPI 注册表里每个
-// 请求体字段名（ASSESSMENT H1 的残留面：端点漂移已有 TestAPIDocMatchesRoutes 兜底，
-// 字段级漂移——文档写旧字段名、代码改新字段名——此前无人校验）。
-// 别名段（「请求体与 `POST /api/x` 相同」）按被引用端点校验。
-func TestAPIDocDocumentsRequestBodyFields(t *testing.T) {
-	t.Parallel()
-	fields := openAPIRequestFields(t)
-	sections := apiDocSections(t)
+// ---- 文档侧请求体字段的机械抽取（双向门禁用） ----
 
-	var missing []string
-	for key, names := range fields {
-		body := sectionText(sections, key, map[string]bool{})
-		if body == "" {
-			missing = append(missing, key+"（docs/api.md 无该端点正文）")
+// stripJSONComments 去掉 JSON 文本中的 `//` 行注释（docs/api.md 的示例体带注释），
+// 同时保持字符串字面量内的 `//` 原样。
+func stripJSONComments(s string) string {
+	var b strings.Builder
+	inStr, esc := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			b.WriteByte(c)
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
 			continue
 		}
-		for _, name := range names {
-			if !strings.Contains(body, name) {
-				missing = append(missing, key+" 缺少请求体字段 `"+name+"`")
+		if c == '"' {
+			inStr = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '/' && i+1 < len(s) && s[i+1] == '/' {
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			if i < len(s) {
+				b.WriteByte('\n')
+			}
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+// jsonObjectSpans 返回文本中所有顶层 `{...}` 片段及其行前缀（用于区分请求体与 `200 {...}` 响应体）。
+func jsonObjectSpans(s string) []struct{ obj, prefix string } {
+	var out []struct{ obj, prefix string }
+	for i := 0; i < len(s); i++ {
+		if s[i] != '{' {
+			continue
+		}
+		depth, inStr, esc := 0, false, false
+		j := i
+		for ; j < len(s); j++ {
+			c := s[j]
+			if inStr {
+				switch {
+				case esc:
+					esc = false
+				case c == '\\':
+					esc = true
+				case c == '"':
+					inStr = false
+				}
+				continue
+			}
+			switch c {
+			case '"':
+				inStr = true
+			case '{':
+				depth++
+			case '}':
+				depth--
+			}
+			if depth == 0 {
+				break
+			}
+		}
+		if j >= len(s) {
+			break
+		}
+		lineStart := strings.LastIndexByte(s[:i], '\n') + 1
+		out = append(out, struct{ obj, prefix string }{s[i : j+1], strings.TrimSpace(s[lineStart:i])})
+		i = j
+	}
+	return out
+}
+
+// responsePrefixRe 匹配响应体的行前缀（如 `200 `、`200`、`202 `）。
+var responsePrefixRe = regexp.MustCompile(`^\d{3}\b`)
+
+// topLevelJSONKeys 返回 JSON 对象顶层（depth==1）的键名。容错：注释已剥离、非法片段返回已识别的键。
+func topLevelJSONKeys(obj string) []string {
+	var out []string
+	depth, inStr, esc := 0, false, false
+	for i := 0; i < len(obj); i++ {
+		c := obj[i]
+		if inStr {
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			// 读取字符串字面量。
+			j := i + 1
+			var sb strings.Builder
+			for j < len(obj) {
+				if obj[j] == '\\' {
+					sb.WriteByte(obj[j])
+					if j+1 < len(obj) {
+						sb.WriteByte(obj[j+1])
+					}
+					j += 2
+					continue
+				}
+				if obj[j] == '"' {
+					break
+				}
+				sb.WriteByte(obj[j])
+				j++
+			}
+			k := j + 1
+			for k < len(obj) && (obj[k] == ' ' || obj[k] == '\t' || obj[k] == '\n' || obj[k] == '\r') {
+				k++
+			}
+			if depth == 1 && k < len(obj) && obj[k] == ':' {
+				out = append(out, sb.String())
+			}
+			i = j
+		case '{':
+			depth++
+		case '}':
+			depth--
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// apiDocRequestBodyFields 返回 docs/api.md 中每个端点的请求体顶层字段名。
+// 取该端点正文（别名已解析）里第一个「非响应体」JSON 对象；没有则返回 nil。
+func apiDocRequestBodyFields(t *testing.T) map[string][]string {
+	t.Helper()
+	sections := apiDocSections(t)
+	out := map[string][]string{}
+	for key := range sections {
+		body := stripJSONComments(sectionText(sections, key, map[string]bool{}))
+		for _, span := range jsonObjectSpans(body) {
+			if responsePrefixRe.MatchString(span.prefix) {
+				continue
+			}
+			out[key] = topLevelJSONKeys(span.obj)
+			break
+		}
+	}
+	return out
+}
+
+// TestAPIDocDocumentsRequestBodyFields docs/api.md 的请求体字段集必须与 OpenAPI 注册表**双向一致**。
+//
+// 旧实现用 `strings.Contains(body, name)` 单向校验（注册表 ⊆ 文档），有两处结构性盲区
+// （docs/review-2026-09-19.md §4.3）：① 文档多写的幻影字段从不检查；② 子串碰撞——
+// 字段 `key` 会被 `keys` / `secretKey` 满足、`newKey` 被 `newKeys` 满足。现改为机械抽取
+// 文档请求体 JSON 的**顶层键**后双向比对，且不再做子串匹配。
+//
+// 别名段（「请求体与 `POST /api/x` 相同」/「请求体与 `copy-prefix` 相同」）按被引用端点校验。
+// 注册表为自由体（`openapi.Obj()`，无 properties）的端点跳过——字段集无从比对。
+func TestAPIDocDocumentsRequestBodyFields(t *testing.T) {
+	t.Parallel()
+	registry := openAPIRequestFields(t)
+	doc := apiDocRequestBodyFields(t)
+
+	var mismatches []string
+	checked := 0
+	for key, names := range registry {
+		if len(names) == 0 {
+			continue // 注册表自由体：无字段可比对（由 inputsource 门禁负责「该不该有 body」）。
+		}
+		checked++
+		body := sectionText(apiDocSections(t), key, map[string]bool{})
+		if strings.TrimSpace(body) == "" {
+			mismatches = append(mismatches, key+"（docs/api.md 无该端点正文）")
+			continue
+		}
+		docNames, ok := doc[key]
+		if !ok {
+			mismatches = append(mismatches, key+"（docs/api.md 未给出请求体 JSON，无法机械比对字段）")
+			continue
+		}
+		want := map[string]bool{}
+		for _, n := range names {
+			want[n] = true
+		}
+		got := map[string]bool{}
+		for _, n := range docNames {
+			got[n] = true
+		}
+		for _, n := range names {
+			if !got[n] {
+				mismatches = append(mismatches, key+" 文档缺少请求体字段 `"+n+"`")
+			}
+		}
+		for _, n := range docNames {
+			if !want[n] {
+				mismatches = append(mismatches, key+" 文档多出请求体字段 `"+n+"`（注册表/handler 不解析）")
 			}
 		}
 	}
-	sort.Strings(missing)
-	for _, s := range missing {
+	if checked < 20 {
+		t.Fatalf("仅比对 %d 个端点的请求体字段，疑似抽取口径失效", checked)
+	}
+	sort.Strings(mismatches)
+	for _, s := range mismatches {
 		t.Errorf("docs/api.md 与 OpenAPI 注册表字段漂移：%s", s)
 	}
 }

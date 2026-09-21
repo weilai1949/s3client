@@ -236,6 +236,7 @@ func registerObjects(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket":       openapi.Str(),
 				"key":          openapi.Str(),
+				"versionId":    openapi.Str(),
 				"storageClass": openapi.Str(),
 			}, "bucket", "key", "storageClass")},
 		},
