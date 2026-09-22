@@ -10,11 +10,17 @@ func registerTrash(r *openapi.Registry) {
 		Params: []openapi.Param{
 			acctIDParam(),
 			refParam("Bucket"),
+			refParam("Prefix"),
 			openapi.Param{Name: "keyMarker", In: "query", Schema: openapi.Str()},
 			openapi.Param{Name: "versionIdMarker", In: "query", Schema: openapi.Str()},
 			refParam("MaxKeys"),
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"deleteMarkers":       openapi.Arr(openapi.Obj()),
+			"isTruncated":         openapi.Bool(),
+			"nextKeyMarker":       openapi.Str(),
+			"nextVersionIdMarker": openapi.Str(),
+		})}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/trash/purge", openapi.Op{
 		Tags: []string{"trash"}, Summary: "彻底清除某 key 的全部版本+标记", OperationID: "purgeTrashObject",
@@ -26,7 +32,10 @@ func registerTrash(r *openapi.Registry) {
 				"key":    openapi.Str(),
 			}, "bucket", "key")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"purged":  openapi.Str(),
+			"deleted": openapi.Int(),
+		})}},
 	})
 }
 

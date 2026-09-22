@@ -10,13 +10,21 @@ func registerVersions(r *openapi.Registry) {
 		Params: []openapi.Param{
 			acctIDParam(),
 			openapi.Param{Name: "bucket", In: "query", Schema: openapi.Str()},
-			openapi.Param{Name: "key", In: "query", Schema: openapi.Str()},
+			// 注意：真实 handler listObjectVersions（metadata.go）只读 bucket/prefix/keyMarker/
+			// versionIdMarker/maxKeys，**不读 key**。此前误声明 key 为幻影参数（客户端发送后被
+			// 忽略），2026-09-19 由 openapi_query_params_test.go 全量门禁发现并移除。
 			openapi.Param{Name: "prefix", In: "query", Schema: openapi.Str()},
 			openapi.Param{Name: "keyMarker", In: "query", Schema: openapi.Str()},
 			openapi.Param{Name: "versionIdMarker", In: "query", Schema: openapi.Str()},
 			openapi.Param{Name: "maxKeys", In: "query", Schema: openapi.Int()},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 versions/deleteMarkers/isTruncated", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 versions/deleteMarkers/isTruncated", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"versions":            openapi.Arr(openapi.Obj()),
+			"deleteMarkers":       openapi.Arr(openapi.Obj()),
+			"isTruncated":         openapi.Bool(),
+			"nextKeyMarker":       openapi.Str(),
+			"nextVersionIdMarker": openapi.Str(),
+		})}},
 	})
 	r.Operation("DELETE", "/api/accounts/{id}/version", openapi.Op{
 		Tags: []string{"versions"}, Summary: "删除指定版本", OperationID: "deleteObjectVersion",
@@ -28,7 +36,10 @@ func registerVersions(r *openapi.Registry) {
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 			openapi.Param{Name: "versionId", In: "query", Required: true, Schema: openapi.Str()},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": {Description: "缺 key/versionId", JSON: refSchema("Error")}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"deleted":   openapi.Str(),
+			"versionId": openapi.Str(),
+		})}, "400": {Description: "缺 key/versionId", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/version/restore", openapi.Op{
 		Tags: []string{"versions"}, Summary: "把历史版本恢复为当前（复制回 key）", OperationID: "restoreObjectVersion",
@@ -41,7 +52,10 @@ func registerVersions(r *openapi.Registry) {
 				"versionId": openapi.Str(),
 			}, "bucket", "key", "versionId")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"restored":  openapi.Str(),
+			"versionId": openapi.Str(),
+		})}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/delete-marker/restore", openapi.Op{
 		Tags: []string{"versions"}, Summary: "撤销删除标记（一键还原已删除对象）", OperationID: "restoreDeleteMarker",
@@ -54,7 +68,10 @@ func registerVersions(r *openapi.Registry) {
 				"versionId": openapi.Str(),
 			}, "bucket", "key", "versionId")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"restored":  openapi.Str(),
+			"versionId": openapi.Str(),
+		})}},
 	})
 }
 
