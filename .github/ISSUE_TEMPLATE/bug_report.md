@@ -33,7 +33,7 @@ assignees: ''
 
 ## 环境
 
-- 版本：`v1.0.0-rc1`
+- 版本：`v1.0.0`
 - 部署：Docker Compose / 本机 / 桌面端
 - 浏览器 / OS：（如涉及前端）
 - S3 服务商：（MinIO / 阿里 OSS / AWS / 其他）
