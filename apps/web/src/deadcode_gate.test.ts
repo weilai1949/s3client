@@ -156,3 +156,37 @@ it('INTENTIONAL_UNUSED 不得登记已不存在的符号（避免豁免清单腐
   const stale = [...INTENTIONAL_UNUSED.keys()].filter((k) => !surface.includes(k))
   expect(stale, `豁免清单中的符号已不存在，请删除：${stale.join(', ')}`).toEqual([])
 })
+
+/**
+ * 测试名不得硬编码源码行号 —— 对应 review-2026-09-19.md §4.2。
+ *
+ * 真实事故：21 个用例名写着 `（line 125 else）`、`（line 111）` 这类源码行号，而行号
+ * **早已过期**（实际 `??` 在 `api/storage.ts:49`、非数组回退在 `:185`，用例名却指向
+ * `:125`）。测试于是在描述一个不存在的版本：既误导读者，也让「测试即文档」失效。
+ * 行号属于实现细节，不是行为断言，本门禁禁止它出现在用例名里。
+ *
+ * 允许：注释里引用行号（局部解释）、断言消息里的行号。
+ * 禁止：`it(...)` / `test(...)` / `describe(...)` 的名称字符串含行号。
+ */
+const TEST_NAME_RE = /\b(?:it|test|describe)\s*\(\s*(?:'([^']*)'|"([^"]*)")/g
+/** 名称中的行号形态：`line 111`、`180 行`、`（209 行）`、`line 614/611/627`。 */
+const LINE_REF_IN_NAME_RE = /\bline\s*\d|\d+\s*行/
+
+it('测试名不得硬编码源码行号（行号会过期，让用例描述一个不存在的版本）', () => {
+  const offenders: string[] = []
+  let scanned = 0
+  for (const [path, text] of Object.entries(rawSources)) {
+    if (!/\.test\.ts$/.test(path)) continue
+    scanned++
+    for (const m of text.matchAll(TEST_NAME_RE)) {
+      const name = m[1] ?? m[2] ?? ''
+      if (LINE_REF_IN_NAME_RE.test(name)) offenders.push(`${path.replace(/^\.\//, '')}: ${name}`)
+    }
+  }
+  // 防空跑：路径解析失效时不得静默变绿。
+  expect(scanned, '未扫描到任何测试文件（解析口径失效）').toBeGreaterThanOrEqual(20)
+  expect(
+    offenders,
+    `以下用例名硬编码了源码行号（改为描述行为，行号请放注释里）：\n  ${offenders.join('\n  ')}`,
+  ).toEqual([])
+})

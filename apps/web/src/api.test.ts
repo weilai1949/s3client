@@ -119,7 +119,7 @@ describe('api token 存储', () => {
     memLocal.getItem = orig
   })
 
-  it('token 迁移读取 localStorage 抛异常时回退空串（line 58 catch）', async () => {
+  it('token 迁移读取 localStorage 抛异常时回退空串', async () => {
     const orig = memLocal.getItem
     memLocal.getItem = ((k: string) => {
       if (k === 's3c.token') throw new Error('boom')
@@ -1431,7 +1431,7 @@ describe('api final branches', () => {
 
 // ── api.ts 覆盖率补全：readToken / newId / servers 分支 ──────────────────────
 describe('api gaps: token/servers 分支', () => {
-  it('readToken 持久化模式下 localStorage 无 token → 返回空串（line 48 ?? 右侧）', async () => {
+  it('readToken 持久化模式下 localStorage 无 token → 返回空串', async () => {
     memLocal.setItem('s3c_token_persistent', '1')
     const { api } = await loadApi()
     expect(api.isTokenPersistent).toBe(true)
@@ -1445,7 +1445,7 @@ describe('api gaps: token/servers 分支', () => {
     expect(p.id).toMatch(/^s-\d+-[a-z0-9]+$/)
   })
 
-  it('listServers() 本地 JSON 非数组时回退默认 server（line 125 else）', async () => {
+  it('listServers() 本地 JSON 非数组时回退默认 server', async () => {
     memLocal.setItem('s3c.servers', JSON.stringify({ not: 'array' }))
     const { api } = await loadApi()
     const list = api.listServers()
@@ -1453,7 +1453,7 @@ describe('api gaps: token/servers 分支', () => {
     expect(list[0].name).toBe('server.sameOriginDefault')
   })
 
-  it('listServers() 首次默认 server 在 Tauri 下用 localBackend 名称（line 133 左支）', async () => {
+  it('listServers() 首次默认 server 在 Tauri 下用 localBackend 名称', async () => {
     const orig = location.hostname
     Object.defineProperty(location, 'hostname', { value: 'tauri.localhost', configurable: true })
     try {
@@ -1466,40 +1466,40 @@ describe('api gaps: token/servers 分支', () => {
     }
   })
 
-  it('activeServerId() 服务器列表为空 → 返回空串（line 197 ?? 右侧）', async () => {
+  it('activeServerId() 服务器列表为空 → 返回空串', async () => {
     memLocal.setItem('s3c.servers', '[]')
     const { api } = await loadApi()
     expect(api.activeServerId()).toBe('')
     expect(api.getActiveServer()).toBeUndefined()
   })
 
-  it('upsertServer() base 为空 → base 归一化为空串（line 215 || 右侧）', async () => {
+  it('upsertServer() base 为空 → base 归一化为空串', async () => {
     const { api } = await loadApi()
     const p = api.upsertServer({ name: 'srv', base: '', token: '' })
     expect(p.base).toBe('')
   })
 
-  it('upsertServer() 名称为空且 base 非空 → 以 base 为名（line 217 中型 ||）', async () => {
+  it('upsertServer() 名称为空且 base 非空 → 以 base 为名', async () => {
     const { api } = await loadApi()
     const p = api.upsertServer({ name: '', base: 'http://x:9001', token: '' })
     expect(p.name).toBe('http://x:9001')
   })
 
-  it('upsertServer() 名称、base 均为空 → 回退 sameOriginShort（line 217 尾支）', async () => {
+  it('upsertServer() 名称、base 均为空 → 回退 sameOriginShort', async () => {
     const { api } = await loadApi()
     const p = api.upsertServer({ name: '   ', base: '', token: '' })
     expect(p.name).toBe('server.sameOriginShort')
     expect(p.base).toBe('')
   })
 
-  it('upsertServer() id 不存在 → 创建新 server（line 220 else）', async () => {
+  it('upsertServer() id 不存在 → 创建新 server', async () => {
     const { api } = await loadApi()
     const p = api.upsertServer({ id: 'ghost-id', name: 'new', base: 'http://x:9002', token: '' })
     expect(p.id).not.toBe('ghost-id')
     expect(p.name).toBe('new')
   })
 
-  it('upsertServer() 更新非当前 server → 不触发 applyProfile（line 223 假分支）', async () => {
+  it('upsertServer() 更新非当前 server → 不触发 applyProfile', async () => {
     const { api } = await loadApi()
     const def = api.listServers()[0]
     const extra = api.upsertServer({ name: 'extra', base: 'http://extra', token: 't-extra' })
@@ -1511,7 +1511,7 @@ describe('api gaps: token/servers 分支', () => {
     expect(api.activeServerId()).toBe(def.id)
   })
 
-  it('deleteServer() 在 Tauri 下重建默认 server → localBackend（line 238 左支）', async () => {
+  it('deleteServer() 在 Tauri 下重建默认 server → localBackend', async () => {
     const orig = location.hostname
     Object.defineProperty(location, 'hostname', { value: 'tauri.localhost', configurable: true })
     try {
@@ -1568,7 +1568,7 @@ describe('api gaps: s3api bucket 可选参数', () => {
 
 // ── api.ts 覆盖率补全：requestResponse 错误体与 downloadZipToDisk catch ──────
 describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
-  it('requestResponse 错误体无 error 字段 → 回退 statusText（line 275 假分支）', async () => {
+  it('requestResponse 错误体无 error 字段 → 回退 statusText', async () => {
     stubFetch(() => Promise.resolve(makeErrorResponse(500, 'boom')))
     const { api } = await loadApi()
     const { downloadZipToDisk } = await import('./api/download')
@@ -1576,7 +1576,7 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
     await expect(downloadZipToDisk('id1', { keys: ['a.txt'] })).rejects.toThrow('500 boom')
   })
 
-  it('FSA 失败且 body.cancel() 也失败 → cancel().catch 回调执行（line 336 函数）', async () => {
+  it('FSA 失败且 body.cancel() 也失败 → cancel().catch 回调执行', async () => {
     const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'))
     const body = { pipeTo: vi.fn(), cancel }
     stubFetch(() => Promise.resolve({
@@ -1592,7 +1592,7 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
     delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker
   })
 
-  it('超限且 body 存在 → res.body?.cancel() 执行且其失败被吞（line 346 函数）', async () => {
+  it('超限且 body 存在 → res.body?.cancel() 执行且其失败被吞', async () => {
     const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'))
     stubFetch(() => Promise.resolve({
       ok: true, status: 200, statusText: 'OK',
@@ -1607,7 +1607,7 @@ describe('api gaps: requestResponse / downloadZipToDisk catch', () => {
 
 // ── api.ts 覆盖率补全：subscribeMigrateEvents SSE 分支 ───────────────────────
 describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
-  it('无空格 data 行 + 未知字段行 + 终态 done → 不触发回读（line 614/611/627）', async () => {
+  it('无空格 data 行 + 未知字段行 + 终态 done → 不触发回读', async () => {
     const stream = new ReadableStream({
       start(c) {
         // data: 不带空格（614 右支）；retry 行既不 event: 也不 data:（611 else 支）
@@ -1631,7 +1631,7 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     off()
   })
 
-  it('回读时 progress 无 status 且任务完成 → status 取 done（line 632 三元真支）', async () => {
+  it('回读时 progress 无 status 且任务完成 → status 取 done', async () => {
     const stream = new ReadableStream({ start(c) { c.close() } })
     stubFetch((input: RequestInfo | URL) => {
       if (String(input).includes('/events')) {
@@ -1666,7 +1666,7 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     off()
   })
 
-  it('fetch 抛非 Error 字符串 → onError 收到包装后的 Error（line 641 三元假支）', async () => {
+  it('fetch 抛非 Error 字符串 → onError 收到包装后的 Error', async () => {
     stubFetch(() => Promise.reject('plain failure'))
     const { subscribeMigrateEvents } = await import('./api')
     const onError = vi.fn()
@@ -1676,7 +1676,7 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     off()
   })
 
-  it('abort 后 fetch 仍 reject → 不回调 onError（line 641 假分支）', async () => {
+  it('abort 后 fetch 仍 reject → 不回调 onError', async () => {
     let rejectFetch: (e: unknown) => void = () => {}
     stubFetch(() => new Promise((_, rej) => { rejectFetch = rej }))
     const { subscribeMigrateEvents } = await import('./api')
@@ -1689,7 +1689,7 @@ describe('api gaps: subscribeMigrateEvents SSE 分支', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
-  it('abort 后流才 EOF → 跳过回读且无回调（line 627 abort 项）', async () => {
+  it('abort 后流才 EOF → 跳过回读且无回调', async () => {
     let resolveRead: (v: unknown) => void = () => {}
     const pending = new Promise<unknown>((res) => { resolveRead = res })
     stubFetch((input: unknown) => {
@@ -1735,7 +1735,7 @@ describe('api gaps: directUpload 进度分支', () => {
     return XHRMock
   }
 
-  it('进度事件 lengthComputable=false → 不回调 onProgress（line 673 假分支）', async () => {
+  it('进度事件 lengthComputable=false → 不回调 onProgress', async () => {
     const XHRMock = createXhrMockClass()
     vi.stubGlobal('XMLHttpRequest', XHRMock)
     const { directUpload } = await import('./api')

@@ -432,7 +432,7 @@ describe('upload final branches', () => {
   })
 
   // abort() 幂等守卫（170 行 `if (aborted) return`）：见下方「最后一组分段完成前后」两用例。
-  it('首段 onload 时 signal 中止：下一轮 worker 迭代在 180 行守卫抛 AbortError', async () => {
+  it('首段 onload 时 signal 中止：下一轮 worker 迭代的守卫抛 AbortError', async () => {
     mockMultipartParts()
     const ctrl = new AbortController()
     let count = 0
@@ -451,7 +451,7 @@ describe('upload final branches', () => {
     expect(s3api.multipartComplete).not.toHaveBeenCalled()
   })
 
-  it('全部分段完成后 signal 才中止：末尾守卫（209 行）抛 AbortError 且不 complete', async () => {
+  it('全部分段完成后 signal 才中止：末尾守卫抛 AbortError 且不 complete', async () => {
     mockMultipartParts()
     const ctrl = new AbortController()
     let count = 0

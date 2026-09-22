@@ -128,7 +128,7 @@ describe('bucketPolicy', () => {
     expect(parsed.Statement[0]).not.toHaveProperty('Sid')
   })
 
-  it('normalizeStringArray rejects non-string/array values (line 111)', () => {
+  it('normalizeStringArray rejects non-string/array values', () => {
     expect(normalizeStringArray(42)).toBeNull()
     expect(normalizeStringArray(true)).toBeNull()
     expect(normalizeStringArray({})).toBeNull()

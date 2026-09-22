@@ -28,6 +28,35 @@ const dictionaries = import.meta.glob('./messages/*.ts', {
   eager: true,
 }) as Record<string, string>
 
+/** 按语言解析字典键集合。
+ *
+ * messages/*.ts 的形状是 `{ 'zh-CN': {...}, 'en-US': {...} }`，因此先定位语言块，
+ * 再在块内抽取键。用「块起止」而不是全文匹配，才能区分同一键属于哪种语言。
+ */
+function keysOfLocale(loc: 'zh-CN' | 'en-US'): Set<string> {
+  const keys = new Set<string>()
+  const startRe = new RegExp(`['"]${loc}['"]\\s*:\\s*\\{`)
+  for (const [path, text] of Object.entries(dictionaries)) {
+    if (path.endsWith('types.ts')) continue
+    const start = startRe.exec(text)
+    if (!start) continue
+    // 从 `{` 起做括号配平，取该语言块的内容。
+    let i = start.index + start[0].length
+    let depth = 1
+    const from = i
+    while (i < text.length && depth > 0) {
+      if (text[i] === '{') depth++
+      else if (text[i] === '}') depth--
+      i++
+    }
+    const block = text.slice(from, i - 1)
+    for (const m of block.matchAll(/['"]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)['"]\s*:/g)) {
+      keys.add(m[1])
+    }
+  }
+  return keys
+}
+
 /** 字典中定义的全部键（zh-CN 与 en-US 的并集）。 */
 function definedKeys(): Set<string> {
   const keys = new Set<string>()
@@ -59,12 +88,62 @@ function usedLiteralKeys(): Map<string, string[]> {
   return used
 }
 
+/** 去掉源码中的注释，保留字符串字面量。
+ *
+ * 此前 `usedKeyTexts` 直接对整份源码文本做正则，**注释里提到的键**也会被算作「已使用」：
+ * 删掉真实引用、只在注释里留个键名，死键门禁仍然全绿（review-2026-09-19.md §4.2）。
+ * 本函数按字符扫描，正确跳过字符串字面量（避免把 `'https://x'` 的 `//` 当注释）。
+ */
+function stripComments(text: string): string {
+  let out = ''
+  let i = 0
+  const n = text.length
+  while (i < n) {
+    const c = text[i]
+    // 字符串 / 模板字面量：整段原样保留（内部可能含 // 或 /*）。
+    if (c === "'" || c === '"' || c === '`') {
+      const quote = c
+      out += c
+      i++
+      while (i < n) {
+        if (text[i] === '\\') {
+          out += text[i] + (text[i + 1] ?? '')
+          i += 2
+          continue
+        }
+        out += text[i]
+        if (text[i] === quote) {
+          i++
+          break
+        }
+        i++
+      }
+      continue
+    }
+    if (c === '/' && text[i + 1] === '/') {
+      while (i < n && text[i] !== '\n') i++
+      continue
+    }
+    if (c === '/' && text[i + 1] === '*') {
+      i += 2
+      while (i < n && !(text[i] === '*' && text[i + 1] === '/')) i++
+      i += 2
+      continue
+    }
+    out += c
+    i++
+  }
+  return out
+}
+
 /** 生产源码中出现的全部带引号字符串字面量（不限 t()/tf() 调用）。
  *
  * 不限于 `t('x')`：部分键以**数据结构字段**形式被引用（如 `bucketPolicy.ts` 的
  * `label: 'policy.tplPublicRead'`、`DestDialog.vue` 三元表达式里的 `'dest.actionCopy'`），
  * 它们不匹配 t()/tf() 正则，但确实在用。用「键文本是否出现」判定可覆盖这两类，
  * 同时仍然排除测试文件（测试引用不能算生产使用，否则死键会被测试永久掩盖）。
+ *
+ * 先剥注释再匹配：注释里的键名不算使用（见 stripComments）。
  */
 function usedKeyTexts(): Set<string> {
   const used = new Set<string>()
@@ -73,7 +152,7 @@ function usedKeyTexts(): Set<string> {
     // messages/*.ts 里找到自己，死键检测恒真）。
     if (path.endsWith('.test.ts')) continue
     if (path.includes('messages/')) continue
-    for (const m of text.matchAll(/['"]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)['"]/g)) {
+    for (const m of stripComments(text).matchAll(/['"]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)['"]/g)) {
       used.add(m[1])
     }
   }
@@ -140,5 +219,27 @@ describe('i18n 字面量键覆盖', () => {
   it('字典非空且中英键数一致', () => {
     expect(definedKeys().size).toBeGreaterThanOrEqual(640)
     expect(i18nKeyCount('zh-CN')).toBe(i18nKeyCount('en-US'))
+  })
+
+  // 此前只比对**键数量**：`zh-CN` 缺 `a` 而 `en-US` 多一个 `b` 时数量相等，
+  // 门禁仍绿——用户切到英文就会看到原始 key（review-2026-09-19.md §4.2）。
+  // 这里按语言分别解析键集合，做**集合级**双向比对。
+  it('中英字典的键集合逐键一致（不是只比数量）', () => {
+    const zh = keysOfLocale('zh-CN')
+    const en = keysOfLocale('en-US')
+    const missingInEn = [...zh].filter((k) => !en.has(k)).sort()
+    const missingInZh = [...en].filter((k) => !zh.has(k)).sort()
+    expect({ missingInEn, missingInZh }).toEqual({ missingInEn: [], missingInZh: [] })
+  })
+
+  it('每个键的两种语言取值都非空（防止占位空串）', () => {
+    const empties: string[] = []
+    for (const [path, text] of Object.entries(dictionaries)) {
+      if (path.endsWith('types.ts')) continue
+      for (const m of text.matchAll(/['"]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)['"]\s*:\s*(['"])(.*?)\2/gs)) {
+        if (m[3].trim() === '') empties.push(`${m[1]} @ ${path.replace(/^\.\//, '')}`)
+      }
+    }
+    expect(empties.sort()).toEqual([])
   })
 })
