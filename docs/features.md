@@ -721,8 +721,36 @@
 functions 1095 / lines 3503）。
 
 > **仍未纳入机械门禁的残留**（须人工跟踪，已写入各门禁文件头）：端点内联 / 运行时动态键的响应体、
-> query 参数的 `Has()` / `Values()` 读取口径、md 表格中的叙述性数字，以及**真实 Go 后端 + 真实前端
-> 产物**的浏览器联调冒烟（todolist #37，需起真实后端 + RustFS，属 CI 架构改动）。
+> query 参数的 `Has()` / `Values()` 读取口径、md 表格中的叙述性数字。
+> （**真实 Go 后端 + 真实前端产物**的浏览器联调冒烟已于 §V 闭环，不再属于本残留清单。）
+
+---
+
+### V. 2026-09-22 真实后端 + 真实 RustFS 浏览器联调（todolist #37）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.3 的**唯一保留项**。此前
+> `e2e-playwright.yml` / `playwright-e2e` 的 `/api/**` 全被 `page.route` mock，没有任何门禁
+> 验证「真实 Go 后端 + 真实 RustFS + 真实构建产物」拼在一起时的行为——尤其**浏览器直传**
+> （预签名 PUT 是浏览器 → S3 的跨源请求），mock 时代在结构上不可能被覆盖。本轮补齐后
+> 审查 §9.3 清零。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | 真实联调用例（不 mock `/api`） | ✅ | 新增 `apps/web/e2e-real/real-backend.spec.ts` + 专用 `playwright.real.config.ts`（不自拉 webServer，`PLAYWRIGHT_BASE_URL` 指向真实后端）。3 条用例：① 账号 CRUD 真实落库（后端 `GET /api/accounts/{id}` 可见、`secretKey` 不回传、UI「测试连接」走真实 S3 成功）；② 建桶 → 列桶（真实 `CreateBucket`/`ListBuckets`）；③ **浏览器真实直传**：UI 选文件 → 前端取预签名 PUT → 浏览器 XHR PUT 到 RustFS → 列对象 → 预签名 GET 回读逐字节校验。用例先 `resetBackend` 清空账号表，保证每个用例从真实空状态出发（失败重试也不会串状态） |
+| 2 | 本地一键运行（docker 自动起 RustFS） | ✅ | 新增 `scripts/e2e-real.sh` + `make e2e-real`：自动 docker 起一份真实 RustFS（**显式配 `RUSTFS_CORS_ALLOWED_ORIGINS`**，否则浏览器直传被 CORS 拦下）→ `pnpm build` 真实产物 → 起真实 Go 后端（`S3C_STATIC_DIR` 托管产物）→ 跑 `pnpm e2e:real` → `trap` 自动清理；`--keep` / `--skip-build` / `--no-rustfs`（复用外部对端）便于排查与 CI 复用；幂等 `playwright install chromium` 修掉新克隆直接失败的 UX 缺口 |
+| 3 | 两套 CI 接入（GitHub + GitLab） | ✅ | GitHub 新增 `.github/workflows/e2e-real.yml`（PR 按路径 + 手动 + 每周五定时）；GitLab 新增 `e2e-real` job（RustFS 用 GitLab **service**，与 `rustfs-e2e` 同款；service 变量里配好 `RUSTFS_CORS_ALLOWED_ORIGINS`）。触发规则与另两套 E2E 对齐，不阻塞普通 push |
+| 4 | 编排收敛为单一来源 | ✅ | 初版三处各写一份编排（改一处漏两处即漂移）。现两套 CI 都 `bash scripts/e2e-real.sh`（GitHub 自起容器；GitLab `--no-rustfs` + `RUSTFS_ENDPOINT=http://rustfs:9000` 复用 service），各自只留「装工具链 / 装浏览器系统依赖」 |
+| 5 | 机械门禁防漂移 | ✅ | `TestRealE2EUsesSharedScript`（两侧 CI 必须**实际调用** `bash scripts/e2e-real.sh`——仅出现在 `paths:`/`changes:` 里不算）、`TestRustFSImageIsConsistentlyPinned`（脚本默认值 / compose / GitLab service 三处镜像版本一致，禁 `latest`）、`TestRealE2EArtifactsExist`（**联调 spec 出现 `page.route(` 即红灯**，防退化成第二个 mock 版）、`TestE2ESourcesAreTypechecked`、`TestLocalRealE2ETargetExists` |
+| 6 | E2E 源码静态检查 | ✅ | `e2e/` 与 `e2e-real/` 此前不在主 `tsconfig.json` 的 `include` 内，**零类型检查与 lint**。现新增 `apps/web/tsconfig.e2e.json` + `pnpm typecheck:e2e`，`pnpm lint` 扩到 `eslint src e2e e2e-real`（顺带修掉一个未使用变量）；两套 CI 的 `web` job 与本地 `make check` 都纳入 |
+
+**变异验证**：① 去掉 RustFS 容器/CORS 配置后重跑本地真实联调——第 3 条（浏览器直传）**红灯**
+（跨源 PUT 被拦，超时），前两条不经浏览器的用例仍绿，证明该用例确实依赖真实对端 + 真 CORS；
+② 门禁侧逐条变异：改 GitLab service 镜像版本 → `TestRustFSImageIsConsistentlyPinned` 红灯；
+把 GitLab 的 `bash scripts/e2e-real.sh` 换成 `pnpm e2e:real` → `TestRealE2EUsesSharedScript` 红灯
+（该门禁最初用子串 `scripts/e2e-real.sh`，被 `changes:` 路径命中而假绿，已改为要求实际调用）；
+删 CI 里的 `typecheck:e2e` → `TestE2ESourcesAreTypechecked` 红灯；往联调 spec 塞类型错误 → 类型检查红灯。
+
+**门禁实跑**：`make e2e-real` 3 passed（默认 docker 模式与 `--no-rustfs` 外部对端模式各跑一遍）；后端新增 5 条门禁纳入 `go test` 100% 覆盖率。
 
 ---
 
@@ -754,8 +782,9 @@ functions 1095 / lines 3503）。
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |
-| E2E（Playwright） | 15 passed / 0 skipped |
+| E2E（Playwright，`/api` mock） | 15 passed / 0 skipped |
 | E2E（真实 RustFS，`S3CLINET_E2E=1`） | 按需运行，默认不阻塞 CI |
+| E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（todolist #37；不 mock `/api`，含浏览器直传） |
 | Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5） |
 
 ### 已知边界与取舍

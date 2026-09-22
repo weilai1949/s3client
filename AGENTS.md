@@ -22,6 +22,9 @@ cd apps/server && go vet ./... && go test ./... && go build ./...
 cd apps/web && pnpm test && pnpm build          # 前端单测 + vue-tsc 类型检查 + 构建
 # 涉及签名 / 预签名直传 / 分段 / 复制 / 标签 / 版本控制时追加真实 RustFS E2E：
 cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+# 涉及前端 / 后端接口 / 预签名直传时追加「真实后端 + 真实 RustFS + 真实产物」浏览器联调
+# （docker 自动起 RustFS，跑完清理；不 mock /api）：
+make e2e-real
 # 或 make test-all（后端 + 前端单测）
 ```
 

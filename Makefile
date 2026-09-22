@@ -2,12 +2,14 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0
 
-.PHONY: server server-build tidy web web-build web-typecheck desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+.PHONY: server server-build tidy web web-build web-typecheck web-typecheck-e2e desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
 
 # Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
 GCL ?= npx --yes gitlab-ci-local@4.75.1
 GCL_JOBS ?=
 GCL_EXTRA ?=
+# e2e-real 透传参数，如 make e2e-real E2E_REAL_ARGS=--keep
+E2E_REAL_ARGS ?=
 
 # 本地跑 GitLab 流水线（docker executor，无需 GitLab 实例）
 gcl-list:
@@ -44,6 +46,10 @@ web-build:
 # 前端类型检查
 web-typecheck:
 	cd apps/web && pnpm install --frozen-lockfile && pnpm typecheck
+
+# E2E 源码（e2e/ 与 e2e-real/）类型检查（与 CI 同命令；#37）
+web-typecheck-e2e:
+	cd apps/web && pnpm install --frozen-lockfile && pnpm typecheck:e2e
 
 # 桌面端开发（Tauri）
 desktop-dev:
@@ -91,8 +97,15 @@ govulncheck:
 	cd apps/server && go install golang.org/x/vuln/cmd/govulncheck@v1.8.0 && "$$(go env GOPATH)/bin/govulncheck" ./...
 
 # 提交前门禁聚合：本地一条命令跑完与 CI 等价的静态检查 + 单测 + 覆盖率。
-# 注意：CI 额外有 Trivy 镜像扫描、RustFS E2E、Playwright E2E，本目标不含（见 docs/development.md）。
-check: vet lint test-cover web-test-cover
+# 注意：CI 额外有 Trivy 镜像扫描、RustFS E2E、Playwright E2E 与真实联调 E2E（make e2e-real），
+# 本目标不含（见 docs/development.md）。
+check: vet lint test-cover web-test-cover web-typecheck-e2e
+
+# 真实联调浏览器冒烟（todolist #37）：docker 自动起一份真实 RustFS + 真实构建产物 +
+# 真实 Go 后端，用 Playwright 跑 apps/web/e2e-real/（不 mock /api），跑完自动清理。
+# 需本机 docker / go / pnpm；参数透传（--keep / --skip-build）见 scripts/e2e-real.sh -h。
+e2e-real:
+	bash scripts/e2e-real.sh $(E2E_REAL_ARGS)
 
 # 安装 git pre-commit hook（静态检查：gofmt / go vet / 前端 typecheck）
 install-hooks:

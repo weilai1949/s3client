@@ -159,7 +159,7 @@ make stop && make status
 
 | S3 服务 | 在 CORS 规则中暴露 `ETag` | 本项目自动化覆盖 |
 |---|---|---|
-| RustFS（内置 compose / 真对端 E2E） | 是 | ✅ `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E` |
+| RustFS（内置 compose / 真对端 E2E / 真实联调 E2E） | 是 | ✅ `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E`、`make e2e-real` |
 | MinIO（自托管常用） | 是 | 手动 |
 | AWS S3 | 是（`ExposeHeaders: ETag`） | 手动 |
 | 阿里云 OSS / 腾讯云 COS 等兼容实现 | 是（CORS 规则「暴露 Headers」填 `ETag`） | 手动 |
@@ -211,13 +211,25 @@ cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 # 可选环境变量：S3CLINET_ENDPOINT / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY
 ```
 
+真实联调浏览器冒烟（todolist #37）——真实 Go 后端 + 真实 RustFS + 真实构建产物，**不 mock `/api`**；
+一条命令自动用 docker 起一份 RustFS、跑完自动清理（覆盖 mock 版测不到的**浏览器直传**跨源链路）：
+
+```bash
+make e2e-real                       # 全自动；等价于 bash scripts/e2e-real.sh
+make e2e-real E2E_REAL_ARGS=--keep  # 跑完保留容器/后端，便于排查
+```
+
+> 本地与两套 CI 共用同一个 `scripts/e2e-real.sh`（CI 只负责装工具链与浏览器系统依赖），
+> 避免「本地跑通 ≠ CI 跑通」。复用已有 RustFS 时用
+> `RUSTFS_ENDPOINT=http://127.0.0.1:9000 bash scripts/e2e-real.sh --no-rustfs`。
+
 CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/test/build、Web typecheck/build 与 Docker 镜像构建。推送 `v*` tag（或手动 `workflow_dispatch`）时，`.github/workflows/release-desktop.yml` 会在 Windows / Linux / macOS 分别打出 `.exe`（NSIS）、`.deb`、`.dmg`，并挂到该 tag 对应的 [GitHub Release](https://github.com/weilai1949/s3clinet/releases)（Tags 页可看到 Assets）。
 
-同一套门禁（server / web / docker / desktop + RustFS E2E + Playwright E2E）也镜像在 [`.gitlab-ci.yml`](.gitlab-ci.yml)，供 GitLab 侧流水线使用；本地可无 GitLab 实例直接跑：
+同一套门禁（server / web / docker / desktop + RustFS E2E + Playwright E2E + 真实后端联调 E2E）也镜像在 [`.gitlab-ci.yml`](.gitlab-ci.yml)，供 GitLab 侧流水线使用；本地可无 GitLab 实例直接跑：
 
 ```bash
 make gcl-list          # 列出 job（pin 的 gitlab-ci-local）
-make gcl GCL_JOBS=web  # 跑单个 job（web / server / rustfs-e2e …）
+make gcl GCL_JOBS=web  # 跑单个 job（web / server / rustfs-e2e / e2e-real …）
 make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 ```
 

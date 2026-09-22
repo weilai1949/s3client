@@ -1,0 +1,90 @@
+name: E2E (real backend + RustFS)
+
+# 真实联调浏览器冒烟（todolist #37）。
+#
+# 与另外两套 E2E 的分工：
+#   - e2e.yml：真实 RustFS 的 **Go 客户端** E2E（`s3wrap`，无浏览器）；
+#   - e2e-playwright.yml：真实浏览器，但 `/api/**` 全被 `page.route` mock（无后端）；
+#   - 本 workflow：**真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器**，
+#     不 mock 任何 `/api/**`。它覆盖前两者都覆盖不到的结合部——尤其是**浏览器直传**
+#     （预签名 PUT 是浏览器 → S3 的跨源请求，只有真对端 + 真 CORS 才能验证）。
+#
+# **编排复用 `scripts/e2e-real.sh`**（本地 `make e2e-real` 同款）：起 RustFS（含 CORS）→
+# 构建产物与后端 → 起后端 → 跑 Playwright，本 workflow 只负责「装工具链 + 装浏览器系统依赖」。
+# 这样本地与两套 CI 跑的是同一段编排，不会各抄一份而漂移
+# （门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都调用该脚本）。
+#
+# 触发规则与另两套 E2E 对齐（PR 按路径 + 手动 + 每周定时），不阻塞普通 push。
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/web/e2e-real/**'
+      - 'apps/web/playwright.real.config.ts'
+      - 'apps/web/src/**'
+      - 'apps/server/**'
+      - 'scripts/e2e-real.sh'
+      - 'docker-compose.yml'
+      - '.github/workflows/e2e-real.yml'
+  schedule:
+    # 每周五 02:00 UTC 冒烟
+    - cron: '0 2 * * 5'
+
+concurrency:
+  group: e2e-real-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-backend-e2e:
+    name: 真实后端 + RustFS 浏览器联调
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # 脚本用宿主 docker 自起 RustFS（默认分支）；凭据与 docker-compose.yml 一致。
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache: true
+          cache-dependency-path: apps/server/go.sum
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install web deps
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser + system deps
+        # --with-deps 需要 sudo/apt，属「环境准备」，故留在 workflow（脚本只做幂等 install）。
+        working-directory: apps/web
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Run real E2E via shared script
+        # 脚本负责：起 RustFS（含 RUSTFS_CORS_ALLOWED_ORIGINS）→ 构建真实产物与后端 →
+        # 起后端托管产物 → 跑 `pnpm e2e:real`（不 mock /api）→ trap 清理容器与后端进程。
+        run: bash scripts/e2e-real.sh
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-real-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7

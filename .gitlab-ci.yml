@@ -159,6 +159,25 @@ variables:
       when: on_success
     - when: never
 
+# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，todolist #37）
+# 触发规则与 GitHub 侧一致：PR 按路径（前端 / 后端 / 脚本 / compose）+ 手动 + 每周定时，不阻塞 push。
+.e2e-real-trigger:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
+      when: on_success
+    - changes:
+        - apps/web/e2e-real/**
+        - apps/web/playwright.real.config.ts
+        - apps/web/src/**
+        - apps/server/**
+        - scripts/e2e-real.sh
+        - docker-compose.yml
+        - .gitlab-ci.yml
+      when: on_success
+    - when: never
+
 # -------------------------------------------------------------------- ci ----
 
 # ← ci.yml job `server`（Go 后端：gofmt / vet / race / cover / build）
@@ -214,6 +233,8 @@ web:
   script:
     - pnpm lint
     - pnpm typecheck
+    # E2E 源码（e2e/ 与 e2e-real/）不在主 tsconfig 内，单独一份配置纳入 vue-tsc（#37）。
+    - pnpm typecheck:e2e
     # 覆盖率 100% 门禁：阈值在 apps/web/vite.config.ts 中配置（istanbul，
     # statements/functions/branches/lines 均为 100%），低于 100% 时非零码退出。
     - pnpm test:coverage
@@ -459,6 +480,88 @@ playwright-e2e:
     - pnpm e2e:ci
   artifacts:
     # 对应 e2e-playwright.yml 的 upload-artifact（playwright-report，失败时上传）
+    when: on_failure
+    expire_in: 7 days
+    paths:
+      - apps/web/playwright-report/
+      - apps/web/test-results/
+
+# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，todolist #37）
+#
+# 与前两个 e2e job 的分工：
+#   - rustfs-e2e：真实 RustFS 的 **Go 客户端** E2E（无浏览器）；
+#   - playwright-e2e：真实浏览器，但 `/api/**` 全被 page.route mock（无后端）；
+#   - 本 job：**真实 Go 后端（托管真实 vite build 产物）+ 真实 RustFS + 真实浏览器**，
+#     不 mock 任何 /api。覆盖前两者都覆盖不到的结合部，尤其是**浏览器直传**
+#     （预签名 PUT 是浏览器 → S3 的跨源请求，只有真对端 + 真 CORS 才能验证）。
+#
+# **编排复用 `scripts/e2e-real.sh --no-rustfs`**（本地 `make e2e-real` 同款脚本）：
+# 本 job 只负责「装工具链 + 起 RustFS service + 装浏览器系统依赖」，其余（构建产物与后端、
+# 起后端托管产物、跑 Playwright、清理后端进程）全交给脚本。这样本地与两套 CI 跑同一段编排，
+# 不会各抄一份而漂移（门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都调用该脚本）。
+#
+# 环境差异（与 GitHub 侧对齐）：
+#   - RustFS 用 GitLab **service**（与 rustfs-e2e 同款）：service 是独立容器，job 容器与
+#     浏览器都经别名 `rustfs` 访问它。**不要**改成 127.0.0.1——回环在 job 容器内指向自己，
+#     实测不可达（同 rustfs-e2e 的教训）；故用脚本的 `--no-rustfs` + `RUSTFS_ENDPOINT` 复用。
+#   - **必须**给 service 配 `RUSTFS_CORS_ALLOWED_ORIGINS`：浏览器直传是跨源请求，
+#     放行页面 Origin（http://127.0.0.1:8080）才不会被拦下。
+#   - 本 job 同时需要 Go 与 Node：用 golang bookworm 镜像 + NodeSource 装 Node（照搬 desktop-build）。
+e2e-real:
+  extends: .e2e-real-trigger
+  stage: e2e
+  timeout: 30 minutes
+  image: golang:1.26.6-bookworm
+  services:
+    - name: rustfs/rustfs:1.0.0-rc.3
+      alias: rustfs
+      variables:
+        RUSTFS_VOLUMES: /data
+        RUSTFS_ADDRESS: 0.0.0.0:9000
+        RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+        RUSTFS_CONSOLE_ENABLE: "true"
+        RUSTFS_ACCESS_KEY: rustfsadmin
+        RUSTFS_SECRET_KEY: rustfsadmin
+        RUSTFS_OBS_LOGGER_LEVEL: error
+        # 浏览器直传（预签名 PUT）是跨源请求：放行页面 Origin，否则被浏览器拦下。
+        RUSTFS_CORS_ALLOWED_ORIGINS: "http://127.0.0.1:8080,http://localhost:8080"
+        RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: "http://127.0.0.1:8080,http://localhost:8080"
+  variables:
+    GOPATH: "$CI_PROJECT_DIR/.go"
+    GOCACHE: "$CI_PROJECT_DIR/.gocache"
+    CGO_ENABLED: "1"
+    PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
+    # 脚本 --no-rustfs：复用上面的 service（容器内回环不可达，必须走别名）。
+    RUSTFS_ENDPOINT: "http://rustfs:9000"
+    S3CLINET_ACCESS_KEY: rustfsadmin
+    S3CLINET_SECRET_KEY: rustfsadmin
+  cache:
+    key:
+      files:
+        - apps/server/go.sum
+        - apps/web/pnpm-lock.yaml
+    paths:
+      - .go/pkg/mod/
+      - .gocache/
+      - .pnpm-store/
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git ca-certificates curl
+    # Node 24 + pnpm 9.15.0（与 .web-base / GitHub 侧一致，精确 patch pin）
+    - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+    - apt-get install -y nodejs=24.21.0-1nodesource1
+    - corepack enable
+    - corepack prepare pnpm@9.15.0 --activate
+    - pnpm config set store-dir "$PNPM_STORE_DIR"
+    - cd apps/web && pnpm install --frozen-lockfile && cd ../..
+    - cd apps/server && go mod download && cd ../..
+    # 浏览器系统依赖（--with-deps 等价于 install-deps，需 root/apt），属环境准备。
+    - cd apps/web && pnpm exec playwright install-deps chromium && cd ../..
+  script:
+    # 全部编排交给共享脚本：等 RustFS → 构建产物与后端 → 起后端 → 跑 e2e:real → 清理。
+    # 脚本内部用「置标志位」轮询而非 `&& exit 0`，不会像 GitHub 那样提前结束整个 job。
+    - bash scripts/e2e-real.sh --no-rustfs
+  artifacts:
     when: on_failure
     expire_in: 7 days
     paths:

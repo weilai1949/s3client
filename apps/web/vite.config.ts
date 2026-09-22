@@ -20,7 +20,9 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    exclude: ['node_modules/**', 'e2e/**', 'dist/**'],
+    // e2e/**（mock /api 的浏览器侧用例）与 e2e-real/**（真实后端 + RustFS，todolist #37）
+    // 都由 Playwright 跑，不是 vitest 单测；不排除会被 vitest 当作 *.spec.ts 收走。
+    exclude: ['node_modules/**', 'e2e/**', 'e2e-real/**', 'dist/**'],
     coverage: {
       provider: 'istanbul',
       reporter: ['text', 'text-summary', 'html', 'lcov'],
