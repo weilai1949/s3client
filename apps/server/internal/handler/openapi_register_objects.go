@@ -70,7 +70,7 @@ func registerObjects(r *openapi.Registry) {
 	r.Operation("GET", "/api/accounts/{id}/lifecycle", openapi.Op{
 		Tags: []string{"objects"}, Summary: "生命周期规则（桶级）", OperationID: "getLifecycle",
 		Params:    []openapi.Param{acctIDParam(), refParam("Bucket")},
-		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.BuildObj(map[string]*openapi.Schema{"rules": openapi.Arr(openapi.Obj())})}},
+		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.BuildObj(map[string]*openapi.Schema{"rules": openapi.Arr(lifecycleRuleSchema())})}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/lifecycle", openapi.Op{
 		Tags: []string{"objects"}, Summary: "写入生命周期规则（空规则=删除）", OperationID: "putLifecycle",
@@ -79,7 +79,7 @@ func registerObjects(r *openapi.Registry) {
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
-				"rules":  openapi.Arr(openapi.Obj()),
+				"rules":  openapi.Arr(lifecycleRuleSchema()),
 			}, "bucket")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"updated": openapi.Int()})}},
@@ -210,15 +210,17 @@ func registerObjects(r *openapi.Registry) {
 			"lastError": openapi.Str(),
 		})}, "400": {Description: "key 数>1000", JSON: refSchema("Error")}},
 	})
+	// 删除前缀（同步 / 异步）共用同一请求体：handler 两处都只解码 bucket/prefix。
+	deletePrefixBody := openapi.BuildObj(map[string]*openapi.Schema{
+		"bucket": openapi.Str(),
+		"prefix": openapi.Str(),
+	}, "bucket", "prefix")
 	r.Operation("POST", "/api/accounts/{id}/delete-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归删除前缀（同步流式）", OperationID: "deletePrefix",
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket": openapi.Str(),
-				"prefix": openapi.Str(),
-			}, "bucket", "prefix")},
+			Content:  openapi.MediaType{Schema: deletePrefixBody},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/truncated/lastError", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"deleted":   openapi.Int(),
@@ -232,7 +234,7 @@ func registerObjects(r *openapi.Registry) {
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content:  openapi.MediaType{Schema: openapi.Obj()},
+			Content:  openapi.MediaType{Schema: deletePrefixBody},
 		},
 		Responses: map[string]openapi.Response{"202": {Description: "jobId", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId":     openapi.Str(),
@@ -240,17 +242,19 @@ func registerObjects(r *openapi.Registry) {
 			"truncated": openapi.Bool(),
 		})}},
 	})
+	// 复制前缀（同步 / 异步）共用 copyPrefixReq：bucket/prefix/targetBucket/targetPrefix。
+	copyPrefixBody := openapi.BuildObj(map[string]*openapi.Schema{
+		"bucket":       openapi.Str(),
+		"prefix":       openapi.Str(),
+		"targetBucket": openapi.Str("可选；省略=同桶"),
+		"targetPrefix": openapi.Str(),
+	}, "bucket", "prefix", "targetPrefix")
 	r.Operation("POST", "/api/accounts/{id}/copy-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归复制前缀（同步流式）", OperationID: "copyPrefix",
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":       openapi.Str(),
-				"prefix":       openapi.Str(),
-				"targetBucket": openapi.Str("可选；省略=同桶"),
-				"targetPrefix": openapi.Str(),
-			}, "bucket", "prefix", "targetPrefix")},
+			Content:  openapi.MediaType{Schema: copyPrefixBody},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 copied/failed/lastError", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"copied":     openapi.Int(),
@@ -266,7 +270,7 @@ func registerObjects(r *openapi.Registry) {
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content:  openapi.MediaType{Schema: openapi.Obj()},
+			Content:  openapi.MediaType{Schema: copyPrefixBody},
 		},
 		Responses: map[string]openapi.Response{"202": {Description: "jobId", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId":     openapi.Str(),
@@ -351,7 +355,7 @@ func registerObjectMeta(r *openapi.Registry) {
 			refParam("Bucket"),
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(openapi.Obj())})}},
+		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(tagRowSchema())})}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/object-tags", openapi.Op{
 		Tags: []string{"object-meta"}, Summary: "设置对象标签（空数组=清空）", OperationID: "putObjectTags",
@@ -361,10 +365,10 @@ func registerObjectMeta(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"key":    openapi.Str(),
-				"tags":   openapi.Arr(openapi.BuildObj(map[string]*openapi.Schema{"key": openapi.Str(), "value": openapi.Str()}, "key", "value")),
+				"tags":   openapi.Arr(tagRowSchema()),
 			}, "bucket", "key", "tags")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(openapi.Obj())})}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(tagRowSchema())})}},
 	})
 }
 

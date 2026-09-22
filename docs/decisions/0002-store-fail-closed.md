@@ -19,7 +19,7 @@ s3clinet 的账号存储（json / sqlite / encrypted）是配置的单一事实�
 
 ## Decision
 
-**硬失败**：`store.Open` 失败 → 进程退出（`main.go:61-66`）；`/api/health` 的 store 探测失败 → 503（`health.go:9-18`）。不做降级。
+**硬失败**：`store.Open` 失败 → 进程退出（`main.go` `runServer`，Open 失败即 `return 1`）；`/api/health` 的 store 探测失败 → 503（`health.go` `health`，`store.Ping` 失败即回 503）。不做降级。
 
 ## Alternatives Considered
 

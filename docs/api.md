@@ -61,7 +61,11 @@ GET /api/accounts/{id}
 ```
 PUT /api/accounts/{id}
 ```
-字段同创建；`secretKey` 传空或不传则保留原值（响应为 `AccountView`，`secretSet` 反映更新后是否仍有密钥）。
+```json
+{"name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
+```
+必填：`name`、`endpoint`、`accessKey`（`secretKey` 可省略，传空或不传则保留原值）；其余字段同创建。
+响应为 `AccountView`，`secretSet` 反映更新后是否仍有密钥。
 
 ### 删除
 ```
@@ -671,7 +675,7 @@ POST /api/migrate/sync
 GET /api/openapi.json
 ```
 
-OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；不进鉴权层（契约非业务）。
+OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
 前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
 

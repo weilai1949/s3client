@@ -76,21 +76,23 @@
 
 ## 四、质量门禁基线
 
-任一版本发布前必须全绿（当前实测状态，2026-09-19）：
+任一版本发布前必须全绿（当前实测状态，2026-09-22）：
 
 | 门禁 | 命令 | 当前状态 |
 |---|---|---|
 | Go 格式 | `gofmt -l .`（`apps/server/`） | ✅ 干净 |
 | Go 静态检查 | `go vet ./...` | ✅ 0 告警 |
+| Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
 | Go 测试 | `go test -race -count=1 ./...` | ✅ 8/8 包通过 |
 | Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100% |
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
-| 前端 lint | `pnpm lint` | ✅ 0 error / 0 warning |
-| 前端类型 | `vue-tsc --noEmit` | ✅ exit 0 |
-| 前端测试 | `pnpm test` | ✅ 986 例全绿（64 文件） |
-| 前端覆盖率 | statements / branches / functions / lines | ✅ 100%（含 `src/i18n/index.ts`） |
+| 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
+| 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
+| 前端测试 | `pnpm test` | ✅ 1042 例全绿（66 文件） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4074 / 2844 / 1095 / 3503；含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
-| E2E | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验 |
+| E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |
+| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物） |
 | Rust 依赖审计 | `cargo audit`（两套 CI 的 desktop job + `make rust-audit`） | ✅ 0 漏洞；7 条 unmaintained/unsound 告警已 triage |
 
 > 后端覆盖率已补齐至**每包 100%**（2026-09 删除了确实不可达的防御分支，其余缺口改用行为断言，
@@ -101,7 +103,10 @@
 > 本表同时是 [§5.1](#51-风险登记) 末尾「已收敛」索引中各守卫的落地：R1（契约漂移）由
 > `handler/api_doc_test.go`（端点 + 请求体字段级**双向**）· `openapi_inputsource_test.go`（输入源）·
 > `openapi_request_fields_test.go`（注册表字段集 ⇔ handler 解码结构体字段集**全量遍历**）·
-> `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO **响应**字段双向）守住，R2（覆盖率掩盖
+> `openapi_query_params_test.go`（query 四种读取口径 + 绑定变量动态键）·
+> `openapi_path_params_test.go`（path 参数 ⇔ handler `PathValue` 双向）·
+> `openapi_semantics_test.go`（类型 / required / 枚举）·
+> `openapi_response_contract_test.go`（共享 schema + **端点级**响应字段双向）守住，R2（覆盖率掩盖
 > 死代码）由 `count==0` + `golangci-lint` 零告警 + `deadcode_gate_test.go` 守住，R3（明文落盘）由
 > `Config.Validate` 硬失败（`ErrPlaintextStoreNotAllowed`，仅 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行）+
 > base compose 的 `${S3C_STORE_KEY:?}` + `StorePlaintextWarning` 单测 + 子进程日志断言守住，R4（单副本）由 `TestDataDirLock*` +
@@ -137,8 +142,8 @@
 
 | # | 原风险 | 现守卫（回归即红灯） | 处置证据 |
 |---|---|---|---|
-| R1 | OpenAPI 契约漂移（字段名 / 输入源位置 / **响应 schema**） | `api_doc_test.go`（端点双向 diff + 请求体字段级双向）· `openapi_inputsource_test.go`（输入源）· `openapi_request_fields_test.go`（注册表 ⇔ handler 字段集全量遍历）· `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO 响应字段双向） | [`features.md`](features.md) §O-1 · §S |
-| R2 | 覆盖率掩盖死代码 / `_ = x` 消音 | 覆盖率门禁 `count==0` · `golangci-lint`（`unused`/`staticcheck`）· `deadcode_gate_test.go` | [`features.md`](features.md) §O-2 |
+| R1 | OpenAPI 契约漂移（字段名 / 输入源位置 / query / path / **响应 schema**） | `api_doc_test.go`（端点双向 diff + 请求体字段级双向）· `openapi_inputsource_test.go`（输入源）· `openapi_request_fields_test.go`（注册表 ⇔ handler 字段集全量遍历）· `openapi_query_params_test.go`（query 四种读取口径 + 绑定变量动态键）· `openapi_path_params_test.go`（path 参数 ⇔ `PathValue` 双向）· `openapi_semantics_test.go`（类型 / required / 枚举）· `openapi_response_contract_test.go`（共享 schema + 端点级响应字段双向） | [`features.md`](features.md) §O-1 · §S · §X |
+| R2 | 覆盖率掩盖死代码 / `_ = x` 消音 | 覆盖率门禁 `count==0` · `golangci-lint`（`errcheck`/`staticcheck`/`govet`/`ineffassign`/`unused`/`gosec`/`nolintlint` 零告警）· `deadcode_gate_test.go` | [`features.md`](features.md) §O-2 · §X |
 | R3 | 明文密钥落盘（`sqlite`/`json` + 空 `S3C_STORE_KEY`） | `Config.Validate` 硬失败（`ErrPlaintextStoreNotAllowed`；仅 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行）+ base compose `${S3C_STORE_KEY:?}` 强制 key + `StorePlaintextWarning` 启动告警（opt-in 时）+ 表驱动单测 + 子进程断言 | [`features.md`](features.md) §N-1 |
 | R4 | 多副本共享同一 `DataDir` | `store.AcquireDataDirLock`（unix flock；**非 unix 为 no-op，已知残留**） | [`features.md`](features.md) §O-3 |
 | R6 | Rust 依赖审计缺口 | 两套 CI 的 `cargo audit` + `make rust-audit`（当前 0 漏洞，7 条告警已 triage） | [`features.md`](features.md) §O-4 |

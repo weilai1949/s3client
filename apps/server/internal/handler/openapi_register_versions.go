@@ -19,8 +19,8 @@ func registerVersions(r *openapi.Registry) {
 			openapi.Param{Name: "maxKeys", In: "query", Schema: openapi.Int()},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 versions/deleteMarkers/isTruncated", JSON: openapi.BuildObj(map[string]*openapi.Schema{
-			"versions":            openapi.Arr(openapi.Obj()),
-			"deleteMarkers":       openapi.Arr(openapi.Obj()),
+			"versions":            openapi.Arr(versionEntrySchema()),
+			"deleteMarkers":       openapi.Arr(deleteMarkerSchema()),
 			"isTruncated":         openapi.Bool(),
 			"nextKeyMarker":       openapi.Str(),
 			"nextVersionIdMarker": openapi.Str(),

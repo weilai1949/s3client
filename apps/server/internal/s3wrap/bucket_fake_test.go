@@ -2,8 +2,10 @@ package s3wrap
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -286,6 +288,65 @@ func TestBucketEncryptionConfig(t *testing.T) {
 	if err := c.DeleteEncryption(ctx, "bkt"); err != nil {
 		t.Fatalf("DeleteEncryption: %v", err)
 	}
+}
+
+// TestCorsRuleJSONFieldNames 钉住 CorsRule 的对外 JSON 契约：必须是 camelCase。
+//
+// 背景：CorsRule 原无 json tag，序列化出的是 Go 字段名（AllowedMethods / MaxAgeSeconds），
+// 而前端 types.ts 的 CorsRule 与 docs/api.md 用的都是 camelCase（allowedMethods / maxAgeSeconds）。
+// Go 的 json.Unmarshal 大小写不敏感，所以**服务端测试**一直是绿的，但 JavaScript 严格区分大小写，
+// 浏览器读 x.allowedMethods 恒为 undefined → CORS 规则的方法/来源全被归一化成空数组。
+// 这是 review-2026-09-19.md 端点级响应门禁（§7.4）暴露出的真实客户端可见缺陷。
+func TestCorsRuleJSONFieldNames(t *testing.T) {
+	b, err := json.Marshal(CorsRule{
+		ID:             "r1",
+		AllowedMethods: []string{"GET"},
+		AllowedOrigins: []string{"*"},
+		AllowedHeaders: []string{"x"},
+		ExposeHeaders:  []string{"ETag"},
+		MaxAgeSeconds:  3600,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, want := range []string{"id", "allowedMethods", "allowedOrigins", "allowedHeaders", "exposeHeaders", "maxAgeSeconds"} {
+		if _, ok := m[want]; !ok {
+			t.Errorf("CorsRule JSON 缺少 camelCase 字段 %q（实得键 %v）；前端 types.ts 按 camelCase 读取，"+
+				"缺了会被静默读成 undefined", want, sortedKeys(m))
+		}
+	}
+	// 反向：不得再出现 Go 字段名（PascalCase），否则前端仍读不到。
+	for _, bad := range []string{"ID", "AllowedMethods", "AllowedOrigins", "AllowedHeaders", "ExposeHeaders", "MaxAgeSeconds"} {
+		if _, ok := m[bad]; ok {
+			t.Errorf("CorsRule JSON 仍含 PascalCase 键 %q（前端读的是 camelCase）", bad)
+		}
+	}
+}
+
+// TestCorsRuleJSONRoundTrip 确认前端发来的 camelCase 规则能被解析（PUT 路径）。
+func TestCorsRuleJSONRoundTrip(t *testing.T) {
+	in := `{"id":"r2","allowedMethods":["GET","PUT"],"allowedOrigins":["*"],"maxAgeSeconds":600}`
+	var got CorsRule
+	if err := json.Unmarshal([]byte(in), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.ID != "r2" || strings.Join(got.AllowedMethods, ",") != "GET,PUT" ||
+		strings.Join(got.AllowedOrigins, ",") != "*" || got.MaxAgeSeconds != 600 {
+		t.Fatalf("camelCase 请求体解析结果 = %+v", got)
+	}
+}
+
+func sortedKeys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestBucketCorsRules CORS：读取全字段 / 未配置错误 / 写入（空 ID 省略）/ 删除。

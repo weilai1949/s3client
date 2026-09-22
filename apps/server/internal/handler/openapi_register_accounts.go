@@ -55,7 +55,17 @@ func registerAccounts(r *openapi.Registry) {
 		Params:      []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content:  openapi.MediaType{Schema: openapi.Obj()},
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"name":           openapi.Str(),
+				"endpoint":       openapi.Str(),
+				"publicEndpoint": openapi.Str(),
+				"region":         openapi.Str(),
+				"accessKey":      openapi.Str(),
+				"secretKey":      openapi.Str(),
+				"bucket":         openapi.Str(),
+				"pathStyle":      openapi.Bool(),
+				"useSSL":         openapi.Bool(),
+			}, "name", "endpoint", "accessKey")},
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "更新后（AccountView）", JSON: refSchema("Account")},
@@ -68,7 +78,9 @@ func registerAccounts(r *openapi.Registry) {
 		OperationID: "deleteAccount",
 		Params:      []openapi.Param{acctIDParam()},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "OK", JSON: openapi.Obj()},
+			"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"deleted": openapi.Str(),
+			})},
 			"404": refResp("NotFound"),
 		},
 	})
@@ -78,7 +90,11 @@ func registerAccounts(r *openapi.Registry) {
 		OperationID: "testAccount",
 		Params:      []openapi.Param{acctIDParam(), refParam("Bucket")},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "检测结果（始终 200，字段 ok 表状态）", JSON: openapi.Obj()},
+			"200": {Description: "检测结果（始终 200，字段 ok 表状态）", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"ok":     openapi.Bool(),
+				"bucket": openapi.Str(),
+				"error":  openapi.Str(),
+			})},
 		},
 	})
 	r.Operation("POST", "/api/accounts/preview-buckets", openapi.Op{

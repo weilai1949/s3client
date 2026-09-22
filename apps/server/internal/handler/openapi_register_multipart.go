@@ -16,7 +16,9 @@ func registerMultipart(r *openapi.Registry) {
 				"contentType": openapi.Str(),
 			}, "bucket", "key")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 uploadId", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 uploadId", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"uploadId": openapi.Str(), "key": openapi.Str(), "bucket": openapi.Str(),
+		})}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/multipart/part", openapi.Op{
 		Tags: []string{"multipart"}, Summary: "预签名单段 PUT URL", OperationID: "multipartPart",
@@ -31,7 +33,9 @@ func registerMultipart(r *openapi.Registry) {
 				"expiresIn":  openapi.Int(),
 			}, "bucket", "key", "uploadId", "partNumber")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresAt", JSON: openapi.Obj()}, "400": {Description: "partNumber 非法", JSON: refSchema("Error")}},
+		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresIn", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"partNumber": openapi.Int(), "url": openapi.Str(), "expiresIn": openapi.Int64(),
+		})}, "400": {Description: "partNumber 非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/multipart/complete", openapi.Op{
 		Tags: []string{"multipart"}, Summary: "完成分段上传", OperationID: "multipartComplete",
@@ -45,7 +49,9 @@ func registerMultipart(r *openapi.Registry) {
 				"parts":    openapi.Arr(openapi.BuildObj(map[string]*openapi.Schema{"partNumber": openapi.Int(), "etag": openapi.Str()}, "partNumber", "etag")),
 			}, "bucket", "key", "uploadId", "parts")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"completed": openapi.Str(),
+		})}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/multipart/abort", openapi.Op{
 		Tags: []string{"multipart"}, Summary: "中止分段上传", OperationID: "multipartAbort",
@@ -58,7 +64,9 @@ func registerMultipart(r *openapi.Registry) {
 				"uploadId": openapi.Str(),
 			}, "bucket", "key", "uploadId")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"aborted": openapi.Bool(),
+		})}},
 	})
 }
 

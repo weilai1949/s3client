@@ -5,11 +5,23 @@ import (
 )
 
 func registerSystem(r *openapi.Registry) {
+	// health 的 store 子对象：正常时仅 {ok:true}，store 不可用时追加 error。
+	healthStore := openapi.BuildObj(map[string]*openapi.Schema{
+		"ok":    openapi.Bool(),
+		"error": openapi.Str(),
+	}, "ok")
+	healthBody := openapi.BuildObj(map[string]*openapi.Schema{
+		"status":  openapi.EnumStr("ok", "error"),
+		"version": openapi.Str(),
+		"time":    openapi.Str("date-time"),
+		"store":   healthStore,
+	}, "status", "version", "time", "store")
+
 	r.Operation("GET", "/api/health", openapi.Op{
 		Tags: []string{"system"}, Summary: "健康检查（含 store 状态与版本）", OperationID: "health",
 		Responses: map[string]openapi.Response{
-			"200": {Description: "OK", JSON: openapi.Obj()},
-			"503": {Description: "store 不可用", JSON: openapi.Obj()},
+			"200": {Description: "OK", JSON: healthBody},
+			"503": {Description: "store 不可用", JSON: healthBody},
 		},
 	})
 	r.Operation("GET", "/api/metrics", openapi.Op{

@@ -20,15 +20,21 @@ package handler
 // 且 handler「恒写出的键」（present）必须 ⊆ 注册表 properties。
 //
 // 断言范围（刻意不做的残留，明确记录而非静默跳过）：
-//   - **自由体 `openapi.Obj()`**：注册表未声明 properties 的端点无从比对，跳过。这是当前最大残留：
-//     本次仅升级了 objects / object-meta / trash / versions 四个注册表（本任务 ownership 范围）中
-//     机械可抽取的响应；buckets / bucket-settings / accounts / multipart / migrate 等其它
-//     `openapi.Obj()` 响应仍无端点级门禁（其 handler 键集合其实已可机械抽取，属后续可收敛项）。
-//     自检要求「带具体 properties 的成功响应」达到下限，防止整体退回自由体后静默变绿。
+//   - **自由体 `openapi.Obj()`**：注册表未声明 properties 的端点无从比对，跳过。**2026-09-22 收敛**：
+//     全部注册表（accounts / buckets / bucket-settings / objects / object-meta / multipart /
+//     versions / trash / migrate / system）的自由体响应已升级为具体 properties，端点级门禁从
+//     15 个覆盖到 61 个成功响应；仅剩 `/api/openapi.json` 一个自由体——它的响应体就是 OpenAPI
+//     规范本身，由 `Registry.HTTPHandler()` 直接写出而非 `writeJSON`，机械抽取无意义。
+//     自检要求「带具体 properties 的成功响应」达到下限（60）且自由体不超过 1 个，
+//     防止整体退回自由体后静默变绿。
 //   - **动态拼装**：handler 从 `[]map` 追加、跨包调用、或键来自运行时字符串的响应无法机械抽取。
 //     若这类端点声明了具体 properties，门禁会红灯要求改用字面量 map / 具名 struct——不得静默放过。
+//     （`listTrash` / `listObjectVersions` 的数组元素由 `deleteMarkerSchema` / `versionEntrySchema`
+//     显式声明，元素键仍由本门禁顶层抽取口径覆盖。）
 //   - **$ref 共享响应**（Account / ListObjectsResp / Error）：由第 1 层门禁覆盖，端点级跳过。
 //   - 不做响应 required / 类型 / 枚举语义比对（类型语义见 `openapi_semantics_test.go`，且仅请求方向）。
+//   - **嵌套对象/数组的深层字段**（如 `store` / `progress` / `result` / `rules[]` 元素）只比对到
+//     顶层键；元素形状由注册表共享 schema 构造器（`openapi_register.go`）统一维护。
 
 import (
 	"go/ast"
@@ -676,9 +682,14 @@ func TestOpenAPI_EndpointResponseSchemasMatchHandlers(t *testing.T) {
 			}
 		}
 	}
-	if checked < 15 {
+	if checked < 60 {
 		t.Fatalf("仅比对 %d 个端点级响应（untyped=%d），疑似注册表回退成自由体或抽取口径失效",
 			checked, untyped)
+	}
+	if untyped > 1 {
+		t.Fatalf("有 %d 个 2xx 响应仍是自由体（openapi.Obj()），超过已登记的 1 个残留"+
+			"（仅 /api/openapi.json：响应体即 OpenAPI 规范本身，由 HTTPHandler 直接写，非 writeJSON）；"+
+			"新增自由体须先升级为具体 properties 或在此登记原因", untyped)
 	}
 	t.Logf("端点级响应全量比对：%d 个带具体 properties 的成功响应（另有 %d 个自由体跳过）", checked, untyped)
 }

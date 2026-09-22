@@ -20,7 +20,7 @@ s3clinet 允许用户配置任意 S3 兼容 endpoint（MinIO、RustFS、局域�
 SSRF 防护**拦截链路本地与云元数据地址，放行私网 / 回环**：
 
 - 创建时 `ValidateEndpoint` + 拨号期 `dialContextSSRF` 双重校验（消除 DNS 重绑定 TOCTOU）。
-- 拦截：链路本地单播/组播、阿里 IMDS（100.100.100.200 / 100.96.0.2）、AWS IMDS IPv6（fd00:ec2::254）、GCP metadata 主机名。
+- 拦截：链路本地单播/组播、阿里云 IMDS（100.100.100.200）、火山引擎内网元数据（100.96.0.2）、AWS IMDS IPv6（fd00:ec2::254）、GCP metadata 主机名。
 - 禁重定向 + 禁 HTTP(S)_PROXY（封环境变量代理绕过路径）。
 - 认证是主防线：所有 `/api/*` 可配置 Bearer 鉴权，非回环监听强制鉴权。
 
@@ -34,7 +34,7 @@ SSRF 防护**拦截链路本地与云元数据地址，放行私网 / 回环**�
 ## Consequences
 
 - 认证用户可让服务器访问任意私网服务（仅依赖鉴权兜底）——已文档化为设计取舍。
-- 攻击面：未配置 `S3C_TOKEN` 时服务默认仅回环监听，外部不可达（`config.go:120`）。
+- 攻击面：未配置 `S3C_TOKEN` 时服务默认仅回环监听，外部不可达（`config.go` `FromEnv`，`S3C_ADDR` 默认 `127.0.0.1:8080`）。
 - 若需更严格部署，可结合网络层隔离（防火墙 / nginx 访问控制）。
 
 ## Update（2026-09-19）

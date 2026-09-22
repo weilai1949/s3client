@@ -22,7 +22,11 @@ func registerBuckets(r *openapi.Registry) {
 			}, "name")},
 		},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "OK", JSON: openapi.Obj()},
+			"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"created": openapi.Str(),
+				"region":  openapi.Str(),
+				"acl":     openapi.Str(),
+			})},
 			"400": refResp("BadRequest"),
 		},
 	})
@@ -30,14 +34,21 @@ func registerBuckets(r *openapi.Registry) {
 		Tags: []string{"buckets"}, Summary: "删除空桶", OperationID: "deleteBucket",
 		Params: []openapi.Param{acctIDParam(), openapi.Param{Name: "name", In: "query", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "OK", JSON: openapi.Obj()},
-			"409": {Description: "桶非空", JSON: openapi.Obj()},
+			"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"deleted": openapi.Str(),
+			})},
+			"409": {Description: "桶非空", JSON: refSchema("Error")},
 		},
 	})
 	r.Operation("GET", "/api/accounts/{id}/bucket-info", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "桶属性（区域 / 创建时间 / 版本控制）", OperationID: "getBucketInfo",
-		Params:    []openapi.Param{acctIDParam(), refParam("Bucket")},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Params: []openapi.Param{acctIDParam(), refParam("Bucket")},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":     openapi.Str(),
+			"region":     openapi.Str(),
+			"createdAt":  openapi.Str("date-time"),
+			"versioning": openapi.Str(),
+		})}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/bucket-versioning", openapi.Op{
 		Tags: []string{"buckets"}, Summary: "开关桶版本控制（Enabled / Suspended）", OperationID: "putBucketVersioning",
@@ -49,7 +60,9 @@ func registerBuckets(r *openapi.Registry) {
 				"status": openapi.EnumStr("Enabled", "Suspended"),
 			}, "bucket", "status")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}, "400": refResp("BadRequest")},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"versioning": openapi.Str(),
+		})}, "400": refResp("BadRequest")},
 	})
 }
 

@@ -54,9 +54,27 @@ cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 make e2e-real
 # 或 make test-all（后端 + 前端单测）
 make test-cover                               # 后端覆盖率 100% 门禁（CI 同款检查）
+make lint                                     # golangci-lint（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint），必须 0 issues
 # 改到桌面端依赖时（需本机已装 cargo-audit）：RustSec 审计，CI desktop job 同命令
 make rust-audit
 ```
+
+> **契约与文档门禁的落点**（改接口 / 改文档数字时相关）：`internal/handler/` 下
+> `openapi_request_fields_test.go`（请求体字段全量）、`openapi_query_params_test.go`（query 参数
+> 四种读取口径）、`openapi_path_params_test.go`（path 参数 ⇔ handler `PathValue` 双向）、
+> `openapi_semantics_test.go`（类型 / required / 枚举）、
+> `openapi_response_contract_test.go`（共享 schema + **端点级**响应）、`api_doc_test.go`（docs 双向
+> + 路由行必须顶格）；仓库级 `repo_infra_gate_test.go`（CI / 发布链 / 工具链 pin）、
+> `doc_number_gate_test.go`（md 叙述性数字）、
+> `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号）。各文件的**断言范围与残留**写在文件头。
+>
+> **门禁自身也用 AST 而非裸正则**：判断「handler 是否解码请求体」「是否读取 path 参数」以及
+> `PathValue` 的动态键时，裸字符串匹配会被注释与字符串字面量骗过（实测），故这些判定走 `go/parser`
+> 语法树。query 参数的字段抽取仍为正则，但绑定变量后的非字面量键（`q := r.URL.Query(); q.Get(name)`
+> / `q[k]`）已由 `hasDynamicQueryRead` 显式红灯，不再静默逃逸。每条判定都配一个用**合成源码**写的
+> 口径测试（如 `TestDecodesBodyIgnoresCommentsAndStrings`、`TestPathParamDynamicReadUsesAST`、
+> `TestFindReadJSONTargetIgnoresCommentsAndStrings`），不依赖「仓库里正好有一个反例」来证明门禁有效。
+> `//nolint` 消音由 `nolintlint` 拦截（必须写明具体 linter 与理由）。
 
 ### CI 双平台一致性
 
@@ -121,6 +139,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 |----------|----------------|
 | 前端使用方式 / 界面 / 快捷键 / 截图 | [`README.md`](../README.md)（必要时补截图） |
 | 后端接口、请求体、响应字段、状态码 | [`api.md`](api.md) + `apps/server/internal/handler/openapi_register_*.go`（并跑契约测试） |
+| **md 正文里「N 个 `/api/*` 端点」这类数字** | 由 `apps/server/doc_number_gate_test.go` 机械校验（真值取自 `routes.go` 的 `mux.HandleFunc` 注册数）；新增此类声明时在 `docNumberClaims` 登记 |
 | 错误码 / 错误文案 | [`errors.md`](errors.md) |
 | **任何**新功能或 bug 修复 | [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段（Keep a Changelog：Added / Fixed / Changed） |
 | 已实现 / 已修复能力的台账 | [`features.md`](features.md) |
@@ -131,6 +150,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 部署 / 镜像 / compose / 发布流程 | [`deployment.md`](deployment.md) |
 | 安全策略 / 威胁模型 / 加固 | [`threat-model.md`](threat-model.md) 与 [`SECURITY.md`](../.github/SECURITY.md) |
 | 开发流程 / 门禁 / 测试命令 | [`AGENTS.md`](../AGENTS.md)（代理入口）+ 本文件 + [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md) |
+| 文档命名 / 存放位置 / 归档 | 本文件 §4 + [`README.md`](../README.md)「文档」段 + [`archive/index.md`](archive/index.md) |
 
 落地要求：
 
@@ -143,7 +163,8 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 - **位置**：根目录只保留三个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`，将来若加 `SUPPORT.md` 同理）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
 - **命名**：普通文档用小写 kebab-case（如 `threat-model.md`、`todolist.md`）；只有名字被外部约定固定的才用大写（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`）。**仓库内不存在白名单之外的大写文件名**——历史上按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` 已于 2026-09-17 小写化。
-- **目录**：一律小写（`docs/`、`docs/decisions/`、`apps/server/`、`apps/web/`）。目录不存在「约定大写」这一说——大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
+- **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`apps/server/`、`apps/web/`）。目录不存在「约定大写」这一说——大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
+- **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。
 - **禁止大小写冲突**：任何两个路径不得仅大小写不同——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。重命名后自检一次全仓。
 
 ### 4.1 Agent 指令文件（`AGENTS.md`）的加载机制

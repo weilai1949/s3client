@@ -209,13 +209,18 @@ func (c *Client) DeleteEncryption(ctx context.Context, bucket string) error {
 }
 
 // CorsRule CORS 规则（简化为常用字段）。
+//
+// json tag 是**对外契约**的一部分，不可省：该结构体经 handler 直接序列化进
+// GET /bucket/cors 的响应体，前端 `types.ts` 与 `docs/api.md` 都按 camelCase 读取。
+// 没有 tag 时 Go 会输出 PascalCase（AllowedMethods），JavaScript 严格区分大小写，
+// 浏览器读 `x.allowedMethods` 恒为 undefined，CORS 规则会被静默清空。
 type CorsRule struct {
-	ID             string
-	AllowedMethods []string
-	AllowedOrigins []string
-	AllowedHeaders []string
-	ExposeHeaders  []string
-	MaxAgeSeconds  int32
+	ID             string   `json:"id,omitempty"`
+	AllowedMethods []string `json:"allowedMethods"`
+	AllowedOrigins []string `json:"allowedOrigins"`
+	AllowedHeaders []string `json:"allowedHeaders,omitempty"`
+	ExposeHeaders  []string `json:"exposeHeaders,omitempty"`
+	MaxAgeSeconds  int32    `json:"maxAgeSeconds"`
 }
 
 // GetCors 读取桶 CORS 规则。

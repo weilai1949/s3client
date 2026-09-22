@@ -6,7 +6,7 @@
 > - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`assessment.md`](assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-22（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置）
+> 最后更新：2026-09-22（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–U 各轮处置台账
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–X 各轮处置台账
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -108,9 +108,9 @@
 |---|---|
 | 三驱动 | `json`（默认）/ `sqlite` / `encrypted`，统一 `store.Open` 入口 |
 | 共享实现 | `json` 与 `encrypted` 统一为 `Store` + 单一 `storeCodec`（strict 区分），复用 `fileStore`（锁 / CRUD / 回滚 / 快照单点实现） |
-| 落盘加密 | `S3C_STORE_KEY` → Argon2id + AES-256-GCM，格式 `S3C2｜salt｜ciphertext` |
+| 落盘加密 | `S3C_STORE_KEY` → Argon2id + AES-256-GCM，当前写入格式 `S3C3`（Argon2id 参数随文件头保存，故可在不破坏既有库的前提下调参）；兼容读旧 `S3C2` |
 | 原子写 | 临时文件 + 写后 rename；写前清残骸（`O_EXCL`）；0600 权限 |
-| 兼容性 | `json` 驱动同时读明文与历史 S3C2 文件（permissive，写盘换新盐）；`encrypted` 严格 S3C2、复用文件盐 |
+| 兼容性 | `json` 驱动同时读明文与历史 S3C2 文件（permissive，写盘换新盐）；`encrypted` 严格模式只接受加密信封（S3C3 当前 / S3C2 兼容），盐建时随机并随文件复用 |
 | 失败回滚 | `Create`/`Update`/`Delete` 持久化失败回滚内存，避免内存/磁盘漂移 |
 
 ### 10. 服务端安全与鉴权
@@ -118,10 +118,10 @@
 |---|---|
 | 鉴权 | Bearer 多 token（`S3C_TOKEN` 逗号分隔，支持轮换）；凭证常量时间比较，scheme 大小写不敏感（RFC 7235） |
 | 启动校验 | 短 token（< 16 字符）拒绝启动；非回环未设 token 拒绝启动 |
-| CSRF 双防 | CORS 白名单外 Origin 直接 403 + `readJSON` 强制 `application/json` 触发预检 |
+| CSRF 双防 | CORS 白名单外 Origin 直接 403 + `readJSON` 要求 **非空** `Content-Type` 必须为 `application/json`（缺省放行，仍受 JSON 解码器约束）触发预检 |
 | SSRF 双校验 | 创建时校验 + 拨号时二次校验（防 DNS rebinding）；禁重定向；`Proxy=nil` 防环境变量代理绕过 |
 | 响应头 | CSP（默认 `connect-src 'self'`，`S3C_CSP_CONNECT_SRC` 可放宽）+ 安全响应头 |
-| 限速 | 按客户端 IP（优先 `X-Forwarded-For`）限速 |
+| 限速 | 按客户端 IP 限速；`X-Forwarded-For` 仅当直连对端命中 `S3C_TRUSTED_PROXIES` 时采信首段（默认空 = 不信任，防直连伪造绕过） |
 | 端点门控 | `/api/openapi.json`（`withOpenAPIGate`）与 `/api/metrics`（`withMetricsGate`）默认 404 |
 | 输入防护 | 路径遍历 / 控制字符 key 拒绝；user metadata 边界 400（非 500） |
 | 请求 ID | 回显 `X-Request-ID` 仅限 ≤128 可见 ASCII，否则服务端生成，防日志/响应头注入 |
@@ -131,7 +131,7 @@
 ### 11. API 与契约
 | 能力 | 说明 |
 |---|---|
-| REST 端点 | **69** 个 `/api/*` 端点（含 health/metrics/openapi.json） |
+| REST 端点 | **70** 个 `/api/*` 端点（含 health/metrics/openapi.json） |
 | OpenAPI 3.0.3 | `/api/openapi.json` 自动生成，按域登记（accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system） |
 | 契约测试 | `routes.go` ↔ 规范双向一致、operation 完整性、路径参数、`$ref` 可解析、`MarshalJSON` 确定性 |
 | 错误约定 | 统一 JSON 错误体，见 [`errors.md`](errors.md) |
@@ -337,7 +337,7 @@
 | `no-explicit-any:'off'` | ✅ | off → warn → **error**（0 违规） |
 | X-Request-ID 超长回显 | ✅ | 长度 + 可见 ASCII 校验 |
 | Bearer scheme 大小写敏感 | ✅ | `strings.Cut` + `EqualFold` |
-| `metadata.go:40` 变量遮蔽 | ✅ | 循环变量改名 |
+| `metadata.go` 循环变量遮蔽 | ✅ | 循环变量改名 |
 | `.env` 按 CWD 相对加载 | ✅ | `S3C_ENV_FILE` + 可执行文件同目录候选 |
 | UserMessage 字符串匹配 `"exceeds 5GB"` | ✅ | sentinel + `errors.Is` |
 | `validBucketName` 首/尾字符 | ✅ | 拒绝首尾 `.`/`-` 与连续分隔符 |
@@ -707,11 +707,11 @@
 | 2 | P3 `/api/openapi.json` 无缓存 | ✅ | `Registry` 增加 `spec` 缓存：`Operation` / `Param` / `Respond` / `SetInfo` / `AddServer` 全部置空（语义与「每次重算」等价）；`MarshalJSON` 双检加锁只算一次并返回**副本**（调用方改写不污染缓存）。测试：`TestRegistry_MarshalJSONCached`（含副本隔离）、`TestRegistry_MarshalJSONCacheInvalidated`（四类注册动作逐一验证）、`TestRegistry_MarshalJSONConcurrent`。既有 `TestOpenAPI_ContractMarshalDeterministic`（8×8 并发字节一致）继续通过 |
 | 3 | D4 `failKeys ≤ 200` 承诺不成立 | ✅ | 根因：承诺写在 `features.md` / `api.md`，但服务端只有异步 `delete-prefix` 在 handler 内裁剪；`copy-objects`（同步/异步）、`migrate`（同步/异步）、`migrate/sync` 全部原样回传 → 10k 全失败约 10 MB 并落盘 `jobs.json`。现上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，**所有**回传 `failedKeys` 的端点统一裁剪；异步路径经新增 `jobResultFromBatch` 在 `Job.Finish`（落盘）**之前**裁剪；`failed` 计数不受裁剪影响。测试：`TestOlCopyManyFailKeysAll`（201 失败 → 列表 200、计数 201）、`TestOlMigrateSyncFailKeysCapped`、`TestOlMigrateAsyncFailKeysCappedBeforePersist`（**直接读 `jobs.json`** 断言裁剪发生在持久化前）。同时修正 `service/batch.go` 与 `copy.go` 中两处互相矛盾的注释 |
 | 4 | D5 `git tag v1.0.0` 不存在 | ✅ | `scripts/release-version.sh v1.0.0` 同步 15 处版本串（Makefile / Dockerfile / compose×2 / web+desktop `package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`（只改本包）/ `main.go` / README / docs），并打 `v1.0.0` tag。历史性提及（CHANGELOG 已发布区、roadmap 里程碑行、本审查报告）按「不追溯篡改」纪律保留 |
-| 5 | D10 CHANGELOG 段内过期计数 | ✅ | `[Unreleased]` 内两处「当时实测值」（覆盖率 3883/2769/1059/3339、前端 63 文件 / 983 测试）已失真。按本文件「不追溯篡改已发布区」的纪律**保留原值并加注**当时时点与新值（4074/2844/1095/3503、66 文件 / 1039），不改写历史数字 |
+| 5 | D10 CHANGELOG 段内过期计数 | ✅ | `[Unreleased]` 内两处「当时实测值」（覆盖率 3883/2769/1059/3339、前端 63 文件 / 983 测试）已失真。按本文件「不追溯篡改已发布区」的纪律**保留原值并加注**当时时点与新值（4074/2844/1095/3503、66 文件 / 1039——后者是 §W 追加用例前的值，§W 后为 1042），不改写历史数字 |
 | 6 | R7 本地 `make` ≠ CI | ✅ | 新增 `lint`（golangci-lint）/ `govulncheck` / `check`（聚合静态检查 + 双侧覆盖率）目标；全部 `pnpm install` → `--frozen-lockfile`；`test-all: test-cover web-test-cover`（此前无覆盖率门禁）；`.PHONY` 补全全部已定义目标。门禁 `TestMakefileMirrorsCIGates`（含「所有已定义目标必须在 .PHONY」的机械检查；**变异验证**：还原裸 `pnpm install` → 红灯） |
 | 7 | R9 GitHub 不传 `VERSION` build-arg | ✅ | 构建与推送两处都显式注入 `VERSION=ci`（此前回落到 Dockerfile 过期字面量，而 GitLab 传 `ci`、Makefile 传真实版本——一个 Dockerfile 三种行为）。门禁 `TestGitHubWorkflowInjectsVersionBuildArg`（要求 ≥2 处，保证扫描与推送版本一致；**变异验证**：改掉一处 → 红灯） |
 | 8 | R10 无 workflow 推送镜像 | ✅ | 新增 `publish` job：`needs: docker`（Trivy 通过才推）、`if: github.event_name != 'pull_request'`、`permissions: packages: write`、`docker/login-action` 登录 GHCR、按 commit SHA + 分支双标签推送。因 buildx `push` 与 `load` 互斥且扫描需 `load`，拆为独立 job（同时避免推出未扫描镜像）。门禁 `TestGitHubWorkflowPushesImage` |
-| 9 | 测试质量：21 个用例名硬编码过期行号 | ✅ | 如 `api.test.ts` 写 `line 125 else`（实际 `listServers` 在 `storage.ts:301`）、`bucketPolicy.test.ts` 写 `line 111`（实际 `:108`）——测试在描述一个不存在的版本。已从全部用例名移除行号（改为描述行为，行号留在注释），新增门禁：`deadcode_gate.test.ts` 的「测试名不得硬编码源码行号」（含扫描下限自检防空跑） |
+| 9 | 测试质量：21 个用例名硬编码过期行号 | ✅ | 如 `api.test.ts` 写 `line 125 else`（当时 `listServers` 在 `storage.ts:301`）、`bucketPolicy.test.ts` 写 `line 111`（当时 `:108`）——测试在描述一个不存在的版本。已从全部用例名移除行号（改为描述行为，行号留在注释），新增门禁：`deadcode_gate.test.ts` 的「测试名不得硬编码源码行号」（含扫描下限自检防空跑） |
 | 10 | 测试质量：i18n 门禁两处盲区 | ✅ | ① `usedKeyTexts` 对整份源码做正则 → **注释里的键名也算「已使用」**；现先按字符扫描剥离注释（正确跳过字符串字面量，避免把 `'https://x'` 的 `//` 当注释）再匹配。② 双语只比**键数量** → `zh-CN` 缺 `a` 而 `en-US` 多 `b` 时数量相等仍绿；现按语言解析键集合做**集合级双向比对**，并新增「每个键两种语言取值都非空」。**变异验证**：改名一个 en-US 键（数量不变）→ 集合门禁红灯；删真实引用只留注释 → 死键门禁红灯 |
 | 11 | 文档失真小项 | ✅ | `openapi_contract_test.go` 的 `apiRouteCount` 注释算错（写「69 = 68 + 1」，常量与实际均为 70 → 改「70 = 69 + 1」）；`docs/todolist.md` 补记 #40 / #42 / #43 / #44 为**从未启用的保留空号**（避免被误读为漏登记），#15 补入已完成编号 |
 
@@ -723,6 +723,10 @@ functions 1095 / lines 3503）。
 > **仍未纳入机械门禁的残留**（须人工跟踪，已写入各门禁文件头）：端点内联 / 运行时动态键的响应体、
 > query 参数的 `Has()` / `Values()` 读取口径、md 表格中的叙述性数字。
 > （**真实 Go 后端 + 真实前端产物**的浏览器联调冒烟已于 §V 闭环，不再属于本残留清单。）
+>
+> **2026-09-22 收尾（§W）**：上述三项残留**全部闭环**——端点级响应门禁升级为全量覆盖（15→61 个
+> 成功响应）、query 门禁扩到四种读取口径、新增 md 叙述性数字门禁与 `_test.go` 导出符号死代码门禁。
+> 现仅剩 `/api/openapi.json` 一个自由体响应（响应体即 OpenAPI 规范本身，非 `writeJSON` 写出）。
 
 ---
 
@@ -754,6 +758,65 @@ functions 1095 / lines 3503）。
 
 ---
 
+### W. 2026-09-22 审查 §7.4 门禁盲区收尾（响应门禁全量 + query 读取口径 + 叙述性数字 + 导出测试符号）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §4.3 / §7.4 / §9.1 列出的**最后四类残留**
+> ——即门禁矩阵里标「部分」与「否」的行。原则同 §R / §S / §T / §U：**补门禁而不只是补缺陷**；
+> 本轮新增/扩展的门禁全部做了变异验证，并在升级过程中**抓到 4 处真实漂移**（见条目 5–8）。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | 端点级响应门禁：自由体 `openapi.Obj()` 全量收敛 | ✅ | 把 accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system 十个注册表的自由体响应全部升级为 `openapi.BuildObj` 具体 `properties`（嵌套形状抽为共享构造器：`corsRuleSchema` / `tagRowSchema` / `lifecycleRuleSchema` / `versionEntrySchema` / `deleteMarkerSchema` / `jobProgressSchema` / `jobResultSchema` / `jobRecordSchema`）。端点级门禁覆盖面 **15 → 61** 个成功响应，自由体从 ~45 个降到 **1 个**（`/api/openapi.json`：响应体即规范本身，由 `Registry.HTTPHandler()` 直接写，非 `writeJSON`，机械抽取无意义）。自检从 `checked ≥ 15` 收紧为 `checked ≥ 60` 且 `untyped ≤ 1`——**回退成自由体会直接红灯** |
+| 2 | query 参数门禁：读取口径扩展 | ✅ | 抽取器从只认 `Get()` 扩到四种字面量口径：`Get` / `Has` / `Values` / `Query()["x"]`，并覆盖 `q := r.URL.Query()` 绑定后的同名形式。新增**非字面量键检测**（`q.Get(name)` / `q[k]`）——命中即红灯要求改字面量，杜绝「动态键读取静默逃逸」。新增口径测试 `TestQueryReadExtractorCoversAllForms`（8 种形态逐一断言，含「无读取不得抽出参数」的反向断言） |
+| 3 | md 叙述性数字门禁（矩阵唯一标「否」的行） | ✅ | 新增 `apps/server/doc_number_gate_test.go`：以 `routes.go` 的 `mux.HandleFunc` 注册数为**唯一真值**，校验 README / `api.md` / `roadmap.md` / `features.md` 里「N 个 `/api/*` 端点」的 N。要求每条声明**至少命中一次**（文案漂移导致正则失配即红灯，防门禁静默失效）。变异验证：把 `features.md` 改回 69 → 红灯 |
+| 4 | `_test.go` 导出符号死代码门禁 | ✅ | `golangci-lint unused` 对**导出**符号因「可能被包外引用」而豁免，但 `_test.go` 不参与库构建、永远无包外引用——实测给 `_test.go` 加无人调用的导出函数/类型，`golangci-lint run` 报 **0 issues**。新增 `TestNoUnusedExportedTestSymbols`：扫描全部 `_test.go` 的导出包级符号，无引用即红灯；`export_test.go`（约定的测试接缝）整体豁免。检测逻辑抽为纯函数 `findUnusedExportedTestSymbols`，由 `TestFindUnusedExportedTestSymbols` 用**合成源码**做口径测试（死符号必报、被引用/非导出/Test 入口/接缝文件不得误伤）——不依赖「仓库里正好有个死符号」来证明门禁有效 |
+| 5 | **真实漂移（升级中抓到）**：`s3wrap.CorsRule` 缺 `json` tag | ✅ | 该结构体经 handler **直接序列化**进 `GET /bucket/cors` 响应，却无 tag → Go 输出 PascalCase（`AllowedMethods` / `MaxAgeSeconds`），而前端 `types.ts` 与 `docs/api.md` 都是 camelCase。Go 的 `json.Unmarshal` 大小写不敏感，**服务端既有测试一直全绿**；但 JavaScript 严格区分大小写，浏览器读 `x.allowedMethods` 恒为 `undefined` → CORS 规则的方法/来源被静默归一化成空数组。已补全 6 个 camelCase tag；新增 `TestCorsRuleJSONFieldNames`（双向：必须有 camelCase、不得再有 PascalCase）与 `TestCorsRuleJSONRoundTrip`（前端发来的 camelCase 能解析）。**变异验证**：去掉 tag → 两条红灯并列出实际 PascalCase 键 |
+| 6 | **真实漂移**：`POST /api/migrate/async` 误声明 200 | ✅ | handler 写 `StatusAccepted`（202），`docs/api.md` 也写 `202`，只有注册表写 200。已改 202 并由端点级门禁钉住 |
+| 7 | **真实漂移**：`docs/api.md` 称 openapi.json「不进鉴权层」 | ✅ | 与实现相反：`withAuth` 只豁免 `health` / `metrics`，openapi.json 配了 token 时无凭证返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 否则 404（既有 `TestOpenAPI_GateAndAuth` 早已钉住该行为，仅文档失真）。已改为「经过鉴权层」并写明两个前置条件 |
+| 8 | **真实漂移**：`docs/features.md` 称 69 个端点 | ✅ | 实际为 70（`routes.go` 70 条 `mux.HandleFunc`，README / `api.md` / `roadmap.md` 与 `apiRouteCount` 常量均为 70）。已改为 70，并纳入条目 3 的数字门禁 |
+| 9 | 文档请求体缺失：`PUT /api/accounts/{id}` | ✅ | 该端点请求体在 `docs/api.md` 只有散文描述（「字段同创建」），导致 `TestAPIDocDocumentsRequestBodyFields` 无法机械比对字段集而红灯。已补显式 JSON 示例（并注明 `secretKey` 可省略、必填为 `name`/`endpoint`/`accessKey`），与注册表的 required 声明一致 |
+
+**门禁实跑**：后端 `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** / `go build ./...` OK /
+`go test ./...` 全绿（含新增门禁）；四条新门禁与两处缺陷修复均经**变异验证**（改回旧写法必红灯）。
+
+> **本节后的残留**（已写入各门禁文件头）：仅 `/api/openapi.json` 一个自由体响应；嵌套对象/数组的
+> **深层字段**只比对到顶层键（元素形状由注册表共享构造器统一维护）；md 中依赖运行环境或时刻的
+> 叙述性数字（用例数 / 覆盖率 / 行数）按「历史记录」保留，不做静态门禁。
+
+---
+
+### X. 2026-09-22 审查 §4.3「维持」项复核收尾（门禁自身口径 + path 参数门禁）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §4.3 表格里最后五行标「维持」的项。
+> 复核后发现**每一项都藏着真实缺口**（不是「已足够好」，而是「没人验过它能不能被绕过」）——
+> 全部经**实测确认缺口存在**，再改为 AST 判定或新增门禁，并逐条做变异验证（改回旧写法必红灯）。
+
+| # | 门禁 | 实测缺口 | 处置与验证 |
+|---|------|----------|------------|
+| 1 | `openapi_inputsource_test.go` | 用裸字符串匹配 `readJSON(` 判断「handler 是否解码请求体」→ **注释与字符串字面量都能骗过它**。实测 `// 这里提到 readJSON(` 与 `s := "readJSON("` 均被判定为「解码了」 | 改为 **AST 判定**（`parseBodyCalls` 解析语法树，只认真实调用表达式）。新增 `TestDecodesBodyIgnoresCommentsAndStrings` 用合成源码钉住口径（注释/字面量不算、真调用与委托算）。**变异验证**：删掉 `createAccount` 的真实 `readJSON` 调用、只在注释留 `readJSON(` → 旧实现假绿、新实现红灯 |
+| 2 | `api_doc_test.go` `TestAPIDocMatchesRoutes` | 解析正则只认行首，缩进行在两个方向上都被漏。实测「文档里有**陈旧**路由、且写成缩进」时双向 diff **静默通过**（fail-open）——陈旧条目会永久留在文档里 | 新增 `TestAPIDocRoutesAreFlushLeft`：路由声明行必须顶格，缩进即红灯（含扫描下限自检）。**变异验证**：插入缩进的 `DELETE /api/nonexistent-stale` → 新门禁红灯，旧双向 diff 无反应 |
+| 3 | `deadcode_gate_test.go` | 旧实现是整行正则 `^_ = ident` / `^var _ = expr`。实测 `x := 1; _ = x`、`if true { _ = x }`、`_ = x.Field`、`_ = s[0]` **全部逃逸**（fail-open） | 改为 **AST 判定**（`findSilencingDeadCode`）：按语句而非按行，判据是「左侧是否全为 `_`」。`_, ok := m[k]`（comma-ok 惯用法）与 `_, _ = w.Write(b)`（显式丢弃返回值）放行；`var _ Iface = (*T)(nil)`（编译期接口断言）放行。新增 `TestFindSilencingDeadCodeCoverage` 断言「AST 命中数严格大于旧正则」（实测 9 vs 5），防止退回旧口径。**变异验证**：四种逃逸形状现全部被拦 |
+| 4 | `golangci-lint` 配置 | **未启用 `nolintlint`**：在函数上方加一行无理由的 `//nolint:all`，`golangci-lint run` 仍报 **0 issues**——`//nolint` 是 golangci 自身的指令，默认不受任何 linter 审查；而 `AGENTS.md` / `development.md` 明令禁止用它消音 | `.golangci.yml` 启用 `nolintlint`（`require-explanation: true` + `require-specific: true` + `allow-unused: false`）。既有唯一一处 `//nolint:staticcheck // SA1019: ...` 已合规。**变异验证**：植入 `//nolint:all` → 红灯（"should mention specific linter"） |
+| 5 | path 参数（新发现的缺口） | `TestOpenAPI_ContractPathParamsDeclared` 只校验注册表**内部**自洽（模板 `{x}` ⇔ 声明 `in:path`），**没有任何一条**比对 handler 是否真的 `r.PathValue("x")` 读取它——注册表与 handler 同时改名才一致，只改一边无人拦 | 新增 `openapi_path_params_test.go`：注册表 `in:path` 参数名集 ⇔ handler 沿调用闭包 `PathValue` 读取集，**双向**比对（70 个端点 / 60 个带 path 参数），含非字面量键检测与口径测试。**变异验证**：把 `getAccount` 的 `PathValue("id")` 改成 `PathValue("accountId")` → 同时报「漏声明」与「幻影参数」 |
+
+**门禁实跑**：后端 `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues**（含新启用的 `nolintlint`）/
+`go build ./...` OK / `go test ./...` 全绿（8/8 包，**每包 100.0% 覆盖且零未覆盖块**）。
+
+> **本节后的残留**：§4.3 表格已无「维持」项（每行都是 ✅ 且带回归门禁）。仅剩的**结构性**无法
+> 机械拦截项同 §W——`/api/openapi.json` 自由体响应、嵌套结构深层字段、依赖运行环境/时刻的
+> 叙述性数字；均已在对应门禁文件头写明断言范围。
+>
+> **2026-09-22 追加复核（门禁自身再检查）**：发现并关闭三处新缺口——① `openapi_query_params_test.go`
+> 的动态键检测只认 `r.URL.Query().Get(name)`，绑定变量后的 `q := r.URL.Query(); q.Get(name)` / `q[k]`
+> 会同时逃过抽取与动态检测（fail-open，已补 `hasDynamicQueryRead` 与合成用例）；
+> ② `openapi_path_params_test.go` 的动态键检测还是裸正则（注释/字符串会误报），已改 AST
+> （`hasDynamicPathValueRead`）；③ `openapi_request_fields_test.go` 的 `readJSON` 定位仍是逐行正则
+> （注释/字符串里的调用会被当成解码点），已改 AST（`findReadJSONTarget`）。同时把
+> `delete-prefix/async`、`copy-prefix/async` 的请求体从 `openapi.Obj()` 自由体升级为具体
+> `properties`，使请求体字段门禁覆盖这两个端点。
+
+---
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
@@ -768,17 +831,21 @@ functions 1095 / lines 3503）。
 > 2026-09-20 审查 §9.3 P2（契约 #26–#28 + 安全 / 供应链 #29–#34）处置后复测见 §T 末段：
 > 后端 8/8 包 **100.0%**（`awk '$NF==0'` 零块）、`golangci-lint` **0 issues**、前端 66 文件 / **1039** 测试全绿、
 > `docker compose config` 在缺 `S3C_STORE_KEY` 时拒绝启动。
+>
+> 2026-09-22 §37 真实联调收口后复测（roadmap §四 门禁基线同步为此轮实跑值）：后端 8/8 包 **100.0%**、
+> `golangci-lint` **0 issues**、前端 66 文件 / **1042** 测试全绿（覆盖率 4074 / 2844 / 1095 / 3503 四指标 100%）、
+> `pnpm audit` **0 漏洞**、`make e2e-real` **3 passed**。
 
 | 门禁 | 结果 |
 |---|---|
 | `go vet ./...` | 干净 |
 | `go test -race -count=1 ./...` | 8/8 包通过 |
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
-| `golangci-lint run ./...` | **0 issues**（`unused` / `staticcheck` 零告警，`run.tests: true` 含测试文件） |
+| `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 66 文件 / **1039** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例） |
+| 前端 `pnpm test` | 66 文件 / **1042** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3） |
 | 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`） |
-| `vue-tsc --noEmit` / `vite build` | 干净 / OK（~355KB，gzip ~109KB） |
+| `vue-tsc --noEmit` / `vite build` | 干净 / OK（360.52 KB，gzip 110.85 kB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |

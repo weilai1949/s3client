@@ -12,8 +12,15 @@ package handler
 //
 // 刻意不做的事：不校验字段名（由 TestAPIDocDocumentsRequestBodyFields 与契约测试负责）、
 // 不校验类型与 required 语义。
+//
+// 判定实现走 **AST**（见 decodesBody / parseBodyCalls）：早先用裸字符串匹配 `readJSON(`，
+// 结果注释与字符串字面量都能骗过门禁——删掉真实解码、只在注释里留一句 `readJSON(` 即假绿。
+// 口径由 TestDecodesBodyIgnoresCommentsAndStrings 用合成源码钉住。
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -130,7 +137,17 @@ func parseRegistryBodyDecl(sources map[string]string) map[string]bool {
 
 // decodesBody 沿 handler 方法调用闭包判断某方法是否最终会解码请求体。
 // 记忆化 + 置 false 防环；结果对每个方法只算一次。
+//
+// 判定走 **AST** 而非裸字符串匹配：裸匹配会把注释（`// 这里提到 readJSON(`）与字符串
+// 字面量（`s := "readJSON("`）也算作「真的解码了请求体」——删掉真实解码、只在注释里留一句
+// 就能让门禁假绿。实测该缺口存在，故改为解析语法树，只认真实的调用表达式。
 func decodesBody(methods map[string]string) map[string]bool {
+	// 先把每个方法体解析成 AST，并抽出它调用的其它 handler 方法名。
+	parsed := make(map[string]bodyCalls, len(methods))
+	for name, body := range methods {
+		parsed[name] = parseBodyCalls(name, body)
+	}
+
 	memo := map[string]bool{}
 	var visit func(name string) bool
 	visit = func(name string) bool {
@@ -138,14 +155,14 @@ func decodesBody(methods map[string]string) map[string]bool {
 			return v
 		}
 		memo[name] = false // 防调用环
-		body, ok := methods[name]
+		bc, ok := parsed[name]
 		if !ok {
 			return false
 		}
-		found := strings.Contains(body, "readJSON(") || strings.Contains(body, "json.NewDecoder")
+		found := bc.decodes
 		if !found {
-			for _, c := range callRe.FindAllStringSubmatch(body, -1) {
-				if visit(c[1]) {
+			for _, callee := range bc.calls {
+				if visit(callee) {
 					found = true
 					break
 				}
@@ -158,6 +175,82 @@ func decodesBody(methods map[string]string) map[string]bool {
 		visit(name)
 	}
 	return memo
+}
+
+// bodyCalls 是一个 handler 方法体的 AST 抽取结果。
+type bodyCalls struct {
+	decodes bool     // 是否真实调用了 readJSON / json.NewDecoder（AST 判定，不受注释影响）
+	calls   []string // 调用的其它 handler 方法名（用于委托闭包）
+}
+
+// parseBodyCalls 把方法体包成一个函数声明后解析，抽取真实调用。
+// go/parser 只做语法解析、不做类型检查，故无需为 `json.NewDecoder` 等选择器补 import。
+func parseBodyCalls(name, body string) bodyCalls {
+	out := bodyCalls{}
+	src := "package p\n\n" + body
+	f, err := parser.ParseFile(token.NewFileSet(), name+".go", src, 0)
+	if err != nil {
+		return out
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		// 只认 <recv>.readJSON(...) / <recv>.NewDecoder(...) 这类真实方法调用。
+		switch sel.Sel.Name {
+		case "readJSON", "NewDecoder":
+			out.decodes = true
+		}
+		// 收集 h.<method>(...) 形式的委托调用（用于沿闭包查找解码点）。
+		if x, ok := sel.X.(*ast.Ident); ok && x.Name == "h" {
+			out.calls = append(out.calls, sel.Sel.Name)
+		}
+		return true
+	})
+	return out
+}
+
+// TestDecodesBodyIgnoresCommentsAndStrings 是 decodesBody 的口径测试：
+// 只有**真实的调用表达式**才算「解码请求体」；注释与字符串字面量里的 `readJSON(` 不算。
+//
+// 没有它，判定实现退回裸字符串匹配时门禁会静默假绿（删掉真解码、只在注释留一句即可通过）。
+func TestDecodesBodyIgnoresCommentsAndStrings(t *testing.T) {
+	t.Parallel()
+	methods := map[string]string{
+		// 只有注释提到 readJSON( —— 不得算作解码。
+		"onlyComment": "func (h *Handler) onlyComment(w http.ResponseWriter, r *http.Request) {\n" +
+			"\t// 这里提到 readJSON( 但并没有真的解码\n\t_ = 1\n}\n",
+		// 只有字符串字面量 —— 不得算作解码。
+		"stringLit": "func (h *Handler) stringLit(w http.ResponseWriter, r *http.Request) {\n" +
+			"\ts := \"readJSON(\"\n\t_ = s\n}\n",
+		// 真实调用 —— 必须算作解码。
+		"realDecode": "func (h *Handler) realDecode(w http.ResponseWriter, r *http.Request) {\n" +
+			"\tvar x struct{}\n\tif err := h.readJSON(r, &x); err != nil {\n\t\treturn\n\t}\n}\n",
+		// 委托：自身不解码，但调用了解码的方法 —— 必须算作解码。
+		"delegates": "func (h *Handler) delegates(w http.ResponseWriter, r *http.Request) {\n" +
+			"\th.realDecode(w, r)\n}\n",
+		// 什么都不做。
+		"nothing": "func (h *Handler) nothing(w http.ResponseWriter, r *http.Request) {\n}\n",
+	}
+	got := decodesBody(methods)
+
+	want := map[string]bool{
+		"onlyComment": false,
+		"stringLit":   false,
+		"realDecode":  true,
+		"delegates":   true,
+		"nothing":     false,
+	}
+	for name, w := range want {
+		if got[name] != w {
+			t.Errorf("decodesBody(%s) = %v, want %v", name, got[name], w)
+		}
+	}
 }
 
 // TestOpenAPIRequestDeclarationMatchesHandlerInput 双向校验：

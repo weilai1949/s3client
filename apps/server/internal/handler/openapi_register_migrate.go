@@ -23,13 +23,18 @@ func registerMigrate(r *openapi.Registry) {
 
 	r.Operation("POST", "/api/migrate", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "同步迁移（流式）", OperationID: "migrate",
-		Request:   &migrateReq,
-		Responses: map[string]openapi.Response{"200": {Description: "含 copied/failed/failedKeys/lastError", JSON: openapi.Obj()}},
+		Request: &migrateReq,
+		Responses: map[string]openapi.Response{"200": {Description: "含 migrated/failed/failedKeys/lastError", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"migrated": openapi.Int(), "failed": openapi.Int(),
+			"lastError": openapi.Str(), "failedKeys": openapi.Arr(openapi.Str()),
+		})}},
 	})
 	r.Operation("POST", "/api/migrate/async", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "异步迁移（SSE 进度）", OperationID: "migrateAsync",
-		Request:   &migrateReq,
-		Responses: map[string]openapi.Response{"200": {Description: "含 jobId", JSON: openapi.Obj()}},
+		Request: &migrateReq,
+		Responses: map[string]openapi.Response{"202": {Description: "含 jobId/total", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"jobId": openapi.Str(), "total": openapi.Int(),
+		})}},
 	})
 	r.Operation("POST", "/api/migrate/sync", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）", OperationID: "migrateSync",
@@ -46,7 +51,10 @@ func registerMigrate(r *openapi.Registry) {
 			})},
 		},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError", JSON: openapi.Obj()},
+			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"scanned": openapi.Int(), "skipped": openapi.Int(), "copied": openapi.Int(), "failed": openapi.Int(),
+				"lastError": openapi.Str(), "failedKeys": openapi.Arr(openapi.Str()),
+			})},
 			"400": {Description: "mode 非法 / 账号缺配置", JSON: refSchema("Error")},
 			"404": {Description: "账号不存在", JSON: refSchema("Error")},
 		},
@@ -54,18 +62,24 @@ func registerMigrate(r *openapi.Registry) {
 	r.Operation("GET", "/api/migrate/jobs", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "异步任务清单（含重启后中断的任务）", OperationID: "migrateJobs",
 		Responses: map[string]openapi.Response{
-			"200": {Description: "含 jobs[]：id/created/total/status/progress/result；status 为 running|done|cancelled|interrupted", JSON: openapi.Obj()},
+			"200": {Description: "含 jobs[]：id/created/total/status/progress/result；status 为 running|done|cancelled|interrupted", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+				"jobs": openapi.Arr(jobRecordSchema()),
+			})},
 		},
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "查询迁移任务状态", OperationID: "migrateJobStatus",
-		Params:    []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"jobId": openapi.Str(), "done": openapi.Bool(), "progress": jobProgressSchema(), "result": jobResultSchema(),
+		})}},
 	})
 	r.Operation("POST", "/api/migrate/jobs/{id}/cancel", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "取消迁移任务", OperationID: "migrateJobCancel",
-		Params:    []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
-		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.Obj()}},
+		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
+		Responses: map[string]openapi.Response{"200": {Description: "已取消含 cancelled；已完成含 done", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"jobId": openapi.Str(), "cancelled": openapi.Bool(), "done": openapi.Bool(),
+		})}},
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}/events", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "迁移任务 SSE 进度事件", OperationID: "migrateJobEvents",

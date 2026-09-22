@@ -9,6 +9,9 @@
 > （证据见 [`features.md`](features.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
 > （证据见 [`features.md`](features.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
 > `DELETE /version` 三处 OpenAPI 注册表失真。
+> 此后的处置进展（含后续审查发现的闭环）逐节归档于 [`features.md`](features.md) §N 起与
+> [`CHANGELOG.md`](../CHANGELOG.md)。本报告正文中的 file:line、版本号与测试数字均为**审计时点值**，
+> 代码演进后请以符号检索核对（快照纪律同 [`docs/archive/`](archive/index.md) 约定）。
 
 ---
 

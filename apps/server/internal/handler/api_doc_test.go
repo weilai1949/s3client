@@ -19,12 +19,21 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // apiDocRouteRe 匹配 api.md 中「行首 METHOD /api...」的路由声明行。
 var apiDocRouteRe = regexp.MustCompile(`^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS) (/api\S*)`)
+
+// apiDocIndentedRouteRe 匹配「有缩进、但内容像路由声明」的行——这类行会被 apiDocRouteRe 漏掉。
+//
+// 为什么单独检测：`TestAPIDocMatchesRoutes` 是双向 diff，缩进行在**两个方向**上都漏——
+// 「代码有、文档缩进写」会报 missing（fail-safe，看得见），但「文档有陈旧条目、且写成缩进」
+// 两个方向都不匹配、**静默通过**（fail-open）。实测确认该 fail-open 存在，故显式拦缩进写法，
+// 要求路由声明必须顶格，把排版约定变成机械约束。
+var apiDocIndentedRouteRe = regexp.MustCompile(`^[ \t]+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[ \t]+/api\S*`)
 
 // apiDocRoutes 解析 docs/api.md，返回 path -> method 集合。
 func apiDocRoutes(t *testing.T) map[string]map[string]bool {
@@ -61,6 +70,46 @@ func apiDocRoutes(t *testing.T) map[string]map[string]bool {
 		t.Fatal("docs/api.md: 未解析到任何「METHOD /api」路由行")
 	}
 	return out
+}
+
+// TestAPIDocRoutesAreFlushLeft 把 api.md 的排版约定变成机械约束：
+// **路由声明行必须顶格**，不得缩进（含表格单元格内的写法）。
+//
+// 动机：`apiDocRouteRe` 只认行首，缩进行在两个方向上都被漏。实测「文档里有陈旧路由、但写成
+// 缩进」时 `TestAPIDocMatchesRoutes` **静默通过**（fail-open）——陈旧条目就此永久留在文档里。
+// 与其放宽解析（会误伤正文里偶然提到的方法名+路径），不如要求顶格并在违规时红灯。
+func TestAPIDocRoutesAreFlushLeft(t *testing.T) {
+	t.Parallel()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller 失败，无法定位 docs/api.md")
+	}
+	docPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", "docs", "api.md")
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", docPath, err)
+	}
+
+	flushLeft := 0
+	var indented []string
+	for i, line := range strings.Split(string(data), "\n") {
+		if apiDocRouteRe.MatchString(line) {
+			flushLeft++
+			continue
+		}
+		if apiDocIndentedRouteRe.MatchString(line) {
+			indented = append(indented, strconv.Itoa(i+1)+": "+strings.TrimSpace(line))
+		}
+	}
+
+	// 自检：解析口径写坏时不要静默变绿。
+	if flushLeft < 60 {
+		t.Fatalf("只解析到 %d 条顶格路由行，疑似解析口径失效", flushLeft)
+	}
+	for _, s := range indented {
+		t.Errorf("docs/api.md 第 %s 行是缩进的路由声明；路由行必须顶格（解析器只认行首，"+
+			"缩进行会被双向 diff 同时漏掉，陈旧条目将静默留存）", s)
+	}
 }
 
 // TestAPIDocMatchesRoutes 双向校验 docs/api.md ↔ routes.go：

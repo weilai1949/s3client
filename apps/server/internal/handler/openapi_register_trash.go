@@ -16,7 +16,7 @@ func registerTrash(r *openapi.Registry) {
 			refParam("MaxKeys"),
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
-			"deleteMarkers":       openapi.Arr(openapi.Obj()),
+			"deleteMarkers":       openapi.Arr(deleteMarkerSchema()),
 			"isTruncated":         openapi.Bool(),
 			"nextKeyMarker":       openapi.Str(),
 			"nextVersionIdMarker": openapi.Str(),

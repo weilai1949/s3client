@@ -38,8 +38,6 @@ import (
 
 // 本文件专用的解析正则。
 var (
-	// readJSONTargetRe 匹配 `h.readJSON(r, &req)`，捕获目标变量名。
-	readJSONTargetRe = regexp.MustCompile(`readJSON\(r,\s*&(\w+)\)`)
 	// namedVarRe 匹配 `var req someType`（命名类型声明）。
 	namedVarRe = regexp.MustCompile(`^var\s+(\w+)\s+([\w.]+)\s*$`)
 	// inlineVarRe 匹配 `var req struct {`（内联匿名 struct 声明）。
@@ -117,40 +115,77 @@ func parseDecodeSites(t *testing.T, dir string) map[string]decodeSite {
 // findDecodeSite 在单个方法体内定位 `readJSON(r, &x)` 并解析 x 的声明。
 // x 可能是：方法体内的 `var x T` / `var x struct {`，或函数签名里的命名返回值
 // （如 `parseMigrateRequest(...) (req migrateRequest, ...)`）。
+//
+// readJSON 调用本身走 AST（findReadJSONTarget），避免注释/字符串里的调用被当成解码点。
 func findDecodeSite(body string) (decodeSite, bool) {
+	target, callLine, ok := findReadJSONTarget(body)
+	if !ok {
+		return decodeSite{}, false
+	}
 	lines := strings.Split(body, "\n")
-	for i, ln := range lines {
-		m := readJSONTargetRe.FindStringSubmatch(ln)
-		if m == nil {
-			continue
+	site := decodeSite{target: target}
+	// 向上找声明：`var x T`（命名类型）或 `var x struct {`（内联）。
+	for j := callLine - 2; j >= 0; j-- {
+		trimmed := strings.TrimSpace(lines[j])
+		if strings.HasPrefix(trimmed, "func ") {
+			break
 		}
-		target := m[1]
-		site := decodeSite{target: target}
-		// 向上找声明：`var x T`（命名类型）或 `var x struct {`（内联）。
-		for j := i - 1; j >= 0; j-- {
-			trimmed := strings.TrimSpace(lines[j])
-			if strings.HasPrefix(trimmed, "func ") {
-				break
-			}
-			if mm := namedVarRe.FindStringSubmatch(trimmed); mm != nil && mm[1] == target {
-				site.typeName = mm[2]
-				return site, true
-			}
-			if mm := inlineVarRe.FindStringSubmatch(trimmed); mm != nil && mm[1] == target {
-				site.inline = true
-				site.fieldLine = j
-				return site, true
-			}
-		}
-		// 命名返回值/参数：在函数签名（首个 `{` 之前）里查找 `x Type`。
-		sig := signatureText(lines)
-		if mm := regexp.MustCompile(`\b` + regexp.QuoteMeta(target) + `\s+([\w.]+)`).FindStringSubmatch(sig); mm != nil {
-			site.typeName = mm[1]
+		if mm := namedVarRe.FindStringSubmatch(trimmed); mm != nil && mm[1] == target {
+			site.typeName = mm[2]
 			return site, true
 		}
+		if mm := inlineVarRe.FindStringSubmatch(trimmed); mm != nil && mm[1] == target {
+			site.inline = true
+			site.fieldLine = j
+			return site, true
+		}
+	}
+	// 命名返回值/参数：在函数签名（首个 `{` 之前）里查找 `x Type`。
+	sig := signatureText(lines)
+	if mm := regexp.MustCompile(`\b` + regexp.QuoteMeta(target) + `\s+([\w.]+)`).FindStringSubmatch(sig); mm != nil {
+		site.typeName = mm[1]
 		return site, true
 	}
-	return decodeSite{}, false
+	return site, true
+}
+
+// findReadJSONTarget 用 AST 定位方法体内 `h.readJSON(r, &x)` 的真实调用，
+// 返回目标变量名与该调用在 body 中的 1-based 行号。注释/字符串字面量不算。
+func findReadJSONTarget(body string) (string, int, bool) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "probe.go", "package p\n\n"+body, 0)
+	if err != nil {
+		return "", 0, false
+	}
+	target, line := "", 0
+	ast.Inspect(f, func(n ast.Node) bool {
+		if target != "" {
+			return false
+		}
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "readJSON" || len(call.Args) < 2 {
+			return true
+		}
+		unary, ok := call.Args[1].(*ast.UnaryExpr)
+		if !ok || unary.Op != token.AND {
+			return true
+		}
+		id, ok := unary.X.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		target = id.Name
+		line = fset.Position(call.Pos()).Line - 2 // body 前插了 `package p` + 空行。
+		return false
+	})
+	if target == "" || line < 1 {
+		return "", 0, false
+	}
+	return target, line, true
 }
 
 // signatureText 返回方法签名的文本（从 `func` 行到首个含 `{` 的行之前）。
@@ -270,6 +305,28 @@ func tryStructJSONFields(t *testing.T, path, structName string) (map[string]bool
 		return false
 	})
 	return out, found
+}
+
+// TestFindReadJSONTargetIgnoresCommentsAndStrings 是 findReadJSONTarget 的口径测试：
+// 只有真实的 `h.readJSON(r, &x)` 调用表达式才算解码；注释与字符串字面量里的
+// `readJSON(...)` 不得被当成解码点（旧实现用逐行正则，实测会被两者骗过）。
+func TestFindReadJSONTargetIgnoresCommentsAndStrings(t *testing.T) {
+	t.Parallel()
+	realBody := "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n" +
+		"\tvar req struct {\n\t\tBucket string `json:\"bucket\"`\n\t}\n" +
+		"\tif err := h.readJSON(r, &req); err != nil {\n\t\treturn\n\t}\n}\n"
+	target, line, ok := findReadJSONTarget(realBody)
+	if !ok || target != "req" || line != 5 {
+		t.Fatalf("真实 readJSON 识别错误：target=%q line=%d ok=%v（want req / 5 / true）", target, line, ok)
+	}
+	for _, body := range []string{
+		"func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\t// h.readJSON(r, &ghost)\n}\n",
+		"func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\ts := \"h.readJSON(r, &ghost)\"\n\t_ = s\n}\n",
+	} {
+		if got, _, ok := findReadJSONTarget(body); ok {
+			t.Errorf("注释/字符串里的 readJSON 被误判为真实解码（body=%q，target=%q）", body, got)
+		}
+	}
 }
 
 // TestOpenAPIRequestFieldsMatchHandlerDTOs 全量遍历：注册表请求体字段集 ⇔ handler 解码字段集。

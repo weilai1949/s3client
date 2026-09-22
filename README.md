@@ -252,6 +252,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
 - [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维
 - [开发指南（TDD 优先）](docs/development.md) — 测试规范 / 验收清单 / 技术债
+- [文档归档](docs/archive/index.md) — 时点性评估 / 审查快照的冻结存放处（归档后不改写历史结论）
 - [贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md)
 - [AI 代理入口](AGENTS.md) — Agent 工具自动加载的仓库级硬约束（详细规范见 [docs/development.md](docs/development.md)）
 - 配置见上文矩阵。

@@ -13,7 +13,16 @@ linters:
     - ineffassign
     - unused
     - gosec
+    # nolintlint：AGENTS.md / development.md 明令禁止用 `//nolint` 消音（「那只是把死代码藏起来」）。
+    # 但此前没有任何门禁拦截它——实测在函数上方加一行无理由的 `//nolint:all`，`golangci-lint run`
+    # 仍报 0 issues（`//nolint` 是 golangci 自身的指令，默认不受任何 linter 审查）。
+    # 启用后：必须写明具体 linter、必须给出理由，且不得写 `//nolint:all`。
+    - nolintlint
   settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
     gosec:
       excludes:
         - G104 # handler 流式路径常见的审计忽略
