@@ -13,7 +13,9 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
   {
-    files: ['src/**/*.{ts,vue}'],
+    // 覆盖 src 与两套 E2E（e2e/ 为 mock 版、e2e-real/ 为真实联调版，todolist #37）。
+    // 此前只 lint src/**，E2E 源码零静态检查。
+    files: ['src/**/*.{ts,vue}', 'e2e/**/*.ts', 'e2e-real/**/*.ts'],
     languageOptions: {
       parser: vueParser,
       parserOptions: {
@@ -35,6 +37,13 @@ export default tseslint.config(
       'no-console': 'off',
       'prefer-const': 'warn',
       'no-empty': ['warn', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    // E2E 运行在 Node（进程 / Buffer / node:crypto），声明其全局，避免误报。
+    files: ['e2e/**/*.ts', 'e2e-real/**/*.ts'],
+    languageOptions: {
+      globals: { process: 'readonly', Buffer: 'readonly', console: 'readonly' },
     },
   },
 )

@@ -226,6 +226,7 @@ func TestNodePinnedToPatchVersion(t *testing.T) {
 		filepath.Join(".github", "workflows", "ci.yml"),
 		filepath.Join(".github", "workflows", "release-desktop.yml"),
 		filepath.Join(".github", "workflows", "e2e-playwright.yml"),
+		filepath.Join(".github", "workflows", "e2e-real.yml"),
 	} {
 		text := readRepoFile(t, rel)
 		matches := nodeVersionRe.FindAllStringSubmatch(text, -1)
@@ -527,5 +528,174 @@ func TestTrivyScansUseCacheAndRetry(t *testing.T) {
 	gh := readRepoFile(t, filepath.Join(".github", "workflows", "ci.yml"))
 	if !strings.Contains(gh, "actions/cache@") || !strings.Contains(gh, ".trivy-cache") {
 		t.Error("ci.yml 未缓存 Trivy DB 目录（R4）")
+	}
+}
+
+// ---- 真实后端 + RustFS 浏览器联调（todolist #37）----
+
+// rustfsImageRe 匹配 `rustfs/rustfs:<version>` 镜像引用。
+// 版本部分只取 `[0-9A-Za-z.-]`，避免把脚本里 `${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-rc.3}` 的 `}` 吞进来。
+var rustfsImageRe = regexp.MustCompile(`rustfs/rustfs:([0-9][0-9A-Za-z.-]*)`)
+
+// TestRustFSImageIsConsistentlyPinned（#37）：RustFS 镜像版本在「脚本默认值 / compose /
+// GitLab service」三处必须**完全一致**且带具体版本。
+//
+// 为什么需要门禁：RustFS 是这套联调唯一的真实 S3 对端，版本不一致意味着本地与 CI 验证的
+// 不是同一个实现。GitLab 的 service 必须自带镜像引用（不能引用脚本变量），因此它是最容易
+// 与脚本默认值漂移的一处。
+//
+// 说明：GitHub workflow **不再**引用镜像——它整体委托给 `scripts/e2e-real.sh`（由脚本起容器）。
+// 若将来又出现直接引用，也必须与其余各处一致（本门禁会把任何出现的引用纳入比对）。
+func TestRustFSImageIsConsistentlyPinned(t *testing.T) {
+	// 必须自带引用的三处（GitHub 可选：委托给脚本后不再需要）。
+	required := []string{
+		filepath.Join("scripts", "e2e-real.sh"),
+		"docker-compose.yml",
+		".gitlab-ci.yml",
+	}
+	optional := []string{filepath.Join(".github", "workflows", "e2e-real.yml")}
+
+	seen := map[string][]string{}
+	collect := func(rel string, mustExist bool) {
+		text := readRepoFile(t, rel)
+		matches := rustfsImageRe.FindAllStringSubmatch(text, -1)
+		if len(matches) == 0 {
+			if mustExist {
+				t.Errorf("%s 未找到 `rustfs/rustfs:<version>` 引用（#37：真实对端镜像需 pin）", rel)
+			}
+			return
+		}
+		for _, m := range matches {
+			seen[m[1]] = append(seen[m[1]], rel)
+		}
+	}
+	for _, rel := range required {
+		collect(rel, true)
+	}
+	for _, rel := range optional {
+		collect(rel, false)
+	}
+
+	if len(seen) > 1 {
+		t.Errorf("RustFS 镜像版本不一致：%v（脚本默认值 / compose / GitLab service 必须同版本，#37）", seen)
+	}
+	// 不允许浮动 tag：`latest` 会让同一 commit 在不同时间拉出不同对端。
+	for version := range seen {
+		if version == "latest" {
+			t.Errorf("RustFS 使用了浮动 tag `latest`（%v）：E2E 会因上游漂移而 flaky", seen[version])
+		}
+	}
+}
+
+// TestRealE2EUsesSharedScript（#37）：本地与两套 CI 必须跑**同一段编排**（scripts/e2e-real.sh），
+// 而不是各抄一份「起 RustFS + 构建 + 起后端 + 跑用例」。
+//
+// 为什么需要门禁：此前三处各写一份编排，改一处漏两处就会出现「本地跑通但 CI 跑不通」
+// （或反之）。收敛到共享脚本后，本门禁钉住这个结构，防止将来有人图省事又复制一份。
+func TestRealE2EUsesSharedScript(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join(".github", "workflows", "e2e-real.yml"),
+		".gitlab-ci.yml",
+	} {
+		text := readRepoFile(t, rel)
+		// 必须**实际调用**（`bash scripts/e2e-real.sh`），而不是只在 `changes:` 路径过滤里
+		// 提到该文件——后者曾被本门禁误判为「已复用脚本」（变异验证发现）。
+		if !strings.Contains(text, "bash scripts/e2e-real.sh") {
+			t.Errorf("%s 未实际调用 `bash scripts/e2e-real.sh`（#37：编排必须单一来源，仅出现在 paths/changes 里不算）", rel)
+		}
+	}
+	// 脚本必须是可执行且语法合法的 bash（`bash -n` 由开发者在 CI 跑；这里只校验关键要素）。
+	script := readRepoFile(t, filepath.Join("scripts", "e2e-real.sh"))
+	for _, want := range []string{
+		"docker run",                  // 自动起 RustFS（默认分支）
+		"RUSTFS_CORS_ALLOWED_ORIGINS", // 浏览器直传所需 CORS
+		"pnpm build",                  // 真实构建产物
+		"S3C_STATIC_DIR",              // 后端托管产物
+		"e2e:real",                    // 真实联调入口
+		"trap cleanup EXIT",           // 跑完自动清理
+		"--no-rustfs",                 // 复用外部对端（GitLab service 用）
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("scripts/e2e-real.sh 缺少 %q（#37：共享编排须自包含、可复用外部对端、可清理）", want)
+		}
+	}
+	// 脚本不能写死单一后端地址：CI 用 service 别名，本地用回环。
+	if strings.Contains(script, "S3CLINET_ENDPOINT=http://127.0.0.1:9000") {
+		t.Error("scripts/e2e-real.sh 写死了 S3CLINET_ENDPOINT：应经 RUSTFS_ENDPOINT 变量支持外部对端（#37）")
+	}
+}
+
+// TestRealE2EArtifactsExist（#37）：联调用例、专用 config、npm 入口必须齐备，
+// 且用例**不得** mock `/api`（否则退化成第二个 playwright-e2e）。
+func TestRealE2EArtifactsExist(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(repoRoot(t), "apps", "web", "e2e-real", "real-backend.spec.ts")); err != nil {
+		t.Errorf("缺少 apps/web/e2e-real/real-backend.spec.ts（#37 的联调用例本体）：%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot(t), "apps", "web", "playwright.real.config.ts")); err != nil {
+		t.Errorf("缺少 apps/web/playwright.real.config.ts（#37 专用配置）：%v", err)
+	}
+	pkg := readRepoFile(t, filepath.Join("apps", "web", "package.json"))
+	if !strings.Contains(pkg, `"e2e:real"`) || !strings.Contains(pkg, "playwright.real.config.ts") {
+		t.Error("apps/web/package.json 的 e2e:real 未指向 playwright.real.config.ts（#37）")
+	}
+	// 联调用例**不得** mock /api：出现 page.route 调用即说明它退化成第二个 playwright-e2e。
+	// 逐行扫描并跳过注释行——文件头的说明性注释里会**提到** `page.route()`（解释为何不用它），
+	// 直接对全文做子串匹配会把这段注释误判为真实调用。
+	spec := readRepoFile(t, filepath.Join("apps", "web", "e2e-real", "real-backend.spec.ts"))
+	for _, line := range strings.Split(spec, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		if strings.Contains(trimmed, "page.route(") {
+			t.Error("e2e-real/real-backend.spec.ts 使用了 page.route：真实联调不得 mock /api（#37）")
+			break
+		}
+	}
+}
+
+// TestE2ESourcesAreTypechecked（#37）：两套 CI 与本地 `make check` 都必须对 E2E 源码
+// （`e2e/` 与 `e2e-real/`）做类型检查。
+//
+// 为什么需要门禁：主 `tsconfig.json` 只 include `src/**`，两套 E2E 长期**零静态检查**——
+// 而 `e2e-real` 是 #37 的核心门禁，其中的用例写错类型（如误用 APIRequestContext 的返回）
+// 只会在运行时才炸。本门禁钉住「E2E 有独立 tsconfig 且两侧 CI 都跑它」。
+func TestE2ESourcesAreTypechecked(t *testing.T) {
+	// 独立配置必须存在，且 include 两套 E2E 目录与 playwright 配置。
+	cfg := readRepoFile(t, filepath.Join("apps", "web", "tsconfig.e2e.json"))
+	for _, want := range []string{"e2e/**/*.ts", "e2e-real/**/*.ts", "playwright.real.config.ts"} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("apps/web/tsconfig.e2e.json 未 include %q（#37：E2E 源码需类型检查）", want)
+		}
+	}
+	// package.json 必须有入口。
+	pkg := readRepoFile(t, filepath.Join("apps", "web", "package.json"))
+	if !strings.Contains(pkg, `"typecheck:e2e"`) || !strings.Contains(pkg, "tsconfig.e2e.json") {
+		t.Error("apps/web/package.json 缺少指向 tsconfig.e2e.json 的 typecheck:e2e 脚本（#37）")
+	}
+	// 两套 CI 的 web job 都要跑它，否则 CI 仍看不见 E2E 类型错误。
+	for _, rel := range []string{
+		filepath.Join(".github", "workflows", "ci.yml"),
+		".gitlab-ci.yml",
+	} {
+		if !strings.Contains(readRepoFile(t, rel), "typecheck:e2e") {
+			t.Errorf("%s 的 web job 未跑 `pnpm typecheck:e2e`（#37：E2E 类型错误会在 CI 漏网）", rel)
+		}
+	}
+	// 本地 check 聚合也要含它，保证「本地绿 ≈ CI 绿」。
+	if !strings.Contains(readRepoFile(t, "Makefile"), "web-typecheck-e2e") {
+		t.Error("Makefile 的 check 未包含 web-typecheck-e2e（#37：本地无法复现 CI 的 E2E 类型门禁）")
+	}
+}
+
+// TestLocalRealE2ETargetExists（#37）：本地必须能一条命令起「真实 RustFS + 真实产物 +
+// 真实后端」跑通联调，否则「本地测试也用 docker 自动运行一份 RustFS」的诉求落空。
+func TestLocalRealE2ETargetExists(t *testing.T) {
+	mk := readRepoFile(t, "Makefile")
+	if !strings.Contains(mk, "e2e-real:") {
+		t.Error("Makefile 缺少 e2e-real 目标（#37：本地一键真实联调）")
+	}
+	if !strings.Contains(mk, "scripts/e2e-real.sh") {
+		t.Error("Makefile 的 e2e-real 必须调用 scripts/e2e-real.sh（#37）")
 	}
 }
