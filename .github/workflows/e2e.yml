@@ -39,6 +39,10 @@ jobs:
           cp .env.example .env
           # CI 使用示例凭据即可（仅回环发布）
           sed -i 's/^S3C_TOKEN=.*/S3C_TOKEN=ci-e2e-token-openssl-rand-hex-32/' .env
+          # 本 workflow 只起 rustfs，但 `docker compose up` 会插值整个 compose 文件：
+          # base compose 的 server 服务对 S3C_STORE_KEY 用了 `${...:?}` 必填守卫，
+          # 缺失会让命令直接失败。填入一次性 dummy key（不会用于任何真实加密）。
+          sed -i 's/^S3C_STORE_KEY=.*/S3C_STORE_KEY=ci-e2e-store-key-openssl-rand-hex-32/' .env
 
       - name: Start RustFS
         run: docker compose up -d rustfs

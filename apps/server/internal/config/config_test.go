@@ -39,9 +39,22 @@ func TestFromEnvSSRFDenyPrivate(t *testing.T) {
 	}
 }
 
+// TestFromEnvAllowPlaintextStore 明文落盘显式 opt-in（todolist #29/#31）：默认关闭，
+// 仅显式 truthy 时开启，与其他 envTruthy 开关语义一致。
+func TestFromEnvAllowPlaintextStore(t *testing.T) {
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "")
+	if FromEnv().AllowPlaintextStore {
+		t.Error("默认应为关闭（安全默认：明文落盘必须显式 opt-in）")
+	}
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	if !FromEnv().AllowPlaintextStore {
+		t.Error("S3C_ALLOW_PLAINTEXT_STORE=1 应开启")
+	}
+}
+
 // TestFromEnvDefaults 验证安全默认值（回环绑定、无鉴权、无 CORS 白名单）。
 func TestFromEnvDefaults(t *testing.T) {
-	for _, k := range []string{"S3C_ADDR", "S3C_DATA_DIR", "S3C_STATIC_DIR", "S3C_REGION", "S3C_TOKEN", "S3C_CORS_ORIGINS", "S3C_LOG_LEVEL", "S3C_LOG_JSON", "S3C_STORE_DRIVER", "S3C_STORE_KEY", "S3C_SHUTDOWN_TIMEOUT", "S3C_EXPOSE_METRICS"} {
+	for _, k := range []string{"S3C_ADDR", "S3C_DATA_DIR", "S3C_STATIC_DIR", "S3C_REGION", "S3C_TOKEN", "S3C_CORS_ORIGINS", "S3C_LOG_LEVEL", "S3C_LOG_JSON", "S3C_STORE_DRIVER", "S3C_STORE_KEY", "S3C_ALLOW_PLAINTEXT_STORE", "S3C_SHUTDOWN_TIMEOUT", "S3C_EXPOSE_METRICS"} {
 		t.Setenv(k, "")
 	}
 	cfg := FromEnv()

@@ -27,6 +27,10 @@ var ErrShortStoreKey = errors.New("S3C_STORE_KEY too short")
 // ErrTokenRequiredNonLoopback 表示非回环监听必须设置 S3C_TOKEN。
 var ErrTokenRequiredNonLoopback = errors.New("S3C_TOKEN required for non-loopback listen address")
 
+// ErrPlaintextStoreNotAllowed 表示 json / sqlite 驱动在未设置 S3C_STORE_KEY 时会明文落盘
+// secretKey，而运维未显式选择明文（S3C_ALLOW_PLAINTEXT_STORE=1）。安全默认：拒绝启动。
+var ErrPlaintextStoreNotAllowed = errors.New("plaintext account store not allowed")
+
 // loadDotEnvFile 从指定路径加载 KEY=VALUE 到环境变量（已存在的环境变量优先）。
 // 支持注释行、引号与空行；实现为 30 行的极简解析器，不引入第三方依赖。
 func loadDotEnvFile(path string) {
@@ -85,22 +89,23 @@ func loadDotEnv() {
 
 // Config 汇总服务端配置。所有项均可通过环境变量覆盖，并内置安全默认值。
 type Config struct {
-	Addr               string   // 监听地址，默认回环 127.0.0.1:8080（更安全）
-	DataDir            string   // 数据目录，存放账号持久化文件
-	StaticDir          string   // Web 静态资源目录
-	Region             string   // 账号缺省 region
-	Token              string   // 可选 API 鉴权 token；非空则要求 Bearer
-	CORSOrigins        []string // CORS 白名单；空 = 仅同源 + localhost/tauri
-	LogLevel           string   // debug|info|warn|error
-	LogJSON            bool     // true = slog JSON（容器/生产更易采集）
-	StoreDriver        string   // json|sqlite|encrypted，账号存储后端
-	StoreKey           string   // encrypted 模式必填；Argon2id+盐派生（仅 S3C2）
-	ShutdownTimeoutSec int      // SIGTERM 后等待活跃连接结束的最长时间（秒）
-	ExposeMetrics      bool     // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
-	ExposeOpenAPI      bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
-	CSPConnectSrc      string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
-	TrustedProxies     []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
-	SSRFDenyPrivate    bool     // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
+	Addr                string   // 监听地址，默认回环 127.0.0.1:8080（更安全）
+	DataDir             string   // 数据目录，存放账号持久化文件
+	StaticDir           string   // Web 静态资源目录
+	Region              string   // 账号缺省 region
+	Token               string   // 可选 API 鉴权 token；非空则要求 Bearer
+	CORSOrigins         []string // CORS 白名单；空 = 仅同源 + localhost/tauri
+	LogLevel            string   // debug|info|warn|error
+	LogJSON             bool     // true = slog JSON（容器/生产更易采集）
+	StoreDriver         string   // json|sqlite|encrypted，账号存储后端
+	StoreKey            string   // encrypted 模式必填；Argon2id+盐派生（仅 S3C2）
+	AllowPlaintextStore bool     // true = 显式允许 json/sqlite 无 StoreKey 明文落盘（S3C_ALLOW_PLAINTEXT_STORE=1，仅本地）
+	ShutdownTimeoutSec  int      // SIGTERM 后等待活跃连接结束的最长时间（秒）
+	ExposeMetrics       bool     // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
+	ExposeOpenAPI       bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
+	CSPConnectSrc       string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
+	TrustedProxies      []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
+	SSRFDenyPrivate     bool     // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
 }
 
 func envOr(key, def string) string {
@@ -126,22 +131,23 @@ func envOrInt(key string, def int) int {
 func FromEnv() Config {
 	loadDotEnv()
 	return Config{
-		Addr:               envOr("S3C_ADDR", "127.0.0.1:8080"),
-		DataDir:            envOr("S3C_DATA_DIR", "./data"),
-		StaticDir:          envOr("S3C_STATIC_DIR", "../web/dist"),
-		Region:             envOr("S3C_REGION", "us-east-1"),
-		Token:              os.Getenv("S3C_TOKEN"),
-		CORSOrigins:        splitList(envOr("S3C_CORS_ORIGINS", "")),
-		LogLevel:           envOr("S3C_LOG_LEVEL", "info"),
-		LogJSON:            envTruthy("S3C_LOG_JSON"),
-		StoreDriver:        envOr("S3C_STORE_DRIVER", "json"),
-		StoreKey:           os.Getenv("S3C_STORE_KEY"),
-		ShutdownTimeoutSec: envOrInt("S3C_SHUTDOWN_TIMEOUT", 30),
-		ExposeMetrics:      envTruthy("S3C_EXPOSE_METRICS"),
-		ExposeOpenAPI:      envTruthy("S3C_EXPOSE_OPENAPI"),
-		CSPConnectSrc:      envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
-		TrustedProxies:     splitList(envOr("S3C_TRUSTED_PROXIES", "")),
-		SSRFDenyPrivate:    envTruthy("S3C_SSRF_DENY_PRIVATE"),
+		Addr:                envOr("S3C_ADDR", "127.0.0.1:8080"),
+		DataDir:             envOr("S3C_DATA_DIR", "./data"),
+		StaticDir:           envOr("S3C_STATIC_DIR", "../web/dist"),
+		Region:              envOr("S3C_REGION", "us-east-1"),
+		Token:               os.Getenv("S3C_TOKEN"),
+		CORSOrigins:         splitList(envOr("S3C_CORS_ORIGINS", "")),
+		LogLevel:            envOr("S3C_LOG_LEVEL", "info"),
+		LogJSON:             envTruthy("S3C_LOG_JSON"),
+		StoreDriver:         envOr("S3C_STORE_DRIVER", "json"),
+		StoreKey:            os.Getenv("S3C_STORE_KEY"),
+		AllowPlaintextStore: envTruthy("S3C_ALLOW_PLAINTEXT_STORE"),
+		ShutdownTimeoutSec:  envOrInt("S3C_SHUTDOWN_TIMEOUT", 30),
+		ExposeMetrics:       envTruthy("S3C_EXPOSE_METRICS"),
+		ExposeOpenAPI:       envTruthy("S3C_EXPOSE_OPENAPI"),
+		CSPConnectSrc:       envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
+		TrustedProxies:      splitList(envOr("S3C_TRUSTED_PROXIES", "")),
+		SSRFDenyPrivate:     envTruthy("S3C_SSRF_DENY_PRIVATE"),
 	}
 }
 
@@ -177,7 +183,8 @@ func IsLoopbackAddr(addr string) bool {
 // Validate 对配置做安全校验：
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
 //   - 非回环监听必须设置 S3C_TOKEN；
-//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：features.md §M）。
+//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：features.md §M）；
+//   - json / sqlite 且 S3C_STORE_KEY 为空时必须显式 opt-in 明文落盘，否则拒绝启动（todolist #29/#31）。
 //
 // 多 token 时以单 token 最短者判定长度。
 func (c Config) Validate() error {
@@ -198,6 +205,12 @@ func (c Config) Validate() error {
 	}
 	if c.StoreKey != "" && len(c.StoreKey) < MinStoreKeyLength {
 		return fmt.Errorf("%w: got %d chars, need >= %d (建议 openssl rand -hex 32)", ErrShortStoreKey, len(c.StoreKey), MinStoreKeyLength)
+	}
+	if (c.StoreDriver == "json" || c.StoreDriver == "sqlite") && c.StoreKey == "" && !c.AllowPlaintextStore {
+		return fmt.Errorf("%w: %s 驱动在 S3C_STORE_KEY 为空时会把 secretKey 明文落盘；"+
+			"请设置 S3C_STORE_KEY（>= %d 字符，openssl rand -hex 32），"+
+			"或仅在本地联调时显式设置 S3C_ALLOW_PLAINTEXT_STORE=1",
+			ErrPlaintextStoreNotAllowed, c.StoreDriver, MinStoreKeyLength)
 	}
 	return nil
 }

@@ -7,7 +7,7 @@ services:
         # 国内网络可覆盖：GOPROXY=https://goproxy.io,direct  NPM_REGISTRY=https://registry.npmmirror.com
         GOPROXY: ${GOPROXY:-https://proxy.golang.org,direct}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
-    image: s3clinet/server:v1.0.0-rc1
+    image: s3clinet/server:v1.0.0
     container_name: s3clinet-server
     restart: unless-stopped
     stop_signal: SIGTERM
@@ -31,9 +31,10 @@ services:
       S3C_DATA_DIR: "/data"
       # 生产推荐 encrypted（整文件加密，需 S3C_STORE_KEY）。默认 sqlite：
       # 只要设置了 S3C_STORE_KEY，secret_key 列即以 AES-256-GCM 密文落盘（已闭环：见 docs/features.md §M；残留风险 docs/roadmap.md §5.1「已收敛」索引 R3）。
-      # 两者都不设置 key 时为明文，仅适用于本地联调。
+      # 安全默认：S3C_STORE_KEY 必填（见下方 `${S3C_STORE_KEY:?...}`），compose 不再允许「无 key 起明文」。
+      # 仅本地联调确需明文时，显式设置 S3C_ALLOW_PLAINTEXT_STORE=1 并自行改回可选 key；服务端会在启动日志打出「明文落盘」WARN。生产绝不要这么做。
       S3C_STORE_DRIVER: "${S3C_STORE_DRIVER:-sqlite}"
-      S3C_STORE_KEY: "${S3C_STORE_KEY:-}"
+      S3C_STORE_KEY: "${S3C_STORE_KEY:?set S3C_STORE_KEY in .env (openssl rand -hex 32)}"
       S3C_STATIC_DIR: "/web/dist"
       S3C_REGION: "${S3C_REGION:-us-east-1}"
       # 非回环监听强制鉴权：未设置则 compose 启动失败

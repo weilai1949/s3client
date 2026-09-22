@@ -142,6 +142,7 @@ func TestRunServerStartsAndShutsDownGracefully(t *testing.T) {
 	t.Setenv("S3C_ADDR", addr)
 	t.Setenv("S3C_DATA_DIR", t.TempDir())
 	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1") // 安全默认：json + 空 key 需显式 opt-in
 	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
 	t.Setenv("S3C_SHUTDOWN_TIMEOUT", "5")
 
@@ -204,6 +205,7 @@ func TestRunServerListenBindFailure(t *testing.T) {
 	t.Setenv("S3C_ADDR", l.Addr().String())
 	t.Setenv("S3C_DATA_DIR", t.TempDir())
 	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
 	code := runServer(context.Background())
 	if code != 0 {
@@ -266,11 +268,12 @@ func TestMainServerSubprocess(t *testing.T) {
 	}
 	addr := reserveLoopbackPort(t)
 	cmd := childCmd(t, "server", map[string]string{
-		"S3C_ADDR":             addr,
-		"S3C_DATA_DIR":         t.TempDir(),
-		"S3C_TOKEN":            "unit-test-token-0123456789",
-		"S3C_STORE_DRIVER":     "json",
-		"S3C_SHUTDOWN_TIMEOUT": "5",
+		"S3C_ADDR":                  addr,
+		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_TOKEN":                 "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":          "json",
+		"S3C_ALLOW_PLAINTEXT_STORE": "1",
+		"S3C_SHUTDOWN_TIMEOUT":      "5",
 	})
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start child: %v", err)
@@ -301,20 +304,22 @@ func TestMainServerSubprocess(t *testing.T) {
 	}
 }
 
-// TestMainServerWarnsPlaintextStore 子进程跑 main()：sqlite + 空 S3C_STORE_KEY 时启动日志
-// 必须出现明文落盘告警（roadmap §5.1 R3），否则运维无从察觉生产误用明文驱动。
+// TestMainServerWarnsPlaintextStore 子进程跑 main()：sqlite + 空 S3C_STORE_KEY 且
+// 显式 S3C_ALLOW_PLAINTEXT_STORE=1 时，启动日志必须出现明文落盘告警（roadmap §5.1 R3），
+// 否则运维无从察觉生产误用明文驱动。安全默认下不 opt-in 会直接硬失败（见下个测试）。
 func TestMainServerWarnsPlaintextStore(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("依赖 SIGTERM")
 	}
 	addr := reserveLoopbackPort(t)
 	cmd := childCmd(t, "server", map[string]string{
-		"S3C_ADDR":             addr,
-		"S3C_DATA_DIR":         t.TempDir(),
-		"S3C_TOKEN":            "unit-test-token-0123456789",
-		"S3C_STORE_DRIVER":     "sqlite",
-		"S3C_STORE_KEY":        "",
-		"S3C_SHUTDOWN_TIMEOUT": "5",
+		"S3C_ADDR":                  addr,
+		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_TOKEN":                 "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":          "sqlite",
+		"S3C_STORE_KEY":             "",
+		"S3C_ALLOW_PLAINTEXT_STORE": "1",
+		"S3C_SHUTDOWN_TIMEOUT":      "5",
 	})
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -344,6 +349,80 @@ func TestMainServerWarnsPlaintextStore(t *testing.T) {
 	}
 }
 
+// TestMainServerRejectsPlaintextStoreWithoutOptIn 安全默认（todolist #29/#31）：
+// json / sqlite + 空 S3C_STORE_KEY 且未显式 S3C_ALLOW_PLAINTEXT_STORE=1 时，
+// 进程必须在启动阶段硬失败（非 0 退出），且报错指明两条出路；不得泄露密钥值。
+func TestMainServerRejectsPlaintextStoreWithoutOptIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("依赖子进程退出码语义")
+	}
+	cmd := childCmd(t, "server", map[string]string{
+		"S3C_ADDR":                  reserveLoopbackPort(t),
+		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_TOKEN":                 "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":          "json",
+		"S3C_STORE_KEY":             "",
+		"S3C_ALLOW_PLAINTEXT_STORE": "",
+	})
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("json + empty key without opt-in must exit non-zero, out=%s", out)
+	}
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() == 0 {
+		t.Fatalf("want non-zero exit, got err=%v out=%s", err, out)
+	}
+	for _, want := range []string{"S3C_STORE_KEY", "S3C_ALLOW_PLAINTEXT_STORE"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("startup error missing %q, got: %s", want, out)
+		}
+	}
+}
+
+// TestMainServerAllowsPlaintextStoreWithOptIn 显式 opt-in 后 json + 空 key 可正常启动
+// 并可被 SIGTERM 优雅停止（返回 0），证明 opt-in 是唯一的明文落盘放行开关。
+func TestMainServerAllowsPlaintextStoreWithOptIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("依赖 SIGTERM")
+	}
+	addr := reserveLoopbackPort(t)
+	cmd := childCmd(t, "server", map[string]string{
+		"S3C_ADDR":                  addr,
+		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_TOKEN":                 "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":          "json",
+		"S3C_STORE_KEY":             "",
+		"S3C_ALLOW_PLAINTEXT_STORE": "1",
+		"S3C_SHUTDOWN_TIMEOUT":      "5",
+	})
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() })
+
+	if !pollHealth(t, fmt.Sprintf("http://%s/api/health", addr)) {
+		_ = cmd.Process.Signal(syscall.SIGKILL)
+		t.Fatal("child server with plaintext opt-in should become healthy")
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("signal child: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			var ee *exec.ExitError
+			if !errors.As(err, &ee) || ee.ExitCode() != 0 {
+				t.Fatalf("child should exit 0 after SIGTERM, got %v", err)
+			}
+		}
+	case <-time.After(15 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("child did not exit after SIGTERM")
+	}
+}
+
 // TestRunServerRejectsLockedDataDir 同一 DataDir 已被占用时拒绝启动并返回 1
 // （roadmap §5.1 R4：文件型 store 必须单副本，否则写覆盖 / 任务重复）。
 // 非 unix 平台的锁是 no-op，跳过。
@@ -362,6 +441,7 @@ func TestRunServerRejectsLockedDataDir(t *testing.T) {
 	t.Setenv("S3C_DATA_DIR", dir)
 	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
 	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	if code := runServer(context.Background()); code != 1 {
 		t.Fatalf("runServer(locked data dir) = %d, want 1", code)
 	}
@@ -373,6 +453,7 @@ func TestRunServerJSONLog(t *testing.T) {
 	t.Setenv("S3C_ADDR", addr)
 	t.Setenv("S3C_DATA_DIR", t.TempDir())
 	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
 	t.Setenv("S3C_LOG_JSON", "1")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -405,6 +486,7 @@ func TestRunServerShortTokenRejects(t *testing.T) {
 	t.Setenv("S3C_TOKEN", "short")
 	t.Setenv("S3C_DATA_DIR", t.TempDir())
 	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	t.Setenv("S3C_LOG_FORMAT", "text")
 	if code := runServer(context.Background()); code != 1 {
 		t.Fatalf("runServer(short token) = %d, want 1 (硬失败)", code)

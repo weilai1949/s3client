@@ -24,8 +24,10 @@ func TestValidate(t *testing.T) {
 		// S3C_STORE_KEY 最短长度校验（已闭环：features.md §M）：短口令会被 Argon2 暴力破解。
 		{"short store key rejected", Config{Addr: "127.0.0.1:8080", StoreKey: "short"}, ErrShortStoreKey},
 		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
-		{"empty store key ok (json driver)", Config{Addr: "127.0.0.1:8080", StoreKey: ""}, nil},
+		// 安全默认：未显式选择驱动（空串）不触发明文落盘校验，由 json/sqlite 用例单独覆盖。
+		{"empty store key ok (no driver)", Config{Addr: "127.0.0.1:8080", StoreKey: ""}, nil},
 		{"long store key ok", Config{Addr: "127.0.0.1:8080", StoreKey: strings.Repeat("k", MinStoreKeyLength)}, nil},
+		{"json empty key with opt-in ok", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", AllowPlaintextStore: true}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -41,6 +43,47 @@ func TestValidate(t *testing.T) {
 			}
 			if !errors.Is(err, c.wantErr) {
 				t.Fatalf("Validate() err=%v, want wraps %v", err, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidatePlaintextStoreRejected 安全默认（todolist #29/#31）：json / sqlite 且
+// S3C_STORE_KEY 为空时，除非显式 AllowPlaintextStore，否则 Validate 必须硬失败，
+// 并给出两条出路（设 S3C_STORE_KEY / 显式 opt-in）。encrypted 与非空 key 不受影响。
+func TestValidatePlaintextStoreRejected(t *testing.T) {
+	key := strings.Repeat("k", MinStoreKeyLength)
+	cases := []struct {
+		name    string
+		cfg     Config
+		wantErr error
+	}{
+		{"json empty key rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "json"}, ErrPlaintextStoreNotAllowed},
+		{"sqlite empty key rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite"}, ErrPlaintextStoreNotAllowed},
+		{"json opt-in allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", AllowPlaintextStore: true}, nil},
+		{"sqlite opt-in allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite", AllowPlaintextStore: true}, nil},
+		{"json with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", StoreKey: key}, nil},
+		{"sqlite with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite", StoreKey: key}, nil},
+		{"encrypted empty key not this sentinel", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted"}, nil},
+		{"unknown driver allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "pgsql"}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.cfg.Validate()
+			if c.wantErr == nil {
+				if err != nil {
+					t.Fatalf("Validate() err=%v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, c.wantErr) {
+				t.Fatalf("Validate() err=%v, want wraps %v", err, c.wantErr)
+			}
+			// 报错必须告诉运维两条出路，且不得泄露任何密钥值。
+			for _, want := range []string{"S3C_STORE_KEY", "S3C_ALLOW_PLAINTEXT_STORE", "openssl rand -hex 32"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("Validate() err=%q missing %q", err.Error(), want)
+				}
 			}
 		})
 	}

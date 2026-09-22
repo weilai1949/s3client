@@ -123,6 +123,7 @@ func TestFromEnvAllFields(t *testing.T) {
 	t.Setenv("S3C_LOG_JSON", "on")
 	t.Setenv("S3C_STORE_DRIVER", "sqlite")
 	t.Setenv("S3C_STORE_KEY", "k3y")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "on")
 	t.Setenv("S3C_SHUTDOWN_TIMEOUT", "12")
 	cfg := FromEnv()
 	if cfg.Addr != "0.0.0.0:8081" {
@@ -133,6 +134,9 @@ func TestFromEnvAllFields(t *testing.T) {
 	}
 	if cfg.Token != "tk" || cfg.StoreKey != "k3y" || cfg.StoreDriver != "sqlite" {
 		t.Errorf("auth/store fields = %+v", cfg)
+	}
+	if !cfg.AllowPlaintextStore {
+		t.Errorf("AllowPlaintextStore = false, want true (S3C_ALLOW_PLAINTEXT_STORE=on)")
 	}
 	if cfg.LogLevel != "warn" || !cfg.LogJSON {
 		t.Errorf("log fields = %q/%v", cfg.LogLevel, cfg.LogJSON)
