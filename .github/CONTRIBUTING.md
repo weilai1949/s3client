@@ -28,6 +28,7 @@ git commit -m "feat: ..."
 
 - Go 1.26+ / Node 24+ / pnpm 9+ / Rust（桌面端）
 - 后端本地启动 + 本机 RustFS 联调：见 [docs/development.md](../docs/development.md) §2「真实 RustFS 联调」
+- 改到前端界面 / 后端接口 / 预签名直传时，额外跑 `make e2e-real`：真实 Go 后端 + 真实 RustFS + 真实构建产物的浏览器联调（自动 docker 起 RustFS、跑完清理；不 mock `/api`）
 
 ## 提交规范
 

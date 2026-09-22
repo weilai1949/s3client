@@ -17,6 +17,7 @@
 |----|------|----------|------|
 | **单元 / 行为测试** | `apps/server/internal/.../*_test.go` | `cd apps/server && go test ./...` | 用 `httptest.NewServer` 的**假 S3** 验证 handler 层逻辑（路由、参数校验、正/反例、错误码映射） |
 | **真实对端 E2E** | `apps/server/internal/s3wrap/e2e_test.go` | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v` | 验证最硬核路径：**SigV4 签名 / 预签名直传 / 分段 Multipart 组装 / 跨 bucket 复制 / 标签 / 版本控制**。默认指向本地 RustFS |
+| **真实联调浏览器 E2E** | `apps/web/e2e-real/real-backend.spec.ts` | `make e2e-real` | 真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器，**不 mock `/api`**：账号落库、建桶列桶、**浏览器直传**（预签名 PUT 跨源）。mock 版 `apps/web/e2e/*.spec.ts` 覆盖不到的结合部 |
 | **前端类型 + 构建** | `web` | `cd apps/web && pnpm build`（含 `vue-tsc --noEmit`） | 类型安全与可构建性；UI 改动同时保留手测/截图证据 |
 
 ### 假 S3 模式（handler 测试）
@@ -28,6 +29,18 @@
 - 需要时用 `docker compose up -d rustfs`（默认 `rustfsadmin/rustfsadmin`，S3 API 9000、控制台 9001）。
 - E2E 测试用 `S3CLINET_E2E=1` 门控，普通 `go test ./...` 不会执行，CI 因此不受影响。
 
+### 真实后端 + RustFS 浏览器联调（todolist #37）
+- 一条命令：`make e2e-real`（脚本 [`scripts/e2e-real.sh`](../scripts/e2e-real.sh)）。它会起一份**独立** RustFS 容器、构建真实前端产物与后端、起真实后端托管产物、跑 `pnpm e2e:real`，最后 `trap` 自动清理。
+- **该脚本是这套编排的唯一来源**：本地 `make e2e-real`、GitHub Actions 与 GitLab CI 都调用它，各自只负责「装工具链 / 装浏览器系统依赖」。门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都**实际调用** `bash scripts/e2e-real.sh`（仅出现在 `paths:`/`changes:` 里不算），防止又抄一份编排而漂移。
+- **必须给 RustFS 配 `RUSTFS_CORS_ALLOWED_ORIGINS`**（脚本自起时已默认配好，GitLab service 变量里也配了）：浏览器直传（预签名 PUT）是页面 → S3 的**跨源**请求，缺 CORS 会被浏览器拦下。注意 curl / Playwright `APIRequestContext` **不经 CORS**，只用它们验证会「假绿」——所以用例特意驱动真实浏览器 XHR。
+- 复用外部对端（GitLab service / 已起的实例）：`RUSTFS_ENDPOINT=http://rustfs:9000 bash scripts/e2e-real.sh --no-rustfs`（此时脚本不管理容器生命周期）。
+- 排查用 `make e2e-real E2E_REAL_ARGS=--keep`（保留容器与后端进程）或 `--skip-build`（复用已有产物）。端口默认 8080 / 9000，可用 `SERVER_PORT` / `RUSTFS_PORT` 覆盖。
+- 机械门禁：`TestRustFSImageIsConsistentlyPinned`（脚本默认值 / compose / GitLab service 三处镜像版本必须一致）、`TestRealE2EArtifactsExist`（联调 spec 出现 `page.route(` 即红灯）、`TestE2ESourcesAreTypechecked`、`TestLocalRealE2ETargetExists`。
+
+### E2E 源码的静态检查
+- `e2e/`（mock 版）与 `e2e-real/`（真实联调版）**不在**主 `tsconfig.json` 的 `include` 内，因此长期零静态检查。现补 [`apps/web/tsconfig.e2e.json`](../apps/web/tsconfig.e2e.json) + `pnpm typecheck:e2e`，并把两个目录纳入 `pnpm lint`（`eslint src e2e e2e-real`）。
+- 两套 CI 的 `web` job 与本地 `make check`（`web-typecheck-e2e`）都跑它；门禁 `TestE2ESourcesAreTypechecked` 防漏挂。
+
 ## 3. 必验门禁（每次改动提交前）
 
 ```bash
@@ -36,6 +49,9 @@ cd apps/server && go build ./...                   # 后端可构建
 cd apps/web && pnpm test && pnpm build             # 前端单测 + 类型检查 + 构建
 # 涉及签名/直传/分段/复制/标签/版本时，额外跑真实 RustFS E2E
 cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+# 涉及前端 / 后端接口 / 直传时，额外跑「真实后端 + 真实 RustFS + 真实产物」浏览器联调
+# （docker 自动起一份 RustFS，跑完自动清理；不 mock /api）
+make e2e-real
 # 或 make test-all（后端 + 前端单测）
 make test-cover                               # 后端覆盖率 100% 门禁（CI 同款检查）
 # 改到桌面端依赖时（需本机已装 cargo-audit）：RustSec 审计，CI desktop job 同命令
@@ -50,12 +66,13 @@ make rust-audit
 | GitHub Actions | GitLab CI job | 门禁内容 |
 |---|---|---|
 | `ci.yml` · `server` | `server` | gofmt / go vet / govulncheck / golangci-lint v2.13.2（**0 issues**）/ `go test -race` + 覆盖率 100% / build |
-| `ci.yml` · `web` | `web` | `pnpm lint`（`--max-warnings 0`）/ typecheck / `test:coverage`（100%）/ build |
+| `ci.yml` · `web` | `web` | `pnpm lint`（`--max-warnings 0`，含 E2E 源码）/ typecheck（src + E2E 两份）/ `test:coverage`（100%）/ build |
 | `ci.yml` · `docker` | `docker` | `docker build` + Trivy CRITICAL/HIGH 失败门禁（`.trivyignore`） |
 | `ci.yml` · `desktop` | `desktop` | `cargo check --locked` + `cargo audit`（RustSec，有漏洞即红灯；webkit/gtk 系统依赖） |
 | `ci.yml` · `desktop-build`（仅 `workflow_dispatch`） | `desktop-build`（`when: manual`，仅 `web` 源） | `tauri build --no-bundle` |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |
+| `e2e-real.yml` | `e2e-real` | **真实 Go 后端（托管真实构建产物）+ 真实 RustFS + 真实浏览器**，不 mock `/api`（含浏览器直传）；本地与两套 CI 共用 `scripts/e2e-real.sh` |
 | `release-desktop.yml` | **不镜像** | 发布目标是 GitHub Release（tauri-action + `gh release upload`），需 Windows/macOS runner 与 `GITHUB_TOKEN` |
 
 **触发事件也要对齐**（三套 workflow 的 `on:` 并不相同，别假设一致）：
@@ -63,9 +80,9 @@ make rust-audit
 | 事件 | GitHub 会跑 | GitLab 会跑 |
 |---|---|---|
 | push 到 main/develop | `ci.yml` 四个 job | `server` / `web` / `docker` / `desktop` |
-| pull_request | `ci.yml` + 路径命中时的两个 E2E | 同上 + 命中的 E2E |
-| workflow_dispatch / web | 全部三套 | 全部 7 个（`desktop-build` 为手动） |
-| schedule | **只有两个 E2E** | 只有 `rustfs-e2e` / `playwright-e2e` |
+| pull_request | `ci.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
+| workflow_dispatch / web | 全部四套 | 全部 8 个（`desktop-build` 为手动） |
+| schedule | **只有三个 E2E** | 只有 `rustfs-e2e` / `playwright-e2e` / `e2e-real` |
 
 本地验证 GitLab 流水线（无需 GitLab 实例，用 [gitlab-ci-local](https://github.com/firecow/gitlab-ci-local) 的 docker executor 跑真实 job；版本 pin 在 `Makefile` 的 `GCL`）：
 
