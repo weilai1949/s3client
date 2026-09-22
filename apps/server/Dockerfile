@@ -4,11 +4,11 @@
 ARG GOPROXY=https://proxy.golang.org,direct
 ARG NPM_REGISTRY=https://registry.npmjs.org
 # 注入到二进制的版本号（main.version）。
-ARG VERSION=v1.0.0-rc1
+ARG VERSION=v1.0.0
 
 ###### Web 前端构建 ######
-# Alpine + Node 24 LTS：体积小、漏洞面窄，构建产物只复制 dist/ 到运行时。
-FROM node:24-alpine AS web
+# Alpine + Node 24 LTS（固定到 patch：大版本 tag 会随上游重建，同一 commit 产出的层会漂移）。
+FROM node:24.21.0-alpine AS web
 ARG NPM_REGISTRY
 WORKDIR /web
 # 先还原依赖再拷贝源码，充分利用层缓存；锁文件一并拷贝保证可复现。

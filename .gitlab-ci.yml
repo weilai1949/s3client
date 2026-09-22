@@ -88,7 +88,7 @@ variables:
 # 前端各 job 的公共底座：镜像、缓存、before_script（安装依赖）。
 # 对应 GitHub ci.yml 的 pnpm/action-setup@v4 + actions/setup-node@v4（node 24 + pnpm 缓存）。
 .web-base:
-  image: node:24-bookworm
+  image: node:24.21.0-bookworm
   cache:
     key:
       files:
@@ -266,7 +266,7 @@ docker:
     # 访问宿主 daemon 扫描镜像，--ignorefile 则用容器内可见的相对路径。
     # 二进制来自固定版本镜像，无需额外下载，版本与 GitHub 侧一致。
     - |
-      cid=$(docker create aquasec/trivy:0.58.1)
+      cid=$(docker create aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969)
       docker cp "$cid:/usr/local/bin/trivy" /usr/local/bin/trivy
       docker rm "$cid" >/dev/null
       # R4：DB 预下载带指数退避重试（mirror.gcr.io 抖动曾导致 FATAL connection timed out），
@@ -287,7 +287,7 @@ docker:
       fi
       trivy image \
         --severity CRITICAL,HIGH \
-        --vuln-type os,library \
+        --pkg-types os,library \
         --exit-code 1 \
         --no-progress \
         --ignore-unfixed \
@@ -300,7 +300,7 @@ desktop:
   extends: .ci-trigger
   stage: ci
   timeout: 30 minutes
-  image: rust:1-bookworm
+  image: rust:1.98.1-bookworm
   cache:
     key:
       files:
@@ -329,7 +329,7 @@ desktop-build:
   extends: .ci-manual-only-trigger
   stage: ci
   timeout: 60 minutes
-  image: rust:1-bookworm
+  image: rust:1.98.1-bookworm
   cache:
     key:
       files:
@@ -345,8 +345,10 @@ desktop-build:
     - apt-get update
     - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf curl
     # Node 24 + pnpm 9.15.0（对应 actions/setup-node@v4 + pnpm/action-setup@v4）
+    # setup_24.x 只负责加 apt 仓库（该路径本身没有精确版本），安装必须显式 pin patch，
+    # 否则同一 commit 在不同日期会装出不同 Node。版本来自 NodeSource nodistro 仓库。
     - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-    - apt-get install -y nodejs
+    - apt-get install -y nodejs=24.21.0-1nodesource1
     - corepack enable
     - corepack prepare pnpm@9.15.0 --activate
   script:
@@ -433,7 +435,7 @@ playwright-e2e:
     - pnpm build
     # 对应 GitHub 的 `pnpm exec playwright install chromium --with-deps`。
     # 拆成两步是因为 GitLab 的 script 里不方便传 --with-deps（它等价于先跑 install-deps）；
-    # node:24-bookworm 基于 Debian，apt 源已配置，install-deps 会装齐 chromium 的系统库。
+    # node:24.21.0-bookworm 基于 Debian，apt 源已配置，install-deps 会装齐 chromium 的系统库。
     - pnpm exec playwright install-deps chromium
     - pnpm exec playwright install chromium
     # Start vite preview + 轮询就绪。

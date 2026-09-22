@@ -1,11 +1,58 @@
+# Docker 构建上下文排除清单。
+#
+# 目标：**同一 commit 必须产出同样的镜像层**，无论本地是否跑过覆盖率 / 缓存。
+# 因此 .gitignore 里所有「构建 / 测试产物」与「本机状态」目录都必须在此同步排除，
+# 否则 `docker build` 会把它们打进 context，镜像层随本机操作历史漂移。
+# 回归门禁见 apps/server/repo_infra_gate_test.go（TestDockerignoreExcludesBuildArtifacts）。
+
+# ---- 依赖与构建产物 ----
 **/node_modules
 **/dist
 **/target
+**/*.tsbuildinfo
+**/.vite
+**/vite.config.js.timestamp-*
+**/vite.config.ts.timestamp-*
+
+# ---- 覆盖率（前端 istanbul / 后端 go cover）----
+apps/web/coverage
+**/coverage.out
+**/coverage.txt
+**/*.lcov
+
+# ---- 缓存 ----
+**/.pnpm-store
+**/.eslintcache
+.cargo/
+.trivy-cache/
+.gitlab-ci-local/
+
+# ---- 测试 / 运行产物 ----
+**/playwright-report
+**/test-results
+**/blob-report
+**/playwright/.cache
+.shots/
+.run/
+
+# ---- 日志 ----
+**/*.log
+
+# ---- 源码控制与本地工具状态 ----
 **/.git
-apps/server/data
-apps/server/s3clinet-server
-apps/server/*.log
-apps/desktop/src-tauri/gen
-apps/desktop/src-tauri/icons/source.png
+.vscode/
+.idea/
+.claude/
+.cursor/
+
+# ---- 环境变量（含密钥，绝不进镜像）----
 .env
 .env.*
+
+# ---- 服务端本地产物 ----
+apps/server/data
+apps/server/s3clinet-server
+
+# ---- 桌面端生成物 ----
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/icons/source.png
