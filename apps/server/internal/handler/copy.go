@@ -98,13 +98,13 @@ func (h *Handler) copyMany(w http.ResponseWriter, r *http.Request) {
 	out := copyKeysThenDelete(r.Context(), client, bucket, targetBucket, pairs, 4, nil)
 	copied, failed := out.OK, out.Failed
 	failMsg := out.LastError
-	failKeys := out.FailKeys
+	// API 层统一裁剪：service 层不截断（见 service/batch.go），此处兑现「failedKeys ≤ 200」承诺。
+	failKeys := capFailKeys(out.FailKeys)
 	resp := map[string]any{"copied": copied, "failed": failed, "total": len(pairs)}
 	if failMsg != "" {
 		resp["lastError"] = failMsg
 	}
 	if len(failKeys) > 0 {
-		// service.RunBatch 已把 FailKeys 裁到 200，无需重复裁剪。
 		resp["failedKeys"] = failKeys
 	}
 	h.writeJSON(w, http.StatusOK, resp)
@@ -171,7 +171,7 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			status = "cancelled"
 		}
-		job.Finish(service.ResultFromBatch(out), status)
+		job.Finish(jobResultFromBatch(out), status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total})
 }
@@ -271,8 +271,8 @@ func copyBatchJSON(out service.BatchResult, total int, truncated bool) map[strin
 	if out.LastError != "" {
 		resp["lastError"] = out.LastError
 	}
-	if len(out.FailKeys) > 0 {
-		resp["failedKeys"] = out.FailKeys
+	if keys := capFailKeys(out.FailKeys); len(keys) > 0 {
+		resp["failedKeys"] = keys
 	}
 	return resp
 }
@@ -325,7 +325,7 @@ func (h *Handler) copyPrefixAsync(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			status = "cancelled"
 		}
-		job.Finish(service.ResultFromBatch(out), status)
+		job.Finish(jobResultFromBatch(out), status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
 		"jobId": job.ID, "total": job.Total, "truncated": truncated,

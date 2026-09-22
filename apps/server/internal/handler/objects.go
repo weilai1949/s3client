@@ -224,9 +224,23 @@ func (h *Handler) renameObject(w http.ResponseWriter, r *http.Request) {
 // 大量删除请走 delete-prefix（异步 + 自动分页）。
 const maxDeleteKeys = 1000
 
-// maxJobFailKeys 异步任务结果里保留的失败 key 上限：避免 10 万个全失败时把
-// 结果 JSON（进而 jobs.json）撑到数十 MB。
-const maxJobFailKeys = 200
+// maxFailKeys 是 API 层返回 / 落盘的失败 key 上限：避免 10 万个 key 全失败时把响应
+// （同步路径）与 jobs.json（异步路径）撑到约 10 MB。
+//
+// 这是对外的**承诺**（docs/features.md、docs/api.md）：所有回传 failedKeys 的端点都必须
+// 经 capFailKeys 裁剪。此前只有 delete-prefix 异步路径裁剪，copy/migrate/sync 全部原样
+// 回传——承诺与实现不符（review-2026-09-19.md §7.3 D4）。
+const maxFailKeys = 200
+
+// capFailKeys 把失败 key 列表裁剪到 maxFailKeys。未超限时原样返回（不复制）。
+func capFailKeys(keys []string) []string {
+	if len(keys) <= maxFailKeys {
+		return keys
+	}
+	out := make([]string, maxFailKeys)
+	copy(out, keys[:maxFailKeys])
+	return out
+}
 
 // deleteCounts 批量删除的累计结果，同时是 POST …/delete 的 200 响应体。
 //
@@ -382,14 +396,14 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 					counts.LastError = s3UserMessage(delErr)
 				}
 				for _, k := range chunk {
-					if len(failKeys) < maxJobFailKeys {
+					if len(failKeys) < maxFailKeys {
 						failKeys = append(failKeys, k)
 					}
 				}
 			} else {
 				counts.observe(len(chunk), failures)
 				for _, f := range failures {
-					if len(failKeys) < maxJobFailKeys {
+					if len(failKeys) < maxFailKeys {
 						failKeys = append(failKeys, f.Key)
 					}
 				}

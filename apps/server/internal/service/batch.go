@@ -99,7 +99,8 @@ func RunBatch[I any](
 			})
 		}
 	}
-	// FailKeys 由调用方（API 层）按需裁剪；service 层不重复截断。
+	// FailKeys 保持完整：service 层不做展示层截断。上限（200）由 API 层统一施加
+	// （handler.capFailKeys / jobResultFromBatch），保证所有回传 failedKeys 的端点口径一致。
 	if onProgress != nil {
 		status := "done"
 		if ctx.Err() != nil {

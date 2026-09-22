@@ -37,7 +37,7 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			status = "cancelled"
 		}
-		job.Finish(service.ResultFromBatch(out), status)
+		job.Finish(jobResultFromBatch(out), status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total})
 }

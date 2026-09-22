@@ -85,7 +85,7 @@ func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := migrateSyncResponse{
 		Scanned: out.Scanned, Skipped: out.Skipped, Copied: out.Copied, Failed: out.Failed,
-		FailKeys: out.FailKeys, LastError: out.LastError,
+		FailKeys: capFailKeys(out.FailKeys), LastError: out.LastError,
 	}
 	h.writeJSON(w, http.StatusOK, resp)
 }
