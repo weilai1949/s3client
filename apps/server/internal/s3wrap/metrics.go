@@ -27,13 +27,13 @@ var latencyBuckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 var latencyBucketLabels = []string{"0.01", "0.05", "0.1", "0.25", "0.5", "1", "2.5", "5", "10", "30", "+Inf"}
 
 type s3Metrics struct {
-	calls    atomic.Int64
 	errors   atomic.Int64
 	streamIn atomic.Int64
 	sumNanos atomic.Int64
 	mu       sync.Mutex
 	byCode   map[string]int64
 	buckets  []int64 // 长度 len(latencyBuckets)+1
+	calls    int64   // 与 buckets 同一把锁下维护：每次 observe 恰好 +1 个桶，故 sum(buckets) == calls
 }
 
 var globalS3Metrics = newS3Metrics()
@@ -49,11 +49,15 @@ type S3MetricsSnapshot struct {
 	StreamBytes  int64
 	LatencySum   time.Duration
 	ErrorsByCode map[string]int64
-	// Latency 为累积直方图：Latency[i].UpperBound 是桶上界（+Inf 用 0 之外的哨兵由调用方区分）。
+	// Latency 是**累积**直方图（Prometheus `_bucket{le=...}` 语义）：Latency[i].Count 是
+	// 「耗时 ≤ Latency[i].UpperBound 的调用数」，因此 Count 沿下标**单调不减**，且
+	// 最后一个 +Inf 桶恒等于 Calls（每次调用恰好落入一个桶，见 observe）。
+	// 内部存储是每桶增量（O(1) 写入），累积在快照时计算。
 	Latency []LatencyBucket
 }
 
-// LatencyBucket 是直方图的一个桶。
+// LatencyBucket 是累积直方图的一个桶。
+// Count 是「≤ UpperBound」（Inf 桶为「全部」）的累计调用数，而非该桶区间的增量。
 type LatencyBucket struct {
 	UpperBound float64
 	Inf        bool
@@ -61,6 +65,10 @@ type LatencyBucket struct {
 }
 
 // MetricsSnapshot 返回当前 S3 指标快照。
+//
+// 直方图在此处由「每桶增量」累积为 Prometheus 语义：`_bucket{le=...}` 要求 le 单调不减、
+// 且 `+Inf` 等于 `_count`。此前直接把增量当累积输出，导致 `histogram_quantile()` 全错
+// （review-2026-09-19.md §7.3 D1）。
 func MetricsSnapshot() S3MetricsSnapshot {
 	m := globalS3Metrics
 	m.mu.Lock()
@@ -70,15 +78,17 @@ func MetricsSnapshot() S3MetricsSnapshot {
 		codes[k] = v
 	}
 	lat := make([]LatencyBucket, 0, len(m.buckets))
+	var cumulative int64
 	for i, c := range m.buckets {
+		cumulative += c
 		if i == len(latencyBuckets) {
-			lat = append(lat, LatencyBucket{Inf: true, Count: c})
+			lat = append(lat, LatencyBucket{Inf: true, Count: cumulative})
 			continue
 		}
-		lat = append(lat, LatencyBucket{UpperBound: latencyBuckets[i], Count: c})
+		lat = append(lat, LatencyBucket{UpperBound: latencyBuckets[i], Count: cumulative})
 	}
 	return S3MetricsSnapshot{
-		Calls:        m.calls.Load(),
+		Calls:        m.calls,
 		Errors:       m.errors.Load(),
 		StreamBytes:  m.streamIn.Load(),
 		LatencySum:   time.Duration(m.sumNanos.Load()),
@@ -102,10 +112,10 @@ func RecordStreamBytes(n int64) {
 }
 
 func (m *s3Metrics) observe(d time.Duration, err error) {
-	m.calls.Add(1)
 	m.sumNanos.Add(d.Nanoseconds())
 	secs := d.Seconds()
 	m.mu.Lock()
+	m.calls++
 	idx := len(latencyBuckets) // 默认落入 +Inf
 	for i, ub := range latencyBuckets {
 		if secs <= ub {

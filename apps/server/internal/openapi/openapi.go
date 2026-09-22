@@ -7,7 +7,7 @@
 //
 // 使用：
 //
-//	api := openapi.New("s3clinet API", "1.0.0-rc1")
+//	api := openapi.New("s3clinet API", "1.0.0")
 //	api.Operation("GET", "/api/health", openapi.Op{Summary: "...", ...}).
 //	    Response("200", openapi.Res{JSON: openapi.Object()})
 //	spec, _ := api.MarshalJSON()
@@ -96,6 +96,13 @@ type Registry struct {
 	paths map[string]map[string]Op
 	info  Info
 	srvs  []Server
+	// spec 是 MarshalJSON 的结果缓存（nil = 未缓存/已失效）。
+	//
+	// 背景（review-2026-09-19.md §6.2 P3）：注册表在启动时构建完成后不再变化，但
+	// HTTPHandler 此前每次请求都全量重新 marshal 70 个 operation。这里按「变更即失效」
+	// 缓存：任何注册/覆盖（Operation / Param / Respond / SetInfo / AddServer）都置 nil，
+	// 因此语义与「每次都重新 marshal」完全一致，只是消除了重复计算。
+	spec []byte
 }
 
 // New 构造一个空 Registry。
@@ -111,6 +118,7 @@ func (r *Registry) SetInfo(info Info) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.info = info
+	r.spec = nil
 }
 
 // AddServer 注册一个 server URL。
@@ -118,6 +126,7 @@ func (r *Registry) AddServer(s Server) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.srvs = append(r.srvs, s)
+	r.spec = nil
 }
 
 // Operation 注册 / 覆盖一个 operation。返回 *OpBuilder 以便链式添加 param/response。
@@ -128,6 +137,7 @@ func (r *Registry) Operation(method, path string, op Op) *OpBuilder {
 		r.paths[path] = map[string]Op{}
 	}
 	r.paths[path][strings.ToUpper(method)] = op
+	r.spec = nil
 	return &OpBuilder{r: r, method: method, path: path}
 }
 
@@ -145,6 +155,7 @@ func (b *OpBuilder) Param(p Param) *OpBuilder {
 	m := b.r.paths[b.path][strings.ToUpper(b.method)]
 	m.Params = append(m.Params, p)
 	b.r.paths[b.path][strings.ToUpper(b.method)] = m
+	b.r.spec = nil
 	return b
 }
 
@@ -158,11 +169,42 @@ func (b *OpBuilder) Respond(status string, resp Response) *OpBuilder {
 	}
 	m.Responses[status] = resp
 	b.r.paths[b.path][strings.ToUpper(b.method)] = m
+	b.r.spec = nil
 	return b
 }
 
 // MarshalJSON 输出 OpenAPI 3.0 JSON。
+//
+// 结果按「注册表未变更」缓存（P3）：并发调用只会计算一次，返回的字节切片是缓存副本，
+// 调用方改写不会污染后续请求。任何注册动作都会置空缓存，故与「每次重新 marshal」等价。
 func (r *Registry) MarshalJSON() ([]byte, error) {
+	r.mu.RLock()
+	if r.spec != nil {
+		out := make([]byte, len(r.spec))
+		copy(out, r.spec)
+		r.mu.RUnlock()
+		return out, nil
+	}
+	r.mu.RUnlock()
+
+	b, err := r.buildSpec()
+	if err != nil {
+		return nil, err
+	}
+
+	r.mu.Lock()
+	// 双检：并发构建时以先写入者为准（内容确定，二者字节相同）。
+	if r.spec == nil {
+		r.spec = b
+	}
+	out := make([]byte, len(r.spec))
+	copy(out, r.spec)
+	r.mu.Unlock()
+	return out, nil
+}
+
+// buildSpec 实际渲染 OpenAPI 文档（不触碰缓存字段）。
+func (r *Registry) buildSpec() ([]byte, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -296,6 +338,7 @@ func renderResponses(rs map[string]Response) map[string]any {
 }
 
 // HTTPHandler 返回一个 http.Handler，吐出当前 Registry 的 JSON 快照。
+// 输出经 MarshalJSON 缓存，重复请求不再重新渲染 70 个 operation（P3）。
 func (r *Registry) HTTPHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		b, err := r.MarshalJSON()
