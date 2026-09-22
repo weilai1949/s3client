@@ -6,7 +6,7 @@
 > - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`assessment.md`](assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-19（`v1.0.0-rc1` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 三轮处置）
+> 最后更新：2026-09-22（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–S 各轮处置台账
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–U 各轮处置台账
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -346,7 +346,11 @@
 | 13 处 `ctx.account.value!.id` | ✅ | 收敛入口，剩余 3 处本轮清理 |
 | blob 下载同步 `revokeObjectURL` | ✅ | 延迟 60s |
 | `{} as KeyBindings` cast hack | ✅ | 改 `const bindings: KeyBindings = {}` + 可选字段 |
-| pnpm 版本口径不一（9 vs 11） | ✅ | 全仓统一 `9.15.0`（`packageManager` + 各 workflow + Dockerfile） |
+| pnpm 版本口径不一（9 vs 11） | ✅ | 全仓统一 `9.15.0`（`packageManager` + 各 workflow + Dockerfile）；`apps/desktop/package.json` 亦补 `packageManager`，由 `repo_infra_gate_test.go` 断言两个 package.json 与 CI 的 pnpm 版本一致 |
+| Node 只 pin 大版本 | ✅ | 统一到 `24.21.0`（`node-version` / `node:24.21.0-alpine` / `node:24.21.0-bookworm` / NodeSource `nodejs=24.21.0-1nodesource1`），由 `TestNodePinnedToPatchVersion` 守住 |
+| Rust 工具链未 pin | ✅ | `dtolnay/rust-toolchain` 由 `stable` 浮动分支 tip 改为版本分支 SHA（`ce678459… # 1.98.1`），新增 `apps/desktop/src-tauri/rust-toolchain.toml`（`channel = "1.98.1"`），GitLab 镜像 `rust:1.98.1-bookworm`；由 `TestRustToolchainIsVersionPinned` 守住 |
+| Trivy 固定 0.58.1（落后 + `--vuln-type` deprecated） | ✅ | 升到 `0.74.0` 并加 digest 双 pin（`aquasec/trivy:0.74.0@sha256:62b1e65e…`），`--vuln-type` → `--pkg-types os,library`；由 `TestTrivyImageIsVersionAndDigestPinned` 守住 |
+| `.dockerignore` 漏覆盖率/缓存目录 | ✅ | 补 `apps/web/coverage`、`.pnpm-store`、`test-results`、`playwright-report`、`.run/`、`.cargo/`、`.trivy-cache/`、`.gitlab-ci-local/`、`coverage.out`/`.txt`、`*.tsbuildinfo`、`*.log` 等；由 `TestDockerignoreExcludesBuildArtifacts` 守住（注释行不计入） |
 | README 示例绑回环 | ✅ | `-p 127.0.0.1:8080:8080` + 说明 |
 | nginx 容器缺内存限制 | ✅ | 两个 compose 均 `memory: 128M` |
 | `\|\| true` 吞安装失败 | ➖ | 已无 install 命令使用；仅保留 read/kill 的良性回退 |
@@ -375,7 +379,8 @@
 - **Batch1 存储类型 + 版本比较 + 一键还原**：`HeadObject` 返回 `storageClass`；`POST /storage-class` 一键切换（标准 / 低频 / 单区 / 智能分层 / 归档）；版本比较（并排元数据 + 逐行内容差异，二进制或 >2MB 仅比元数据）；`POST /delete-marker/restore` 撤销删除。
 - **Batch2 桶管理菜单**：7 页签（概览 / 生命周期 / SSE / CORS / 网站托管 / 桶策略 / 桶标签）+ 15 个 `Get/Put/DeleteBucket*` 端点；`isNoSuchBucketSetting` 把「未配置」映射为空响应。
 - **Batch3 回收站菜单**：`GET /trash` + `POST /trash/purge`，列全部删除标记、一键还原、彻底清除（永删该 key 全部版本）。
-- **四轴评审修复**：Vue `key` 为保留属性导致 7 个弹窗实际不可用 → 统一 `objectKey`（Vue 3.5 SSR 复现验证）；桶设置页签 `watch` 补 `immediate`（此前永不加载、保存会用默认值覆盖）；CORS 非白名单普通请求直接 403 + `readJSON` 强制 JSON；`inline` 代理 MIME 白名单；代理支持 `versionId` + `Accept-Ranges`/416；创建账号忽略客户端 id；ZIP 条目 `/` 与 `\` 双消毒；`.env` 加载；`PurgeObject` 改 `DeleteObjects` 批量 1000/批；`deletePrefix` 页前检查 + 跨页切分；multipart 段号 1..10000 且唯一校验；copy/migrate 4 路有界并发、migrate 限 10k key、failKeys ≤200；列表导航序号防过期响应；上传入队捕获所属桶；焦点陷阱与初始焦点；版本比较下载走服务端代理。
+- **四轴评审修复**：Vue `key` 为保留属性导致 7 个弹窗实际不可用 → 统一 `objectKey`（Vue 3.5 SSR 复现验证）；桶设置页签 `watch` 补 `immediate`（此前永不加载、保存会用默认值覆盖）；CORS 非白名单普通请求直接 403 + `readJSON` 强制 JSON；`inline` 代理 MIME 白名单；代理支持 `versionId` + `Accept-Ranges`/416；创建账号忽略客户端 id；ZIP 条目 `/` 与 `\` 双消毒；`.env` 加载；`PurgeObject` 改 `DeleteObjects` 批量 1000/批；`deletePrefix` 页前检查 + 跨页切分；multipart 段号 1..10000 且唯一校验；copy/migrate 4 路有界并发、migrate 限 10k key、failKeys ≤200<sup>†</sup>；列表导航序号防过期响应；上传入队捕获所属桶；焦点陷阱与初始焦点；版本比较下载走服务端代理。
+  > <sup>†</sup> **该条当时并不成立**（2026-09-21 复核，review-2026-09-19.md §7.3 D4）：服务端 `BatchResult.FailKeys` 不做截断，只有异步 `delete-prefix` 在 handler 内裁剪，copy/migrate/sync 原样回传——10k 全失败会回约 10 MB 并落盘 `jobs.json`。**2026-09-22 已真正实现**：上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，所有回传 `failedKeys` 的端点（copy-objects 同步/异步、migrate 同步/异步、migrate/sync、delete-prefix 同步/异步）统一裁剪，异步路径在 `jobResultFromBatch` 中于 `Finish`（落盘）之前裁剪；回归测试 `TestOlCopyManyFailKeysAll` / `TestOlMigrateSyncFailKeysCapped` / `TestOlMigrateAsyncFailKeysCappedBeforePersist`。
 - 测试与清理：handler 覆盖率 60.3% → 70.8%；AWS SDK 类型外泄清理（`FromS3Object` / `FormatBuckets` / `DescribeACL` / `GranteeLabel`）；`filename*` RFC 5987；store 临时文件 `O_CREATE|O_EXCL`；删除死代码（`PresignGet`、`genSign`、`SignUrlDialog` 等）。
 
 #### 20260901.2（2026-09-01）
@@ -541,7 +546,7 @@
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
-| 1 | 落盘明文启动告警 | ✅ | `config.Config.StorePlaintextWarning()`：`json` / `sqlite` 驱动且 `S3C_STORE_KEY` 为空时返回可执行文案（含驱动名、`DataDir`、`encrypted` 建议与最短长度），其余配置（含未知驱动）返回空串；`runServer` 在 `Validate` 之后以 `logger.Warn` 输出。先写失败测试（`TestStorePlaintextWarning` 六例表驱动）再实现；`TestMainServerWarnsPlaintextStore` 用 fork 子进程跑完整 `main()`，断言 `sqlite` + 空 key 启动日志确实出现「明文落盘」，加密配置不告警。对应风险 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3（启动告警守卫） |
+| 1 | 落盘明文启动告警 | ✅ | `config.Config.StorePlaintextWarning()`：`json` / `sqlite` 驱动且 `S3C_STORE_KEY` 为空时返回可执行文案（含驱动名、`DataDir`、`encrypted` 建议与最短长度），其余配置（含未知驱动）返回空串；`runServer` 在 `Validate` 之后以 `logger.Warn` 输出。先写失败测试（`TestStorePlaintextWarning` 六例表驱动）再实现；`TestMainServerWarnsPlaintextStore` 用 fork 子进程跑完整 `main()`，断言 `sqlite` + 空 key 启动日志确实出现「明文落盘」，加密配置不告警。对应风险 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3（启动告警守卫）。**2026-09-20 强化**：该告警仅在显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行时才会出现——默认改为硬失败，见 §T |
 | 2 | 旧 `roadmap #N` 引用清零 | ✅ | 2026-09-17 收口后，代码注释里仍留 **27 处**（25 个文件）指向已归档编号的 `roadmap #N`（`docker-compose.yml`、`config.go`、`store/*`、`handler/*`、`s3wrap/*`、`apps/web/src/*`）。按语义改写：带 `ASSESSMENT` 编号的只保留该编号；纯 roadmap 编号的改为「已闭环：features.md §M」；`docker-compose.yml` 的密钥加密说明改指 `features.md` §M + `roadmap.md` §5.1「已收敛」索引 R3。全仓 `grep -rn "roadmap #[0-9]"`（除 `CHANGELOG.md` 的历史记录）为零，编号引用规则见 [roadmap.md](roadmap.md) §六 第 6 条 |
 
 ---
@@ -664,6 +669,63 @@
 
 ---
 
+### T. 2026-09-20 审查 §9.3 P2 处置（契约 #26–#28 + 安全 / 供应链 #29–#34）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.3 P2。该审查文档按约定只保留**未闭环**发现，
+> 本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。原则同 §R / §S：
+> **补门禁而不只是补缺陷**——每项都配了会先失败的回归测试，新增门禁在文件头写明「断言范围」。
+> #25（桌面端签名）经确认是**外部凭证阻塞**（roadmap E6），代码侧无剩余工作，转入 ⛔ 外部阻塞。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | #26 query 参数漏声明 | ✅ | 补 `head.versionId` / `proxy.maxBytes` / `trash.prefix` / `objects.startAfter`（+ `docs/api.md` 补 `startAfter`）。新增 `openapi_query_params_test.go`：routes.go → handler 调用闭包 → 机械抽取 `q.Get(...)`，与注册表 `in:query` **双向**比对（含自检计数）。**上线即抓到第 5 处漂移**：`GET /versions` 的幻影参数 `key`（handler 从不读取）→ 移除 |
+| 2 | #27 类型 / required / 枚举语义门禁 | ✅ | 新增 `openapi_semantics_test.go`。**枚举**：每个 `EnumStr` 站点须在 `enumContracts` 登记，真实值从 `switch` case / `map[string]bool` / 跨包 `service` 常量抽取后双向比对 → 抓到 `PUT object-acl` 漏 `authenticated-read`/`aws-exec-read`。**required**：注册表 required 必须是 handler 真实解码且非「空值→默认」的字段 → 修正 `presign.method`、`copy-object.newBucket`、`copy-prefix.targetBucket` 三处错误 required。残留（`bucketOr` 默认桶模式）写入文件头 |
+| 3 | #28 响应门禁残留范围 | ✅ | `openapi_response_contract_test.go` 新增**端点级响应门禁**：对声明具体 `properties` 的 2xx 响应，抽取 handler `writeJSON` 表达式的键（字面量 map / 命名 struct tag / 变量 / 同包 helper 递归）双向比对；4 个注册表文件约 30 个 `Obj()` 响应升级为 `BuildObj` 纳入门禁；修正 3 个异步端点 `200`→`202`。残留（其他注册表自由体、运行时动态键 map）写入文件头 |
+| 4 | #29 / #31 明文落盘安全默认 | ✅ | `Config.Validate` 对 `json`/`sqlite` + 空 `S3C_STORE_KEY` 返回新 sentinel `ErrPlaintextStoreNotAllowed` **硬失败**，除非 `S3C_ALLOW_PLAINTEXT_STORE=1`（opt-in 时保留 WARN）；报错给出两条出路且不泄露密钥。base compose 改 `${S3C_STORE_KEY:?}` 强制非空；`.env.example`（根 + server）补说明；`e2e.yml` 补 dummy key（`docker compose up` 会插值整个文件）。测试 `TestValidatePlaintextStoreRejected` / `TestMainServerRejectsPlaintextStoreWithoutOptIn` / `TestMainServerAllowsPlaintextStoreWithOptIn` / `TestFromEnvAllowPlaintextStore` |
+| 5 | #30 metrics 免鉴权文档声明 | ✅ | 行为不变（有意内网 scrape），在 `README.md` / `docs/api.md` / `docs/deployment.md` §6.3 / `docs/threat-model.md` §2 显式声明「即使配了 `S3C_TOKEN` 也不受保护、匿名可读、勿直接暴露公网」；`TestMetricsEndpointUnauthenticatedEvenWithToken` 钉住行为（metrics 无 token 200 / accounts 无 token 401） |
+| 6 | #32 Trivy 升级 + digest pin | ✅ | `aquasec/trivy:0.58.1` → `0.74.0@sha256:62b1e65e…1969`（两套 CI；digest 经 `docker pull` + ghcr.io + public.ecr.aws 三源核对）；`--vuln-type` → `--pkg-types os,library`（0.74.0 `--help` + `pkg/flag/package_flags.go` 核实）。门禁 `TestTrivyImageIsVersionAndDigestPinned`（两套 CI 版本一致 + 必须带 digest + 禁用 `--vuln-type`） |
+| 7 | #33 工具链 pin | ✅ | **关键发现**：原 `dtolnay/rust-toolchain` SHA `6bed0761…` 是 `stable` **浮动分支 tip**（commit 即 `toolchain: stable`），并非版本 pin——改为版本分支 SHA `ce678459… # 1.98.1`；新增 `rust-toolchain.toml`（`channel = "1.98.1"`）；GitLab `rust:1.98.1-bookworm`。Node `24` → 精确 `24.21.0`（workflow / alpine / bookworm / NodeSource）。desktop `packageManager: pnpm@9.15.0`（实测不破坏 lockfile）。门禁 `TestRustToolchainIsVersionPinned` / `TestNodePinnedToPatchVersion` / `TestPackageManagerIsPinnedToCIPnpm` |
+| 8 | #34 `.dockerignore` 补齐 | ✅ | 补 `apps/web/coverage`、`.pnpm-store`、`test-results`、`playwright-report`、`.run/`、`.cargo/`、`.trivy-cache/`、`.gitlab-ci-local/`、`coverage.out`/`.txt`、`*.tsbuildinfo`、`*.log` 等；`apps/server/*.log` → `**/*.log`。门禁 `TestDockerignoreExcludesBuildArtifacts`（11 条必需模式，注释行不计入） |
+
+**门禁实跑**：`gofmt -l` 干净 / `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** /
+`go test -race -count=1 -coverprofile` 8/8 包通过且**每包 100.0% 语句覆盖**（`awk '$NF==0'` 零块）/
+`go build ./...` OK；前端 `pnpm lint` 0 告警 / `pnpm test` 66 文件 1039 用例全绿 / `pnpm build` OK；
+`docker compose config` 缺 `S3C_STORE_KEY` → exit 1、补齐 → exit 0。供应链 pin 均经上游实测核验
+（Trivy 版本 + digest、Node 24.21.0、Rust 1.98.1），新门禁均做「先红后绿」与变异验证。
+
+---
+
+### U. 2026-09-22 审查 §9.3 P2 收尾（D1 / D4 / D5 / D10 + P3 + R7 / R9 / R10 + 门禁质量）
+
+> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §7.3 与 §9.3 的余项；逐条改动见
+> [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。原则同 §R / §S / §T：**补门禁而不只是补缺陷**，
+> 每项都配了会先失败的回归测试，关键修复做「还原旧实现」变异验证。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | D1 Prometheus 直方图语义违规 | ✅ | 根因：`s3wrap` 记的是**每桶增量**，`handler/metrics.go` 直接当**累积**值按 `_bucket{le=…}` 输出 → `le` 非单调、`+Inf`≠`_count`（实测 `le="0.01"`=3 / `le="+Inf"`=0 / `_count`=3），`histogram_quantile()` 全错。现 `MetricsSnapshot` 快照时累积为真累积值；并把 `calls` 由 `atomic.Int64` 移入同一把锁（消除「`+Inf`=0 而 `_count`=3」的读写不一致窗口）。测试：`TestS3MetricsHistogramIsCumulativeAcrossBuckets`（3 个耗时逐桶断言累积值）、`TestS3MetricsHistogramConcurrentContract`（8×50 并发）、`TestMetricsHistogramSatisfiesPrometheusContract`（端点级解析 `le` 单调性与 `+Inf == _count`）。**变异验证**：把 `cumulative += c` 还原为 `cumulative = c` → 三条全部红灯，且复现报告中 `+Inf`=0 / `_count`=3 的原始症状 |
+| 2 | P3 `/api/openapi.json` 无缓存 | ✅ | `Registry` 增加 `spec` 缓存：`Operation` / `Param` / `Respond` / `SetInfo` / `AddServer` 全部置空（语义与「每次重算」等价）；`MarshalJSON` 双检加锁只算一次并返回**副本**（调用方改写不污染缓存）。测试：`TestRegistry_MarshalJSONCached`（含副本隔离）、`TestRegistry_MarshalJSONCacheInvalidated`（四类注册动作逐一验证）、`TestRegistry_MarshalJSONConcurrent`。既有 `TestOpenAPI_ContractMarshalDeterministic`（8×8 并发字节一致）继续通过 |
+| 3 | D4 `failKeys ≤ 200` 承诺不成立 | ✅ | 根因：承诺写在 `features.md` / `api.md`，但服务端只有异步 `delete-prefix` 在 handler 内裁剪；`copy-objects`（同步/异步）、`migrate`（同步/异步）、`migrate/sync` 全部原样回传 → 10k 全失败约 10 MB 并落盘 `jobs.json`。现上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，**所有**回传 `failedKeys` 的端点统一裁剪；异步路径经新增 `jobResultFromBatch` 在 `Job.Finish`（落盘）**之前**裁剪；`failed` 计数不受裁剪影响。测试：`TestOlCopyManyFailKeysAll`（201 失败 → 列表 200、计数 201）、`TestOlMigrateSyncFailKeysCapped`、`TestOlMigrateAsyncFailKeysCappedBeforePersist`（**直接读 `jobs.json`** 断言裁剪发生在持久化前）。同时修正 `service/batch.go` 与 `copy.go` 中两处互相矛盾的注释 |
+| 4 | D5 `git tag v1.0.0` 不存在 | ✅ | `scripts/release-version.sh v1.0.0` 同步 15 处版本串（Makefile / Dockerfile / compose×2 / web+desktop `package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`（只改本包）/ `main.go` / README / docs），并打 `v1.0.0` tag。历史性提及（CHANGELOG 已发布区、roadmap 里程碑行、本审查报告）按「不追溯篡改」纪律保留 |
+| 5 | D10 CHANGELOG 段内过期计数 | ✅ | `[Unreleased]` 内两处「当时实测值」（覆盖率 3883/2769/1059/3339、前端 63 文件 / 983 测试）已失真。按本文件「不追溯篡改已发布区」的纪律**保留原值并加注**当时时点与新值（4074/2844/1095/3503、66 文件 / 1039），不改写历史数字 |
+| 6 | R7 本地 `make` ≠ CI | ✅ | 新增 `lint`（golangci-lint）/ `govulncheck` / `check`（聚合静态检查 + 双侧覆盖率）目标；全部 `pnpm install` → `--frozen-lockfile`；`test-all: test-cover web-test-cover`（此前无覆盖率门禁）；`.PHONY` 补全全部已定义目标。门禁 `TestMakefileMirrorsCIGates`（含「所有已定义目标必须在 .PHONY」的机械检查；**变异验证**：还原裸 `pnpm install` → 红灯） |
+| 7 | R9 GitHub 不传 `VERSION` build-arg | ✅ | 构建与推送两处都显式注入 `VERSION=ci`（此前回落到 Dockerfile 过期字面量，而 GitLab 传 `ci`、Makefile 传真实版本——一个 Dockerfile 三种行为）。门禁 `TestGitHubWorkflowInjectsVersionBuildArg`（要求 ≥2 处，保证扫描与推送版本一致；**变异验证**：改掉一处 → 红灯） |
+| 8 | R10 无 workflow 推送镜像 | ✅ | 新增 `publish` job：`needs: docker`（Trivy 通过才推）、`if: github.event_name != 'pull_request'`、`permissions: packages: write`、`docker/login-action` 登录 GHCR、按 commit SHA + 分支双标签推送。因 buildx `push` 与 `load` 互斥且扫描需 `load`，拆为独立 job（同时避免推出未扫描镜像）。门禁 `TestGitHubWorkflowPushesImage` |
+| 9 | 测试质量：21 个用例名硬编码过期行号 | ✅ | 如 `api.test.ts` 写 `line 125 else`（实际 `listServers` 在 `storage.ts:301`）、`bucketPolicy.test.ts` 写 `line 111`（实际 `:108`）——测试在描述一个不存在的版本。已从全部用例名移除行号（改为描述行为，行号留在注释），新增门禁：`deadcode_gate.test.ts` 的「测试名不得硬编码源码行号」（含扫描下限自检防空跑） |
+| 10 | 测试质量：i18n 门禁两处盲区 | ✅ | ① `usedKeyTexts` 对整份源码做正则 → **注释里的键名也算「已使用」**；现先按字符扫描剥离注释（正确跳过字符串字面量，避免把 `'https://x'` 的 `//` 当注释）再匹配。② 双语只比**键数量** → `zh-CN` 缺 `a` 而 `en-US` 多 `b` 时数量相等仍绿；现按语言解析键集合做**集合级双向比对**，并新增「每个键两种语言取值都非空」。**变异验证**：改名一个 en-US 键（数量不变）→ 集合门禁红灯；删真实引用只留注释 → 死键门禁红灯 |
+| 11 | 文档失真小项 | ✅ | `openapi_contract_test.go` 的 `apiRouteCount` 注释算错（写「69 = 68 + 1」，常量与实际均为 70 → 改「70 = 69 + 1」）；`docs/todolist.md` 补记 #40 / #42 / #43 / #44 为**从未启用的保留空号**（避免被误读为漏登记），#15 补入已完成编号 |
+
+**门禁实跑**：后端 `gofmt -l` 干净 / `go vet ./...` 0 告警 / `go test -race -count=1 -coverprofile`
+8/8 包通过且**每包 100.0% 语句覆盖**；前端 `pnpm lint` 0 告警 / `pnpm typecheck` 通过 /
+`pnpm test:coverage` **66 文件 1042 用例全绿，四项覆盖率 100%**（statements 4074 / branches 2844 /
+functions 1095 / lines 3503）。
+
+> **仍未纳入机械门禁的残留**（须人工跟踪，已写入各门禁文件头）：端点内联 / 运行时动态键的响应体、
+> query 参数的 `Has()` / `Values()` 读取口径、md 表格中的叙述性数字，以及**真实 Go 后端 + 真实前端
+> 产物**的浏览器联调冒烟（todolist #37，需起真实后端 + RustFS，属 CI 架构改动）。
+
+---
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
@@ -674,6 +736,10 @@
 > `golangci-lint run ./...` **0 issues**、前端 64 文件 / **986** 测试全绿、`cargo audit` **0 漏洞**（7 条告警已 triage）。
 >
 > 2026-09-19 审查 §三（正确性 B3–B11 / F2–F10）处置后复测见 §R 末段：后端 8/8 包 **100.0%**、前端 66 文件 / **1039** 测试全绿。
+>
+> 2026-09-20 审查 §9.3 P2（契约 #26–#28 + 安全 / 供应链 #29–#34）处置后复测见 §T 末段：
+> 后端 8/8 包 **100.0%**（`awk '$NF==0'` 零块）、`golangci-lint` **0 issues**、前端 66 文件 / **1039** 测试全绿、
+> `docker compose config` 在缺 `S3C_STORE_KEY` 时拒绝启动。
 
 | 门禁 | 结果 |
 |---|---|

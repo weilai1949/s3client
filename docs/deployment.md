@@ -35,10 +35,12 @@ S3C_LOG_JSON=1
 # S3C_SSRF_DENY_PRIVATE=1
 ```
 
-> **安全提醒**：`sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时才会把 `secretKey` 加密落盘
-> （AES-256-GCM）；不设 key 即为明文，仅限本地联调——此时 `json` / `sqlite` 驱动会在启动日志打出
-> 「secretKey 将明文落盘」WARN 告警（`S3C_STORE_DRIVER=encrypted` 或设 key 后消失）。生产推荐
-> `encrypted` 驱动（整文件加密）或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，`openssl rand -hex 32`）。
+> **安全提醒（安全默认：明文存储拒绝启动）**：`json` / `sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时
+> 才会把 `secretKey` 加密落盘（AES-256-GCM）；**不设 key 时进程直接拒绝启动**，除非显式设置
+> `S3C_ALLOW_PLAINTEXT_STORE=1`（仅限本地联调，启动日志会打出「secretKey 将明文落盘」WARN）。
+> 生产推荐 `encrypted` 驱动（整文件加密）或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，
+> `openssl rand -hex 32`）。`docker-compose.yml`（base）已用 `${S3C_STORE_KEY:?…}` 做非空守卫，
+> 未填 key 时 `docker compose up` 直接失败；`docker-compose.prod.yml` 用 `encrypted` + 强制 key。
 > 加密文件格式为 S3C3（Argon2id 参数随文件头保存），并兼容读取旧的 S3C2 库。
 > 详见 [threat-model.md](threat-model.md)。
 
@@ -98,7 +100,7 @@ cd apps/web && pnpm dev         # 前端 5173（Vite 代理到后端）
 
 ```bash
 curl http://127.0.0.1:8080/api/health
-# {"status":"ok","version":"v1.0.0-rc1","time":"...","store":{"ok":true}}
+# {"status":"ok","version":"v1.0.0","time":"...","store":{"ok":true}}
 # store 探测失败返回 503（不做降级，见 ADR-002）
 ```
 
@@ -119,6 +121,8 @@ curl http://127.0.0.1:8080/api/health
 ### 6.3 指标
 
 `/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`（存储可达性，掉线为 0）、`s3c_ssrf_deny_private`（SSRF 生效策略 0/1）与 `s3c_stream_interrupted_total`（流式传输中断计数）。后者用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
+
+> **`/api/metrics` 不受 `S3C_TOKEN` 保护**：即使配置了 token，只要 `S3C_EXPOSE_METRICS=1`，该端点无需 `Authorization` 头即返回 200（有意为内网 Prometheus 免 token scrape）。代价是**匿名可读**（版本、存储可达性、S3 上游调用统计等运行信息）。请只在**内网 / 反向代理鉴权之后**暴露，切勿把开启 metrics 的实例直接放上公网。
 
 ### 6.4 升级
 

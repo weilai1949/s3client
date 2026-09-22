@@ -85,7 +85,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 > ⚠️ **别把 GitHub 的 `&& exit 0` 直接搬到 GitLab**：GitLab 把整个 `script` 拼成**一个 shell 脚本**执行，`exit 0` 结束的是**整个 job**。`rustfs-e2e` / `playwright-e2e` 的就绪轮询若照搬 GitHub 的 `curl … && exit 0`，会在服务就绪后立刻退出——**测试一条没跑却报 PASS**（GitHub 每个 `run:` 是独立 step，所以那边写法没问题）。本仓库统一用「置标志位 + `break`」跳出循环。
 
-> **Trivy 镜像名坑**：Docker Hub 上的仓库是 `aquasec/trivy`，`aquasecurity/trivy` **只存在于 `ghcr.io`**。写成 `aquasecurity/trivy` 时 `docker run` 拉不到镜像会以 **exit 125** 退出，看起来像「扫出漏洞导致失败」（漏洞门禁是 exit 1），实际是镜像名错。两套 CI 现均用 `aquasec/trivy:0.58.1`。
+> **Trivy 镜像名坑**：Docker Hub 上的仓库是 `aquasec/trivy`，`aquasecurity/trivy` **只存在于 `ghcr.io`**。写成 `aquasecurity/trivy` 时 `docker run` 拉不到镜像会以 **exit 125** 退出，看起来像「扫出漏洞导致失败」（漏洞门禁是 exit 1），实际是镜像名错。两套 CI 现均用 `aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969`（tag + digest 双 pin；`repo_infra_gate_test.go` 的 `TestTrivyImageIsVersionAndDigestPinned` 守住两套 CI 一致且必须带 digest）。`--vuln-type` 已 deprecated，改用 `--pkg-types os,library`（0.74.0 的 `trivy image --help` 与 `pkg/flag/package_flags.go` 已核实）。
 
 > ⚠️ **关于覆盖率 100% 门禁**：项目 CI 对后端与前端均设有 100% 覆盖率门禁。后端直接检查
 > profile 中是否存在 `count==0` 的语句块，而不是比较 `total` 百分比——后者只有 1 位小数，

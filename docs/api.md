@@ -1,6 +1,8 @@
 # REST API 参考
 
 后端默认监听 `127.0.0.1:8080`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`。
+
+> **`/api/metrics` 有意不受 `S3C_TOKEN` 保护**：即使配置了 token，只要设置 `S3C_EXPOSE_METRICS=1`，`GET /api/metrics` 无需 `Authorization` 头即返回 200（`withAuth` 只豁免 `/api/health` 与 `/api/metrics`，见 `middleware.go`）。这是为了让内网 Prometheus 直接 scrape 而无需分发 token；代价是该端点一旦暴露即**匿名可读**（含版本、存储可达性、S3 上游调用统计等运行信息）。因此**不要**把开启 metrics 的实例直接暴露到公网，应仅在内网 / 反向代理鉴权之后放行。
 所有响应带 `X-Request-ID`（客户端可传入，否则服务端生成）；访问日志字段 `req` 与之对应。
 
 错误格式：`{"error": "..."}`  
@@ -13,7 +15,7 @@ S3 错误码与用户消息对照见 [`docs/errors.md`](./errors.md)。
 GET /api/health
 ```
 ```json
-200 {"status":"ok","version":"v1.0.0-rc1","time":"...","store":{"ok":true}}
+200 {"status":"ok","version":"v1.0.0","time":"...","store":{"ok":true}}
 ```
 `version` 为服务端版本号（构建时经 ldflags 注入），可用来核对前后端版本是否匹配。store 探测失败时返回 `503` + `"status":"error"`（不做降级；不健康即失败）。
 
@@ -123,11 +125,12 @@ DELETE /api/accounts/{id}/bucket?name=new-bucket
 
 ### 列出对象
 ```
-GET /api/accounts/{id}/objects?bucket=B&prefix=P&delimiter=/&maxKeys=1000&continuationToken=CT
+GET /api/accounts/{id}/objects?bucket=B&prefix=P&delimiter=/&maxKeys=1000&continuationToken=CT&startAfter=K
 ```
 - `bucket` 缺省用账号默认桶；`maxKeys` 范围 1–1000（默认 1000）。
 - `delimiter=/` 时用 `commonPrefixes` 返回目录。
 - `continuationToken` 用于分页。
+- `startAfter` 可选，按 key 字典序从该 key **之后**开始列举（ListObjectsV2 `start-after`）；与 `continuationToken` 互斥使用，用于「从某位置继续」的场景。
 ```json
 200 {
   "objects":[{"key":"a.txt","size":17,"lastModified":"...","etag":"\"...\"","storageClass":"STANDARD","isDir":false}],
@@ -190,7 +193,7 @@ POST /api/accounts/{id}/copy-objects
 ```json
 {"bucket":"B(可选)","targetBucket":"B2(可选)","targetPrefix":"archive/","keys":["dir/a.txt","dir/b.txt"],"deleteSource":false}
 ```
-把多个文件复制到目标桶 + 前缀（`targetPrefix + 文件名`，保留文件名）；`targetPrefix` 留空 = 目标桶根目录；`deleteSource=true` 时复制成功后再删除源（移动）。逐个处理、失败不中断。
+把多个文件复制到目标桶 + 前缀（`targetPrefix + 文件名`，保留文件名）；`targetPrefix` 留空 = 目标桶根目录；`deleteSource=true` 时复制成功后再删除源（移动）。逐个处理、失败不中断。`failedKeys` **上限 200 条**（`failed` 计数不受裁剪影响）。
 ```json
 200 {"copied":1,"failed":1,"lastError":"(失败时才有)","failedKeys":["dir/b.txt"]}
 ```
@@ -573,7 +576,7 @@ POST /api/migrate
 }
 ```
 - 源、目标 endpoint 一致时用 `CopyObject`（服务端复制）；否则 `GetObject`→`PutObject` 流式转发（保留 Content-Type/元数据）。
-- 逐个对象迁移，任一失败继续其余；失败对象 key 通过 `failedKeys` 返回（便于前端展示失败清单）。
+- 逐个对象迁移，任一失败继续其余；失败对象 key 通过 `failedKeys` 返回（便于前端展示失败清单，**上限 200 条**——`failed` 计数不受裁剪影响）。
 ```json
 200 {"migrated":1,"failed":1,"lastError":"(失败时才有)","failedKeys":["bad.txt"]}
 ```

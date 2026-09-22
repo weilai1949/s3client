@@ -30,9 +30,11 @@
 | `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（已闭环，证据见 [features.md](features.md) §M；残留风险见 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3） |
 | `encrypted` | S3C3 加密（严格） | ✅ 生产推荐；文件盐建时随机并复用；可读旧 S3C2 库 |
 
-所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。未配置 `S3C_STORE_KEY` 的
-`json` / `sqlite` 驱动会在启动日志打出「secretKey 将明文落盘」WARN（[roadmap.md](roadmap.md) §5.1「已收敛」索引 R3），
-生产必须用 `encrypted` 或 `sqlite` + key。
+所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。**未配置 `S3C_STORE_KEY` 的
+`json` / `sqlite` 驱动会拒绝启动**（安全默认，todolist #29/#31），除非显式设置
+`S3C_ALLOW_PLAINTEXT_STORE=1`——此时允许运行并打出「secretKey 将明文落盘」WARN
+（[roadmap.md](roadmap.md) §5.1「已收敛」索引 R3），仅限本地联调；生产必须用 `encrypted` 或
+`sqlite` + key。base `docker-compose.yml` 亦以 `${S3C_STORE_KEY:?…}` 强制非空。
 加密文件格式：S3C3 头部内嵌 Argon2id 参数（time/memory/threads），因此可在不破坏既有库的前提下调参；
 S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 16 字符。
 
@@ -57,7 +59,9 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 回环绑定 `127.0.0.1:8080` | `config.go:120` |
 | 非回环监听强制 `S3C_TOKEN`（否则拒绝启动） | `config.go:184-186` |
 | token 最短 16 字符 | `config.go:180` |
+| `json`/`sqlite` 无 `S3C_STORE_KEY` 时拒绝启动（需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行） | `config.go` `Validate` |
 | `/api/metrics` 与 `/api/openapi.json` 默认 404 | `middleware.go:177-199` |
+| `/api/metrics` 开启后**不受 token 保护**（有意为内网 scrape；匿名可读，勿直接暴露公网） | `middleware.go` `withAuth` 豁免 |
 | CORS 白名单仅 localhost/127.0.0.1/tauri + 跨域 403 硬阻断 | `middleware.go:105-172` |
 | 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP | `middleware.go:17-28` |
 | TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3clinet-tls.example.conf` |

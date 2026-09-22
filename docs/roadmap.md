@@ -14,7 +14,7 @@
 > [`features.md`](features.md) §M 与 [`CHANGELOG.md`](../CHANGELOG.md)），**不要按当前编号回读**。
 >
 > 版本命名：稳定里程碑 **v1.0.0** 后日常发版用时间戳（`v1.0.0-YYYYMMDDHHmmss`），预发布用 `v1.0.0-rcN`。
-> 当前版本 **`v1.0.0-rc1`**。最后更新：2026-09-19。
+> 当前版本 **`v1.0.0`**。最后更新：2026-09-19。
 
 ## 目录
 
@@ -36,7 +36,8 @@
 5 项稳定版门槛项（P1：Go 1.26.6 + `govulncheck`、幽灵 action SHA、OpenAPI 契约对齐、缺失 i18n 键、
 异步任务持久化）全部修复并归档。**v1.0.0 / v1.0.x / v1.1.0 三个里程碑的开放条目也已于 2026-09-17
 全部完成并从本文件移除**（`docs/api.md` 漂移校验、存储加密、安全审计、可观测性、前端长列表与恢复、
-覆盖率去注水），当前唯一未完成项是长期性质的第 1 条：**桌面端分发与签名**。
+覆盖率去注水），当前唯一未完成项是长期性质的第 1 条：**桌面端分发与签名**——该项为**外部凭证阻塞**
+（E6 未获取），代码层面已无剩余工作。
 
 > P0 / P1 的逐条修复记录与验证证据见 [`docs/features.md`](features.md)「H」「I」段，
 > 2026-09-17 一轮的验收证据见同文件 §M，不在此重复。本文件只列**未完成**项。
@@ -67,7 +68,7 @@
 
 | # | 条目 | 来源 | 状态 | 说明 |
 |---|---|---|---|---|
-| 1 | 桌面端分发与签名 | 长期 | ⬜ | **已立项**（todolist #25），**暂不处理**；Windows / Linux / macOS 产物签名与自动更新策略（现仅打包挂 Release）；风险 **R5**、阻塞依赖 **E6** 见 §五 |
+| 1 | 桌面端分发与签名 | 长期 | ⛔ | **已立项**（todolist #25），**外部阻塞**：Windows 代码签名证书 / Apple Developer ID + 公证均为外部凭证（**E6**，⬜ 未获取），未获取前无法完成签名与公证；自动更新通道依赖签名产物。**代码层面无剩余工作**——打包与发布链（tag↔清单校验、平台内唯一 `SHA256SUMS`、聚合 job）已收口，未签名产物以 `SHA256SUMS` + 手动放行说明过渡（[deployment.md](deployment.md) §5）；风险 **R5** 见 §五 |
 | 2 | 增量同步与批量能力的体验增强 | FEATURES | ➖ | 现有 `etag` / `size_mtime` / `always` 三模式满足需求，按用户反馈再评估 |
 | 3 | 死代码纪律 | ASSESSMENT §三 | ➖ | 维持现状：由覆盖率门禁调整一并治理，不单独立项 |
 
@@ -102,7 +103,8 @@
 > `openapi_request_fields_test.go`（注册表字段集 ⇔ handler 解码结构体字段集**全量遍历**）·
 > `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO **响应**字段双向）守住，R2（覆盖率掩盖
 > 死代码）由 `count==0` + `golangci-lint` 零告警 + `deadcode_gate_test.go` 守住，R3（明文落盘）由
-> `config.StorePlaintextWarning` 单测 + 子进程日志断言守住，R4（单副本）由 `TestDataDirLock*` +
+> `Config.Validate` 硬失败（`ErrPlaintextStoreNotAllowed`，仅 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行）+
+> base compose 的 `${S3C_STORE_KEY:?}` + `StorePlaintextWarning` 单测 + 子进程日志断言守住，R4（单副本）由 `TestDataDirLock*` +
 > `TestRunServerRejectsLockedDataDir` 守住，R6（Rust 供应链）由本表的 `cargo audit` 守住。
 > 发布链与安全基线（tag↔清单、平台内唯一 checksum、Trivy DB 缓存/重试、alpine 版本、`.env.example`
 > token）由 `repo_infra_gate_test.go` 守住。
@@ -137,7 +139,7 @@
 |---|---|---|---|
 | R1 | OpenAPI 契约漂移（字段名 / 输入源位置 / **响应 schema**） | `api_doc_test.go`（端点双向 diff + 请求体字段级双向）· `openapi_inputsource_test.go`（输入源）· `openapi_request_fields_test.go`（注册表 ⇔ handler 字段集全量遍历）· `openapi_response_contract_test.go`（共享 schema ⇔ Go DTO 响应字段双向） | [`features.md`](features.md) §O-1 · §S |
 | R2 | 覆盖率掩盖死代码 / `_ = x` 消音 | 覆盖率门禁 `count==0` · `golangci-lint`（`unused`/`staticcheck`）· `deadcode_gate_test.go` | [`features.md`](features.md) §O-2 |
-| R3 | 明文密钥落盘（`sqlite`/`json` + 空 `S3C_STORE_KEY`） | `Config.StorePlaintextWarning` 启动告警 + 表驱动单测 + 子进程日志断言 | [`features.md`](features.md) §N-1 |
+| R3 | 明文密钥落盘（`sqlite`/`json` + 空 `S3C_STORE_KEY`） | `Config.Validate` 硬失败（`ErrPlaintextStoreNotAllowed`；仅 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行）+ base compose `${S3C_STORE_KEY:?}` 强制 key + `StorePlaintextWarning` 启动告警（opt-in 时）+ 表驱动单测 + 子进程断言 | [`features.md`](features.md) §N-1 |
 | R4 | 多副本共享同一 `DataDir` | `store.AcquireDataDirLock`（unix flock；**非 unix 为 no-op，已知残留**） | [`features.md`](features.md) §O-3 |
 | R6 | Rust 依赖审计缺口 | 两套 CI 的 `cargo audit` + `make rust-audit`（当前 0 漏洞，7 条告警已 triage） | [`features.md`](features.md) §O-4 |
 | R7 | 分段上传缺 `ETag` 不可见 | `upload.test.ts`（缺 ETag → 报错 + `multipartAbort`）· README 兼容性矩阵 | [`features.md`](features.md) §O-6 |
@@ -165,7 +167,7 @@
 | E6 | 代码签名证书（Windows）/ Apple Developer ID + 公证 | 外部凭证 | §三 #1 桌面分发（阻塞项） | ⬜ 未获取 | 产物被 SmartScreen / Gatekeeper 拦截 | 暂以 `SHA256SUMS` + 手动放行说明过渡 |
 | E7 | GitHub Release（tauri-action + `gh release upload`）+ Windows / macOS runner | 发布通道 | 桌面端分发 | ✅ 已可用 | 桌面产物无法分发 | 无替代通道（有意不镜像到 GitLab CI） |
 | E8 | 目标 S3 服务的 CORS / ETag 行为（阿里 / 腾讯 / RustFS / MinIO） | 外部服务 | 浏览器直传与分段上传 | ⚠️ 因厂商而异 | 直传或分段组装失败 | README 兼容性矩阵明示所需 CORS / `ExposeHeader: ETag`；缺 ETag 即报错并清理分段 |
-| E9 | pnpm `9.15.0` / Node 版本 / Playwright chromium | 构建 | 前端构建与 E2E | ✅ 由 `packageManager` + 锁文件固定 | 构建 / E2E 结果漂移 | `--frozen-lockfile`；CI 与本地同命令 |
+| E9 | pnpm `9.15.0` / Node `24.21.0` / Rust `1.98.1` / Playwright chromium | 构建 | 前端 / 桌面构建与 E2E | ✅ 由 `packageManager`（web + desktop）+ 锁文件 + `rust-toolchain.toml` + CI 精确 patch 版本固定 | 构建 / E2E 结果漂移 | `--frozen-lockfile`；CI 与本地同命令；`repo_infra_gate_test.go` 断言 Node/pnpm/Rust 均为精确 pin |
 | E10 | 加密存储文件格式 S3C2 / S3C3 向后兼容承诺 | 内部契约 | `store` 加解密与既有账号库 | ✅ S3C3 头部随文件携带 Argon2id 参数 | 直接改 KDF 参数会让既有库不可解密 | 只增版本、不改既有语义；升级路径已有实跑证据（[features.md](features.md)） |
 
 **复审规则**：状态随每次五维度评估（[assessment.md](assessment.md)）与里程碑收口同步更新；登记项（🟡）必须写清「缺口」，➖ 由 ADR 兜底并只登记在索引；风险收敛为自动化门禁后移入上方「已收敛」索引（**编号不重排**），闭环证据按 §六 第 1 条归档 `features.md`。新增外部服务 / 凭证 / 分发通道必须在同一 PR 补 E 表一行。

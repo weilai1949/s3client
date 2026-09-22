@@ -2,7 +2,7 @@
 
 S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提供 **Web 端** 与 **Tauri 2 桌面端**；桌面端采用 **B/S 架构**，不使用 Tauri IPC，前后端全部通过 HTTP 通信。
 
-版本命名：稳定里程碑 **v1.0.0** 之后日常发版用**时间戳**（`v1.0.0-YYYYMMDDHHmmss`），预发布可用 **`v1.0.0-rcN`**；当前版本 `v1.0.0-rc1`；详见 [Changelog](CHANGELOG.md)。
+版本命名：稳定里程碑 **v1.0.0** 之后日常发版用**时间戳**（`v1.0.0-YYYYMMDDHHmmss`），预发布可用 **`v1.0.0-rcN`**；当前版本 `v1.0.0`；详见 [Changelog](CHANGELOG.md)。
 
 [!TIP]
 - 后端默认绑定 `127.0.0.1`（更安全），并开启 CORS 白名单与可选 Bearer 鉴权。
@@ -84,12 +84,13 @@ docker-compose.yml   一键起 server + RustFS
 | `S3C_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 | `S3C_SHUTDOWN_TIMEOUT` | `30` | 收到 SIGTERM 后等待活跃连接结束的最长时间（秒） |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
-| `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`） |
-| `S3C_EXPOSE_METRICS` | 空 | `1`/`true`/`yes`/`on` 时暴露 `GET /api/metrics`（Prometheus 文本）；默认 404，避免公网被 scrape |
+| `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`）。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式设置 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
+| `S3C_ALLOW_PLAINTEXT_STORE` | 空 | 仅本地联调：`1`/`true`/`yes`/`on` 时允许 `json`/`sqlite` 在无 `S3C_STORE_KEY` 下运行，`secretKey` **明文落盘**并在启动日志打出 WARN。**不要在生产设置** |
+| `S3C_EXPOSE_METRICS` | 空 | `1`/`true`/`yes`/`on` 时暴露 `GET /api/metrics`（Prometheus 文本）；默认 404，避免公网被 scrape。**该端点不受 `S3C_TOKEN` 保护**：开启后匿名可读，应仅在内网 / 反代鉴权后放行 |
 | `S3C_TRUSTED_PROXIES` | 空 | 可信反向代理 IP（逗号分隔）；仅这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速 |
 | `S3C_SSRF_DENY_PRIVATE` | 空 | 设为 `1` 时连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](docs/decisions/0003-ssrf-private-allow.md) |
 
-**安全默认值**：回环绑定 + CORS 白名单 + 可选鉴权 + 短 token 拒绝启动 + 指标端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN` 时进程**拒绝启动**。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
+**安全默认值**：回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN`、或 `json`/`sqlite` 未设 `S3C_STORE_KEY` 时进程**拒绝启动**（后者需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行，仅限本地联调）。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
 
 ## 快速开始
 
@@ -98,9 +99,11 @@ docker-compose.yml   一键起 server + RustFS
 后端提供多阶段 `apps/server/Dockerfile`，产出**非 root**、带健康检查、数据持久化的镜像。
 
 ```bash
-# 复制环境变量（必填 S3C_TOKEN / RUSTFS_*）
+# 复制环境变量（必填 S3C_TOKEN / S3C_STORE_KEY / RUSTFS_*）
 cp .env.example .env
-# 生成 token：openssl rand -hex 32
+# 生成 token 与存储密钥：openssl rand -hex 32
+# 二者都必须填入 .env：compose 对 S3C_TOKEN / S3C_STORE_KEY 均做了非空守卫，
+# 缺任一项 docker compose 会直接拒绝启动（避免以明文密钥或公开已知口令上线）。
 
 # 一键起 server + nginx + RustFS（会自动构建镜像）
 docker compose up -d --build
@@ -109,9 +112,14 @@ docker compose up -d --build
 docker compose -f docker-compose.prod.yml up -d --build
 
 # 仅运行服务端（外部 S3）
-docker build -f apps/server/Dockerfile -t s3clinet/server:v1.0.0-rc1 --build-arg GOPROXY=https://goproxy.io,direct .
-docker run -d --name s3clinet -p 127.0.0.1:8080:8080 -e S3C_TOKEN="$(openssl rand -hex 32)" -v s3c-data:/data s3clinet/server:v1.0.0-rc1
+docker build -f apps/server/Dockerfile -t s3clinet/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
+docker run -d --name s3clinet -p 127.0.0.1:8080:8080 \
+  -e S3C_TOKEN="$(openssl rand -hex 32)" \
+  -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
+  -v s3c-data:/data s3clinet/server:v1.0.0
 ```
+
+> 本地仅联调、明确接受明文落盘时，可 `S3C_ALLOW_PLAINTEXT_STORE=1` 绕过存储密钥硬失败（进程会打 WARN）。
 
 > 服务默认只绑定 `127.0.0.1`，因此端口映射建议仅发布到回环地址（`127.0.0.1:8080:8080`）；如需外部访问，请置于反向代理/TLS 之后再暴露到 `0.0.0.0`。
 
