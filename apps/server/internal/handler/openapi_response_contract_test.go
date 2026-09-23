@@ -3,7 +3,7 @@ package handler
 // openapi_response_contract_test.go —— **响应**契约门禁：components.schemas ⇔ 真实响应 DTO，
 // 以及**端点级**响应 schema ⇔ handler 真实写出的键。
 //
-// 背景（docs/review-2026-09-19.md §7.2 / §4.3 / docs/todolist.md #28）：此前的门禁只覆盖**请求**方向
+// 背景（docs/archive/review-2026-09-19.md §7.2 / §4.3 / docs/todolist.md #28）：此前的门禁只覆盖**请求**方向
 // （`openapi_inputsource_test.go` 比对「是否解码请求体」、`openapi_contract_test.go` 断言
 // 请求体字段集、`api_doc_test.go` 比对文档字段）。响应方向原先只覆盖 `components.schemas`
 // 的共享 schema，各端点内联 / `map[string]any` 拼装的响应没有机械门禁。

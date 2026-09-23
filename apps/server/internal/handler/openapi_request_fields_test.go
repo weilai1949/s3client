@@ -2,7 +2,7 @@ package handler
 
 // openapi_request_fields_test.go —— **全量**请求体字段门禁：注册表声明字段集 ⇔ handler 实际解码字段集。
 //
-// 背景（docs/review-2026-09-19.md §4.3）：此前的字段级断言是**逐端点族硬编码**
+// 背景（docs/archive/review-2026-09-19.md §4.3）：此前的字段级断言是**逐端点族硬编码**
 // （`openapi_contract_test.go` 第 1–8 项，只覆盖 2026-09 修过的那批端点），新端点把字段写错
 // 仍然不会变红。本文件把它换成机械全量遍历：
 //

@@ -2,7 +2,7 @@ package handler
 
 // openapi_query_params_test.go —— **全量** query 参数门禁：注册表声明 ⇔ handler 实际读取。
 //
-// 背景（docs/todolist.md #26 / docs/review-2026-09-19.md §7.3 D7、§7.4）：
+// 背景（docs/todolist.md #26 / docs/archive/review-2026-09-19.md §7.3 D7、§7.4）：
 // 此前的 query 断言是**逐端点硬编码**（`openapi_contract_test.go` 只覆盖 version DELETE 的
 // bucket/key/versionId 三个），新端点漏声明 query 参数不会变红。实测漏了 4 个：
 // `head.versionId`、`proxy.maxBytes`、`trash.prefix`、`objects.startAfter`。

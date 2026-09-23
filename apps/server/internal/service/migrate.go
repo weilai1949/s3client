@@ -27,7 +27,7 @@ func MigrateKeys(
 //
 // 目标 key 必须由 dstKeyFor 决定（而不是在此处裸拼接目标前缀）：增量同步的目标 key 是
 // 「目标前缀 + 相对路径」，与源 key 不是同一个字符串——把两处映射写成两个表达式正是
-// P0-3（review-2026-09-19.md §B2）永不收敛的根因。
+// P0-3（docs/archive/review-2026-09-19.md §B2）永不收敛的根因。
 func migrateKeys(
 	ctx context.Context,
 	src, dst *s3wrap.Client,

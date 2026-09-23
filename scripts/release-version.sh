@@ -17,7 +17,7 @@ if [[ -z "$DISPLAY" ]]; then
 fi
 # 接受：纯 semver（v1.0.0 / v1.0.1 / v1.1.0）+ 预发布（rcN / alphaN / betaN）+ 时间戳版本。
 # 此前正则只接受 `v1.0.0-<时间戳|rcN>`，会**拒绝纯 v1.0.0**（roadmap 的首个稳定里程碑）与
-# v1.0.1 / v1.1.0（docs/review-2026-09-19.md §7.3 D3）。
+# v1.0.1 / v1.1.0（docs/archive/review-2026-09-19.md §7.3 D3）。
 if [[ ! "$DISPLAY" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-([0-9]{14}|(rc|alpha|beta)[0-9]*))?$ ]]; then
   echo "error: version must be vMAJOR.MINOR.PATCH with optional -YYYYMMDDHHmmss / -rcN / -alphaN / -betaN, got: $DISPLAY" >&2
   exit 1

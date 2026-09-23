@@ -2,7 +2,7 @@ package main
 
 // doc_number_gate_test.go —— **文档叙述性数字**的源码门禁。
 //
-// 背景（docs/review-2026-09-19.md §7.4）：`routes.go` ↔ 注册表 ↔ `docs/api.md` 已有三重门禁，
+// 背景（docs/archive/review-2026-09-19.md §7.4）：`routes.go` ↔ 注册表 ↔ `docs/api.md` 已有三重门禁，
 // 但**写在 md 正文里的数字**（「N 个端点」这类叙述）没有任何机械校验——改代码时忘了改文档，
 // 门禁全绿而文档失真。审查点名这是矩阵里唯一标「否」的一行。
 //

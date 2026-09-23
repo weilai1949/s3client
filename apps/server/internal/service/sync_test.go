@@ -137,7 +137,7 @@ func simpleHash(s string) uint64 {
 	return h
 }
 
-// TestSync_PrefixMappingConverges 复现并锁死 P0-3（docs/review-2026-09-19.md §B2）。
+// TestSync_PrefixMappingConverges 复现并锁死 P0-3（docs/archive/review-2026-09-19.md §B2）。
 //
 // 过滤阶段用相对 key 判定（dstPrefix + stripPrefix(so.Key, srcPrefix)），复制阶段却把
 // **完整源 key** 交给 MigrateKeys（后者裸拼接 targetPrefix + k）——两处映射表达式不一致：

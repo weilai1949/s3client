@@ -80,7 +80,7 @@ const defaultMaxJobs = 256
 
 // RegistryOption 在构造注册表时调整其行为；当前只有「在册任务上限」一项。
 // 用构造期选项而非可变全局：上限是每个注册表实例的属性，改全局会影响所有实例
-// 并与并发测试相互干扰（原 `SetMaxJobsForTest` 见 docs/review-2026-09-19.md §A2）。
+// 并与并发测试相互干扰（原 `SetMaxJobsForTest` 见 docs/archive/review-2026-09-19.md §A2）。
 type RegistryOption func(*JobRegistry)
 
 // WithMaxJobs 覆盖该注册表的在册任务上限（<=0 视为未设置，保持默认）。

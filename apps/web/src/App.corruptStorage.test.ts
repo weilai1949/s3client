@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 /**
- * P0-2 验收（docs/review-2026-09-19.md §F1）：`s3c.servers` 被写坏时整站白屏。
+ * P0-2 验收（docs/archive/review-2026-09-19.md §F1）：`s3c.servers` 被写坏时整站白屏。
  *
  * 与 App.test.ts 的区别：这里**不 mock `./api`**，用真实存储模块 + 真实 App 模板，
  * 复现「渲染期调用 `api.getActiveServer()` 抛异常 → 渲染中断 → 白屏」的完整路径。

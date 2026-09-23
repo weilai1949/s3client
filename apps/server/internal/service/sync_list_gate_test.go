@@ -1,6 +1,6 @@
 package service
 
-// sync_list_gate_test.go —— review-2026-09-19.md §B6：列举循环必须有界。
+// sync_list_gate_test.go —— docs/archive/review-2026-09-19.md §B6：列举循环必须有界。
 //
 // indexDst 旧实现的循环条件是「已收集数 < 10 万」且循环内不查 ctx：对端只要返回
 // 不前进的 NextContinuationToken，这个循环就永不退出（同步端点在任务超时前一直挂着）。

@@ -274,7 +274,7 @@ func TestMigrateSync_CompareSizeTime(t *testing.T) {
 
 // TestMigrateSync_PrefixFilter 验证 sourcePrefix 过滤：仅同步 prefix 下的对象，
 // 且目标 key 是「targetPrefix + 相对路径」——与比对用的 key 必须同一个表达式，
-// 否则增量同步永不收敛（docs/review-2026-09-19.md §B2）。
+// 否则增量同步永不收敛（docs/archive/review-2026-09-19.md §B2）。
 func TestMigrateSync_PrefixFilter(t *testing.T) {
 	syncStore = map[string]map[string]syncEntry{
 		"src-bucket": {

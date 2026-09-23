@@ -35,7 +35,7 @@ type SyncResult struct {
 //   - 复用复制内核完成实际复制（同/异端点自动适配）
 //
 // 列举失败（源/目标端 4xx/5xx、ctx 取消）必须上抛 error：静默返回「扫描 0 个」会让用户
-// 以为「无事可做」，而实际上一次对象都没比对过（review-2026-09-19.md §B5）。
+// 以为「无事可做」，而实际上一次对象都没比对过（docs/archive/review-2026-09-19.md §B5）。
 func SyncKeys(
 	ctx context.Context,
 	src, dst *s3wrap.Client,
@@ -213,7 +213,7 @@ func isEqual(mode CompareMode, src s3wrap.ObjectItem, dst *s3wrap.ObjectMeta) bo
 //
 // **段边界校验**：prefix 必须结束在 S3 key 的「/」段边界上才算命中，否则原样返回。
 // 否则前缀 "p" 会错误命中 "prefix/x.txt" 并剥成 "refix/x.txt"——该 key 在目标侧永不存在，
-// 使增量同步每次都判定「缺失」而反复重拷（review-2026-09-19.md §B2）。
+// 使增量同步每次都判定「缺失」而反复重拷（docs/archive/review-2026-09-19.md §B2）。
 func stripPrefix(key, prefix string) string {
 	if prefix == "" {
 		return key

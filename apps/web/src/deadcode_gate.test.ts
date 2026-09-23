@@ -9,7 +9,7 @@ import { api, s3api } from './api'
  * 「导出后无人引用」的符号；而测试文件的引用会让这类符号一直"活着"。真实事故：
  * `s3api.copyFiles` / `deletePrefix` / `copyPrefix` / `migrate` / `migrateSync`
  * 五个方法只被 `api.test.ts` 调用、生产零引用，在 100% 覆盖率门禁下长期存活
- * （见 docs/review-2026-09-19.md §A3）。
+ * （见 docs/archive/review-2026-09-19.md §A3）。
  *
  * 门禁口径：`src/api` 对外暴露的每个成员，必须在**至少一个非测试源文件**里被引用。
  *   - 对象成员（`s3api.*` / `api.*`）：按 import 别名精确匹配 `别名.成员`，
@@ -158,7 +158,7 @@ it('INTENTIONAL_UNUSED 不得登记已不存在的符号（避免豁免清单腐
 })
 
 /**
- * 测试名不得硬编码源码行号 —— 对应 review-2026-09-19.md §4.2。
+ * 测试名不得硬编码源码行号 —— 对应 docs/archive/review-2026-09-19.md §4.2。
  *
  * 真实事故：21 个用例名写着 `（line 125 else）`、`（line 111）` 这类源码行号，而行号
  * **早已过期**（实际 `??` 在 `api/storage.ts:49`、非数组回退在 `:185`，用例名却指向

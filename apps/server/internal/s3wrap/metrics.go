@@ -68,7 +68,7 @@ type LatencyBucket struct {
 //
 // 直方图在此处由「每桶增量」累积为 Prometheus 语义：`_bucket{le=...}` 要求 le 单调不减、
 // 且 `+Inf` 等于 `_count`。此前直接把增量当累积输出，导致 `histogram_quantile()` 全错
-// （review-2026-09-19.md §7.3 D1）。
+// （docs/archive/review-2026-09-19.md §7.3 D1）。
 func MetricsSnapshot() S3MetricsSnapshot {
 	m := globalS3Metrics
 	m.mu.Lock()

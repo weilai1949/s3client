@@ -98,7 +98,7 @@ type Registry struct {
 	srvs  []Server
 	// spec 是 MarshalJSON 的结果缓存（nil = 未缓存/已失效）。
 	//
-	// 背景（review-2026-09-19.md §6.2 P3）：注册表在启动时构建完成后不再变化，但
+	// 背景（docs/archive/review-2026-09-19.md §6.2 P3）：注册表在启动时构建完成后不再变化，但
 	// HTTPHandler 此前每次请求都全量重新 marshal 70 个 operation。这里按「变更即失效」
 	// 缓存：任何注册/覆盖（Operation / Param / Respond / SetInfo / AddServer）都置 nil，
 	// 因此语义与「每次都重新 marshal」完全一致，只是消除了重复计算。

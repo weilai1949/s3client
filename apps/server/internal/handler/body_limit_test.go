@@ -1,6 +1,6 @@
 package handler
 
-// body_limit_test.go —— review-2026-09-19.md §B9：8 MB 请求体上限与「10 000 key 批量」
+// body_limit_test.go —— docs/archive/review-2026-09-19.md §B9：8 MB 请求体上限与「10 000 key 批量」
 // 的公开承诺冲突，且超限被截断后报的是 400「JSON 无效」而不是 413。
 
 import (

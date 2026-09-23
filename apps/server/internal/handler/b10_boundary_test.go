@@ -1,6 +1,6 @@
 package handler
 
-// b10_boundary_test.go —— review-2026-09-19.md §B10 的四个端点级边界缺陷：
+// b10_boundary_test.go —— docs/archive/review-2026-09-19.md §B10 的四个端点级边界缺陷：
 // ② filename* 编码、③ ZIP 空 key、④ text 预览读错误、⑤ 分段顺序。
 
 import (

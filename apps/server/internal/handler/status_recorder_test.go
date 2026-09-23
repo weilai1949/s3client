@@ -1,6 +1,6 @@
 package handler
 
-// status_recorder_test.go —— review-2026-09-19.md §B11：statusRecorder 未覆写 Write，
+// status_recorder_test.go —— docs/archive/review-2026-09-19.md §B11：statusRecorder 未覆写 Write，
 // 隐式 200 之后 written 仍为 false，后续显式 WriteHeader 会被再次透传
 //（Go 会打 superfluous 日志，且日志里的状态可能被改写成与实际响应不符的值）。
 

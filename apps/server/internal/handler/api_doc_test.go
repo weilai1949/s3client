@@ -455,7 +455,7 @@ func apiDocRequestBodyFields(t *testing.T) map[string][]string {
 // TestAPIDocDocumentsRequestBodyFields docs/api.md 的请求体字段集必须与 OpenAPI 注册表**双向一致**。
 //
 // 旧实现用 `strings.Contains(body, name)` 单向校验（注册表 ⊆ 文档），有两处结构性盲区
-// （docs/review-2026-09-19.md §4.3）：① 文档多写的幻影字段从不检查；② 子串碰撞——
+// （docs/archive/review-2026-09-19.md §4.3）：① 文档多写的幻影字段从不检查；② 子串碰撞——
 // 字段 `key` 会被 `keys` / `secretKey` 满足、`newKey` 被 `newKeys` 满足。现改为机械抽取
 // 文档请求体 JSON 的**顶层键**后双向比对，且不再做子串匹配。
 //

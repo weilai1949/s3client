@@ -124,7 +124,7 @@ func TestMetricsEndpointUnauthenticatedEvenWithToken(t *testing.T) {
 // TestMetricsHistogramSatisfiesPrometheusContract 端到端固定 D1 的修复：
 // /api/metrics 输出的 `_bucket{le=...}` 必须满足 Prometheus 直方图契约——le 单调不减、
 // `+Inf` 等于 `_count`。旧实现把「每桶增量」当累积输出，实测 le="0.01"=3 / le="+Inf"=0 /
-// _count=3，`histogram_quantile()` 结果全错（review-2026-09-19.md §7.3 D1）。
+// _count=3，`histogram_quantile()` 结果全错（docs/archive/review-2026-09-19.md §7.3 D1）。
 func TestMetricsHistogramSatisfiesPrometheusContract(t *testing.T) {
 	// 假 S3：列出桶成功 → 触发一次上游调用，使直方图非空。
 	srv := olFake(t, func(r *http.Request) olResp {

@@ -380,7 +380,7 @@
 - **Batch2 桶管理菜单**：7 页签（概览 / 生命周期 / SSE / CORS / 网站托管 / 桶策略 / 桶标签）+ 15 个 `Get/Put/DeleteBucket*` 端点；`isNoSuchBucketSetting` 把「未配置」映射为空响应。
 - **Batch3 回收站菜单**：`GET /trash` + `POST /trash/purge`，列全部删除标记、一键还原、彻底清除（永删该 key 全部版本）。
 - **四轴评审修复**：Vue `key` 为保留属性导致 7 个弹窗实际不可用 → 统一 `objectKey`（Vue 3.5 SSR 复现验证）；桶设置页签 `watch` 补 `immediate`（此前永不加载、保存会用默认值覆盖）；CORS 非白名单普通请求直接 403 + `readJSON` 强制 JSON；`inline` 代理 MIME 白名单；代理支持 `versionId` + `Accept-Ranges`/416；创建账号忽略客户端 id；ZIP 条目 `/` 与 `\` 双消毒；`.env` 加载；`PurgeObject` 改 `DeleteObjects` 批量 1000/批；`deletePrefix` 页前检查 + 跨页切分；multipart 段号 1..10000 且唯一校验；copy/migrate 4 路有界并发、migrate 限 10k key、failKeys ≤200<sup>†</sup>；列表导航序号防过期响应；上传入队捕获所属桶；焦点陷阱与初始焦点；版本比较下载走服务端代理。
-  > <sup>†</sup> **该条当时并不成立**（2026-09-21 复核，review-2026-09-19.md §7.3 D4）：服务端 `BatchResult.FailKeys` 不做截断，只有异步 `delete-prefix` 在 handler 内裁剪，copy/migrate/sync 原样回传——10k 全失败会回约 10 MB 并落盘 `jobs.json`。**2026-09-22 已真正实现**：上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，所有回传 `failedKeys` 的端点（copy-objects 同步/异步、migrate 同步/异步、migrate/sync、delete-prefix 同步/异步）统一裁剪，异步路径在 `jobResultFromBatch` 中于 `Finish`（落盘）之前裁剪；回归测试 `TestOlCopyManyFailKeysAll` / `TestOlMigrateSyncFailKeysCapped` / `TestOlMigrateAsyncFailKeysCappedBeforePersist`。
+  > <sup>†</sup> **该条当时并不成立**（2026-09-21 复核，docs/archive/review-2026-09-19.md §7.3 D4）：服务端 `BatchResult.FailKeys` 不做截断，只有异步 `delete-prefix` 在 handler 内裁剪，copy/migrate/sync 原样回传——10k 全失败会回约 10 MB 并落盘 `jobs.json`。**2026-09-22 已真正实现**：上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，所有回传 `failedKeys` 的端点（copy-objects 同步/异步、migrate 同步/异步、migrate/sync、delete-prefix 同步/异步）统一裁剪，异步路径在 `jobResultFromBatch` 中于 `Finish`（落盘）之前裁剪；回归测试 `TestOlCopyManyFailKeysAll` / `TestOlMigrateSyncFailKeysCapped` / `TestOlMigrateAsyncFailKeysCappedBeforePersist`。
 - 测试与清理：handler 覆盖率 60.3% → 70.8%；AWS SDK 类型外泄清理（`FromS3Object` / `FormatBuckets` / `DescribeACL` / `GranteeLabel`）；`filename*` RFC 5987；store 临时文件 `O_CREATE|O_EXCL`；删除死代码（`PresignGet`、`genSign`、`SignUrlDialog` 等）。
 
 #### 20260901.2（2026-09-01）
@@ -571,7 +571,7 @@
 
 ### P. 2026-09-19 分支状态审查 A1–A3 处置（前端 API 拆分 / 死代码门禁 / 测试接缝）
 
-> 来源：2026-09-19 分支状态审查 [`review-2026-09-19.md`](review-2026-09-19.md) 的架构项 A1–A3 与
+> 来源：2026-09-19 分支状态审查 [`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) 的架构项 A1–A3 与
 > 浏览器 E2E 空转用例（已在审查文档中销项——该文档按约定只保留**未闭环**的发现）。归档证据即本表。
 > 该审查登记的 P0/P1 缺陷（B1 SSE 自旋、B2 SyncKeys 前缀、F1 白名单 crash、R1 CI docker job、
 > §7.2 契约幻影字段等）**仍未处置**，不在本节范围内。
@@ -588,7 +588,7 @@
 
 ### Q. 2026-09-19 分支状态审查 P0 处置（5 项全部闭环）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md)。该审查登记的 P0 已全部处置并从审查文档移除
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md)。该审查登记的 P0 已全部处置并从审查文档移除
 > （该文档只保留未闭环发现）；本表即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
 > 剩余的 P1/P2 发现仍开放。
 
@@ -604,7 +604,7 @@
 
 ### R. 2026-09-19 分支状态审查 §三 正确性处置（后端 B3–B11 / 前端 F2–F10）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) 的「阶段 2 · 正确性」全部发现项。该审查文档按约定
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) 的「阶段 2 · 正确性」全部发现项。该审查文档按约定
 > 只保留**未闭环**发现，本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
 > 原则：**补门禁而不只是补缺陷**——每条修复都配了会先失败的回归测试，覆盖「分支/语义正确但断言缺席」这类盲区。
 
@@ -643,7 +643,7 @@
 
 ### S. 2026-09-19 分支状态审查 P1 处置（§9.2 全部闭环）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.2 的 8 项 P1。该审查文档按约定只保留
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §9.2 的 8 项 P1。该审查文档按约定只保留
 > **未闭环**发现，本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
 > 原则同 §R：**补门禁而不只是补缺陷**——每项都配了会先失败的回归测试；新增/改造的门禁在文件头
 > 写明「断言范围」，避免下轮把"有门禁"误读为"已全量收敛"。
@@ -671,7 +671,7 @@
 
 ### T. 2026-09-20 审查 §9.3 P2 处置（契约 #26–#28 + 安全 / 供应链 #29–#34）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.3 P2。该审查文档按约定只保留**未闭环**发现，
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §9.3 P2。该审查文档按约定只保留**未闭环**发现，
 > 本节即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。原则同 §R / §S：
 > **补门禁而不只是补缺陷**——每项都配了会先失败的回归测试，新增门禁在文件头写明「断言范围」。
 > #25（桌面端签名）经确认是**外部凭证阻塞**（roadmap E6），代码侧无剩余工作，转入 ⛔ 外部阻塞。
@@ -697,7 +697,7 @@
 
 ### U. 2026-09-22 审查 §9.3 P2 收尾（D1 / D4 / D5 / D10 + P3 + R7 / R9 / R10 + 门禁质量）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §7.3 与 §9.3 的余项；逐条改动见
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §7.3 与 §9.3 的余项；逐条改动见
 > [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。原则同 §R / §S / §T：**补门禁而不只是补缺陷**，
 > 每项都配了会先失败的回归测试，关键修复做「还原旧实现」变异验证。
 
@@ -733,7 +733,7 @@ functions 1095 / lines 3503）。
 
 ### V. 2026-09-22 真实后端 + 真实 RustFS 浏览器联调（todolist #37）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §9.3 的**唯一保留项**。此前
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §9.3 的**唯一保留项**。此前
 > `e2e-playwright.yml` / `playwright-e2e` 的 `/api/**` 全被 `page.route` mock，没有任何门禁
 > 验证「真实 Go 后端 + 真实 RustFS + 真实构建产物」拼在一起时的行为——尤其**浏览器直传**
 > （预签名 PUT 是浏览器 → S3 的跨源请求），mock 时代在结构上不可能被覆盖。本轮补齐后
@@ -761,7 +761,7 @@ functions 1095 / lines 3503）。
 
 ### W. 2026-09-22 审查 §7.4 门禁盲区收尾（响应门禁全量 + query 读取口径 + 叙述性数字 + 导出测试符号）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §4.3 / §7.4 / §9.1 列出的**最后四类残留**
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §4.3 / §7.4 / §9.1 列出的**最后四类残留**
 > ——即门禁矩阵里标「部分」与「否」的行。原则同 §R / §S / §T / §U：**补门禁而不只是补缺陷**；
 > 本轮新增/扩展的门禁全部做了变异验证，并在升级过程中**抓到 4 处真实漂移**（见条目 5–8）。
 
@@ -789,7 +789,7 @@ functions 1095 / lines 3503）。
 
 ### X. 2026-09-22 审查 §4.3「维持」项复核收尾（门禁自身口径 + path 参数门禁）
 
-> 来源：[`review-2026-09-19.md`](review-2026-09-19.md) §4.3 表格里最后五行标「维持」的项。
+> 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §4.3 表格里最后五行标「维持」的项。
 > 复核后发现**每一项都藏着真实缺口**（不是「已足够好」，而是「没人验过它能不能被绕过」）——
 > 全部经**实测确认缺口存在**，再改为 AST 判定或新增门禁，并逐条做变异验证（改回旧写法必红灯）。
 

@@ -1,6 +1,6 @@
 package handler
 
-// migrate_sync_gate_test.go —— review-2026-09-19.md §B5：/api/migrate/sync 在源端列举失败时
+// migrate_sync_gate_test.go —— docs/archive/review-2026-09-19.md §B5：/api/migrate/sync 在源端列举失败时
 // 必须回错误状态，而不是 `200 {scanned:0}`（后者会被读成「没有需要同步的内容」）。
 
 import (

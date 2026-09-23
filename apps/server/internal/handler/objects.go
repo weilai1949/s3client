@@ -229,7 +229,7 @@ const maxDeleteKeys = 1000
 //
 // 这是对外的**承诺**（docs/features.md、docs/api.md）：所有回传 failedKeys 的端点都必须
 // 经 capFailKeys 裁剪。此前只有 delete-prefix 异步路径裁剪，copy/migrate/sync 全部原样
-// 回传——承诺与实现不符（review-2026-09-19.md §7.3 D4）。
+// 回传——承诺与实现不符（docs/archive/review-2026-09-19.md §7.3 D4）。
 const maxFailKeys = 200
 
 // capFailKeys 把失败 key 列表裁剪到 maxFailKeys。未超限时原样返回（不复制）。

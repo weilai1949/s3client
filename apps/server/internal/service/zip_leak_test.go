@@ -1,6 +1,6 @@
 package service
 
-// zip_leak_test.go —— review-2026-09-19.md §B4：写 ZIP 时首个拷贝错误不能 break，
+// zip_leak_test.go —— docs/archive/review-2026-09-19.md §B4：写 ZIP 时首个拷贝错误不能 break，
 // 否则无缓冲 results 通道无人消费 → worker 永久阻塞、已取回的 body 不关闭。
 
 import (

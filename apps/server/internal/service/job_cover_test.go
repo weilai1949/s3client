@@ -167,7 +167,7 @@ func TestJobRecordStatusFallsBackForStatuslessFrames(t *testing.T) {
 // TestWithMaxJobsLimitsRegistry 在册上限是**每个注册表实例**的属性：
 // WithMaxJobs(n) 生效后第 n+1 个未终结任务必须被拒（ErrTooManyJobs），
 // 且不影响其它实例（原全局钩子会让并发用例相互污染，见
-// docs/review-2026-09-19.md §A2）。
+// docs/archive/review-2026-09-19.md §A2）。
 func TestWithMaxJobsLimitsRegistry(t *testing.T) {
 	limited := NewJobRegistry(WithMaxJobs(1))
 	defer limited.Stop()

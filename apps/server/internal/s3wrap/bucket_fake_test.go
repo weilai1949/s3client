@@ -296,7 +296,7 @@ func TestBucketEncryptionConfig(t *testing.T) {
 // 而前端 types.ts 的 CorsRule 与 docs/api.md 用的都是 camelCase（allowedMethods / maxAgeSeconds）。
 // Go 的 json.Unmarshal 大小写不敏感，所以**服务端测试**一直是绿的，但 JavaScript 严格区分大小写，
 // 浏览器读 x.allowedMethods 恒为 undefined → CORS 规则的方法/来源全被归一化成空数组。
-// 这是 review-2026-09-19.md 端点级响应门禁（§7.4）暴露出的真实客户端可见缺陷。
+// 这是 docs/archive/review-2026-09-19.md 端点级响应门禁（§7.4）暴露出的真实客户端可见缺陷。
 func TestCorsRuleJSONFieldNames(t *testing.T) {
 	b, err := json.Marshal(CorsRule{
 		ID:             "r1",

@@ -232,7 +232,7 @@ describe('servers', () => {
     expect(mod.api.activeServerId()).toBe(mod.api.listServers()[0].id)
   })
 
-  // P0-2（docs/review-2026-09-19.md §F1）：s3c.servers 被外部写坏时整站白屏。
+  // P0-2（docs/archive/review-2026-09-19.md §F1）：s3c.servers 被外部写坏时整站白屏。
   // 读路径在渲染期被 App.vue 调用，抛异常 = 白屏且 UI 无法自救（连修复它的 Server 面板都不可达）。
   describe('存储被写坏时不得抛异常 / 不得产生幽灵 server', () => {
     const corrupt: Array<{ name: string; raw: string }> = [

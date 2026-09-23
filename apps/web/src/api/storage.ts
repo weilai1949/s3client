@@ -186,7 +186,7 @@ interface StoredServerEntry {
  *
  * `s3c.servers` 是外部可写的 localStorage 键（旧版本、手工编辑、其它页面都可能写坏），
  * 因此读取路径必须把每个元素当成**不可信输入**：`[null]`/`[1]`/`[{}]` 这类条目此前会
- * 抛 TypeError（整站白屏）或退化成 id:'' 的幽灵 server（见 review-2026-09-19.md §F1）。
+ * 抛 TypeError（整站白屏）或退化成 id:'' 的幽灵 server（见 docs/archive/review-2026-09-19.md §F1）。
  * 返回 null 表示该条无法寻址（没有 id），调用方应丢弃并修复存储。
  */
 function sanitizeServer(s: unknown): StoredServerEntry | null {
@@ -313,7 +313,7 @@ export function activeServerId(): string {
  *
  * 这是**渲染期安全**访问器：`App.vue` 在模板里直接调用它（顶栏显示服务器名），
  * 一旦抛出就打断渲染 → 整站白屏，而唯一能修复存储的 Server 面板也随之不可达
- * （见 review-2026-09-19.md §F1）。因此这里兜底为 undefined，让 UI 至少可用。
+ * （见 docs/archive/review-2026-09-19.md §F1）。因此这里兜底为 undefined，让 UI 至少可用。
  * 可达路径：浏览器禁用存储时 `writeServers` 的 setItem 会抛 SecurityError。
  */
 export function getActiveServer(): ServerProfile | undefined {

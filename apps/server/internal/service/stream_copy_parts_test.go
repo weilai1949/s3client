@@ -1,6 +1,6 @@
 package service
 
-// stream_copy_parts_test.go —— review-2026-09-19.md §B10①：段号 10000 是合法段，
+// stream_copy_parts_test.go —— docs/archive/review-2026-09-19.md §B10①：段号 10000 是合法段，
 // 上限判断必须在**上传前**做，否则「正好 10000 段」的对象会被误判超限并 abort。
 
 import (

@@ -1,6 +1,6 @@
 package service
 
-// sync_list_error_test.go —— review-2026-09-19.md §B5/§B6：列举错误必须上抛（源/目标两侧），
+// sync_list_error_test.go —— docs/archive/review-2026-09-19.md §B5/§B6：列举错误必须上抛（源/目标两侧），
 // 而 ctx 取消是「客户端放弃」，不上报为错误；取消后 indexDst 必须立刻停。
 
 import (

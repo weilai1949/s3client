@@ -4,7 +4,7 @@
  * 这些数字来自 `apps/server/internal/handler`：超过上限的请求会被直接 400 拒绝
  * （`too many keys (max …)`）。前端选中量可以远超上限（对象列表 loadAll 2 万、
  * 迁移面板 20 万、`selectAll` 可全选），因此**提交前必须分片**——否则整批失败、
- * 一个都没执行（见 docs/review-2026-09-19.md §F3）。
+ * 一个都没执行（见 docs/archive/review-2026-09-19.md §F3）。
  *
  * 放在共享模块而不是各自散落的魔数：上限变更时只改一处。
  */

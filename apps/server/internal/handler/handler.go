@@ -136,7 +136,7 @@ func fromS3Object(o s3wrap.ObjectItem) objectItem {
 //
 // 取值必须容得下文档承诺的最大批量：批量端点允许 10 000 个 key，1 KB/key 的合法请求约
 // 10.3 MB，旧的 8 MiB 会把这种请求截断成 JSON 语法错误并回 400「invalid request body」。
-// 超限时 readJSON 返回 errBodyTooLarge，由 writeBadJSON 回 413（review-2026-09-19.md §B9）。
+// 超限时 readJSON 返回 errBodyTooLarge，由 writeBadJSON 回 413（docs/archive/review-2026-09-19.md §B9）。
 const maxBody = 16 << 20 // 16MB request body cap（批量删除/复制可含大量长 key）
 
 // errBodyTooLarge 表示请求体超过了 maxBody；调用方应回 413 而不是「JSON 无效」的 400。

@@ -247,7 +247,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [功能大全（Features）](docs/features.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
 - [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）
 - [综合评估报告](docs/assessment.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
-- [分支整体状态审查](docs/review-2026-09-19.md) — 2026-09-19 时点性审查：七维度实跑复核 + P0/P1/P2 优先级
+- [分支整体状态审查](docs/archive/review-2026-09-19.md) — 2026-09-19 时点性审查：七维度实跑复核 + P0/P1/P2 优先级
 - [路线图（Roadmap）](docs/roadmap.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
 - [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
 - [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维

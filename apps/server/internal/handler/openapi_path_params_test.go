@@ -2,7 +2,7 @@ package handler
 
 // openapi_path_params_test.go —— **全量** path 参数门禁：注册表声明 ⇔ handler 实际读取。
 //
-// 背景（docs/review-2026-09-19.md §4.3）：`openapi_contract_test.go` 的
+// 背景（docs/archive/review-2026-09-19.md §4.3）：`openapi_contract_test.go` 的
 // `TestOpenAPI_ContractPathParamsDeclared` 只校验「注册表**内部**自洽」——路径模板里的
 // `{id}` 必须在同 path 的每条 operation 上声明为 `in:path & required:true`。它**不**比对
 // handler 是否真的用 `r.PathValue("id")` 读了这个参数。于是这类漂移无人拦：

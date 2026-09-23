@@ -20,7 +20,7 @@ import (
 
 // resetMetrics 清零进程级 S3 指标，避免用例之间相互污染。
 // 定义在测试包内：清零是纯测试需求，不应作为生产 API 暴露（原 `ResetMetrics`
-// 见 docs/review-2026-09-19.md §A2）。
+// 见 docs/archive/review-2026-09-19.md §A2）。
 func resetMetrics() {
 	globalS3Metrics = newS3Metrics()
 }

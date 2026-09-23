@@ -1,6 +1,6 @@
 package service
 
-// job_race_test.go —— review-2026-09-19.md §B7：Emit 必须在锁内投递。
+// job_race_test.go —— docs/archive/review-2026-09-19.md §B7：Emit 必须在锁内投递。
 //
 // 旧实现先在锁内快照订阅者、解锁后再发送；Finish 会在同一把锁下清空订阅表、
 // 解锁后 close 这些 channel。两者之间没有任何互斥 → 一旦 Emit 与 Finish 并发，

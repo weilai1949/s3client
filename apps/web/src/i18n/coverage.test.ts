@@ -91,7 +91,7 @@ function usedLiteralKeys(): Map<string, string[]> {
 /** 去掉源码中的注释，保留字符串字面量。
  *
  * 此前 `usedKeyTexts` 直接对整份源码文本做正则，**注释里提到的键**也会被算作「已使用」：
- * 删掉真实引用、只在注释里留个键名，死键门禁仍然全绿（review-2026-09-19.md §4.2）。
+ * 删掉真实引用、只在注释里留个键名，死键门禁仍然全绿（docs/archive/review-2026-09-19.md §4.2）。
  * 本函数按字符扫描，正确跳过字符串字面量（避免把 `'https://x'` 的 `//` 当注释）。
  */
 function stripComments(text: string): string {
@@ -222,7 +222,7 @@ describe('i18n 字面量键覆盖', () => {
   })
 
   // 此前只比对**键数量**：`zh-CN` 缺 `a` 而 `en-US` 多一个 `b` 时数量相等，
-  // 门禁仍绿——用户切到英文就会看到原始 key（review-2026-09-19.md §4.2）。
+  // 门禁仍绿——用户切到英文就会看到原始 key（docs/archive/review-2026-09-19.md §4.2）。
   // 这里按语言分别解析键集合，做**集合级**双向比对。
   it('中英字典的键集合逐键一致（不是只比数量）', () => {
     const zh = keysOfLocale('zh-CN')

@@ -2,7 +2,7 @@ package handler
 
 // openapi_semantics_test.go —— **类型语义**门禁：注册表的 enum / required 与 handler 真实行为对齐。
 //
-// 背景（docs/todolist.md #27 / docs/review-2026-09-19.md §7.4）：此前的门禁只比对字段**名**集合
+// 背景（docs/todolist.md #27 / docs/archive/review-2026-09-19.md §7.4）：此前的门禁只比对字段**名**集合
 // （`openapi_request_fields_test.go` / `api_doc_test.go`），类型语义（enum / required）没有机械门禁；
 // 只有 presign 的 method 枚举有逐条断言。结果是 objects ACL 的注册表 enum 少了两个 handler 真实
 // 接受的取值；presign `method` / copy-object `newBucket` / copy-prefix `targetBucket` 被误标

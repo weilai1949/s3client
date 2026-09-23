@@ -1,6 +1,6 @@
 package handler
 
-// ol_delete_partial_test.go —— review-2026-09-19.md §B3：200 响应体内的逐 key 删除失败
+// ol_delete_partial_test.go —— docs/archive/review-2026-09-19.md §B3：200 响应体内的逐 key 删除失败
 // 必须体现在「已删除」计数里（S3 对部分失败仍返回 200）。
 
 import (
