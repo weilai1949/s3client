@@ -601,7 +601,7 @@ GET /api/migrate/jobs
 `status` 取值：`running` | `done` | `cancelled` | `interrupted`。
 `interrupted` 表示服务重启导致任务中断，需人工对账——**移动（`deleteSource:true`）任务可能已复制但源未删除**。
 ```json
-200 {"jobs":[{"id":"uuid","created":"2026-09-16T10:00:00Z","total":100,"status":"interrupted","progress":{"done":42,"total":100,"migrated":42,"failed":0,"status":"interrupted"},"result":{"migrated":42,"failed":0}}]}
+200 {"jobs":[{"id":"uuid","created":"2026-09-16T10:00:00Z","total":100,"status":"interrupted","progress":{"done":42,"total":100,"migrated":42,"failed":0,"status":"interrupted"},"result":{"migrated":42,"failed":0,"failedKeys":["..."]}}]}
 ```
 
 ```

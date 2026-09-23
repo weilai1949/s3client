@@ -161,6 +161,31 @@ func TestIsTerminalJobStatus(t *testing.T) {
 	}
 }
 
+// TestJobResultUnmarshalAcceptsLegacyFailKeys 落盘兼容：新格式写 `failedKeys`（公共契约），
+// 旧 jobs.json 里的 `failKeys` 仍须能读出，避免升级后历史任务的失败清单丢失。
+func TestJobResultUnmarshalAcceptsLegacyFailKeys(t *testing.T) {
+	var legacy JobResult
+	if err := json.Unmarshal([]byte(`{"migrated":1,"failed":2,"lastError":"old","failKeys":["old.txt"]}`), &legacy); err != nil {
+		t.Fatalf("unmarshal legacy failKeys: %v", err)
+	}
+	if len(legacy.FailKeys) != 1 || legacy.FailKeys[0] != "old.txt" {
+		t.Fatalf("legacy failKeys 未兼容读出: %+v", legacy)
+	}
+
+	var current JobResult
+	if err := json.Unmarshal([]byte(`{"migrated":1,"failed":2,"failedKeys":["new.txt"]}`), &current); err != nil {
+		t.Fatalf("unmarshal failedKeys: %v", err)
+	}
+	if len(current.FailKeys) != 1 || current.FailKeys[0] != "new.txt" {
+		t.Fatalf("failedKeys 未读出: %+v", current)
+	}
+
+	var bad JobResult
+	if err := json.Unmarshal([]byte(`{"migrated":"not-an-int"}`), &bad); err == nil {
+		t.Fatal("字段类型错误的 JSON 必须返回错误，不得静默吞掉")
+	}
+}
+
 // ---- JobRegistry 持久化接入 ----
 
 func TestJobRegistryPersistsCreateAndFinish(t *testing.T) {

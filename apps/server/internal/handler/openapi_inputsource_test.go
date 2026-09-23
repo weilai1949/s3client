@@ -37,8 +37,6 @@ var (
 	methodRe = regexp.MustCompile(`(?m)^func \(h \*Handler\) (\w+)\(`)
 	// opRe 匹配注册表的 operation 声明。
 	opRe = regexp.MustCompile(`r\.Operation\("([A-Z]+)", "([^"]+)"`)
-	// callRe 匹配方法体内对其它 handler 方法的调用（用于委托闭包）。
-	callRe = regexp.MustCompile(`h\.(\w+)\(`)
 )
 
 // handlerSourceDir 返回本测试所在目录（internal/handler）。
@@ -201,14 +199,46 @@ func parseBodyCalls(name, body string) bodyCalls {
 		if !ok {
 			return true
 		}
-		// 只认 <recv>.readJSON(...) / <recv>.NewDecoder(...) 这类真实方法调用。
+		// 只认真实请求体解码：`h.readJSON(...)` 与 `json.NewDecoder(...)`。
+		// 其它 receiver 的 `readJSON` / `NewDecoder` 不得算作请求体解码（receiver 负例见
+		// TestParseBodyCallsDecodeReceivers）。
 		switch sel.Sel.Name {
-		case "readJSON", "NewDecoder":
-			out.decodes = true
+		case "readJSON":
+			if x, ok := sel.X.(*ast.Ident); ok && x.Name == "h" {
+				out.decodes = true
+			}
+		case "NewDecoder":
+			if x, ok := sel.X.(*ast.Ident); ok && x.Name == "json" {
+				out.decodes = true
+			}
 		}
 		// 收集 h.<method>(...) 形式的委托调用（用于沿闭包查找解码点）。
 		if x, ok := sel.X.(*ast.Ident); ok && x.Name == "h" {
 			out.calls = append(out.calls, sel.Sel.Name)
+		}
+		return true
+	})
+	return out
+}
+
+// handlerMethodCalls 返回函数声明体内所有 `h.<method>(...)` 形式的真实调用（AST 判定）。
+// 供各契约门禁的调用闭包遍历使用，替代会命中注释/字符串的裸正则 `h\.(\w+)\(`。
+func handlerMethodCalls(fd *ast.FuncDecl) []string {
+	if fd == nil || fd.Body == nil {
+		return nil
+	}
+	var out []string
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		if x, ok := sel.X.(*ast.Ident); ok && x.Name == "h" {
+			out = append(out, sel.Sel.Name)
 		}
 		return true
 	})
@@ -250,6 +280,54 @@ func TestDecodesBodyIgnoresCommentsAndStrings(t *testing.T) {
 		if got[name] != w {
 			t.Errorf("decodesBody(%s) = %v, want %v", name, got[name], w)
 		}
+	}
+}
+
+// TestParseBodyCallsIgnoresCommentsAndStrings 钉住「调用闭包」的 AST 口径：
+// 注释与字符串字面量里的 `h.ghost()` 不得进入闭包，只有真实调用表达式才算。
+// 各契约门禁（path / query / request fields / semantics）都消费 parseBodyCalls 的 calls，
+// 若退回裸正则，注释即可污染闭包并掩盖漂移。
+func TestParseBodyCallsIgnoresCommentsAndStrings(t *testing.T) {
+	t.Parallel()
+	body := "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n" +
+		"\t// h.ghost()\n" +
+		"\ts := \"h.alsoGhost()\"\n\t_ = s\n" +
+		"\th.real(w, r)\n}\n"
+	bc := parseBodyCalls("m", body)
+	want := map[string]bool{"real": true}
+	got := map[string]bool{}
+	for _, c := range bc.calls {
+		got[c] = true
+	}
+	if len(got) != len(want) || !got["real"] {
+		t.Errorf("parseBodyCalls calls = %v, want 仅 [real]（注释/字符串里的 h.x() 不得进入闭包）", bc.calls)
+	}
+	if bc.decodes {
+		t.Error("parseBodyCalls 不应把该函数判为解码请求体")
+	}
+}
+
+// TestParseBodyCallsDecodeReceivers 钉住解码判定的 receiver：
+// 只有 `h.readJSON(...)` 与 `json.NewDecoder(...)` 算请求体解码；
+// `other.readJSON(...)` / `other.NewDecoder(...)` 不得误报。
+func TestParseBodyCallsDecodeReceivers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"h.readJSON", "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\tvar x struct{}\n\t_ = h.readJSON(r, &x)\n}\n", true},
+		{"json.NewDecoder", "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\t_ = json.NewDecoder(r.Body)\n}\n", true},
+		{"other.readJSON", "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\tvar x struct{}\n\t_ = other.readJSON(r, &x)\n}\n", false},
+		{"other.NewDecoder", "func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\t_ = other.NewDecoder(r.Body)\n}\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := parseBodyCalls("m", tc.body).decodes; got != tc.want {
+				t.Errorf("parseBodyCalls.decodes = %v, want %v（body=%q）", got, tc.want, tc.body)
+			}
+		})
 	}
 }
 

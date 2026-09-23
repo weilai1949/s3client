@@ -7,8 +7,8 @@ package handler
 // 仍然不会变红。本文件把它换成机械全量遍历：
 //
 //   1. 解析 routes.go：路由 → handler 方法；
-//   2. 沿 handler 方法调用闭包找到真正 `readJSON` 的方法（覆盖 parseMigrateRequest /
-//      parseCopyPrefix 这类委托解码）；
+//   2. 沿 handler 方法调用闭包（`parseBodyCalls` AST 抽取 `h.xxx()`）找到真正 `readJSON` 的方法
+//      （覆盖 parseMigrateRequest / parseCopyPrefix 这类委托解码）；
 //   3. 解析 readJSON 目标变量的字段集（内联匿名 struct 或命名 struct）；
 //   4. 与注册表该 operation 的 requestBody schema 字段集比对。
 //
@@ -98,8 +98,8 @@ func parseDecodeSites(t *testing.T, dir string) map[string]decodeSite {
 		if !ok {
 			return decodeSite{}, false
 		}
-		for _, c := range callRe.FindAllStringSubmatch(body, -1) {
-			if s, ok := visit(c[1]); ok {
+		for _, c := range parseBodyCalls(name, body).calls {
+			if s, ok := visit(c); ok {
 				memo[name] = s
 				return s, true
 			}
@@ -169,6 +169,9 @@ func findReadJSONTarget(body string) (string, int, bool) {
 		sel, ok := call.Fun.(*ast.SelectorExpr)
 		if !ok || sel.Sel.Name != "readJSON" || len(call.Args) < 2 {
 			return true
+		}
+		if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "h" {
+			return true // 只认 h.readJSON；其它 receiver 的同名方法不是请求体解码点。
 		}
 		unary, ok := call.Args[1].(*ast.UnaryExpr)
 		if !ok || unary.Op != token.AND {
@@ -322,6 +325,7 @@ func TestFindReadJSONTargetIgnoresCommentsAndStrings(t *testing.T) {
 	for _, body := range []string{
 		"func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\t// h.readJSON(r, &ghost)\n}\n",
 		"func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\ts := \"h.readJSON(r, &ghost)\"\n\t_ = s\n}\n",
+		"func (h *Handler) m(w http.ResponseWriter, r *http.Request) {\n\tvar req struct{}\n\t_ = other.readJSON(r, &req)\n}\n",
 	} {
 		if got, _, ok := findReadJSONTarget(body); ok {
 			t.Errorf("注释/字符串里的 readJSON 被误判为真实解码（body=%q，target=%q）", body, got)

@@ -112,6 +112,38 @@ func TestOlMigrateJobCancelAndStatus(t *testing.T) {
 	}
 }
 
+// TestOlMigrateJobsListUsesFailedKeys 回归：任务清单接口的 result 必须与状态接口/前端一致，
+// 使用 `failedKeys` 而不是持久化内部的旧名 `failKeys`——否则重启后的 interrupted 任务
+// 在「未完成任务」视图里读不到失败对象列表。
+func TestOlMigrateJobsListUsesFailedKeys(t *testing.T) {
+	srv := olFake(t, func(r *http.Request) olResp { return olPlain(http.StatusOK) })
+	env := accNewEnv(t, srv.URL, "b")
+
+	_, jcancel := context.WithCancel(context.Background())
+	defer jcancel()
+	job := env.hnd.migrateJobs.Create(1, jcancel)
+	job.Finish(migrateJobResult(), "done")
+
+	rr := env.accDoRec("GET", "/api/migrate/jobs", "")
+	olExpectStatus(t, rr, http.StatusOK, "jobs list")
+	var m map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode jobs list: %v", err)
+	}
+	jobs, _ := m["jobs"].([]any)
+	if len(jobs) != 1 {
+		t.Fatalf("jobs = %v, want 1 条", jobs)
+	}
+	first, _ := jobs[0].(map[string]any)
+	res, _ := first["result"].(map[string]any)
+	if res == nil || res["failedKeys"] == nil {
+		t.Fatalf("list result 缺少 failedKeys（前端读不到失败清单）: %v", first)
+	}
+	if _, legacy := res["failKeys"]; legacy {
+		t.Fatalf("list result 仍泄露持久化旧名 failKeys: %v", res)
+	}
+}
+
 // migrateJobResult 带失败信息的终态结果。
 func migrateJobResult() service.JobResult {
 	return service.JobResult{Failed: 1, LastError: "boom", FailKeys: []string{"k"}}

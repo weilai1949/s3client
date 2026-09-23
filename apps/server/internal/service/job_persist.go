@@ -39,6 +39,34 @@ type JobRecord struct {
 	Result   JobResult   `json:"result"`
 }
 
+// jobResultWire 是 JobResult 的落盘线格式：同时接受新公共名 `failedKeys` 与旧落盘名
+// `failKeys`（旧名只读兼容，写出始终用 `failedKeys`）。
+type jobResultWire struct {
+	Migrated   int      `json:"migrated"`
+	Failed     int      `json:"failed"`
+	LastError  string   `json:"lastError,omitempty"`
+	FailedKeys []string `json:"failedKeys,omitempty"`
+	FailKeys   []string `json:"failKeys,omitempty"`
+}
+
+// UnmarshalJSON 兼容旧 jobs.json 的 `failKeys`。公共契约统一为 `failedKeys`，
+// 但升级不能丢掉历史任务的失败清单。
+func (r *JobResult) UnmarshalJSON(b []byte) error {
+	var w jobResultWire
+	if err := json.Unmarshal(b, &w); err != nil {
+		return err
+	}
+	r.Migrated = w.Migrated
+	r.Failed = w.Failed
+	r.LastError = w.LastError
+	if len(w.FailedKeys) > 0 {
+		r.FailKeys = w.FailedKeys
+	} else {
+		r.FailKeys = w.FailKeys
+	}
+	return nil
+}
+
 // JobPersister 是任务清单的落盘抽象（Load 无既有数据时返回 (nil, nil)）。
 // 由调用方注入；不注入则为纯内存行为，与历史一致。
 type JobPersister interface {

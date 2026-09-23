@@ -95,10 +95,10 @@ func jobProgressSchema() *openapi.Schema {
 // jobResultSchema 对应 service.JobResult 的 json tag（异步任务终态汇总）。
 func jobResultSchema() *openapi.Schema {
 	return openapi.BuildObj(map[string]*openapi.Schema{
-		"migrated":  openapi.Int(),
-		"failed":    openapi.Int(),
-		"lastError": openapi.Str(),
-		"failKeys":  openapi.Arr(openapi.Str()),
+		"migrated":   openapi.Int(),
+		"failed":     openapi.Int(),
+		"lastError":  openapi.Str(),
+		"failedKeys": openapi.Arr(openapi.Str()),
 	})
 }
 

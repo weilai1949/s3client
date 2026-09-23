@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–X 各轮处置台账
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Y 各轮处置台账
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -456,7 +456,7 @@
 #### 0.1.0（2026-08-22）
 - 首个版本：Go 后端（AWS SDK for Go v2，封装 11 个 S3 接口）、Vue3 + Vite + TS 前端（账号 / 列对象 / 直传 / 签名 / 删除 / 迁移 / 加前缀）、Tauri 2 桌面壳（无 IPC，B/S）。
 
-### G. Unreleased（进行中）已记录项
+### G. 已记录的 Unreleased 项（已完成）
 运行时基镜像 Alpine 3.20、`/api/metrics` 默认关闭、S3C_TOKEN 短口令硬失败、S3 出站禁代理、桶名校验收紧、user metadata 400、delete-objects ≤1000、migrate SSE 写超时、store 失败回滚、错误 sentinel 化、X-Request-ID 加固、Bearer scheme、`.env` 解耦、nginx 内存上限、OpenAPI 自动生成 + 契约测试、**OpenAPI components 接线 `$ref`（109 处引用，消灭 0 引用死代码）**、双驱动去重、存储驱动再收敛（统一 `storeCodec`）、账号响应契约收敛（`secretSet` 替代 `"******"` 占位）、全仓 gofmt 对齐、Playwright E2E、增量同步、桶策略可视化编辑器、批量元数据编辑、存储类型切换、回收站、桌面端 SHA 校验与 actions pin SHA、**gitlab-ci-local 本地体验收口**（`.gitlab-ci-local-env` 默认挂 docker.sock、`make gcl*` pin `@4.75.1`、Trivy DB / 镜像源变量示例）等。完整逐条见 [`CHANGELOG.md`](../CHANGELOG.md)。
 
 ### H. 2026-09-16 评估 P0 发布阻塞修复
@@ -726,7 +726,8 @@ functions 1095 / lines 3503）。
 >
 > **2026-09-22 收尾（§W）**：上述三项残留**全部闭环**——端点级响应门禁升级为全量覆盖（15→61 个
 > 成功响应）、query 门禁扩到四种读取口径、新增 md 叙述性数字门禁与 `_test.go` 导出符号死代码门禁。
-> 现仅剩 `/api/openapi.json` 一个自由体响应（响应体即 OpenAPI 规范本身，非 `writeJSON` 写出）。
+> 现顶层自由体响应仅剩 `/api/openapi.json` 一个（响应体即 OpenAPI 规范本身，非 `writeJSON` 写出）；
+> `metadata` / `fields` 等嵌套自由体只比对到顶层键。
 
 ---
 
@@ -766,7 +767,7 @@ functions 1095 / lines 3503）。
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
-| 1 | 端点级响应门禁：自由体 `openapi.Obj()` 全量收敛 | ✅ | 把 accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system 十个注册表的自由体响应全部升级为 `openapi.BuildObj` 具体 `properties`（嵌套形状抽为共享构造器：`corsRuleSchema` / `tagRowSchema` / `lifecycleRuleSchema` / `versionEntrySchema` / `deleteMarkerSchema` / `jobProgressSchema` / `jobResultSchema` / `jobRecordSchema`）。端点级门禁覆盖面 **15 → 61** 个成功响应，自由体从 ~45 个降到 **1 个**（`/api/openapi.json`：响应体即规范本身，由 `Registry.HTTPHandler()` 直接写，非 `writeJSON`，机械抽取无意义）。自检从 `checked ≥ 15` 收紧为 `checked ≥ 60` 且 `untyped ≤ 1`——**回退成自由体会直接红灯** |
+| 1 | 端点级响应门禁：**顶层**自由体 `openapi.Obj()` 全量收敛 | ✅ | 把 accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system 十个注册表的**顶层**自由体响应全部升级为 `openapi.BuildObj` 具体 `properties`（嵌套形状抽为共享构造器：`corsRuleSchema` / `tagRowSchema` / `lifecycleRuleSchema` / `versionEntrySchema` / `deleteMarkerSchema` / `jobProgressSchema` / `jobResultSchema` / `jobRecordSchema`）。端点级门禁覆盖面 **15 → 61** 个成功响应，**顶层**自由体从 ~45 个降到 **1 个**（`/api/openapi.json`：响应体即规范本身，由 `Registry.HTTPHandler()` 直接写，非 `writeJSON`，机械抽取无意义）。自检从 `checked ≥ 15` 收紧为 `checked ≥ 60` 且 `untyped ≤ 1`——**回退成顶层自由体会直接红灯**。注意：`metadata` / `fields` 等**嵌套**自由体仍只比对到顶层键 |
 | 2 | query 参数门禁：读取口径扩展 | ✅ | 抽取器从只认 `Get()` 扩到四种字面量口径：`Get` / `Has` / `Values` / `Query()["x"]`，并覆盖 `q := r.URL.Query()` 绑定后的同名形式。新增**非字面量键检测**（`q.Get(name)` / `q[k]`）——命中即红灯要求改字面量，杜绝「动态键读取静默逃逸」。新增口径测试 `TestQueryReadExtractorCoversAllForms`（8 种形态逐一断言，含「无读取不得抽出参数」的反向断言） |
 | 3 | md 叙述性数字门禁（矩阵唯一标「否」的行） | ✅ | 新增 `apps/server/doc_number_gate_test.go`：以 `routes.go` 的 `mux.HandleFunc` 注册数为**唯一真值**，校验 README / `api.md` / `roadmap.md` / `features.md` 里「N 个 `/api/*` 端点」的 N。要求每条声明**至少命中一次**（文案漂移导致正则失配即红灯，防门禁静默失效）。变异验证：把 `features.md` 改回 69 → 红灯 |
 | 4 | `_test.go` 导出符号死代码门禁 | ✅ | `golangci-lint unused` 对**导出**符号因「可能被包外引用」而豁免，但 `_test.go` 不参与库构建、永远无包外引用——实测给 `_test.go` 加无人调用的导出函数/类型，`golangci-lint run` 报 **0 issues**。新增 `TestNoUnusedExportedTestSymbols`：扫描全部 `_test.go` 的导出包级符号，无引用即红灯；`export_test.go`（约定的测试接缝）整体豁免。检测逻辑抽为纯函数 `findUnusedExportedTestSymbols`，由 `TestFindUnusedExportedTestSymbols` 用**合成源码**做口径测试（死符号必报、被引用/非导出/Test 入口/接缝文件不得误伤）——不依赖「仓库里正好有个死符号」来证明门禁有效 |
@@ -779,9 +780,10 @@ functions 1095 / lines 3503）。
 **门禁实跑**：后端 `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** / `go build ./...` OK /
 `go test ./...` 全绿（含新增门禁）；四条新门禁与两处缺陷修复均经**变异验证**（改回旧写法必红灯）。
 
-> **本节后的残留**（已写入各门禁文件头）：仅 `/api/openapi.json` 一个自由体响应；嵌套对象/数组的
-> **深层字段**只比对到顶层键（元素形状由注册表共享构造器统一维护）；md 中依赖运行环境或时刻的
-> 叙述性数字（用例数 / 覆盖率 / 行数）按「历史记录」保留，不做静态门禁。
+> **本节后的残留**（已写入各门禁文件头）：**顶层**自由体响应仅 `/api/openapi.json` 一个；
+> `metadata` / `fields` 等**嵌套**自由体与嵌套对象/数组的**深层字段**只比对到顶层键（元素形状由
+> 注册表共享构造器统一维护）；md 中依赖运行环境或时刻的叙述性数字（用例数 / 覆盖率 / 行数）
+> 按「历史记录」保留，不做静态门禁；md 端点数量叙述数字由 `doc_number_gate_test.go` 覆盖。
 
 ---
 
@@ -803,7 +805,7 @@ functions 1095 / lines 3503）。
 `go build ./...` OK / `go test ./...` 全绿（8/8 包，**每包 100.0% 覆盖且零未覆盖块**）。
 
 > **本节后的残留**：§4.3 表格已无「维持」项（每行都是 ✅ 且带回归门禁）。仅剩的**结构性**无法
-> 机械拦截项同 §W——`/api/openapi.json` 自由体响应、嵌套结构深层字段、依赖运行环境/时刻的
+> 机械拦截项同 §W——`/api/openapi.json` 顶层自由体响应、`metadata`/`fields` 嵌套自由体与嵌套结构深层字段、依赖运行环境/时刻的
 > 叙述性数字；均已在对应门禁文件头写明断言范围。
 >
 > **2026-09-22 追加复核（门禁自身再检查）**：发现并关闭三处新缺口——① `openapi_query_params_test.go`
@@ -814,6 +816,22 @@ functions 1095 / lines 3503）。
 > （注释/字符串里的调用会被当成解码点），已改 AST（`findReadJSONTarget`）。同时把
 > `delete-prefix/async`、`copy-prefix/async` 的请求体从 `openapi.Obj()` 自由体升级为具体
 > `properties`，使请求体字段门禁覆盖这两个端点。
+
+---
+
+### Y. 2026-09-22 子审查复核：异步任务契约统一 + 门禁口径补充
+
+> 来源：子审查 724461ee 的复核发现。逐条修复证据见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | 异步任务失败 key 契约分裂（`failKeys` vs `failedKeys`） | ✅ | 公共契约统一为 `failedKeys`（`JobResult` json tag + OpenAPI `jobResultSchema` + `docs/api.md` list 示例）；`job_persist.go` 的 `UnmarshalJSON` 兼容旧落盘 `failKeys`。新增 `TestOlMigrateJobsListUsesFailedKeys`（清单接口 result 必须含 `failedKeys`、不得泄露 `failKeys`）与 `TestJobResultUnmarshalAcceptsLegacyFailKeys`（新旧格式 + 非法 JSON 错误路径） |
+| 2 | query 字面量空白盲区 | ✅ | `q.Get( "x" )` / `q[ "x" ]` 既可被抽取、也不会被误判动态；动态下标正则补 `\s` 排除。合成用例覆盖空白字面量与空白动态键 |
+| 3 | 请求体解码 receiver 不敏感 | ✅ | `parseBodyCalls` 只认 `h.readJSON` / `json.NewDecoder`；`findReadJSONTarget` 要求 receiver 为 `h`。新增 `TestParseBodyCallsDecodeReceivers` 与 `other.readJSON` 负例 |
+| 4 | 死代码符号计数跨包互相抵消 | ✅ | 按「归一化包名 + 符号名」计数（`foo_test` 与 `foo` 同作用域）；新增 `TestFindUnusedExportedTestSymbolsScopesByPackage` 跨包同名合成用例 |
+
+> **仍未机械覆盖**：仍保留 §X 列出的结构性残留；本节的 query 抽取本身仍是正则（动态键已显式红灯），
+> 如需彻底 AST 化，应另立任务而不是把「有门禁」读成「已无裸正则」。
 
 ---
 

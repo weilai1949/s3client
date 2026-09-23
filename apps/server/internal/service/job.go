@@ -37,12 +37,13 @@ type JobProgress struct {
 }
 
 // JobResult 异步任务终态汇总。
-// JSON 标签是落盘格式的一部分（JobRecord.Result），改名会让旧任务清单读不出来。
+// JSON 标签是落盘格式与公共契约的一部分：对外统一 `failedKeys`（OpenAPI / 前端 /
+// docs/api.md）；`job_persist.go` 的 UnmarshalJSON 兼容旧落盘格式里的 `failKeys`。
 type JobResult struct {
 	Migrated  int      `json:"migrated"`
 	Failed    int      `json:"failed"`
 	LastError string   `json:"lastError,omitempty"`
-	FailKeys  []string `json:"failKeys,omitempty"`
+	FailKeys  []string `json:"failedKeys,omitempty"`
 }
 
 // Job 单次异步批量任务。

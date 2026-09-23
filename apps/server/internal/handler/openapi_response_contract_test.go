@@ -20,13 +20,16 @@ package handler
 // 且 handler「恒写出的键」（present）必须 ⊆ 注册表 properties。
 //
 // 断言范围（刻意不做的残留，明确记录而非静默跳过）：
-//   - **自由体 `openapi.Obj()`**：注册表未声明 properties 的端点无从比对，跳过。**2026-09-22 收敛**：
-//     全部注册表（accounts / buckets / bucket-settings / objects / object-meta / multipart /
-//     versions / trash / migrate / system）的自由体响应已升级为具体 properties，端点级门禁从
-//     15 个覆盖到 61 个成功响应；仅剩 `/api/openapi.json` 一个自由体——它的响应体就是 OpenAPI
-//     规范本身，由 `Registry.HTTPHandler()` 直接写出而非 `writeJSON`，机械抽取无意义。
-//     自检要求「带具体 properties 的成功响应」达到下限（60）且自由体不超过 1 个，
+//   - **自由体 `openapi.Obj()`**：注册表未声明**顶层** properties 的端点无从比对，跳过。**2026-09-22 收敛**：
+//     全部注册表的顶层自由体响应已升级为具体 properties，端点级门禁从 15 个覆盖到 61 个成功响应；
+//     顶层自由体仅剩 `/api/openapi.json` 一个——它的响应体就是 OpenAPI 规范本身，由
+//     `Registry.HTTPHandler()` 直接写出而非 `writeJSON`，机械抽取无意义。注意：properties 内部嵌套的
+//     `metadata` / `fields` 仍可为 `openapi.Obj()`，本门禁只比对顶层键，不计入 `untyped` 自检。
+//     自检要求「带具体 properties 的成功响应」达到下限（60）且顶层自由体不超过 1 个，
 //     防止整体退回自由体后静默变绿。
+//   - **helper 内部直接 `writeJSON`**：本门禁只扫描 handler 方法体内的 `h.writeJSON` 写出点；
+//     helper 返回表达式会被递归解析，但 helper 自身直接 `writeJSON` 的写法不追踪
+//     （当前生产代码无此形状，新增时须在本文件登记或改为返回表达式）。
 //   - **动态拼装**：handler 从 `[]map` 追加、跨包调用、或键来自运行时字符串的响应无法机械抽取。
 //     若这类端点声明了具体 properties，门禁会红灯要求改用字面量 map / 具名 struct——不得静默放过。
 //     （`listTrash` / `listObjectVersions` 的数组元素由 `deleteMarkerSchema` / `versionEntrySchema`

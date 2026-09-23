@@ -300,6 +300,7 @@ var _ Iface = (*T)(nil)         // 编译期接口断言：放行
 // testExportedDecl 是一个在 _test.go 中声明的导出包级符号。
 type testExportedDecl struct {
 	file string // 相对 apps/server
+	pkg  string // 归一化包名（`foo_test` 与 `foo` 视为同一作用域）
 	name string
 	kind string
 }
@@ -361,10 +362,15 @@ func TestNoUnusedExportedTestSymbols(t *testing.T) {
 // 判定口径：
 //   - 只统计**包级**声明（函数 / 类型 / 变量 / 常量），跳过方法与 Test/Benchmark/Example/Fuzz 入口；
 //   - 跳过 `export_test.go`（约定合法的测试接缝）；
-//   - 引用计数以**整个包的文件集合**为单位：标识符出现次数 ≤ 1（仅声明处）即视为无引用。
+//   - 引用计数按**归一化包名 + 符号名**分组：`foo_test` 与 `foo` 视为同一作用域，
+//     不同包中的同名符号互不抵消；标识符出现次数 ≤ 1（仅声明处）即视为无引用。
 func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl {
 	fset := token.NewFileSet()
-	var decls []testExportedDecl
+	type parsedFile struct {
+		file *ast.File
+		pkg  string
+	}
+	parsed := map[string]parsedFile{}
 	refs := map[string]int{}
 
 	for rel, data := range sources {
@@ -372,16 +378,22 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 		if err != nil {
 			continue // 解析失败交给 go build / vet 报错，不在此重复。
 		}
+		pkg := strings.TrimSuffix(f.Name.Name, "_test")
+		parsed[rel] = parsedFile{file: f, pkg: pkg}
 		ast.Inspect(f, func(n ast.Node) bool {
 			if id, ok := n.(*ast.Ident); ok {
-				refs[id.Name]++
+				refs[pkg+"."+id.Name]++
 			}
 			return true
 		})
+	}
+
+	var decls []testExportedDecl
+	for rel, pf := range parsed {
 		if !strings.HasSuffix(rel, "_test.go") || filepath.Base(rel) == "export_test.go" {
 			continue
 		}
-		for _, dc := range f.Decls {
+		for _, dc := range pf.file.Decls {
 			switch v := dc.(type) {
 			case *ast.FuncDecl:
 				if v.Recv != nil {
@@ -391,18 +403,18 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 				if !isExported(n) || isTestEntrypoint(n) {
 					continue
 				}
-				decls = append(decls, testExportedDecl{rel, n, "func"})
+				decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: n, kind: "func"})
 			case *ast.GenDecl:
 				for _, sp := range v.Specs {
 					switch s := sp.(type) {
 					case *ast.TypeSpec:
 						if isExported(s.Name.Name) {
-							decls = append(decls, testExportedDecl{rel, s.Name.Name, "type"})
+							decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: s.Name.Name, kind: "type"})
 						}
 					case *ast.ValueSpec:
 						for _, nm := range s.Names {
 							if nm.Name != "_" && isExported(nm.Name) {
-								decls = append(decls, testExportedDecl{rel, nm.Name, "var/const"})
+								decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: nm.Name, kind: "var/const"})
 							}
 						}
 					}
@@ -413,7 +425,7 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 
 	var dead []testExportedDecl
 	for _, d := range decls {
-		if refs[d.name] <= 1 {
+		if refs[d.pkg+"."+d.name] <= 1 {
 			dead = append(dead, d)
 		}
 	}
@@ -480,6 +492,55 @@ func SeamForOtherPackage() int { return 1 }
 		if got[mustNot] {
 			t.Errorf("误报合法符号 %q", mustNot)
 		}
+	}
+}
+
+// TestFindUnusedExportedTestSymbolsScopesByPackage 钉住引用计数的作用域：
+// 不同包中的同名导出符号不得互相「引用」；`foo_test` 外部测试包与 `foo` 视为同一作用域。
+func TestFindUnusedExportedTestSymbolsScopesByPackage(t *testing.T) {
+	t.Parallel()
+	sources := map[string][]byte{
+		// alpha 包：SameName 被同包测试引用 → 合法。
+		"alpha/aaa_test.go": []byte(`package alpha
+
+func SameName() int { return 1 }
+`),
+		"alpha/bbb_test.go": []byte(`package alpha
+
+import "testing"
+
+func TestUsesSameName(t *testing.T) { _ = SameName() }
+`),
+		// beta 包：同名 SameName 无任何引用 → 死符号；不能因为 alpha 用过就漏报。
+		"beta/aaa_test.go": []byte(`package beta
+
+func SameName() int { return 2 }
+`),
+		// gamma_test 外部测试包引用 gamma 的导出符号 → 视为同作用域，不得误报。
+		"gamma/aaa_test.go": []byte(`package gamma
+
+func ExportedSeam() int { return 3 }
+`),
+		"gamma/external_test.go": []byte(`package gamma_test
+
+import "testing"
+
+func TestUsesSeam(t *testing.T) { _ = ExportedSeam() }
+`),
+	}
+	dead := findUnusedExportedTestSymbols(sources)
+	got := map[string]bool{}
+	for _, d := range dead {
+		got[d.file+"|"+d.name] = true
+	}
+	if !got["beta/aaa_test.go|SameName"] {
+		t.Errorf("漏报 beta 包中无引用的 SameName（跨包同名引用不应互相抵消）；实得 %v", got)
+	}
+	if got["alpha/aaa_test.go|SameName"] {
+		t.Errorf("误报 alpha 包中被同包引用的 SameName")
+	}
+	if got["gamma/aaa_test.go|ExportedSeam"] {
+		t.Errorf("误报 gamma 包中被 gamma_test 外部测试包引用的 ExportedSeam")
 	}
 }
 

@@ -9,7 +9,8 @@ package handler
 //
 // 本门禁做成机械全量遍历：
 //   1. 解析 routes.go：路由 → handler 方法；
-//   2. 沿 handler 方法调用闭包，机械抽取方法体内全部四种 query 读取口径：
+//   2. 沿 handler 方法调用闭包（`parseBodyCalls` AST 抽取 `h.xxx()`，不受注释/字符串污染），
+//      机械抽取方法体内全部四种 query 读取口径：
 //      `r.URL.Query().Get("...")` / `r.URL.Query().Has("...")` / `r.URL.Query().Values("...")`
 //      / `r.URL.Query()["..."]`，以及 `q := r.URL.Query()` 绑定后的同名形式
 //      `q.Get` / `q.Has` / `q.Values` / `q["..."]`（覆盖 parseMigrateRequest 这类委托）；
@@ -39,18 +40,18 @@ import (
 var (
 	// queryBindRe 匹配 `q := r.URL.Query()`，捕获 query 变量名。
 	queryBindRe = regexp.MustCompile(`(\w+)\s*:=\s*r\.URL\.Query\(\)`)
-	// queryMethodRe 匹配 `r.URL.Query().Get("x")` / `.Has("x")` / `.Values("x")`。
-	queryDirectRe = regexp.MustCompile(`r\.URL\.Query\(\)\.(?:Get|Has|Values)\("([^"]+)"\)`)
-	// queryDirectIndexRe 匹配 `r.URL.Query()["x"]`。
-	queryDirectIndexRe = regexp.MustCompile(`r\.URL\.Query\(\)\["([^"]+)"\]`)
-	// queryVarMethodRe 匹配 `q.Get("x")` / `q.Has("x")` / `q.Values("x")`。
-	queryVarGetRe = regexp.MustCompile(`(\w+)\.(?:Get|Has|Values)\("([^"]+)"\)`)
-	// queryVarIndexRe 匹配 `q["x"]`。
-	queryVarIndexRe = regexp.MustCompile(`(\w+)\["([^"]+)"\]`)
+	// queryMethodRe 匹配 `r.URL.Query().Get("x")` / `.Has("x")` / `.Values("x")`（允许括号内空白）。
+	queryDirectRe = regexp.MustCompile(`r\.URL\.Query\(\)\.(?:Get|Has|Values)\(\s*"([^"]+)"\s*\)`)
+	// queryDirectIndexRe 匹配 `r.URL.Query()["x"]`（允许方括号内空白）。
+	queryDirectIndexRe = regexp.MustCompile(`r\.URL\.Query\(\)\[\s*"([^"]+)"\s*\]`)
+	// queryVarMethodRe 匹配 `q.Get("x")` / `q.Has("x")` / `q.Values("x")`（允许括号内空白）。
+	queryVarGetRe = regexp.MustCompile(`(\w+)\.(?:Get|Has|Values)\(\s*"([^"]+)"\s*\)`)
+	// queryVarIndexRe 匹配 `q["x"]`（允许方括号内空白）。
+	queryVarIndexRe = regexp.MustCompile(`(\w+)\[\s*"([^"]+)"\s*\]`)
 	// queryDynamicRe 匹配对 query 变量使用**非字面量**键的读取（如 `q.Get(name)` / `q[k]`）。
 	// 命中即说明存在无法机械抽取的读取口径，门禁自检会红灯要求改成字面量。
 	queryDynamicMethodRe = regexp.MustCompile(`r\.URL\.Query\(\)\.(?:Get|Has|Values)\(\s*[^")\s]`)
-	queryDynamicIndexRe  = regexp.MustCompile(`r\.URL\.Query\(\)\[\s*[^"\]]`)
+	queryDynamicIndexRe  = regexp.MustCompile(`r\.URL\.Query\(\)\[\s*[^"\]\s]`)
 )
 
 // internalOnlyQueryParams 是「handler 读取、但刻意不进入公开契约」的 query 参数白名单。
@@ -80,7 +81,7 @@ func hasDynamicQueryRead(body string) bool {
 func queryVarDynamicRead(body, varName string) bool {
 	name := regexp.QuoteMeta(varName)
 	methodRe := regexp.MustCompile(`\b` + name + `\.(?:Get|Has|Values)\(\s*[^")\s]`)
-	indexRe := regexp.MustCompile(`\b` + name + `\[\s*[^"\]]`)
+	indexRe := regexp.MustCompile(`\b` + name + `\[\s*[^"\]\s]`)
 	return methodRe.MatchString(body) || indexRe.MatchString(body)
 }
 
@@ -131,8 +132,8 @@ func parseQueryReads(methods map[string]string) map[string]map[string]bool {
 		for k := range direct[name] {
 			set[k] = true
 		}
-		for _, c := range callRe.FindAllStringSubmatch(body, -1) {
-			for k := range visit(c[1]) {
+		for _, c := range parseBodyCalls(name, body).calls {
+			for k := range visit(c) {
 				set[k] = true
 			}
 		}
@@ -163,6 +164,10 @@ func TestQueryReadExtractorCoversAllForms(t *testing.T) {
 		{"绑定后 Has", "q := r.URL.Query()\nif q.Has(\"zeta\") {}", []string{"zeta"}},
 		{"绑定后 Values", "q := r.URL.Query()\nvs := q.Values(\"eta\")", []string{"eta"}},
 		{"绑定后下标", "q := r.URL.Query()\nvs := q[\"theta\"]", []string{"theta"}},
+		{"Get 直取带空白", `v := r.URL.Query().Get( "alpha" )`, []string{"alpha"}},
+		{"下标直取带空白", `vs := r.URL.Query()[ "delta" ]`, []string{"delta"}},
+		{"绑定后 Get 带空白", "q := r.URL.Query()\nv := q.Get( \"eps\" )", []string{"eps"}},
+		{"绑定后下标带空白", "q := r.URL.Query()\nvs := q[ \"theta\" ]", []string{"theta"}},
 		{"无读取", `v := "x"`, nil},
 	}
 	for _, tc := range cases {
@@ -185,6 +190,10 @@ func TestQueryReadExtractorCoversAllForms(t *testing.T) {
 		`vs := r.URL.Query()[k]`,
 		"q := r.URL.Query()\nv := q.Get(name)",
 		"q := r.URL.Query()\nvs := q[k]",
+		`v := r.URL.Query().Get( name )`,
+		`vs := r.URL.Query()[ k ]`,
+		"q := r.URL.Query()\nv := q.Get( name )",
+		"q := r.URL.Query()\nvs := q[ k ]",
 	}
 	for _, body := range dynamic {
 		if !hasDynamicQueryRead(body) {
@@ -197,6 +206,8 @@ func TestQueryReadExtractorCoversAllForms(t *testing.T) {
 	for _, body := range []string{
 		"q := r.URL.Query()\nv := q.Get(\"literal\")",
 		"q := r.URL.Query()\nv := q[\"literal\"]",
+		"q := r.URL.Query()\nv := q.Get( \"literal\" )",
+		"q := r.URL.Query()\nv := q[ \"literal\" ]",
 	} {
 		if hasDynamicQueryRead(body) {
 			t.Errorf("绑定后的字面量读取被误判为动态读取（body=%q）", body)

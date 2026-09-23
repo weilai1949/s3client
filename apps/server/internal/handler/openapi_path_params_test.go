@@ -12,7 +12,7 @@ package handler
 //   - handler 读了模板里没有的参数名 → 永远拿到空串。
 //
 // 本门禁把「注册表 in:path 参数名集 ⇔ handler 沿调用闭包 PathValue 读取的参数名集」做双向比对，
-// 与 query 参数门禁同构。
+// 与 query 参数门禁同构；调用闭包由 `parseBodyCalls` AST 抽取 `h.xxx()`，不受注释/字符串污染。
 //
 // 断言范围（刻意不做的事）：
 //   - 只校验参数**名**，不校验类型 / required（required 由 `TestOpenAPI_ContractPathParamsDeclared`
@@ -53,8 +53,8 @@ func pathParamReads(methods map[string]string) map[string]map[string]bool {
 		for k := range direct[name] {
 			set[k] = true
 		}
-		for _, c := range callRe.FindAllStringSubmatch(body, -1) {
-			for k := range visit(c[1]) {
+		for _, c := range parseBodyCalls(name, body).calls {
+			for k := range visit(c) {
 				set[k] = true
 			}
 		}

@@ -599,8 +599,8 @@ func (a *handlerAST) defaultedFields(method string) map[string]bool {
 			return
 		}
 		collectDefaults(fd.Body, out)
-		for _, c := range callRe.FindAllStringSubmatch(a.exprText(fd), -1) {
-			visit(c[1])
+		for _, c := range handlerMethodCalls(fd) {
+			visit(c)
 		}
 	}
 	visit(method)
