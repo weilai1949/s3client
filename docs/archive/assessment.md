@@ -3,15 +3,19 @@
 > 本报告从**代码质量、代码漏洞、死代码、服务降级、自我迭代**五个维度对 s3clinet 进行整体评估。
 > 评估方法：4 个并行深度审查（后端 Go / 前端 Vue-TS / 安全威胁与依赖 / SRE 可靠性）× 全部质量门禁实跑
 > （`go vet`、`go test -race`、`pnpm lint`、`vue-tsc`、覆盖率）× 关键发现人工复核。
-> 评估结论已回写至 [`todolist.md`](todolist.md) 作为后续迭代的待办来源。
+> 评估结论已回写至 [`todolist.md`](../todolist.md) 作为后续迭代的待办来源。
 >
 > **后续处置（不改写本报告的历史结论）**：2026-09-17 完成 P0/P1/P2 与路线图 v1.0.0–v1.1.0 收口
-> （证据见 [`features.md`](features.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
-> （证据见 [`features.md`](features.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
+> （证据见 [`features.md`](../features.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
+> （证据见 [`features.md`](../features.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
 > `DELETE /version` 三处 OpenAPI 注册表失真。
-> 此后的处置进展（含后续审查发现的闭环）逐节归档于 [`features.md`](features.md) §N 起与
-> [`CHANGELOG.md`](../CHANGELOG.md)。本报告正文中的 file:line、版本号与测试数字均为**审计时点值**，
-> 代码演进后请以符号检索核对（快照纪律同 [`docs/archive/`](archive/index.md) 约定）。
+> 此后的处置进展（含后续审查发现的闭环）逐节归档于 [`features.md`](../features.md) §N 起与
+> [`CHANGELOG.md`](../../CHANGELOG.md)。本报告正文中的 file:line、版本号与测试数字均为**审计时点值**，
+> 代码演进后请以符号检索核对（快照纪律同 [`docs/archive/`](index.md) 约定）。
+>
+> **归档冻结（2026-09-24）**：全仓引用收敛完成后，本报告已 `git mv` 至 [`docs/archive/`](index.md)
+> 并在归档清单登记——归档 = 冻结，**不回写、不改写历史结论**（下方「后续处置」状态行系归档前追加，
+> 属附加状态、非正文回写）。当前事实来源：[`features.md`](../features.md) · [`CHANGELOG.md`](../../CHANGELOG.md)。
 
 ---
 

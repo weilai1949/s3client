@@ -1,7 +1,7 @@
 # 安全设计
 
 > 本文档描述 s3clinet 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
-> 本文档基于 2026-09-16 综合安全审计（详见 [assessment.md](assessment.md) §二），其后按修复进展滚动更新。
+> 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
 > 最后更新：2026-09-22。
 
 ## 1. 威胁模型（STRIDE × 边界）
@@ -136,7 +136,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 ### 6.1 已闭环（证据归档）
 
 > 逐项证据见 [features.md](features.md) 与 [CHANGELOG.md](../CHANGELOG.md)；原始发现见
-> [assessment.md](assessment.md) §二。当前待办见 [todolist.md](todolist.md)「四、安全 / 供应链待办」——
+> [archive/assessment.md](archive/assessment.md) §二。当前待办见 [todolist.md](todolist.md)「四、安全 / 供应链待办」——
 > 该节现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已于 2026-09-23 复审维持现状并移出 todolist（见 §6.2）。
 
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁

@@ -3,7 +3,7 @@
 > 本文件是后续迭代的**单一待办来源**，只收录**尚未完成**的事项。
 > 「已完成 / 已评估」记录见 [`features.md`](features.md)；发版历史见 [`CHANGELOG.md`](../CHANGELOG.md)。
 > 最近一轮综合评估（2026-09-16，五维度：代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）见
-> [`assessment.md`](assessment.md)。
+> [`archive/assessment.md`](archive/assessment.md)。
 >
 > 状态图例：⬜ 待办 · ⏳ 已排期 / 进行中（仅列剩余工作） · ➖ 已决策（不做 / 维持现状） · ⛔ 外部阻塞（外部凭证未获取等非代码工作）
 >
@@ -93,6 +93,7 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|---|
 | 57 | 原生 fuzz 与性质测试纳入门禁 | ROADMAP §三 #14 | ⬜ | 对 policy JSON 解析、`NormalizeEndpoint`、S3C / S3C3 信封读取、桶名 / key 校验等解析面加 Go `Fuzz*` 目标 + CI 有界 fuzz 轮跑 + 语料入库；弥补 100% statement 覆盖对非法输入空间的盲区（覆盖率 ≠ 无死代码 / 无解析漏洞，须分别验证） |
+| 60 | 4 个超 1000 行的前端测试文件拆分 | AGENTS.md 单文件约束 | ⬜ | `src/api.test.ts`（1928 行）、`src/components/MigratePanel.test.ts`（1210 行）、`src/composables/useObjectActions.test.ts`（1118 行）、`src/composables/useObjectBrowser.test.ts`（1040 行）均超 AGENTS.md「单文件不超过约 1000 行」约束（Go 侧同款 2 文件已于 2026-09-24 拆分完成，证据见 CHANGELOG）。拆分只动文件归属、不改断言；会牵动登记数——`features.md` §Z 等处「66 文件 / 1043 例」为时点实测值，拆分后逐处收口 |
 
 ## 四、安全 / 供应链待办
 

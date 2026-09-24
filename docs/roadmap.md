@@ -4,7 +4,7 @@
 > 已实现 / 已修复的内容不在此流水账，见 [`docs/features.md`](features.md)；
 > 逐条待办的**唯一来源**仍是 [`docs/todolist.md`](todolist.md)（战术层）；
 > 逐字发布历史见 [`CHANGELOG.md`](../CHANGELOG.md)；
-> 评分与问题证据见 [`docs/assessment.md`](assessment.md)（2026-09-16 五维度评估：代码质量 82 /
+> 评分与问题证据见 [`docs/archive/assessment.md`](archive/assessment.md)（2026-09-16 五维度评估：代码质量 82 /
 > 漏洞 72 / 死代码 70 / 服务降级 74 / 自我迭代 90，总分 78）。
 >
 > 状态图例：⬜ 未开始 · ⏳ 进行中（部分已落地） · ➖ 已决策（不做 / 维持现状） · ⛔ 外部阻塞（外部凭证未获取等非代码工作）
@@ -204,7 +204,7 @@
 | E9 | pnpm `9.15.0` / Node `24.21.0` / Rust `1.98.1` / Playwright chromium | 构建 | 前端 / 桌面构建与 E2E | ✅ 由 `packageManager`（web + desktop）+ 锁文件 + `rust-toolchain.toml` + CI 精确 patch 版本固定 | 构建 / E2E 结果漂移 | `--frozen-lockfile`；CI 与本地同命令；`repo_infra_gate_test.go` 断言 Node/pnpm/Rust 均为精确 pin |
 | E10 | 加密存储文件格式 S3C2 / S3C3 向后兼容承诺 | 内部契约 | `store` 加解密与既有账号库 | ✅ S3C3 头部随文件携带 Argon2id 参数 | 直接改 KDF 参数会让既有库不可解密 | 只增版本、不改既有语义；升级路径已有实跑证据（[features.md](features.md)） |
 
-**复审规则**：状态随每次五维度评估（[assessment.md](assessment.md)）与里程碑收口同步更新；登记项（🟡）必须写清「缺口」，➖ 由 ADR 兜底并只登记在索引；风险收敛为自动化门禁后移入上方「已收敛」索引（**编号不重排**），闭环证据按 §六 第 1 条归档 `features.md`。新增外部服务 / 凭证 / 分发通道必须在同一 PR 补 E 表一行。
+**复审规则**：状态随每次五维度评估（[archive/assessment.md](archive/assessment.md)）与里程碑收口同步更新；登记项（🟡）必须写清「缺口」，➖ 由 ADR 兜底并只登记在索引；风险收敛为自动化门禁后移入上方「已收敛」索引（**编号不重排**），闭环证据按 §六 第 1 条归档 `features.md`。新增外部服务 / 凭证 / 分发通道必须在同一 PR 补 E 表一行。
 
 ---
 
@@ -213,7 +213,7 @@
 1. **单一来源**：本文件只维护**版本级规划与优先级**，且**只列未完成项**；新增 / 关闭具体条目时，同步更新
    [`docs/todolist.md`](todolist.md)（唯一待办来源），完成后归档至 [`docs/features.md`](features.md)
    并**从本文件移除该条目**（必要时重编号）；风险条目收敛为自动化门禁后移入 §5.1「已收敛」索引、**编号不重排**。
-2. **评估驱动**：每次五维度评估（见 [`docs/assessment.md`](assessment.md)）产出后，按 P0/P1/P2 回写
+2. **评估驱动**：每次五维度评估（见 [`docs/archive/assessment.md`](archive/assessment.md)）产出后，按 P0/P1/P2 回写
    本路线图与 todolist，形成「评估 → 修复 → 再评估」闭环。
 3. **状态真实性**：标 ⏳ 必须是工作区/分支已有代码变更，并在合并后改为 ✅（或按第 1 条移除）；禁止保留
    已完成条目的 ✅ 行——历史证据归 `features.md`。所有门禁数字必须来自实跑。

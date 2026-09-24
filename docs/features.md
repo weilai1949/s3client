@@ -3,7 +3,7 @@
 > 本文件是 s3clinet 的**单一事实来源**：产品能力总览 + 全部已完成修复 / 优化记录。
 > 已把散落在各评估文档与 [`CHANGELOG.md`](../CHANGELOG.md) 中的「已实现 / 已修复 / 已完善」功能统一汇总于此；CHANGELOG 仍保留逐字发布历史。
 >
-> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`assessment.md`](assessment.md)
+> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
 > 最后更新：2026-09-22（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾）
@@ -461,7 +461,7 @@
 
 ### H. 2026-09-16 评估 P0 发布阻塞修复
 
-> 来源：[`assessment.md`](assessment.md) §六 P0（H1 / H4 / M8+C2 / S7+C3）。对应 todolist 原 #5 / #6 / #7 / #15，均已归档。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P0（H1 / H4 / M8+C2 / S7+C3）。对应 todolist 原 #5 / #6 / #7 / #15，均已归档。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -472,7 +472,7 @@
 
 ### I. 2026-09-16 P1 稳定版门槛修复
 
-> 来源：[`assessment.md`](assessment.md) §六 P1 与 §二 L4 / S1。对应 todolist #13 / #14 / #19 / #24，以及 P0-1 的契约收尾。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P1 与 §二 L4 / S1。对应 todolist #13 / #14 / #19 / #24，以及 P0-1 的契约收尾。
 > 修复后 `govulncheck ./...` 由 6 个可达 stdlib 漏洞降为 **0**；全仓 action SHA 经 GitHub API 核验均有效。
 > **P1 至此清零**，`v1.0.0` 稳定版门槛达成。
 
@@ -486,7 +486,7 @@
 
 ### J. 2026-09-16 P2 加固修复（第一批）
 
-> 来源：[`assessment.md`](assessment.md) §二 L1/L2、§二 S2、§二 M4/M6。对应 todolist #17（部分）/ #18（部分）/ #20 / #23（部分）。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 L1/L2、§二 S2、§二 M4/M6。对应 todolist #17（部分）/ #18（部分）/ #20 / #23（部分）。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -504,7 +504,7 @@
 
 ### K. 2026-09-17 P2 加固修复（第二批）
 
-> 来源：[`assessment.md`](assessment.md) §二 D5/D6。对应 todolist #10。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D5/D6。对应 todolist #10。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -514,7 +514,7 @@
 
 ### L. 2026-09-17 目录迁移后的可移除项清理
 
-> 来源：[`assessment.md`](assessment.md) §二 D7/D8/D10。对应 todolist #11。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D7/D8/D10。对应 todolist #11。
 
 | # | 项 | 状态 | 处理内容 |
 |---|----|------|----------|
