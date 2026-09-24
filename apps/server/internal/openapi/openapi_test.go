@@ -16,14 +16,15 @@ func TestRegistry_Roundtrip(t *testing.T) {
 		Tags:        []string{"system"},
 		Summary:     "健康检查",
 		OperationID: "health",
+		Params: []Param{{
+			Name: "verbose", In: "query", Schema: Bool(),
+		}},
 		Responses: map[string]Response{
 			"200": {Description: "OK", JSON: BuildObj(map[string]*Schema{
 				"ok":      Bool(),
 				"version": Str(),
 			}, "ok", "version")},
 		},
-	}).Param(Param{
-		Name: "verbose", In: "query", Schema: Bool(),
 	})
 
 	b, err := r.MarshalJSON()
@@ -137,15 +138,18 @@ func TestRegistry_MarshalJSONCacheInvalidated(t *testing.T) {
 		t.Error("新增 operation 后缓存未失效")
 	}
 
-	// ② Param / Respond 链式追加 → 也必须失效。
-	r.Operation("GET", "/z", Op{Summary: "z"}).Param(Param{Name: "q", In: "query", Schema: Str()}).
-		Respond("200", Response{Description: "OK"})
+	// ② 覆盖已存在的 path/method（带 params / responses）→ 渲染进文档且缓存失效。
+	r.Operation("POST", "/y", Op{
+		Summary:   "y",
+		Params:    []Param{{Name: "q", In: "query", Schema: Str()}},
+		Responses: map[string]Response{"200": {Description: "OK"}},
+	})
 	withParam, err := r.MarshalJSON()
 	if err != nil {
-		t.Fatalf("MarshalJSON after Param/Respond: %v", err)
+		t.Fatalf("MarshalJSON after overwrite: %v", err)
 	}
 	if !bytes.Contains(withParam, []byte(`"q"`)) || !bytes.Contains(withParam, []byte(`"200"`)) {
-		t.Error("Param/Respond 追加后缓存未失效")
+		t.Error("覆盖注册后缓存未失效")
 	}
 
 	// ③ SetInfo / AddServer → 也必须失效。

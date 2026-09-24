@@ -60,6 +60,11 @@ make lint                                     # golangci-lint（errcheck / stati
 make rust-audit
 ```
 
+> **编辑器约定**：仓根 [`.editorconfig`](../.editorconfig) 声明**已被工具链强制**的最小格式规则
+> （Go / Makefile = tab，TS / Vue / YAML / shell = 2 空格，Rust = 4 空格，统一 LF + 末行换行；
+> `*.md` 关闭行尾空格裁剪以保留两空格硬换行）。它只影响编辑器内即时行为、**不新增 CI 门禁**，
+> 也不与 `gofmt` / `rustfmt` 打架。
+>
 > **契约与文档门禁的落点**（改接口 / 改文档数字时相关）：`internal/handler/` 下
 > `openapi_request_fields_test.go`（请求体字段全量）、`openapi_query_params_test.go`（query 参数
 > 四种读取口径）、`openapi_path_params_test.go`（path 参数 ⇔ handler `PathValue` 双向）、
@@ -67,7 +72,9 @@ make rust-audit
 > `openapi_response_contract_test.go`（共享 schema + **端点级**响应）、`api_doc_test.go`（docs 双向
 > + 路由行必须顶格）；仓库级 `repo_infra_gate_test.go`（CI / 发布链 / 工具链 pin）、
 > `doc_number_gate_test.go`（md 叙述性数字）、
-> `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号）。各文件的**断言范围与残留**写在文件头。
+> `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）；
+> 前端半边落点在 `apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 / 孤儿模块**）。
+> 各文件的**断言范围与残留**写在文件头。
 >
 > **门禁自身也用 AST 而非裸正则**：判断「handler 是否解码请求体」「是否读取 path 参数」、
 > `PathValue` 的动态键与 **handler 调用闭包**（`h.xxx()`）时，裸字符串匹配会被注释与字符串字面量
@@ -91,6 +98,7 @@ make rust-audit
 | `ci.yml` · `docker` | `docker` | `docker build` + Trivy CRITICAL/HIGH 失败门禁（`.trivyignore`） |
 | `ci.yml` · `desktop` | `desktop` | `cargo check --locked` + `cargo audit`（RustSec，有漏洞即红灯；webkit/gtk 系统依赖） |
 | `ci.yml` · `desktop-build`（仅 `workflow_dispatch`） | `desktop-build`（`when: manual`，仅 `web` 源） | `tauri build --no-bundle` |
+| `ci.yml` · `publish` | **不镜像** | 推送镜像到 GHCR（`needs: docker`，Trivy 通过才推；`if: != 'pull_request'` 即 push / dispatch 才推）。GitLab 侧未配置 registry，故无对应 job；门禁 `TestGitHubWorkflowPushesImage` |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |
 | `e2e-real.yml` | `e2e-real` | **真实 Go 后端（托管真实构建产物）+ 真实 RustFS + 真实浏览器**，不 mock `/api`（含浏览器直传）；本地与两套 CI 共用 `scripts/e2e-real.sh` |
@@ -100,9 +108,9 @@ make rust-audit
 
 | 事件 | GitHub 会跑 | GitLab 会跑 |
 |---|---|---|
-| push 到 main/develop | `ci.yml` 四个 job | `server` / `web` / `docker` / `desktop` |
-| pull_request | `ci.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
-| workflow_dispatch / web | 全部四套 | 全部 8 个（`desktop-build` 为手动） |
+| push 到 main/develop | `ci.yml` 五个 job（`server`/`web`/`docker`/`desktop`/**`publish`**） | `server` / `web` / `docker` / `desktop` |
+| pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ 路径命中时的三个 E2E | 同上 + 命中的 E2E |
+| workflow_dispatch / web | 全部四套（`ci.yml` 含 `desktop-build`，共 6 个） | 全部 8 个（`desktop-build` 为手动） |
 | schedule | **只有三个 E2E** | 只有 `rustfs-e2e` / `playwright-e2e` / `e2e-real` |
 
 本地验证 GitLab 流水线（无需 GitLab 实例，用 [gitlab-ci-local](https://github.com/firecow/gitlab-ci-local) 的 docker executor 跑真实 job；版本 pin 在 `Makefile` 的 `GCL`）：

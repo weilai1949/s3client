@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { i18nKeyCount } from './index'
 
 // 静态扫描：源码中以字面量形式传给 t()/tf() 的键，必须都能在字典中解析。
 //
@@ -216,9 +215,9 @@ describe('i18n 字面量键覆盖', () => {
     expect(missing.sort()).toEqual([])
   })
 
-  it('字典非空且中英键数一致', () => {
+  // 中英键数一致由下方「键集合逐键一致」用例断言（集合相等 ⇒ 数量相等），此处只留规模下限。
+  it('字典非空（键数 ≥ 640）', () => {
     expect(definedKeys().size).toBeGreaterThanOrEqual(640)
-    expect(i18nKeyCount('zh-CN')).toBe(i18nKeyCount('en-US'))
   })
 
   // 此前只比对**键数量**：`zh-CN` 缺 `a` 而 `en-US` 多一个 `b` 时数量相等，

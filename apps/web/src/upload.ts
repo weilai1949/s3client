@@ -71,11 +71,6 @@ export function calcMultipartParts(fileSize: number, partSize = PART_SIZE): numb
   return Math.ceil(fileSize / partSize)
 }
 
-/** 是否应走分段上传。 */
-export function shouldUseMultipart(fileSize: number): boolean {
-  return fileSize >= MULTIPART_THRESHOLD
-}
-
 /**
  * 上传单个文件：小文件走单次 PUT（presign），大文件自动分段上传。
  * onProgress 回调整数百分比（0-100）。signal 触发时中止 XHR 并尽力 abort 分段会话。

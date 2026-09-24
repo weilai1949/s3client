@@ -100,7 +100,7 @@ type Registry struct {
 	//
 	// 背景（docs/archive/review-2026-09-19.md §6.2 P3）：注册表在启动时构建完成后不再变化，但
 	// HTTPHandler 此前每次请求都全量重新 marshal 70 个 operation。这里按「变更即失效」
-	// 缓存：任何注册/覆盖（Operation / Param / Respond / SetInfo / AddServer）都置 nil，
+	// 缓存：任何注册/覆盖（Operation / SetInfo / AddServer）都置 nil，
 	// 因此语义与「每次都重新 marshal」完全一致，只是消除了重复计算。
 	spec []byte
 }
@@ -129,8 +129,10 @@ func (r *Registry) AddServer(s Server) {
 	r.spec = nil
 }
 
-// Operation 注册 / 覆盖一个 operation。返回 *OpBuilder 以便链式添加 param/response。
-func (r *Registry) Operation(method, path string, op Op) *OpBuilder {
+// Operation 注册 / 覆盖一个 operation（param / response 直接放在 Op 结构里）。
+// 早期的 *OpBuilder 链式 API（Param / Respond）生产零引用、仅测试使用，
+// 已按死代码纪律删除。
+func (r *Registry) Operation(method, path string, op Op) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.paths[path] == nil {
@@ -138,39 +140,6 @@ func (r *Registry) Operation(method, path string, op Op) *OpBuilder {
 	}
 	r.paths[path][strings.ToUpper(method)] = op
 	r.spec = nil
-	return &OpBuilder{r: r, method: method, path: path}
-}
-
-// OpBuilder 链式追加 param / response。
-type OpBuilder struct {
-	r      *Registry
-	method string
-	path   string
-}
-
-// Param 追加一个参数。
-func (b *OpBuilder) Param(p Param) *OpBuilder {
-	b.r.mu.Lock()
-	defer b.r.mu.Unlock()
-	m := b.r.paths[b.path][strings.ToUpper(b.method)]
-	m.Params = append(m.Params, p)
-	b.r.paths[b.path][strings.ToUpper(b.method)] = m
-	b.r.spec = nil
-	return b
-}
-
-// Respond 追加一个 response。
-func (b *OpBuilder) Respond(status string, resp Response) *OpBuilder {
-	b.r.mu.Lock()
-	defer b.r.mu.Unlock()
-	m := b.r.paths[b.path][strings.ToUpper(b.method)]
-	if m.Responses == nil {
-		m.Responses = map[string]Response{}
-	}
-	m.Responses[status] = resp
-	b.r.paths[b.path][strings.ToUpper(b.method)] = m
-	b.r.spec = nil
-	return b
 }
 
 // MarshalJSON 输出 OpenAPI 3.0 JSON。

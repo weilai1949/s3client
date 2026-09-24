@@ -3,7 +3,8 @@ import * as apiModule from './api'
 import { api, s3api } from './api'
 
 /**
- * 前端「公开面」死代码门禁 —— 对应后端 `apps/server/deadcode_gate_test.go` 的前端半边。
+ * 前端死代码门禁（API 公开面 + 非 API 模块导出）—— 对应后端
+ * `apps/server/deadcode_gate_test.go` 的前端半边。
  *
  * 为什么需要它：`pnpm lint`（eslint + vue-tsc）只报**未使用的局部变量**，看不见
  * 「导出后无人引用」的符号；而测试文件的引用会让这类符号一直"活着"。真实事故：
@@ -11,16 +12,23 @@ import { api, s3api } from './api'
  * 五个方法只被 `api.test.ts` 调用、生产零引用，在 100% 覆盖率门禁下长期存活
  * （见 docs/archive/review-2026-09-19.md §A3）。
  *
- * 门禁口径：`src/api` 对外暴露的每个成员，必须在**至少一个非测试源文件**里被引用。
- *   - 对象成员（`s3api.*` / `api.*`）：按 import 别名精确匹配 `别名.成员`，
- *     不用裸词匹配——避免 `'migrate'` 这类字符串字面量或 `migrateAsync` 之类的前缀
- *     碰撞造成假绿（这正是子串匹配式门禁的教训）。
- *   - 具名导出：匹配该名字的标识符引用。
+ * 门禁口径分两半：
+ *   A. `src/api` 对外暴露的每个成员，必须在**至少一个非测试源文件**里被引用。
+ *      - 对象成员（`s3api.*` / `api.*`）：按 import 别名精确匹配 `别名.成员`，
+ *        不用裸词匹配——避免 `'migrate'` 这类字符串字面量或 `migrateAsync` 之类的前缀
+ *        碰撞造成假绿（这正是子串匹配式门禁的教训）。
+ *      - 具名导出：匹配该名字的标识符引用。
+ *   B. 非 api 模块（components / composables / store / i18n …）的每个**运行期导出**
+ *      必须被生产代码引用（剥掉 import 与导出声明后裸词计数，仅测试引用 = 死）；
+ *      每个生产源模块（含 .vue 组件）必须被生产代码 import，孤儿即死代码。
+ *      两半共同镜像后端 `apps/server/deadcode_gate_test.go` 的「零生产引用」口径。
  *
  * 盲区（有意接受，写清以免被误读为"该类风险已收敛"）：
  *   1. 不覆盖类型导出（`type X`）——类型仅存在于编译期，`vue-tsc` 已覆盖；
- *   2. 不覆盖 components / composables / store 等其它模块的导出，本门禁只守 API 公开面；
- *   3. 动态成员访问（`s3api[name]`）无法静态识别——当前全仓无此写法。
+ *   2. 动态成员访问（`s3api[name]`）无法静态识别——当前全仓无此写法；
+ *   3. B 半边按裸词计数：同名标识符跨文件抵消、注释/字符串中的同名整词会被算作
+ *      引用（只会漏报、不会误报，与后端 Gate 1 的同名抵消同向）；`as` 重命名导入
+ *      与 default 导出会破坏该计数，已用前置断言拦死——出现即红灯，先改写再进门禁。
  */
 
 // 用 Vite 的 import.meta.glob 读取源码文本：不引入 node:fs / @types/node（前端依赖最小化），
@@ -188,5 +196,144 @@ it('测试名不得硬编码源码行号（行号会过期，让用例描述一�
   expect(
     offenders,
     `以下用例名硬编码了源码行号（改为描述行为，行号请放注释里）：\n  ${offenders.join('\n  ')}`,
+  ).toEqual([])
+})
+
+// ===== B 半边：非 API 模块导出（盲区 2 收口） =====
+// 口径见文件头 B 段：剥掉 import 与导出声明后按裸标识符计数——「声明之外全仓零出现」
+// 即零生产引用 = 死代码（仅测试引用同样算死），与后端 Gate 1 完全同向。
+
+/** 是否属于 src/api（其公开面由上面的 API 半边守，这里跳过避免重复口径）。 */
+function isApiPath(path: string): boolean {
+  return /^\.\/(?:src\/)?api\//.test(path)
+}
+
+/** 入口模块：由 index.html 直接加载，没有源内 importer。 */
+const ENTRY_MODULE_RE = /^\.\/(?:src\/)?main\.ts$/
+
+/** 抹掉 import 语句与导出声明后的正文：导出名在剩余文本里出现才算被引用。 */
+function usageBody(text: string): string {
+  return text
+    .replace(IMPORT_RE, '')
+    .replace(/\bexport\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+[A-Za-z_$][\w$]*/g, '\u0000')
+    .replace(/\bexport\s+\{[^}]*\}/g, '\u0000')
+}
+
+/** 抽取运行期导出名：function / const / class / 列表导出（type 与 default 不在此列）。 */
+function runtimeExportNames(text: string): string[] {
+  const names: string[] = []
+  for (const m of text.matchAll(/\bexport\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/g)) {
+    names.push(m[1])
+  }
+  for (const m of text.matchAll(/\bexport\s+\{([^}]*)\}/g)) {
+    for (const part of m[1].split(',')) {
+      const p = part.trim()
+      if (!p || p.startsWith('type ')) continue
+      const as = /^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/.exec(p)
+      names.push(as ? as[2] : p)
+    }
+  }
+  return names
+}
+
+/** 相对说明符 → 候选规范路径（相对 importer 所在目录，补扩展名与目录 index）。 */
+function resolveSpec(importer: string, spec: string): string[] {
+  if (!spec.startsWith('.')) return []
+  const dir = importer.replace(/^\.\//, '').split('/').slice(0, -1)
+  for (const part of spec.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') dir.pop()
+    else dir.push(part)
+  }
+  const base = dir.join('/')
+  return [base, `${base}.ts`, `${base}.vue`, `${base}/index.ts`, `${base}/index.vue`]
+}
+
+it('非 API 运行期导出必须被生产代码引用（零引用即死代码）', () => {
+  const bodies = files.map(([path, text]) => [path, usageBody(text)] as const)
+  const red: string[] = []
+  let scanned = 0
+  for (const [path, text] of files) {
+    if (isApiPath(path)) continue
+    for (const name of runtimeExportNames(text)) {
+      scanned++
+      const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+      if (bodies.some(([, body]) => re.test(body))) continue
+      red.push(`${path} → ${name}`)
+    }
+  }
+  // 防空跑：解析口径失效时不得静默变绿（真实基数 79 文件 / 108 导出）。
+  expect(files.length).toBeGreaterThanOrEqual(70)
+  expect(scanned, '未抽取到任何非 API 运行期导出（解析口径失效）').toBeGreaterThanOrEqual(90)
+  expect(
+    red.sort(),
+    `以下运行期导出在生产代码中零引用（仅测试引用 = 死代码）：\n  ${red.join('\n  ')}\n` +
+      '请删除该导出，并同步改写只引用它的测试。',
+  ).toEqual([])
+})
+
+it('每个生产源模块都必须被生产代码 import（孤儿即死代码）', () => {
+  const importedAny = new Set<string>()
+  const importedAsComponent = new Set<string>()
+  for (const [path, text] of files) {
+    for (const m of text.matchAll(IMPORT_RE)) {
+      const clause = m[1].trim()
+      // `import type { X }` 只消费类型，不算组件/模块被真正使用；default 绑定才说明 .vue 组件在用。
+      const typeOnly = /^type\s/.test(clause)
+      const hasDefault = !typeOnly && !clause.startsWith('{') && !clause.startsWith('*')
+      for (const cand of resolveSpec(path, m[2])) {
+        importedAny.add(cand)
+        if (hasDefault && cand.endsWith('.vue')) importedAsComponent.add(cand)
+      }
+    }
+    // `export { X } from './y'`（含 type / 命名空间形态）是消费边但不是 import 语句，
+    // 漏算它会把被再导出的模块误判成孤儿——api/index.ts 的 `export { directUpload } from './upload'` 即实例。
+    for (const m of text.matchAll(/\bexport\s+(?:type\s+)?(?:\*\s*(?:as\s+\w+)?|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g)) {
+      for (const cand of resolveSpec(path, m[1])) importedAny.add(cand)
+    }
+  }
+  const orphans: string[] = []
+  let vueCount = 0
+  for (const [path] of files) {
+    const norm = path.replace(/^\.\//, '')
+    if (path.endsWith('.vue')) {
+      vueCount++
+      if (!importedAsComponent.has(norm)) orphans.push(`${path}（组件未被生产代码默认导入）`)
+    } else if (!ENTRY_MODULE_RE.test(path) && !importedAny.has(norm)) {
+      orphans.push(`${path}（模块无人 import）`)
+    }
+  }
+  // 防空跑：真实基数 37 个 .vue。
+  expect(vueCount).toBeGreaterThanOrEqual(30)
+  expect(
+    orphans.sort(),
+    `以下生产源模块无人 import（仅测试 import 不算）：\n  ${orphans.join('\n  ')}\n` +
+      '请删除该文件，或让生产代码真正用起来。',
+  ).toEqual([])
+})
+
+it('门禁前置成立：非 API 源码无 default 导出、无 as 重命名 import', () => {
+  const defaults: string[] = []
+  const aliases: string[] = []
+  for (const [path, text] of files) {
+    if (isApiPath(path)) continue
+    if (/\bexport\s+default\b/.test(text)) defaults.push(path)
+    for (const m of text.matchAll(IMPORT_RE)) {
+      if (API_SPECIFIER_RE.test(m[2])) continue // api 模块的别名由 API 半边精确匹配，不在此列
+      const braces = /\{([^}]*)\}/.exec(m[1])
+      if (!braces) continue
+      for (const part of braces[1].split(',')) {
+        if (/^\w+\s+as\s+\w+$/.test(part.trim())) aliases.push(`${path}: ${part.trim()}`)
+      }
+    }
+  }
+  expect(
+    defaults,
+    '非 API 模块出现 default 导出：本门禁只守具名导出，请改为具名导出或扩展门禁',
+  ).toEqual([])
+  expect(
+    aliases,
+    `非 API 模块出现 as 重命名 import（原名裸词计数会失真）：\n  ${aliases.join('\n  ')}\n` +
+      '请改回直名 import，或扩展本门禁处理别名',
   ).toEqual([])
 })

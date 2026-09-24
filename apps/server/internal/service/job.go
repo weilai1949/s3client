@@ -78,23 +78,9 @@ type JobRegistry struct {
 // 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（todolist #17 / ASSESSMENT M4）。
 const defaultMaxJobs = 256
 
-// RegistryOption 在构造注册表时调整其行为；当前只有「在册任务上限」一项。
-// 用构造期选项而非可变全局：上限是每个注册表实例的属性，改全局会影响所有实例
-// 并与并发测试相互干扰（原 `SetMaxJobsForTest` 见 docs/archive/review-2026-09-19.md §A2）。
-type RegistryOption func(*JobRegistry)
-
-// WithMaxJobs 覆盖该注册表的在册任务上限（<=0 视为未设置，保持默认）。
-func WithMaxJobs(n int) RegistryOption {
-	return func(r *JobRegistry) {
-		if n > 0 {
-			r.maxJobs = n
-		}
-	}
-}
-
 // NewJobRegistry 创建纯内存注册表（不落盘，与历史行为一致）并启动 reap 循环。
-func NewJobRegistry(opts ...RegistryOption) *JobRegistry {
-	return NewJobRegistryWithPersister(nil, opts...)
+func NewJobRegistry() *JobRegistry {
+	return NewJobRegistryWithPersister(nil)
 }
 
 // NewJobRegistryWithPersister 创建注册表并恢复既有任务清单（persister 为 nil 时纯内存）。
@@ -105,15 +91,16 @@ func NewJobRegistry(opts ...RegistryOption) *JobRegistry {
 //
 // 任务清单属于辅助信息：Load/Save 失败只降级为内存态，不影响服务启动
 // （与账号存储「不可用则硬失败」的取舍不同，见 ADR-002）。
-func NewJobRegistryWithPersister(p JobPersister, opts ...RegistryOption) *JobRegistry {
+//
+// 在册上限恒为 defaultMaxJobs、不可配置：原 RegistryOption / WithMaxJobs 只被测试
+// 引用（生产零引用），已按死代码纪律删除；测试需要「在册满」语义时填到上限即可
+// （见 job_cap_test.go 的 fillUntilFull）。
+func NewJobRegistryWithPersister(p JobPersister) *JobRegistry {
 	r := &JobRegistry{
 		jobs:      make(map[string]*Job),
 		stopCh:    make(chan struct{}),
 		persister: p,
 		maxJobs:   defaultMaxJobs,
-	}
-	for _, opt := range opts {
-		opt(r)
 	}
 	r.restore()
 	go r.reapLoop()

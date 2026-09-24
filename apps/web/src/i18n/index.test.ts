@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { cycleLocale, i18nKeyCount, locale, setLocale, t, tf } from './index'
+import { cycleLocale, locale, setLocale, t, tf } from './index'
 
 describe('i18n', () => {
   it('translates nav keys', () => {
@@ -81,15 +81,6 @@ describe('i18n', () => {
     expect(t('storage.switch')).toBe('Change')
     expect(t('bucketTags.clearAll')).toContain('Clear')
     expect(t('buckets.enter')).toBe('Open')
-  })
-
-  it('keeps zh/en key parity above 640', () => {
-    const zh = i18nKeyCount('zh-CN')
-    const en = i18nKeyCount('en-US')
-    expect(zh).toBe(en)
-    expect(zh).toBeGreaterThanOrEqual(640)
-    // 缺省参数分支：不传 locale 时统计 zh-CN。
-    expect(i18nKeyCount()).toBe(zh)
   })
 
   it('tf replaces placeholders', () => {

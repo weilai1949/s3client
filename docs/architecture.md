@@ -95,7 +95,8 @@ apps/web/src/
 > `api/` 原为单文件 `api.ts`（838 行，把凭据存储、传输、领域端点、SSE、上传混在一处）。
 > 拆分为目录后 `./api` / `../api` 仍解析到 `api/index.ts`，**对外契约与 import 路径不变**；
 > 模块间为单向依赖 `index → {endpoints, jobs, download, upload} → http → storage`，无环。
-> 公开面由 `src/deadcode_gate.test.ts` 守住：生产代码零引用的导出会让门禁变红。
+> 公开面由 `src/deadcode_gate.test.ts` 守住（API 公开面 + 非 API 模块导出 / 孤儿模块两半）：
+> 生产代码零引用的导出、无人 import 的源模块都会让门禁变红。
 
 - **技术栈**：Vue 3 + Vite + TS，生产依赖**仅 `vue`**（刻意最小化供应链）。
 - **竞态防护**：`loadSeq` + `AbortController` 双保险，SSE 订阅在卸载路径全部断开。

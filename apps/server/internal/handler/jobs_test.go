@@ -134,7 +134,7 @@ func TestSetJobPersisterReplacesRegistry(t *testing.T) {
 func TestNewJobReturns503AtCapacity(t *testing.T) {
 	h, _ := gapStoreHandler(t)
 	t.Cleanup(h.Shutdown)
-	SetJobCapForTest(h, 1)
+	FillJobSlotsForTest(t, h)
 
 	// 占满唯一名额（首个 job 的返回值不参与断言，只需注册成功）。
 	if _, ok := h.newJob(httptest.NewRecorder(), 1, func() {}); !ok {

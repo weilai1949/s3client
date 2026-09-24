@@ -57,11 +57,6 @@ export function locale(): Locale {
   return state.locale
 }
 
-/** Number of dictionary keys for a locale (used by tests / coverage checks). */
-export function i18nKeyCount(loc: Locale = 'zh-CN'): number {
-  return Object.keys(messages[loc]).length
-}
-
 export function setLocale(loc: Locale) {
   state.locale = loc
   try {

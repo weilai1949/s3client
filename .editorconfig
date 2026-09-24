@@ -1,0 +1,36 @@
+# EditorConfig — 跨编辑器的最小格式约定（VS Code / JetBrains / Vim 均原生支持）。
+# 只声明**已被现有工具链强制**的规则，避免与 gofmt / rustfmt / prettier 打架：
+#   - Go     ：gofmt 强制 tab 缩进
+#   - Rust   ：rustfmt 默认 4 空格
+#   - TS/Vue ：现有源码为 2 空格（eslint 不校验缩进，这里定基线）
+#   - Makefile：recipe 必须 tab，否则 make 直接报错
+# 不引入新的 CI 门禁；本文件只影响编辑器内的即时行为。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.go]
+indent_style = tab
+
+[Makefile]
+indent_style = tab
+
+[*.rs]
+indent_size = 4
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# Markdown 的行尾两个空格是硬换行语法，不得裁剪。
+trim_trailing_whitespace = false
+
+[*.sh]
+indent_size = 2

@@ -835,6 +835,24 @@ functions 1095 / lines 3503）。
 
 ---
 
+### Z. 2026-09-24 roadmap §三 #3 死代码纪律收口：前后端两道「零生产引用」导出门禁
+
+> 来源：roadmap §三 #3（原 ➖「维持现状：由覆盖率门禁调整一并治理」）评估后改判为**两道显式门禁**收口；
+> 逐条改动与实现细节见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 1 | 后端生产导出符号零引用门禁（Gate 1） | ✅ | `apps/server/deadcode_gate_test.go` 扩展：AST 扫描全仓 Go 文件，导出包级符号与导出方法一旦**零生产引用**（仅测试引用同样算死）即红灯并报出文件与处置指引。口径：按「归一化包 clause + 符号名」分组（`foo_test` 与 `foo` 同作用域）、方法裸名归并；豁免 `//nolint` 消音符号、门禁自身反射用例（`reflectiveMethodNames` 7 项，配合成用例兜底）、const 表成员（枚举契约）。**变异验证**：注入 `MutantDeadExportedFunc` → 精确红灯（184 文件扫描、定位 `internal/service/job.go`、给出处置指引）→ 撤回 → 复绿且 grep 残留 0 |
+| 2 | 前端非 API 模块导出门禁（Gate 2，关闭文件头盲区 #2） | ✅ | `apps/web/src/deadcode_gate.test.ts` 新增 B 半边：非 `src/api` 模块的每个运行期导出必须被生产代码引用（剥掉 import 与导出声明后裸词计数，仅测试引用 = 死）；每个生产源模块必须被生产代码 import——`.vue` 组件要求**默认导入**（`import type` 不算在用）、`export { … } from` 再导出边计入 import 图（`api/index.ts → ./upload` 实例）、`main.ts` 入口豁免（`index.html` 引用）；`default` 导出与 `as` 重命名导入用**前置断言**拦死（出现即红灯，先改写再进门禁）；自检下限 79 文件 / ≥90 导出 / ≥37 组件防空跑。**变异验证**：注入 `mutantDeadExport` + `MutantOrphan.vue` → 两半同时红灯并指名 → 撤回 → 7/7 复绿 |
+| 3 | 门禁红灯清出的死代码清零 | ✅ | 后端 5 个生产死导出删除：`openapi.OpBuilder` 链式配置器（`OpBuilder` / `Param` / `Respond`——端点已全部改为 `r.Operation(...)` 内联 `Op{}` 直注册，链只剩测试引用）与 `service.RegistryOption` / `WithMaxJobs` 选项接缝（原 `SetMaxJobsForTest` 的再包装，零生产调用），`Registry.Operation` 改无返回值、`NewJobRegistry*` 去掉空转选项参数；测试接缝统一为 `FillJobSlotsForTest(t, h)`（`export_test.go`，生产文件零 `*ForTest` 钩子）。前端 2 个真死导出删除：`i18nKeyCount`（`i18n/index.ts`）、`shouldUseMultipart`（`upload.ts`，`uploadObject` 已内联同义判断）；引用方测试同步改写（中英键数一致由 `coverage.test.ts` 集合级比对承担、阈值分支由 `uploadObject` 用例覆盖） |
+| 4 | 文档同步（与代码同 commit） | ✅ | `roadmap` §三 #3 行移除（编号不重排，#3 留空号并在 3.2 注中说明）、§四 基线日期与前端数字实测更新；`development.md` §3 门禁落点补两半口径与前端落点；`architecture.md` §3 提法扩为两半；`CHANGELOG` `[Unreleased]` 同日条目；本节即证据台账 |
+
+> **仍未机械覆盖**：门禁文件头保留 3 条盲区——类型导出（`vue-tsc` 承担）、`s3api[name]` 动态成员（全仓无此写法）、
+> 裸词计数的同名抵消与注释 / 字符串命中（只漏报、不误报，与后端 Gate 1 同向）。`as` 重命名导入与 `default`
+> 导出属**前置断言**而非盲区：出现即红灯。
+
+---
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
@@ -853,6 +871,11 @@ functions 1095 / lines 3503）。
 > 2026-09-22 §37 真实联调收口后复测（roadmap §四 门禁基线同步为此轮实跑值）：后端 8/8 包 **100.0%**、
 > `golangci-lint` **0 issues**、前端 66 文件 / **1042** 测试全绿（覆盖率 4074 / 2844 / 1095 / 3503 四指标 100%）、
 > `pnpm audit` **0 漏洞**、`make e2e-real` **3 passed**。
+>
+> 2026-09-24 roadmap §三 #3 死代码纪律收口（前后端两道「零生产引用」导出门禁，见 §Z）后复测
+> （roadmap §四 门禁基线同步为此轮实跑值）：`gofmt -l` 干净 / `go vet` 0 告警 / 后端 `go test` **8/8 包通过**、
+> `golangci-lint` **0 issues**、`go build` 干净；前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 /
+> **66 文件 1043 例全绿**（覆盖率 **4072 / 2843 / 1093 / 3501 四指标 100%**）/ `pnpm build` OK。
 
 | 门禁 | 结果 |
 |---|---|
@@ -861,7 +884,7 @@ functions 1095 / lines 3503）。
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 66 文件 / **1042** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3） |
+| 前端 `pnpm test` | 66 文件 / **1043** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例） |
 | 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`） |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（360.52 KB，gzip 110.85 kB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |

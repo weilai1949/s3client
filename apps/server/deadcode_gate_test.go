@@ -18,6 +18,13 @@ package main
 // 不可能被包外引用——测试文件不参与库构建。实测给 `_test.go` 加一个无人调用的
 // 导出函数/类型，`golangci-lint run` 报 0 issues。
 //
+// 同一豁免在**生产代码**上造成更大的缺口（见 TestNoUnusedExportedProdSymbols）：
+// 本仓库是可执行应用而非对外库，不存在任何「包外引用」，但 `unused` 仍豁免全部导出
+// —— 导出包级符号与导出方法一旦「零生产引用」（含仅测试引用）即为死代码
+// （D1 `ctxReader` / D3 `Client.S3()` 的处置口径），golangci-lint 一律看不见。
+// 本文件因此有两道导出门禁：扫 `_test.go` 的 TestNoUnusedExportedTestSymbols、
+// 扫非测试文件的 TestNoUnusedExportedProdSymbols。
+//
 // 刻意**不**拦 `_ = f()`（丢弃返回值，如 `_ = resp.Body.Close()`）：那是显式、
 // 可读的忽略，且 errcheck 与 exclude-functions 已对错误返回做统一策略。
 
@@ -27,6 +34,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -53,6 +61,39 @@ func serverRoot(t *testing.T) string {
 		t.Fatal("runtime.Caller 失败，无法定位 server 根目录")
 	}
 	return filepath.Dir(thisFile)
+}
+
+// collectGoSources 遍历 apps/server 下全部 .go（含 _test.go），返回「相对路径 → 源码」。
+// 自检：读到的文件过少时直接失败，避免根目录定位错误让门禁静默变绿。
+func collectGoSources(t *testing.T) map[string][]byte {
+	t.Helper()
+	root := serverRoot(t)
+	sources := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = path
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		sources[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("遍历 %s: %v", root, err)
+	}
+	if len(sources) < 50 {
+		t.Fatalf("只读取到 %d 个 .go 文件，疑似根目录定位错误（%s）", len(sources), root)
+	}
+	return sources
 }
 
 // silenceViolation 是一处消音式死代码。
@@ -297,12 +338,13 @@ var _ Iface = (*T)(nil)         // 编译期接口断言：放行
 	t.Logf("AST 命中 %d 处 vs 旧正则 %d 处", len(got), oldRegexHits)
 }
 
-// testExportedDecl 是一个在 _test.go 中声明的导出包级符号。
-type testExportedDecl struct {
+// exportedDecl 是一处导出符号声明（包级或方法），供 `_test.go` 导出门禁与
+// 生产代码导出门禁共用。
+type exportedDecl struct {
 	file string // 相对 apps/server
-	pkg  string // 归一化包名（`foo_test` 与 `foo` 视为同一作用域）
+	pkg  string // 归一化包名（`foo_test` 与 `foo` 视为同一作用域；生产门禁为包 clause）
 	name string
-	kind string
+	kind string // "func" / "type" / "var/const" / "method"
 }
 
 // TestNoUnusedExportedTestSymbols 拦截 golangci-lint `unused` 结构上看不见的死代码：
@@ -319,33 +361,7 @@ type testExportedDecl struct {
 // 本仓库当前该集合为空（无死代码），故检测逻辑另由 TestFindUnusedExportedTestSymbols
 // 用合成源码做单元测试——**不**依赖「仓库里正好有一个死符号」来证明门禁有效。
 func TestNoUnusedExportedTestSymbols(t *testing.T) {
-	root := serverRoot(t)
-	sources := map[string][]byte{}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = path
-		}
-		data, rerr := os.ReadFile(path)
-		if rerr != nil {
-			return rerr
-		}
-		sources[filepath.ToSlash(rel)] = data
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("遍历 %s: %v", root, err)
-	}
-	// 自检：路径写错时不要静默变绿。
-	if len(sources) < 50 {
-		t.Fatalf("只读取到 %d 个 .go 文件，疑似根目录定位错误（%s）", len(sources), root)
-	}
+	sources := collectGoSources(t)
 
 	dead := findUnusedExportedTestSymbols(sources)
 	for _, d := range dead {
@@ -364,7 +380,7 @@ func TestNoUnusedExportedTestSymbols(t *testing.T) {
 //   - 跳过 `export_test.go`（约定合法的测试接缝）；
 //   - 引用计数按**归一化包名 + 符号名**分组：`foo_test` 与 `foo` 视为同一作用域，
 //     不同包中的同名符号互不抵消；标识符出现次数 ≤ 1（仅声明处）即视为无引用。
-func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl {
+func findUnusedExportedTestSymbols(sources map[string][]byte) []exportedDecl {
 	fset := token.NewFileSet()
 	type parsedFile struct {
 		file *ast.File
@@ -388,7 +404,7 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 		})
 	}
 
-	var decls []testExportedDecl
+	var decls []exportedDecl
 	for rel, pf := range parsed {
 		if !strings.HasSuffix(rel, "_test.go") || filepath.Base(rel) == "export_test.go" {
 			continue
@@ -403,18 +419,18 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 				if !isExported(n) || isTestEntrypoint(n) {
 					continue
 				}
-				decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: n, kind: "func"})
+				decls = append(decls, exportedDecl{file: rel, pkg: pf.pkg, name: n, kind: "func"})
 			case *ast.GenDecl:
 				for _, sp := range v.Specs {
 					switch s := sp.(type) {
 					case *ast.TypeSpec:
 						if isExported(s.Name.Name) {
-							decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: s.Name.Name, kind: "type"})
+							decls = append(decls, exportedDecl{file: rel, pkg: pf.pkg, name: s.Name.Name, kind: "type"})
 						}
 					case *ast.ValueSpec:
 						for _, nm := range s.Names {
 							if nm.Name != "_" && isExported(nm.Name) {
-								decls = append(decls, testExportedDecl{file: rel, pkg: pf.pkg, name: nm.Name, kind: "var/const"})
+								decls = append(decls, exportedDecl{file: rel, pkg: pf.pkg, name: nm.Name, kind: "var/const"})
 							}
 						}
 					}
@@ -423,7 +439,7 @@ func findUnusedExportedTestSymbols(sources map[string][]byte) []testExportedDecl
 		}
 	}
 
-	var dead []testExportedDecl
+	var dead []exportedDecl
 	for _, d := range decls {
 		if refs[d.pkg+"."+d.name] <= 1 {
 			dead = append(dead, d)
@@ -541,6 +557,353 @@ func TestUsesSeam(t *testing.T) { _ = ExportedSeam() }
 	}
 	if got["gamma/aaa_test.go|ExportedSeam"] {
 		t.Errorf("误报 gamma 包中被 gamma_test 外部测试包引用的 ExportedSeam")
+	}
+}
+
+// reflectiveMethodNames 是 well-known 接口中由标准库**按接口 / 反射调用**的方法：
+// 实现方在仓内通常没有任何显式调用点（`json.Marshal(r)` 不会出现 `r.MarshalJSON`），
+// 裸计数会把这类合法实现误判为死代码。成员必须同时有一条合成口径用例（见
+// TestFindUnusedExportedProdSymbols），防止清单腐烂成静默豁免。
+var reflectiveMethodNames = map[string]bool{
+	"MarshalJSON":   true, // encoding/json Marshaler
+	"UnmarshalJSON": true, // encoding/json Unmarshaler
+	"MarshalText":   true, // encoding.TextMarshaler
+	"UnmarshalText": true, // encoding.TextUnmarshaler
+	"String":        true, // fmt.Stringer
+	"Read":          true, // io.Reader——由 io.Copy / io.ReadAll 等经接口消费（stream.go / zip.go 实证）
+	"Unwrap":        true, // http.ResponseController 穿透连接、errors.Unwrap 解错误链，均按接口断言调用
+}
+
+// findUnusedExportedProdSymbols 在给定的「相对路径 → 源码」集合里，找出**生产代码**
+// （非 `_test.go`）中声明、却从未被生产代码引用的导出符号（包级 + 导出方法）。
+// 抽成纯函数以便用合成源码做口径测试。
+//
+// 判定口径：
+//   - 引用只统计**非测试文件**——仅测试引用同样是死代码（D1 / D3 处置口径）；
+//   - 包级符号按「包 clause + 符号名」分组：限定引用 `s3wrap.X` 经该文件的 import 表
+//     （别名 / 路径末段 → import 路径 → 目录后缀 → clause）记到声明包；外部包
+//     （stdlib / 第三方）的限定引用不计入任何本地键，避免同名假绿；裸引用记到所在
+//     文件的包。标识符出现次数（含声明处）≤ 声明次数即判定为死；
+//   - 导出方法按**方法名裸计数**（纯函数无类型信息，区分不了同名方法）：调用点
+//     （局部选择器的 Sel）与仓内 interface 方法名都计入引用，跨类型同名互相抵消
+//     → 只会漏报、不会误报；well-known 反射方法（reflectiveMethodNames）整体豁免；
+//   - 不扫点导入（仓内已排查为零，出现时先改写再进门禁）。
+//
+// 漏报方向的已接受盲区：同名跨类型 / 跨包抵消、结构体导出字段（JSON 反射按 tag
+// 使用，无法文本判定）、非导出符号（由 golangci-lint `unused` 覆盖）。
+func findUnusedExportedProdSymbols(sources map[string][]byte) []exportedDecl {
+	fset := token.NewFileSet()
+	type parsedFile struct {
+		file *ast.File
+		pkg  string
+	}
+	parsed := map[string]parsedFile{}
+	dirClause := map[string]string{} // 目录 → 包 clause（限定符解析）
+	for rel, data := range sources {
+		f, err := parser.ParseFile(fset, rel, data, 0)
+		if err != nil {
+			continue // 解析失败交给 go build / vet 报错，不在此重复。
+		}
+		parsed[rel] = parsedFile{file: f, pkg: f.Name.Name}
+		if dir := path.Dir(rel); dir != "." {
+			dirClause[dir] = f.Name.Name
+		}
+	}
+
+	// clauseOf 把 import 路径解析到仓内包 clause（目录最长后缀匹配）；外部包返回 false。
+	clauseOf := func(importPath string) (string, bool) {
+		best, bestLen := "", -1
+		for dir, clause := range dirClause {
+			if (importPath == dir || strings.HasSuffix(importPath, "/"+dir)) && len(dir) > bestLen {
+				best, bestLen = clause, len(dir)
+			}
+		}
+		return best, bestLen >= 0
+	}
+
+	refs := map[string]int{} // 包级键（含声明处标识符，判定用「≤ 1」）
+	var decls []exportedDecl
+	mrefs := map[string]int{}      // 方法名裸引用
+	mdeclCount := map[string]int{} // 同名方法声明聚合计数
+	var methodDecls []exportedDecl
+
+	for rel, pf := range parsed {
+		if strings.HasSuffix(rel, "_test.go") {
+			continue // 测试文件对生产门禁既不是声明源、也不是引用源（仅测试引用 = 死）。
+		}
+		f := pf.file
+		impPath := map[string]string{} // selector 文本（别名 / 路径末段）→ import 路径
+		for _, im := range f.Imports {
+			p := strings.Trim(im.Path.Value, `"`)
+			if im.Name != nil {
+				impPath[im.Name.Name] = p
+			} else {
+				impPath[path.Base(p)] = p
+			}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch v := n.(type) {
+			case *ast.SelectorExpr:
+				if x, ok := v.X.(*ast.Ident); ok {
+					if p, isImp := impPath[x.Name]; isImp {
+						if clause, local := clauseOf(p); local {
+							refs[clause+"."+v.Sel.Name]++
+						}
+						// 限定引用已记账（外部包则不记）——包名与 Sel 都不再当普通标识符计，
+						// 避免 `errors.New` 之类的外部调用污染本地同名符号。
+						return false
+					}
+				}
+				// 非 import 限定：方法调用 / 方法值 / 字段访问。X 可以是任意表达式
+				// （`h.openapi.HTTPHandler()`、`(&T{}).M()`、`f().M()`），Sel 必须计数；
+				// 字段名混入方法桶只是过计数（漏报方向），安全。
+				mrefs[v.Sel.Name]++
+				return true
+			case *ast.InterfaceType:
+				for _, fld := range v.Methods.List {
+					for _, nm := range fld.Names {
+						mrefs[nm.Name]++ // 接口方法名 = 动态调用点
+					}
+				}
+				return true // 嵌入接口名照常下钻，按普通标识符计
+			case *ast.FuncDecl:
+				if v.Recv != nil {
+					if isExported(v.Name.Name) && !reflectiveMethodNames[v.Name.Name] {
+						mdeclCount[v.Name.Name]++
+						mrefs[v.Name.Name]++ // 声明处自计，与「≤ 声明次数」语义对齐
+						methodDecls = append(methodDecls, exportedDecl{
+							file: rel, pkg: f.Name.Name, name: v.Name.Name, kind: "method",
+						})
+					}
+					return true
+				}
+				if isExported(v.Name.Name) {
+					decls = append(decls, exportedDecl{
+						file: rel, pkg: f.Name.Name, name: v.Name.Name, kind: "func",
+					})
+				}
+				return true
+			case *ast.GenDecl:
+				if v.Tok == token.CONST && isConstTable(v) {
+					return true // 枚举 / 常量表：成员即使暂无引用也属契约（AGENTS 硬规则）
+				}
+				for _, sp := range v.Specs {
+					switch s := sp.(type) {
+					case *ast.TypeSpec:
+						if isExported(s.Name.Name) {
+							decls = append(decls, exportedDecl{
+								file: rel, pkg: f.Name.Name, name: s.Name.Name, kind: "type",
+							})
+						}
+					case *ast.ValueSpec:
+						for _, nm := range s.Names {
+							if nm.Name != "_" && isExported(nm.Name) {
+								decls = append(decls, exportedDecl{
+									file: rel, pkg: f.Name.Name, name: nm.Name, kind: "var/const",
+								})
+							}
+						}
+					}
+				}
+				return true
+			case *ast.Ident:
+				refs[f.Name.Name+"."+v.Name]++
+			}
+			return true
+		})
+	}
+
+	var dead []exportedDecl
+	for _, d := range decls {
+		if refs[d.pkg+"."+d.name] <= 1 { // 仅声明处自身 = 零生产引用
+			dead = append(dead, d)
+		}
+	}
+	seenMethod := map[string]bool{}
+	for _, d := range methodDecls {
+		if mrefs[d.name] <= mdeclCount[d.name] && !seenMethod[d.file+"|"+d.name] {
+			seenMethod[d.file+"|"+d.name] = true
+			dead = append(dead, d)
+		}
+	}
+	sort.Slice(dead, func(i, j int) bool {
+		if dead[i].file != dead[j].file {
+			return dead[i].file < dead[j].file
+		}
+		return dead[i].name < dead[j].name
+	})
+	return dead
+}
+
+// isConstTable 报告 const 块是否为枚举 / 常量表：多成员 const 块，或出现 iota 的块。
+// AGENTS 硬规则：枚举 / 常量表的成员即使暂无引用也算契约，保留。
+func isConstTable(gd *ast.GenDecl) bool {
+	if len(gd.Specs) > 1 {
+		return true
+	}
+	found := false
+	ast.Inspect(gd, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == "iota" {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// TestNoUnusedExportedProdSymbols 拦截 golangci-lint `unused` 在**生产代码**上结构
+// 看不见的死代码：**导出后零生产引用的包级符号与导出方法**（含「仅测试引用」）。
+//
+// 为什么 `unused` 不管：导出符号默认视为「可能被包外引用」而豁免，而本仓库是可执行
+// 应用，没有任何包外引用方。真实事故：D3 `Client.S3()`（导出方法，生产零调用、仅
+// 测试白盒）当年靠人工审查才发现，复发无人报警。前端对位门禁见
+// `apps/web/src/deadcode_gate.test.ts`（API 公开面 + 模块导出面）。
+func TestNoUnusedExportedProdSymbols(t *testing.T) {
+	sources := collectGoSources(t)
+	dead := findUnusedExportedProdSymbols(sources)
+	for _, d := range dead {
+		t.Errorf("%s: 导出%s %q 零生产引用（仅测试引用也算死代码）——请删除、改为非导出；"+
+			"若为 well-known 反射 / 接口方法（标准库按名调用），在 reflectiveMethodNames 登记"+
+			"并补一条合成口径用例", d.file, d.kind, d.name)
+	}
+	t.Logf("扫描 %d 个文件，生产代码中零生产引用的导出符号 %d 个", len(sources), len(dead))
+}
+
+// TestFindUnusedExportedProdSymbols 是生产导出门禁的**口径测试**：用合成源码证明
+// 下列合法形态不会被误伤、下列死形态会被抓到——
+// 活：同包裸引用、跨包限定引用、方法调用点、接口方法名、well-known 反射方法、
+// 接收者类型；死：零引用的包级 func/type/var/const、零引用的导出方法、仅测试引用。
+func TestFindUnusedExportedProdSymbols(t *testing.T) {
+	t.Parallel()
+	sources := map[string][]byte{
+		// 死形态 + 活形态（同包）。
+		"internal/s3wrap/client.go": []byte(`package s3wrap
+
+func LiveFunc() {}
+
+func DeadFunc() {}
+
+func DeadTestOnly() {}
+
+type DeadType struct{ X int }
+
+const DeadConst = 1
+
+const (
+	TableA = "a"
+	TableB = "b"
+)
+
+const IotaOnly = iota
+
+var DeadVar = 2
+
+type Client struct{}
+
+func (c *Client) LiveMethod() {}
+
+func (c *Client) DeadMethod() {}
+
+func (c *Client) MarshalJSON() ([]byte, error) { return nil, nil }
+
+type Doer interface{ DoThing() }
+
+type Impl struct{}
+
+func (Impl) DoThing() {}
+
+type StdlibFace struct{}
+
+func (StdlibFace) Read(p []byte) (int, error)  { return 0, nil }
+
+func (StdlibFace) Unwrap() error               { return nil }
+
+func (StdlibFace) String() string              { return "" }
+
+func (StdlibFace) MarshalText() ([]byte, error) { return nil, nil }
+
+func (StdlibFace) UnmarshalText(b []byte) error { return nil }
+
+func useClient() { (&Client{}).LiveMethod() }
+`),
+		// 仅测试引用：生产门禁不统计测试文件 → DeadTestOnly 判死。
+		"internal/s3wrap/client_test.go": []byte(`package s3wrap
+
+import "testing"
+
+func TestUsesDeadTestOnly(t *testing.T) { DeadTestOnly() }
+`),
+		// 跨包限定引用：LiveFunc 活。
+		"internal/service/svc.go": []byte(`package service
+
+import "github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+
+func use() { s3wrap.LiveFunc() }
+`),
+	}
+	dead := findUnusedExportedProdSymbols(sources)
+
+	got := map[string]bool{}
+	for _, d := range dead {
+		got[d.name] = true
+	}
+	for _, want := range []string{"DeadFunc", "DeadTestOnly", "DeadType", "DeadConst", "DeadVar", "DeadMethod"} {
+		if !got[want] {
+			t.Errorf("漏报死符号 %q（实得 %v）", want, got)
+		}
+	}
+	for _, mustNot := range []string{"LiveFunc", "LiveMethod", "MarshalJSON", "DoThing", "Client", "Impl", "TableA", "TableB", "IotaOnly", "StdlibFace", "Read", "Unwrap", "String", "MarshalText", "UnmarshalText"} {
+		if got[mustNot] {
+			t.Errorf("误报合法符号 %q", mustNot)
+		}
+	}
+}
+
+// TestFindUnusedExportedProdScopesByPackage 钉住生产门禁引用计数的作用域：
+// 不同包中的同名导出符号不得互相抵消（alpha 的引用不能让 beta 的同名符号免死）。
+func TestFindUnusedExportedProdScopesByPackage(t *testing.T) {
+	t.Parallel()
+	sources := map[string][]byte{
+		// alpha：同包引用 → 活。
+		"alpha/a.go": []byte(`package alpha
+
+func Dup() int { return 1 }
+`),
+		"alpha/b.go": []byte(`package alpha
+
+func use() int { return Dup() }
+`),
+		// beta：同名零引用 → 死，不能被 alpha 的 Dup 引用抵消。
+		"beta/a.go": []byte(`package beta
+
+func Dup() int { return 2 }
+`),
+		// gamma：被 delta 跨包限定引用 → 活。
+		"gamma/a.go": []byte(`package gamma
+
+func Dup() int { return 3 }
+`),
+		"delta/a.go": []byte(`package delta
+
+import "github.com/weilai1949/s3clinet/apps/server/gamma"
+
+func use() int { return gamma.Dup() }
+`),
+	}
+	dead := findUnusedExportedProdSymbols(sources)
+	got := map[string]bool{}
+	for _, d := range dead {
+		got[d.pkg+"."+d.name] = true
+	}
+	if !got["beta.Dup"] {
+		t.Errorf("漏报 beta 包中零引用的 Dup（跨包同名引用不应互相抵消）；实得 %v", got)
+	}
+	if got["alpha.Dup"] {
+		t.Errorf("误报 alpha 包中被同包引用的 Dup")
+	}
+	if got["gamma.Dup"] {
+		t.Errorf("误报 gamma 包中被跨包限定引用的 Dup")
 	}
 }
 

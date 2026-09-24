@@ -11,7 +11,7 @@ vi.mock('./api', () => ({
   directUpload: vi.fn(),
 }))
 
-import { MULTIPART_THRESHOLD, PART_RETRY_DELAYS_MS, calcMultipartParts, shouldUseMultipart, withRetries, uploadObject } from './upload'
+import { MULTIPART_THRESHOLD, PART_RETRY_DELAYS_MS, calcMultipartParts, withRetries, uploadObject } from './upload'
 import { s3api, directUpload } from './api'
 
 // Auto-fire mock XHR: send() completes immediately (default 'load'), tests can
@@ -106,11 +106,6 @@ describe('upload multipart helpers', () => {
     expect(calcMultipartParts(1)).toBe(1)
     expect(calcMultipartParts(10 * 1024 * 1024)).toBe(1)
     expect(calcMultipartParts(10 * 1024 * 1024 + 1)).toBe(2)
-  })
-
-  it('shouldUseMultipart at 100MB threshold', () => {
-    expect(shouldUseMultipart(MULTIPART_THRESHOLD - 1)).toBe(false)
-    expect(shouldUseMultipart(MULTIPART_THRESHOLD)).toBe(true)
   })
 })
 

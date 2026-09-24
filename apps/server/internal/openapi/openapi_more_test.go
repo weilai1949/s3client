@@ -27,33 +27,6 @@ func TestSetInfo(t *testing.T) {
 	}
 }
 
-// TestRespond 覆盖 Respond 的两个分支：首次创建 Responses map 与后续追加。
-func TestRespond(t *testing.T) {
-	r := New("t", "1.0")
-	// 首次 Respond：op.Responses 为 nil，进入创建 map 分支。
-	b := r.Operation("POST", "/a", Op{Summary: "a"}).Respond("201", Response{Description: "created", JSON: Obj()})
-	// 链式再次 Respond：op.Responses 已非 nil，进入追加分支。
-	b.Respond("200", Response{Description: "ok"})
-
-	out, err := r.MarshalJSON()
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(out, &doc); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	paths := doc["paths"].(map[string]any)
-	post := paths["/a"].(map[string]any)["post"].(map[string]any)
-	resps := post["responses"].(map[string]any)
-	if resps["201"] == nil {
-		t.Error("first Respond swallowed: 201 missing")
-	}
-	if resps["200"] == nil {
-		t.Error("second Respond swallowed: 200 missing")
-	}
-}
-
 // TestRenderOp_Full 覆盖 renderOp 的所有非空 / 真分支。
 func TestRenderOp_Full(t *testing.T) {
 	op := Op{

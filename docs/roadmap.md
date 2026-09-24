@@ -14,7 +14,7 @@
 > [`features.md`](features.md) §M 与 [`CHANGELOG.md`](../CHANGELOG.md)），**不要按当前编号回读**。
 >
 > 版本命名：稳定里程碑 **v1.0.0** 后日常发版用时间戳（`v1.0.0-YYYYMMDDHHmmss`），预发布用 `v1.0.0-rcN`。
-> 当前版本 **`v1.0.0`**（已打 tag `v1.0.0`）。最后更新：2026-09-22。
+> 当前版本 **`v1.0.0`**（已打 tag `v1.0.0`）。最后更新：2026-09-24。
 
 ## 目录
 
@@ -32,15 +32,14 @@
 **产品形态**：S3 兼容对象存储客户端，Web 端 + Tauri 2 桌面端（B/S 架构、无 IPC、全 HTTP）；Go 后端
 （AWS SDK for Go v2）+ Vue 3 / Vite / TS 前端，70 个 `/api/*` 端点、OpenAPI 3.0.3 自动生成。
 
-**结论**：**P0 与 P1 均已清零**，`v1.0.0-rc1` 候选版已收口——4 项发布前必修缺陷（P0，提交 `e03a15e`）与
-5 项稳定版门槛项（P1：Go 1.26.6 + `govulncheck`、幽灵 action SHA、OpenAPI 契约对齐、缺失 i18n 键、
-异步任务持久化）全部修复并归档。**v1.0.0 / v1.0.x / v1.1.0 三个里程碑的开放条目也已于 2026-09-17
-全部完成并从本文件移除**（`docs/api.md` 漂移校验、存储加密、安全审计、可观测性、前端长列表与恢复、
-覆盖率去注水），当前唯一未完成项是长期性质的第 1 条：**桌面端分发与签名**——该项为**外部凭证阻塞**
-（E6 未获取），代码层面已无剩余工作。
+**结论**：**P0 与 P1 均已清零**，`v1.0.0` 已打 tag；`v1.0.0-rc1` → `v1.0.0` → `v1.0.x` → `v1.1.0`
+四个里程碑均已收口。已立项的未完成项只有长期性质的第 1 条：**桌面端分发与签名**——外部凭证阻塞
+（E6 未获取），代码层面已无剩余工作。2026-09-24 另在 §三 #4–#16 补录 **13 条趋势展望迭代方向**
+（⬜ 候选、未排期，每条已按 §六 第 1 条同步登记 [`docs/todolist.md`](todolist.md) #47–#59）；
+排期进入里程碑后才转 ⏳，评估为不做则转 ➖ 并由 ADR / 决策记录兜底。
 
-> P0 / P1 的逐条修复记录与验证证据见 [`docs/features.md`](features.md)「H」「I」段，
-> 2026-09-17 一轮的验收证据见同文件 §M，不在此重复。本文件只列**未完成**项。
+> 已修复内容不在此流水账：P0 / P1 逐条记录与验证证据见 [`features.md`](features.md)「H」「I」段，
+> 2026-09-17 一轮的验收证据见同文件 §M。本文件只列**未完成**项。
 
 ---
 
@@ -48,16 +47,17 @@
 
 | 里程碑 | 主题 | 关键验收 | 依赖 |
 |---|---|---|---|
-| **v1.0.0-rc1** | 候选版收口：P0 四项缺陷清零 | ✅ 已收口（`e03a15e`）；门禁全绿 | — |
-| **v1.0.0** | 首个稳定版：P1 清零 + 契约可信 | ✅ **已打 tag**（2026-09-22）：`docs/api.md` 漂移校验落地；分支状态审查 P0/P1/P2 全部闭环 | rc1 |
-| **v1.0.x** | 可靠性加固：存储 / 安全审计 / 可观测性 | ✅ 已收口（2026-09-17）：密钥落盘加密；安全事件日志；S3 上游指标与流式失败可见 | v1.0.0 |
-| **v1.1.0** | 体验与性能：长列表、错误恢复、i18n | ✅ 已收口（2026-09-17）：grid 窗口化；健康轮询自动恢复；门禁消除注水 | v1.0.x |
-| **v1.2+** | 长期：桌面分发、可选增强 | 桌面端签名与自动更新；按需评估 | v1.1.0 |
+| **v1.2+** | 长期：桌面分发、可选增强、趋势方向（§三 #4–#16 候选池） | 桌面端签名与自动更新；候选方向按需立项评估 | v1.1.0 |
+| **v1.3+** | 长期：增量同步与批量能力的体验增强 | 评估用户反馈下的现有模式扩展能力 | v1.2+ |
+| **v2.0+** | 长期：死代码纪律治理 | 升级覆盖率门禁，治理残留死代码（已备选） | v1.3+ |
+
+> rc1 → v1.0.0 → v1.0.x → v1.1.0 四个里程碑已全部收口，验收证据见 [`features.md`](features.md)
+> 「H」「I」/ §M——按 §六 第 3 条约定**不占 ✅ 行**。
 
 > 「依赖」列只表示**里程碑前置关系**（上一个里程碑须先收口），不含外部技术 / 供应链 / 凭证依赖——
 > 后者见 [§5.2 依赖清单](#52-依赖清单)。
 
-**发布约束**：任一里程碑发布前，[质量门禁基线](#四质量门禁基线)必须全绿；P0 未清零不得进入 v1.0.0。
+**发布约束**：任一里程碑发布前，[质量门禁基线](#四质量门禁基线)必须全绿；P0 未清零不得发布。
 
 ---
 
@@ -65,18 +65,46 @@
 
 > v1.0.0 / v1.0.x / v1.1.0 三个里程碑的开放条目已于 2026-09-17 全部完成并从本文件移除，
 > 逐条验收证据见 [`features.md`](features.md) §M。本节只列仍未完成的长期项。
+>
+> **#4–#16 为 2026-09-24 补录的趋势展望方向**（来源标「趋势展望」：结合现有代码可承接点与
+> 2026 技术趋势评估得出）：全部 ⬜ **未排期候选池**，不是发布承诺——立项排期后状态改 ⏳ 并
+> 进入 §二 里程碑验收；评估为不做转 ➖。每条已同步登记 [`todolist.md`](todolist.md)（唯一待办
+> 来源）对应编号，两文件 `#N` 仍相互独立、引用须带各自前缀（§六 第 6 条）。
+
+### 3.1 已立项 / 已决策项
 
 | # | 条目 | 来源 | 状态 | 说明 |
 |---|---|---|---|---|
 | 1 | 桌面端分发与签名 | 长期 | ⛔ | **已立项**（todolist #25），**外部阻塞**：Windows 代码签名证书 / Apple Developer ID + 公证均为外部凭证（**E6**，⬜ 未获取），未获取前无法完成签名与公证；自动更新通道依赖签名产物。**代码层面无剩余工作**——打包与发布链（tag↔清单校验、平台内唯一 `SHA256SUMS`、聚合 job）已收口，未签名产物以 `SHA256SUMS` + 手动放行说明过渡（[deployment.md](deployment.md) §5）；风险 **R5** 见 §五 |
 | 2 | 增量同步与批量能力的体验增强 | FEATURES | ➖ | 现有 `etag` / `size_mtime` / `always` 三模式满足需求，按用户反馈再评估 |
-| 3 | 死代码纪律 | ASSESSMENT §三 | ➖ | 维持现状：由覆盖率门禁调整一并治理，不单独立项 |
+
+### 3.2 趋势展望候选池（2026-09-24 补录，⬜ 全部未排期）
+
+> 编号接续 3.1（§三 内全局唯一；3.1 原 #3「死代码纪律」于 2026-09-24 以前后端两道导出门禁收口移出，
+> 编号不重排故 #3 空号）；每行「对应」列为 `todolist` 编号（两套编号独立，引用须带前缀）。
+> 立项时在 todolist 状态改 ⏳ 并回本表同步；评估为不做改 ➖ 并写决策依据。
+
+| # | 方向 | 对应 | 状态 | 现有代码可承接点 + 趋势依据 |
+|---|---|---|---|---|
+| 4 | MCP Server：把对象存储能力开放给 AI 代理 | #47 | ⬜ | 已有 70 端点 OpenAPI 3.0.3 全量契约 + `handler → service → s3wrap` 分层，工具面可由契约派生并复用既有鉴权 / 限速 / SSRF 防护；MCP 已是 AI 客户端接入外部工具的事实标准，只读工具可先行、写工具复用 Bearer 与危险操作二次确认 |
+| 5 | S3 新协议特性：条件写 / 端到端校验和 / Object Lock | #48 | ⬜ | 已有 CopyObject 复制链、`etag` 比对与版本控制；条件写（If-Match / If-None-Match）防并发覆盖、CRC64 全对象校验和、Object Lock / 合规保留是近两年 S3 API 演进主线，经 `s3wrap` 唯一边界接入并按厂商支持度降级（扩 E8 兼容矩阵） |
+| 6 | 计划任务与持续同步（增量同步 → 定时备份） | #49 | ⬜ | `migrate/sync` 三模式 + `JobRegistry` 落盘 / 重启恢复 / SSE 进度已是任务框架；补 cron 式计划即可把一次性迁移升级为「桶 → 桶定时备份」，落盘策略沿用 `job_persist.go`，符合 2026 数据保护 / 可持续备份趋势 |
+| 7 | FinOps：存储分析与成本洞察 | #50 | ⬜ | 已有列表 size / storageClass、批量改存储类、生命周期规则读写；按前缀 / 存储类聚合用量、给出低频 / 归档 / 生命周期建议即成成本看板（有界并发 + 100k 上限沿用 `RunBatch`），对齐 FinOps 成本优化大趋势 |
+| 8 | 大文件体验：上传断点续传 + 下载并行分段 | #51 | ⬜ | 上传侧已有 multipart 四端点与 4 路并发，缺「刷新 / 断电后恢复」——可持久化分段清单实现续传；下载侧代理已支持 Range / 416，补多段并行 GET 聚合。大文件可靠性是网盘类客户端的分水岭能力 |
+| 9 | 本地文件夹 ↔ 桶 双向同步 + PWA 离线壳 | #52 | ⬜ | `download.ts` 已用 File System Access API 流式落盘，同 API 的目录句柄 + `etag` 比对可复用为本地目录同步；PWA manifest / service worker 让 Web 端可安装离线启动（密钥仍不落地 localStorage，遵守安全基线） |
+| 10 | OpenAPI → 前端类型 / 客户端代码生成 | #53 | ⬜ | `types.ts` / `endpoints.ts` 目前手写、靠契约测试守漂移；以 `/api/openapi.json` 为源生成 TS 类型与端点封装（schema-first），生成物入 CI diff 门禁，从「测出漂移」升级为「不产生漂移」；生成器为 devDependency，不违 ADR-004 |
+| 11 | OpenTelemetry：trace 贯穿签名 / 代理 / 迁移 | #54 | ⬜ | 已有 Prometheus 指标 + `X-Request-ID` + 可选 `S3C_LOG_JSON`；接入 OTLP 导出（开关式、默认关）把请求 ID 升级为跨 presign / proxy / migrate 的 trace，配套 SLO 仪表盘。OTel 已是可观测性事实标准，与既有指标互补不替换 |
+| 12 | 供应链证明：SBOM + SLSA provenance + cosign 签名 | #55 | ⬜ | 已有 actions pin SHA / govulncheck / Trivy / `cargo audit` / `SHA256SUMS`，缺「制品来源可验证」一环；发布产物生成 SBOM（CycloneDX）、附 SLSA 构建 provenance、镜像与桌面产物 cosign 签名。是 E6 证书阻塞之外**不需外部凭证**的签名增量，补 R5 缺口的一半 |
+| 13 | Token 作用域与最小权限（只读 / 前缀限定） | #56 | ⬜ | 现有多 token（`S3C_TOKEN` 逗号分隔）只有全权一种；补作用域声明（只读、限定账号 / 前缀、过期时间），高危端点按 scope 拒绝并进 OpenAPI 契约。least-privilege / 短时凭证是 API 鉴权演进主流，复用常量时间比较与既有中间件链 |
+| 14 | 原生 fuzz 与性质测试纳入门禁 | #57 | ⬜ | 已达成 100% statement 覆盖，但覆盖 ≠ 输入空间探索；对 policy JSON 解析、endpoint 归一化、S3C 信封读取、key 校验等解析面加 Go `Fuzz*` 目标 + CI 有界 fuzz 轮跑，语料入库防回归。弥补覆盖率门禁对非法输入的盲区，符合持续模糊测试实践 |
+| 15 | 多副本 / HA 能力评估（store 外置） | #58 | ⬜ | 现状为 `flock` 单副本（R4 已决策接受、ADR-002 fail-closed）；评估引入可外置的 store 后端（如 SQLite 共享卷 / Postgres 驱动）以支撑滚动升级与多副本。**属推翻既有决策的评估项**：先出 ADR 再动代码，结论若维持现状则转 ➖ |
+| 16 | 多平台差异化用户体验增强 | #59 | ⬜ | 体验评估计划（桌面 / 移动 / Web 协同体验）；评估产出后按结论拆分或转 ➖ |
 
 ---
 
 ## 四、质量门禁基线
 
-任一版本发布前必须全绿（当前实测状态，2026-09-22）：
+任一版本发布前必须全绿（当前实测状态，2026-09-24）：
 
 | 门禁 | 命令 | 当前状态 |
 |---|---|---|
@@ -88,8 +116,8 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ 1042 例全绿（66 文件） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4074 / 2844 / 1095 / 3503；含 `src/i18n/index.ts`） |
+| 前端测试 | `pnpm test` | ✅ 1043 例全绿（66 文件） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4072 / 2843 / 1093 / 3501；含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |
 | E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物） |
@@ -107,7 +135,8 @@
 > `openapi_path_params_test.go`（path 参数 ⇔ handler `PathValue` 双向）·
 > `openapi_semantics_test.go`（类型 / required / 枚举）·
 > `openapi_response_contract_test.go`（共享 schema + **端点级**响应字段双向）守住，R2（覆盖率掩盖
-> 死代码）由 `count==0` + `golangci-lint` 零告警 + `deadcode_gate_test.go` 守住，R3（明文落盘）由
+> 死代码）由 `count==0` + `golangci-lint` 零告警 + `deadcode_gate_test.go` 守住（2026-09-24 扩至生产导出符号
+> 零引用，前端同口径半边见 `apps/web/src/deadcode_gate.test.ts` 与 features §Z），R3（明文落盘）由
 > `Config.Validate` 硬失败（`ErrPlaintextStoreNotAllowed`，仅 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行）+
 > base compose 的 `${S3C_STORE_KEY:?}` + `StorePlaintextWarning` 单测 + 子进程日志断言守住，R4（单副本）由 `TestDataDirLock*` +
 > `TestRunServerRejectsLockedDataDir` 守住，R6（Rust 供应链）由本表的 `cargo audit` 守住。

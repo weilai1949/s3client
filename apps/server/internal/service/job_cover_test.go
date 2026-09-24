@@ -6,13 +6,12 @@ package service
 //   - Create 在容量耗尽时的兼容语义（返回已终结任务，不注册）；
 //   - 无状态进度帧不得让清单快照出现空状态；
 //   - Emit 的中间进度落盘节流；
-//   - WithMaxJobs 的上限生效语义（每实例，不影响其它注册表）。
+//   - 在册上限的生效语义（每实例，填满一个注册表不影响其它注册表）。
 //
 // 这些断言的是「外部可见行为」（清单内容、落盘次数、任务终态），不是内部变量。
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -65,13 +64,11 @@ func TestJobRegistryListTieBreaksByIDAscending(t *testing.T) {
 // 容量耗尽时必须给出一个「已终结」的合法 *Job——调用方拿到它不会 panic，也不会
 // 误以为任务在运行而无限等待；同时该任务不得占用在册名额。
 func TestJobRegistryCreateReturnsTerminalJobAtCapacity(t *testing.T) {
-	r := NewJobRegistry(WithMaxJobs(1))
+	r := NewJobRegistry()
 	defer r.Stop()
 
 	_, cancel := context.WithCancel(context.Background())
-	if _, err := r.TryCreate(1, cancel); err != nil {
-		t.Fatalf("occupy slot: %v", err)
-	}
+	occupied := fillUntilFull(t, r)
 
 	j := r.Create(2, cancel)
 	if j == nil || j.ID == "" {
@@ -87,8 +84,8 @@ func TestJobRegistryCreateReturnsTerminalJobAtCapacity(t *testing.T) {
 	if _, ok := r.Get(j.ID); ok {
 		t.Error("rejected job must not be registered")
 	}
-	if got := len(r.List()); got != 1 {
-		t.Errorf("jobs = %d, want 1 (only the occupying job)", got)
+	if got := len(r.List()); got != occupied {
+		t.Errorf("jobs = %d, want %d (fallback job must not be registered)", got, occupied)
 	}
 }
 
@@ -127,7 +124,7 @@ func TestJobEmitPersistsProgressThrottled(t *testing.T) {
 }
 
 // TestJobRecordStatusFallsBackForStatuslessFrames 进度帧允许不带 status
-// （JobProgress.Status 是 omitempty，service.Progress.Status 同样可选），但清单快照
+// （JobProgress.Status 是 omitempty，service.Progress 同样可选），但清单快照
 // 必须给出确定状态：空状态落盘后会被 restore 当成「非终态」，把已完成任务误标为
 // interrupted，进而触发「需人工对账」的假告警。
 func TestJobRecordStatusFallsBackForStatuslessFrames(t *testing.T) {
@@ -164,33 +161,17 @@ func TestJobRecordStatusFallsBackForStatuslessFrames(t *testing.T) {
 	}
 }
 
-// TestWithMaxJobsLimitsRegistry 在册上限是**每个注册表实例**的属性：
-// WithMaxJobs(n) 生效后第 n+1 个未终结任务必须被拒（ErrTooManyJobs），
-// 且不影响其它实例（原全局钩子会让并发用例相互污染，见
-// docs/archive/review-2026-09-19.md §A2）。
-func TestWithMaxJobsLimitsRegistry(t *testing.T) {
-	limited := NewJobRegistry(WithMaxJobs(1))
-	defer limited.Stop()
-	if _, err := limited.TryCreate(1, func() {}); err != nil {
-		t.Fatalf("first job: %v", err)
-	}
-	if _, err := limited.TryCreate(1, func() {}); !errors.Is(err, ErrTooManyJobs) {
-		t.Fatalf("second job err = %v, want ErrTooManyJobs", err)
-	}
+// TestJobRegistryCapIsPerInstance 在册上限是**每个注册表实例**的属性：
+// 填满一个实例不得影响其它实例接受新任务（原全局钩子会让并发用例相互污染，
+// 见 docs/archive/review-2026-09-19.md §A2）。
+func TestJobRegistryCapIsPerInstance(t *testing.T) {
+	full := NewJobRegistry()
+	defer full.Stop()
+	fillUntilFull(t, full)
 
-	// 另一个实例不受影响：默认上限远大于 1。
 	other := NewJobRegistry()
 	defer other.Stop()
 	if _, err := other.TryCreate(1, func() {}); err != nil {
 		t.Fatalf("independent registry should accept: %v", err)
-	}
-}
-
-// TestWithMaxJobsIgnoresNonPositive 非正上限视为未设置，回落默认值（构造期防御）。
-func TestWithMaxJobsIgnoresNonPositive(t *testing.T) {
-	r := NewJobRegistry(WithMaxJobs(0))
-	defer r.Stop()
-	if r.maxJobs != defaultMaxJobs {
-		t.Fatalf("maxJobs = %d, want default %d", r.maxJobs, defaultMaxJobs)
 	}
 }
