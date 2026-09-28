@@ -32,8 +32,9 @@ export function resolvedTheme(): 'light' | 'dark' {
   return t === 'auto' ? (mq.matches ? 'dark' : 'light') : t
 }
 
-/** 应用主题到 <html data-theme>，供 styles.css 的 [data-theme=...] 选择器使用。 */
-export function applyTheme(t: Theme = readTheme()) {
+/** 应用主题到 <html data-theme>，供 styles.css 的 [data-theme=...] 选择器使用。
+ *  模块私有：只被 cycleTheme / 系统主题监听 / 模块初始化调用，外部经 cycleTheme 取用。 */
+function applyTheme(t: Theme = readTheme()) {
   const resolved = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t
   document.documentElement.dataset.theme = resolved
   try {

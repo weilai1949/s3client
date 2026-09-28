@@ -66,35 +66,43 @@ function modeAction(kind: 'plain' | 'past' | 'ing'): string {
   return t(props.mode === 'copy' ? 'dest.actionCopy' : 'dest.actionMove')
 }
 
-/** 进行中的 SSE 取消器：组件卸载时全部断开，避免流悬挂、后台持续推送或回调写入已销毁的 ref。 */
+/** 进行中的 SSE 取消器：组件卸载时全部断开并让等待中的 Promise 以中止 settle，
+ * 避免流悬挂、后台持续推送、回调写入已销毁的 ref，以及 await 永远挂起的帧泄漏。 */
 const activeStops = new Set<() => void>()
 
 onBeforeUnmount(() => {
-  for (const stop of activeStops) stop()
+  for (const stop of [...activeStops]) stop()
   activeStops.clear()
 })
 
 function waitMigrateJob(jobId: string, onProgress?: (p: MigrateProgress) => void): Promise<{ ok: number; failed: number }> {
   return new Promise((resolve, reject) => {
     let last = { ok: 0, failed: 0 }
-    const finish = (fn: () => void) => {
-      activeStops.delete(stop)
+    /** 卸载路径：断开 SSE 并以 AbortError 收尾（teardown 引用的 stopSse 此时已赋值）。 */
+    const teardown = () => {
+      activeStops.delete(teardown)
+      stopSse()
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    /** 正常终态：先摘除再 settle，保证卸载不再二次触发 teardown。 */
+    const settle = (fn: () => void) => {
+      activeStops.delete(teardown)
       fn()
     }
-    const stop = subscribeMigrateEvents(
+    const stopSse = subscribeMigrateEvents(
       jobId,
       (p) => {
         last = { ok: p.migrated ?? 0, failed: p.failed ?? 0 }
         onProgress?.(p)
         if (p.status === 'done' || p.status === 'cancelled') {
-          finish(() => resolve(last))
+          settle(() => resolve(last))
         }
       },
       (e) => {
-        finish(() => reject(e))
+        settle(() => reject(e))
       },
     )
-    activeStops.add(stop)
+    activeStops.add(teardown)
   })
 }
 
@@ -195,6 +203,8 @@ async function submitDest() {
       emit('submit')
     }
   } catch (err) {
+    // 卸载中止（teardown 的 AbortError）：静默收尾，不向已销毁的父级发 error
+    if (err instanceof DOMException && err.name === 'AbortError') return
     emit('error', toErrorMessage(err))
   } finally {
     busy.value = false

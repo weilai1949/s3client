@@ -24,7 +24,7 @@ func (h *Handler) newJob(w http.ResponseWriter, total int, cancel context.Cancel
 // jobsList 返回异步任务清单（最新在前），含跨重启恢复的 interrupted 任务。
 //
 // 用途：前端「未完成任务」视图。任务清单持久化后，进程重启不会丢失记录，
-// 「复制成功但源未删除」的移动任务可据此被发现并对账（todolist #19）。
+// 「复制成功但源未删除」的移动任务可据此被发现并对账（KNOWN_ISSUES #19）。
 func (h *Handler) jobsList(w http.ResponseWriter, r *http.Request) {
 	// List 以 make(..., 0, n) 构造，空清单也非 nil，序列化为 [] 而非 null（前端直接 .length/map）。
 	h.writeJSON(w, http.StatusOK, map[string]any{"jobs": h.migrateJobs.List()})

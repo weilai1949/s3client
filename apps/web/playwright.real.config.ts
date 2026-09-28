@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * 真实联调（todolist #37）专用 Playwright 配置。
+ * 真实联调（KNOWN_ISSUES #37）专用 Playwright 配置。
  *
  * 与 `playwright.config.ts`（mock `/api/**` 的浏览器侧用例）分开的原因：
  *   - **被测对象不同**：这里必须打到真实 Go 后端 + 真实 RustFS，任何

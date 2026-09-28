@@ -13,7 +13,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/essential'],
   {
-    // 覆盖 src 与两套 E2E（e2e/ 为 mock 版、e2e-real/ 为真实联调版，todolist #37）。
+    // 覆盖 src 与两套 E2E（e2e/ 为 mock 版、e2e-real/ 为真实联调版，KNOWN_ISSUES #37）。
     // 此前只 lint src/**，E2E 源码零静态检查。
     files: ['src/**/*.{ts,vue}', 'e2e/**/*.ts', 'e2e-real/**/*.ts'],
     languageOptions: {

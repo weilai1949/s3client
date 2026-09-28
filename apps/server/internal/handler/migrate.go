@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/model"
 	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
 	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
 
 // migrate 跨账号迁移：源账号对象 → 目标账号/桶 + 前缀（同步）。
@@ -45,11 +47,21 @@ func (h *Handler) parseMigrateRequest(w http.ResponseWriter, r *http.Request) (
 	var err error
 	src, err = h.store.Get(req.SourceAccountID)
 	if err != nil {
+		// store 读取故障（磁盘/解码错误）不是「账号不存在」：一律 404 会误导用户
+		// 去查一个本来存在的账号，只有 ErrNotFound 才是 404。
+		if !errors.Is(err, store.ErrNotFound) {
+			h.writeInternalErr(w, err, "failed to load source account")
+			return
+		}
 		h.writeErr(w, http.StatusNotFound, "source account not found")
 		return
 	}
 	dst, err = h.store.Get(req.TargetAccountID)
 	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			h.writeInternalErr(w, err, "failed to load target account")
+			return
+		}
 		h.writeErr(w, http.StatusNotFound, "target account not found")
 		return
 	}

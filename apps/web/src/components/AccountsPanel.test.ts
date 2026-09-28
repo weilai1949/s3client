@@ -471,4 +471,42 @@ describe('AccountsPanel', () => {
     await nextTick()
     expect(w.find('.modal-stub').exists()).toBe(false)
   })
+
+  it('异步提交防重复：在途时双击「保存登录」只发一次 createAccount', async () => {
+    vi.mocked(s3api.createAccount).mockImplementationOnce(() => new Promise<never>(() => {})) // 请求挂起
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'accounts.add').trigger('click')
+    const btn = findButton(w, 'accounts.saveLogin')
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('disabled')).toBeDefined() // 在途时提交按钮禁用
+    await btn.trigger('click') // 第二次点击必须被守卫拦住
+    expect(s3api.createAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('提交在途时直调 submit 被守卫拦截；请求失败后错误展示且按钮恢复', async () => {
+    let rejectSave!: (e: Error) => void
+    vi.mocked(s3api.createAccount).mockImplementationOnce(
+      () =>
+        new Promise<never>((_, rej) => {
+          rejectSave = rej
+        }),
+    )
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'accounts.add').trigger('click')
+    const btn = findButton(w, 'accounts.saveLogin')
+    await btn.trigger('click')
+    await nextTick()
+    expect(btn.attributes('disabled')).toBeDefined() // 在途时按钮禁用
+    // 按钮 disabled 绕过点击后，提交入口自身必须仍拦住第二次提交
+    await (w.vm as unknown as { submit: () => Promise<void> }).submit()
+    expect(s3api.createAccount).toHaveBeenCalledTimes(1)
+    // 请求失败 settle：错误展示、按钮恢复可点
+    rejectSave(new Error('accounts-boom'))
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toBe('accounts-boom')
+    expect(btn.attributes('disabled')).toBeUndefined()
+  })
 })

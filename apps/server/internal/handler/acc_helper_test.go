@@ -34,6 +34,7 @@ type accStubStore struct {
 	mu        sync.Mutex
 	listErr   error
 	getErr    error // 为 nil 且 getAcc 为 nil 时返回 store.ErrNotFound
+	getErrs   map[string]error
 	getAcc    *model.Account
 	createErr error
 	updateErr error
@@ -45,6 +46,9 @@ func (s *accStubStore) List() ([]*model.Account, error) { return nil, s.listErr 
 func (s *accStubStore) Get(id string) (*model.Account, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err, ok := s.getErrs[id]; ok {
+		return nil, err
+	}
 	if s.getErr != nil {
 		return nil, s.getErr
 	}

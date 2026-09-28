@@ -69,10 +69,12 @@ func (h *Handler) clientIP(r *http.Request) string {
 }
 
 // clientIPWithProxies 解析客户端 IP：仅当直连对端（RemoteAddr）在可信代理列表中时
-// 才采信 X-Forwarded-For 的首段，否则一律回退 RemoteAddr。
+// 才采信 X-Forwarded-For 的**最后一段**，否则一律回退 RemoteAddr。
 //
 // 为什么不能无条件信任 XFF：直连部署（未过代理）时任何客户端都能伪造该头，
 // 从而为每个请求换一个「IP」绕过限速（ASSESSMENT M4）。
+// 为什么取最后一段而不是首段：右侧条目由可信代理自己追加（它直连的对端），
+// 上游客户端只能在左侧预置伪造值；取首段会让伪造者每换一个值就换一个限速桶（review R1）。
 func clientIPWithProxies(r *http.Request, trusted []string) string {
 	remote := remoteHost(r.RemoteAddr)
 	if len(trusted) == 0 {
@@ -81,8 +83,8 @@ func clientIPWithProxies(r *http.Request, trusted []string) string {
 	for _, p := range trusted {
 		if p == remote {
 			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-				if i := strings.Index(xff, ","); i >= 0 {
-					return strings.TrimSpace(xff[:i])
+				if i := strings.LastIndex(xff, ","); i >= 0 {
+					return strings.TrimSpace(xff[i+1:])
 				}
 				return strings.TrimSpace(xff)
 			}

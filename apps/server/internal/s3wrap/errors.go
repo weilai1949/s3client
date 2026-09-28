@@ -3,7 +3,6 @@ package s3wrap
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -19,6 +18,22 @@ var (
 	// ErrPartialDelete 表示批量删除的 200 响应体内有逐 key 被服务端拒绝的条目（其余已删除）。
 	ErrPartialDelete = errors.New("partially deleted")
 )
+
+// partialDeleteError 是 ErrPartialDelete 的结构化载体：sentinel 只表达「部分删除」，
+// 已删计数与首个失败 key/code 必须放进结构化字段，UserMessage 才能向用户透出计数
+// 而不必解析错误文本（review §R17：部分删除曾被报成通用 500，精细文案与计数一并丢失）。
+type partialDeleteError struct {
+	deleted   int
+	firstKey  string
+	firstCode string
+}
+
+func (e *partialDeleteError) Error() string {
+	return fmt.Sprintf("%s: %s (%s)", ErrPartialDelete.Error(), e.firstKey, e.firstCode)
+}
+
+// Unwrap 指向 sentinel：errors.Is(err, ErrPartialDelete) 与 HTTPStatus 的 409 判定据此成立。
+func (e *partialDeleteError) Unwrap() error { return ErrPartialDelete }
 
 // wrapObjectTooLarge 把 S3 的 EntityTooLarge 归一为 ErrObjectTooLarge，
 // 让上层可用 errors.Is 判断「单次上传/复制超限」并给出 multipart 指引。
@@ -41,6 +56,11 @@ func UserMessage(err error) string {
 		return "copied but failed to delete source"
 	}
 	if errors.Is(err, ErrPartialDelete) {
+		// 优先透出已删计数（结构化字段，不解析文本）；裸 sentinel 包装回退基础文案。
+		var pde *partialDeleteError
+		if errors.As(err, &pde) {
+			return fmt.Sprintf("some objects could not be deleted (%d deleted)", pde.deleted)
+		}
 		return "some objects could not be deleted"
 	}
 	if IsNotFound(err) {
@@ -77,10 +97,17 @@ func UserMessageForCode(code string) string {
 	return "storage operation failed"
 }
 
-// HTTPStatus 将常见 S3 错误映射为稳定 HTTP 状态。
+// HTTPStatus 将常见 S3 错误映射为稳定 HTTP 状态；与 UserMessage 对同一错误的归类必须
+// 同口径（「暂不可用」→ 503、冲突 → 409），否则客户端状态码与用户文案互相矛盾。
 func HTTPStatus(err error) int {
 	if err == nil {
 		return 500
+	}
+	// 应用层 sentinel 先于错误码判定：部分删除的错误体不含 API 错误码，但语义是
+	// 「请求已完成、部分条目冲突」→ 409；回落 500 会让 UserMessage 的精细文案不可达
+	// 且丢失已删计数（review §R17）。
+	if errors.Is(err, ErrPartialDelete) {
+		return 409
 	}
 	if IsNotFound(err) {
 		return 404
@@ -94,7 +121,7 @@ func HTTPStatus(err error) int {
 		return 409
 	case "InvalidRange":
 		return 416
-	case "SlowDown", "ServiceUnavailable":
+	case "SlowDown", "ServiceUnavailable", "RequestTimeout":
 		return 503
 	}
 	return 500
@@ -140,17 +167,12 @@ func IsNotFound(err error) bool {
 // IsAPIError 是否为可识别的 S3 API 错误。
 func IsAPIError(err error) bool { return ErrorCode(err) != "" }
 
-// IsEntityTooLarge 判断是否为对象过大错误。
+// IsEntityTooLarge 判断是否为对象过大错误：只做结构化判定（应用层 sentinel 或 S3
+// 错误码），不匹配错误文案——文案会被上游措辞 / 本地化改变，字符串子串匹配会静默失效
+// （review Nit：冗余文案匹配已删除）。
 func IsEntityTooLarge(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, ErrObjectTooLarge) {
-		return true
-	}
-	if HasErrorCode(err, "EntityTooLarge") || UserMessage(err) == "entity too large" {
-		return true
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "EntityTooLarge") || strings.Contains(msg, "entity too large")
+	return errors.Is(err, ErrObjectTooLarge) || HasErrorCode(err, "EntityTooLarge")
 }

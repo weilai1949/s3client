@@ -31,7 +31,7 @@ func migrateResultJSON(out migrateResult) map[string]any {
 
 func migrateBatchJSON(out service.BatchResult) map[string]any {
 	return migrateResultJSON(migrateResult{
-		Migrated: out.OK, Failed: out.Failed, LastError: out.LastError, FailKeys: out.FailKeys,
+		Migrated: out.OK, Failed: out.Failed, LastError: out.FirstError, FailKeys: out.FailKeys,
 	})
 }
 

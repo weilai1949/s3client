@@ -1,6 +1,6 @@
 package handler
 
-// presign_error_test.go —— 预签名失败不得被静默吞掉（todolist #23 / ASSESSMENT L1）。
+// presign_error_test.go —— 预签名失败不得被静默吞掉（KNOWN_ISSUES #23 / ASSESSMENT L1）。
 //
 // 背景：原实现三处写成 `u, _ := client.PresignXxx(...)`，失败时 url 为空字符串
 // 却仍返回 200，调用方无法区分「服务端出错」与「前端没渲染」。
@@ -13,6 +13,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,7 +28,8 @@ func TestWritePresignResultError(t *testing.T) {
 	h, _ := gapStoreHandler(t)
 
 	rr := httptest.NewRecorder()
-	ok := h.writePresignResult(rr, errTestPresign, map[string]any{
+	// 测试内联构造错误：生产代码不得为测试保留哨兵变量（review R19a 死代码）。
+	ok := h.writePresignResult(rr, errors.New("presign failed"), map[string]any{
 		"method": "put", "bucket": "b", "key": "k", "url": "", "expiresIn": 3600,
 	})
 

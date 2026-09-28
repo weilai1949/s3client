@@ -1,7 +1,6 @@
 package store
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,7 +151,7 @@ func TestGapEncryptedNewErrors(t *testing.T) {
 func writeEnvelope(t *testing.T, path, password string, plain []byte, corruptSalt bool) {
 	t.Helper()
 	salt := []byte("0123456789abcdef")
-	key := deriveKeyLegacy(password, salt)
+	key := deriveKey(password, salt, legacyParams)
 	blob, err := encryptAESGCM(key, plain)
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +261,7 @@ func TestGapAESGCMEdge(t *testing.T) {
 	if _, err := decryptAESGCM([]byte("short"), []byte("xx")); err == nil {
 		t.Fatal("decrypt: 8-byte key must fail")
 	}
-	key := deriveKeyLegacy("pw", []byte("0123456789abcdef"))
+	key := deriveKey("pw", []byte("0123456789abcdef"), legacyParams)
 	if _, err := decryptAESGCM(key, []byte("n")); err == nil || !strings.Contains(err.Error(), "too short") {
 		t.Fatalf("short blob = %v", err)
 	}
@@ -383,6 +382,9 @@ func TestGapSQLiteBool(t *testing.T) {
 
 // ---- open.go 驱动分发 ----
 
+// TestGapOpenDispatch R4:合法驱动名大小写/空白归一化后与小写等价(行为一致);
+// 未知驱动必须报错,不再静默落回 json(否则明文落盘安全闸被绕过后无人察觉)。
+// 空串是「未显式指定」的文档化默认,等价 json。
 func TestGapOpenDispatch(t *testing.T) {
 	dir := t.TempDir()
 	st, err := Open(dir, "sqlite", "")
@@ -393,18 +395,33 @@ func TestGapOpenDispatch(t *testing.T) {
 		t.Fatal("driver=sqlite should yield *SQLiteStore")
 	}
 	st.Close()
+	for _, d := range []string{"SQLITE", " Sqlite "} {
+		s, err := Open(dir, d, "")
+		if err != nil {
+			t.Fatalf("Open(driver=%q) = %v", d, err)
+		}
+		if _, ok := s.(*SQLiteStore); !ok {
+			t.Fatalf("driver=%q should normalize to *SQLiteStore, got %T", d, s)
+		}
+		_ = s.Close()
+	}
 	if _, err := Open(dir, "encrypted", ""); err == nil {
 		t.Fatal("encrypted without key must fail")
 	}
-	for _, d := range []string{"", "json", "JSON", "  json  ", "bogus-driver"} {
+	for _, d := range []string{"", "json", "JSON", "  json  "} {
 		s, err := Open(dir, d, "")
 		if err != nil {
 			t.Fatalf("Open(driver=%q) = %v", d, err)
 		}
 		if _, ok := s.(*Store); !ok {
-			t.Fatalf("driver=%q should fall back to *Store, got %T", d, s)
+			t.Fatalf("driver=%q should yield *Store, got %T", d, s)
 		}
 		_ = s.Close()
+	}
+	for _, d := range []string{"bogus-driver", "jsonx", "sqlite3", "PostgreSQL"} {
+		if _, err := Open(dir, d, ""); err == nil {
+			t.Fatalf("Open(driver=%q) must fail with unknown driver, got nil error", d)
+		}
 	}
 }
 
@@ -636,88 +653,6 @@ func TestGapSQLiteScanNullRow(t *testing.T) {
 	}
 }
 
-// TestAtomicWriteFile 通过注入 OS 操作覆盖原子写全部分支。
-// 真实 OS 上无法触发「写一半失败 / close 报错 / rename 失败」等错误路径，
-// 借助包级钩子在测试里精确制造这些场景。
-func TestAtomicWriteFile(t *testing.T) {
-	dir := t.TempDir()
-
-	// 备份并恢复注入点
-	origOpen, origWrite, origClose, origRename, origRemove :=
-		atomicOpenTmp, atomicWrite, atomicClose, atomicRename, atomicRemove
-	t.Cleanup(func() {
-		atomicOpenTmp, atomicWrite, atomicClose, atomicRename, atomicRemove =
-			origOpen, origWrite, origClose, origRename, origRemove
-	})
-
-	t.Run("happy", func(t *testing.T) {
-		p := filepath.Join(dir, "happy.bin")
-		if err := atomicWriteFile(p, []byte("hello")); err != nil {
-			t.Fatal(err)
-		}
-		got, _ := os.ReadFile(p)
-		if string(got) != "hello" {
-			t.Fatalf("got %q", got)
-		}
-		if fi, err := os.Stat(p); err != nil || fi.Mode().Perm() != 0o600 {
-			t.Fatalf("perm = %v err %v", fi.Mode().Perm(), err)
-		}
-	})
-
-	t.Run("open fail", func(t *testing.T) {
-		atomicOpenTmp = func(string) (*os.File, error) { return nil, errors.New("boom") }
-		if err := atomicWriteFile(filepath.Join(dir, "x"), []byte("a")); err == nil {
-			t.Fatal("expected error")
-		}
-	})
-
-	t.Run("write fail", func(t *testing.T) {
-		atomicOpenTmp = origOpen
-		atomicWrite = func(*os.File, []byte) (int, error) { return 0, errors.New("disk full") }
-		atomicRemove = origRemove
-		p := filepath.Join(dir, "wf.bin")
-		if err := atomicWriteFile(p, []byte("x")); err == nil {
-			t.Fatal("expected write error")
-		}
-		if _, err := os.Stat(p + ".tmp"); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("tmp should be cleaned, stat err = %v", err)
-		}
-	})
-
-	t.Run("short write", func(t *testing.T) {
-		atomicOpenTmp = origOpen
-		atomicWrite = func(_ *os.File, data []byte) (int, error) { return len(data) - 1, nil }
-		if err := atomicWriteFile(filepath.Join(dir, "sw.bin"), []byte("xyz")); err == nil {
-			t.Fatal("expected short write")
-		}
-	})
-
-	t.Run("close fail", func(t *testing.T) {
-		atomicOpenTmp = origOpen
-		atomicWrite = origWrite
-		atomicClose = func(*os.File) error { return errors.New("close err") }
-		if err := atomicWriteFile(filepath.Join(dir, "cf.bin"), []byte("x")); err == nil {
-			t.Fatal("expected close error")
-		}
-		if _, err := os.Stat(filepath.Join(dir, "cf.bin.tmp")); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("tmp should be cleaned, stat err = %v", err)
-		}
-	})
-
-	t.Run("rename fail", func(t *testing.T) {
-		atomicOpenTmp = origOpen
-		atomicWrite = origWrite
-		atomicClose = origClose
-		atomicRename = func(_, _ string) error { return errors.New("rename fail") }
-		if err := atomicWriteFile(filepath.Join(dir, "rf.bin"), []byte("x")); err == nil {
-			t.Fatal("expected rename error")
-		}
-		if _, err := os.Stat(filepath.Join(dir, "rf.bin.tmp")); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("tmp should be cleaned, stat err = %v", err)
-		}
-	})
-}
-
 // TestGapEncryptedDeleteSuccess 正常 Delete 走通（既有的 Delete 测试都建立在 nuke 之上，
 // 覆盖的是「持久化失败」分支；此处补正常成功路径）。
 func TestGapEncryptedDeleteSuccess(t *testing.T) {
@@ -786,10 +721,8 @@ func TestGapEncryptedUpdateRollbackOnPersistFail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 备份并恢复注入点
-	origRename := atomicRename
-	t.Cleanup(func() { atomicRename = origRename })
-	atomicRename = func(_, _ string) error { return errors.New("rename fail") }
+	// 删掉存储文件所在目录 → 持久化必然失败（与其他持久化失败测试同用 nuke 手法）。
+	nukeParentDir(t, filepath.Join(dir, "a.enc"))
 
 	upd := gapAcc("updated")
 	if _, err := st.Update(a.ID, upd); err == nil {
@@ -822,9 +755,8 @@ func TestGapJSONUpdateRollbackOnPersistFail(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	origRename := atomicRename
-	t.Cleanup(func() { atomicRename = origRename })
-	atomicRename = func(_, _ string) error { return errors.New("rename fail") }
+	// 删掉存储文件所在目录 → 持久化必然失败（与其他持久化失败测试同用 nuke 手法）。
+	nukeParentDir(t, filepath.Join(dir, "a.json"))
 
 	upd := gapAcc("updated")
 	if _, err := st.Update(a.ID, upd); err == nil {

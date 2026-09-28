@@ -76,11 +76,3 @@ func (a *Account) View() *AccountView {
 		UpdatedAt:      a.UpdatedAt,
 	}
 }
-
-// BucketOrDefault 返回默认桶；为空时返回空串（由调用方决定如何处理）。
-func (a *Account) BucketOrDefault() string {
-	if a.Bucket == "" {
-		return ""
-	}
-	return a.Bucket
-}

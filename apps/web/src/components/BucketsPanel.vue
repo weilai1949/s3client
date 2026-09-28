@@ -2,7 +2,8 @@
 import { onMounted, ref, watch, computed } from 'vue'
 import { toErrorMessage } from '../errors'
 
-import { state, selectAccount, rememberedAccountId } from '../store'
+import { state, selectAccount } from '../store'
+import { resolveAccountSelect } from '../composables/useAccountSelect'
 import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
@@ -61,9 +62,7 @@ async function loadBuckets() {
 }
 
 onMounted(() => {
-  const remembered = rememberedAccountId()
-  if (state.accounts.some((a) => a.id === remembered)) accSel.value = remembered
-  else accSel.value = state.currentAccountId && state.accounts.some((a) => a.id === state.currentAccountId) ? state.currentAccountId : (state.accounts[0]?.id ?? '')
+  accSel.value = resolveAccountSelect()
   selectAccount(accSel.value)
   loadBuckets()
 })

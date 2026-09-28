@@ -187,7 +187,8 @@ func TestClientIPTrustedProxy(t *testing.T) {
 		{"no xff uses remote", nil, "203.0.113.9:1234", "", "203.0.113.9"},
 		{"untrusted peer ignores xff", []string{"10.0.0.1"}, "203.0.113.9:1234", "1.2.3.4", "203.0.113.9"},
 		{"trusted peer honors xff", []string{"10.0.0.1"}, "10.0.0.1:5555", "1.2.3.4", "1.2.3.4"},
-		{"trusted peer honors first xff hop", []string{"10.0.0.1"}, "10.0.0.1:5555", "1.2.3.4, 5.6.7.8", "1.2.3.4"},
+		// 取最后一段：右侧条目由可信代理追加，首段可被上游客户端伪造。
+		{"trusted peer honors last xff hop", []string{"10.0.0.1"}, "10.0.0.1:5555", "1.2.3.4, 5.6.7.8", "5.6.7.8"},
 		{"trusted peer without xff falls back to remote", []string{"10.0.0.1"}, "10.0.0.1:5555", "", "10.0.0.1"},
 		{"empty trusted list ignores xff", nil, "10.0.0.1:5555", "1.2.3.4", "10.0.0.1"},
 		{"malformed remote falls back", []string{"10.0.0.1"}, "not-an-addr", "1.2.3.4", "not-an-addr"},

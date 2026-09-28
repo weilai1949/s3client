@@ -10,23 +10,20 @@ import { previewKind } from '../preview'
 import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import type { Entry, ObjectItem, SortKey } from '../types'
 
-const props = withDefaults(
-  defineProps<{
-    entries: Entry[] // 过滤 + 排序后的可见条目
-    bucketView: 'list' | 'grid'
-    selected: Set<string>
-    sortKey: SortKey
-    sortDir: 1 | -1
-    filter: string
-    filterActive: boolean
-    loading: boolean
-    totalCount: number // 未过滤条目总数（骨架屏「无任何条目」判断）
-    nextToken: string
-    isTruncated: boolean
-    loadingAll: boolean
-  }>(),
-  {},
-)
+const props = defineProps<{
+  entries: Entry[] // 过滤 + 排序后的可见条目
+  bucketView: 'list' | 'grid'
+  selected: Set<string>
+  sortKey: SortKey
+  sortDir: 1 | -1
+  filter: string
+  filterActive: boolean
+  loading: boolean
+  totalCount: number // 未过滤条目总数（骨架屏「无任何条目」判断）
+  nextToken: string
+  isTruncated: boolean
+  loadingAll: boolean
+}>()
 
 const emit = defineEmits<{
   (e: 'rowClick', entry: Entry): void
@@ -101,7 +98,7 @@ watch(
 
 /* 网格视图窗口化：网格是 CSS grid 自适应列数，无法用固定行高做精确窗口化，
    因此按「最大渲染条数」设上限：超出部分显示提示条，用户可切列表视图或翻页。
-   这避免 grid 视图对万级条目全量渲染 DOM（todolist #11 / ASSESSMENT D8）。 */
+   这避免 grid 视图对万级条目全量渲染 DOM（KNOWN_ISSUES #11 / ASSESSMENT D8）。 */
 const GRID_MAX_ITEMS = 300
 const gridItems = computed(() => props.entries.slice(0, GRID_MAX_ITEMS))
 const gridHiddenCount = computed(() => Math.max(0, props.entries.length - GRID_MAX_ITEMS))

@@ -79,16 +79,20 @@ func New(acc *model.Account) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
-	svc := newS3FromConfig(cfg, acc, acc.Endpoint)
+	svc := newS3FromConfig(cfg, acc, acc.Endpoint, registerMiddlewares)
 	presignEndpoint := acc.PublicEndpoint
 	if presignEndpoint == "" {
 		presignEndpoint = acc.Endpoint
 	}
-	presignSvc := newS3FromConfig(cfg, acc, presignEndpoint)
+	// presign client 走独立的中间件注册：签名所需的 UNSIGNED-PAYLOAD 必须保留（否则
+	// 预签名 URL 校验失败），但 metricsMiddleware 必须去掉——预签名只构造 URL、不产生
+	// 真实 S3 调用，计入 s3c_s3_calls_total 会凭空抬高调用数并把延迟 p99 拉向 0
+	// （分段直传每段预签名一次 → N 段注入 N 个假调用，review §R16）。
+	presignSvc := newS3FromConfig(cfg, acc, presignEndpoint, registerPresignMiddlewares)
 	return &Client{acc: acc, s3: svc, presign: s3.NewPresignClient(presignSvc)}, nil
 }
 
-func newS3FromConfig(cfg aws.Config, acc *model.Account, endpoint string) *s3.Client {
+func newS3FromConfig(cfg aws.Config, acc *model.Account, endpoint string, apiMiddleware func(*middleware.Stack) error) *s3.Client {
 	return s3.NewFromConfig(cfg, func(o *s3.Options) {
 		if ep := NormalizeEndpoint(endpoint, acc.UseSSL); ep != "" {
 			o.BaseEndpoint = aws.String(ep)
@@ -96,11 +100,11 @@ func newS3FromConfig(cfg aws.Config, acc *model.Account, endpoint string) *s3.Cl
 		o.UsePathStyle = acc.PathStyle
 		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
-		o.APIOptions = append(o.APIOptions, registerMiddlewares)
+		o.APIOptions = append(o.APIOptions, apiMiddleware)
 	})
 }
 
-// registerMiddlewares 在 smithy 栈上注册本项目的中间件：
+// registerMiddlewares 在 smithy 栈上注册本项目的中间件（数据面 client）：
 //   - unsignedPayloadSetter 置于 ResolveEndpointV2 之后（注入 UNSIGNED-PAYLOAD）；
 //   - metricsMiddleware 置于 Finalize 最外层（覆盖每次 S3 调用，含传输错误）。
 func registerMiddlewares(stack *middleware.Stack) error {
@@ -108,6 +112,14 @@ func registerMiddlewares(stack *middleware.Stack) error {
 		return err
 	}
 	return stack.Finalize.Add(&metricsMiddleware{}, middleware.Before)
+}
+
+// registerPresignMiddlewares 是 presign client 的注册表：只挂签名必需的
+// unsignedPayloadSetter，不挂 metricsMiddleware（原因见 New 中的注释，review §R16）。
+// 不用 registerMiddlewares 是刻意分叉：数据面与预签名的计量语义不同，合并会再次引入
+// 假调用计数。
+func registerPresignMiddlewares(stack *middleware.Stack) error {
+	return stack.Finalize.Insert(&unsignedPayloadSetter{}, "ResolveEndpointV2", middleware.After)
 }
 
 const unsignedPayload = "UNSIGNED-PAYLOAD"
@@ -170,7 +182,7 @@ func newHTTPClient() *ssrfAwareClient {
 // 此函数是端点归一化的唯一实现：`service.SameEndpoint` 与建 client 的 BaseEndpoint
 // 必须用同一套规则，否则会出现「比较判定为同一端点、建出的 URL 却连不上」。
 // 旧实现只做大小写敏感的前缀判断，把 "HTTP://Host" 当成裸主机，产出损坏的
-// "http://HTTP://Host"（features.md §K，原 todolist #10）。
+// "http://HTTP://Host"（features.md §K，KNOWN_ISSUES #10）。
 func NormalizeEndpoint(endpoint string, useSSL bool) string {
 	ep := strings.TrimSpace(endpoint)
 	if ep == "" {

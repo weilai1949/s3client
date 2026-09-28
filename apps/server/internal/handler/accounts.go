@@ -115,7 +115,7 @@ func (h *Handler) testAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	bucket := r.URL.Query().Get("bucket")
 	if bucket == "" {
-		bucket = acc.BucketOrDefault()
+		bucket = acc.Bucket
 	}
 	if bucket == "" {
 		if _, err := client.ListBuckets(r.Context()); err != nil {

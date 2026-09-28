@@ -38,6 +38,8 @@ const form = reactive<AccountInput>({
 })
 const showForm = ref(false)
 const error = ref('')
+/** 提交在途：防双击重复 createAccount/updateAccount（第二次点击直接忽略）。 */
+const saving = ref(false)
 /** 账号列表加载失败（后端不可用）：与表单 `error` 分开，避免打开表单时被清掉。 */
 const loadError = ref('')
 const bucketOptions = ref<BucketItem[]>([])
@@ -158,6 +160,8 @@ async function fetchBuckets() {
 }
 
 async function submit() {
+  if (saving.value) return
+  saving.value = true
   error.value = ''
   try {
     if (editingId.value) {
@@ -175,6 +179,8 @@ async function submit() {
     emit('changed')
   } catch (e) {
     error.value = toErrorMessage(e)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -310,7 +316,7 @@ watch(accountFormRequest, () => startCreate())
         </label>
       </div>
       <div class="row">
-        <button class="btn sm" @click="submit">{{ editingId ? t('common.save') : t('accounts.saveLogin') }}</button>
+        <button class="btn sm" :disabled="saving" @click="submit">{{ editingId ? t('common.save') : t('accounts.saveLogin') }}</button>
         <button class="btn secondary sm" @click="showForm = false">{{ t('common.cancel') }}</button>
       </div>
     </ModalDialog>

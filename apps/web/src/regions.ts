@@ -471,7 +471,7 @@ export function inferProvider(endpoint: string): Provider {
 
 /** 依据服务商返回区域候选列表。 */
 export function regionsFor(p: Provider): RegionPreset[] {
-  return REGION_MAP[p] ?? []
+  return REGION_MAP[p]
 }
 
 /** 公共云预设是否应同步公网 Endpoint（有固定域名的服务商）。 */

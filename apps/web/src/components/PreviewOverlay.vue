@@ -1,10 +1,14 @@
 <script lang="ts">
 import type { PreviewKind } from '../preview'
 
+/**
+ * 预览状态。**不携带 URL**：`<img>`/`<video>`/`<iframe>` 直连代理 URL 无法携带
+ * Authorization 头，启用 S3C_TOKEN 的部署下会 401（review §C1）；取回统一在
+ * 本组件内以带 Bearer 的 fetch → blob → objectURL 完成，故 URL 属于组件内部状态。
+ */
 export interface PreviewState {
   key: string
   kind: PreviewKind
-  url: string // inline 代理 URL（图片/PDF/媒体）
 }
 </script>
 
@@ -13,7 +17,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { api } from '../api'
-import { proxyUrl } from '../proxy'
+import { downloadProxyObject, fetchProxy, fetchProxyBlob } from '../proxy'
+import { toast } from '../store'
 import { t, tf } from '../i18n'
 import { useKeydownStack } from '../composables/useKeydownStack'
 
@@ -25,18 +30,33 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'error', msg: string): void
 }>()
 
 const text = ref('')
 const truncated = ref(false)
 const loading = ref(false)
+/** 媒体/PDF 的 inline objectURL（取回成功后渲染；切换/卸载时释放）。 */
+const mediaUrl = ref('')
+/** 媒体/PDF 取回失败原因（非空时渲染失败占位，绝不渲染错误体）。 */
+const mediaError = ref('')
 
 let fetchCtrl: AbortController | null = null
 
 function cancelFetch() {
   fetchCtrl?.abort()
   fetchCtrl = null
+}
+
+function releaseMediaUrl() {
+  if (mediaUrl.value) {
+    URL.revokeObjectURL(mediaUrl.value)
+    mediaUrl.value = ''
+  }
+}
+
+/** 是否为需要「带鉴权取回字节后渲染」的媒体/PDF 类型。 */
+function isMediaKind(kind: PreviewState['kind']): boolean {
+  return kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'pdf'
 }
 
 // Escape 关闭预览（与 ModalDialog 行为一致；经 keydown 栈，仅顶层生效）。
@@ -49,10 +69,25 @@ function onKeydown(e: KeyboardEvent) {
 useKeydownStack(onKeydown, computed(() => !!props.preview))
 onBeforeUnmount(() => {
   cancelFetch()
+  releaseMediaUrl()
 })
+
+/** 附件下载：带 Bearer 经代理取回后落盘；失败只提示，不把错误体当文件保存。 */
+async function downloadPreview(key: string) {
+  try {
+    await downloadProxyObject(
+      { accountId: props.accountId, bucket: props.bucket, key, apiBase: api.base, token: api.token },
+      key.split('/').pop() || 'object',
+    )
+  } catch (err) {
+    toast(tf('preview.downloadFail', { msg: toErrorMessage(err) }), 'err')
+  }
+}
 
 watch(() => props.preview, async (p) => {
   cancelFetch()
+  releaseMediaUrl()
+  mediaError.value = ''
   if (!p) {
     text.value = ''
     truncated.value = false
@@ -66,18 +101,44 @@ watch(() => props.preview, async (p) => {
     fetchCtrl = ctrl
     loading.value = true
     try {
-      const res = await fetch(proxyUrl(props.accountId, props.bucket, 'text', p.key, api.base), {
-        headers: api.token ? { Authorization: `Bearer ${api.token}` } : {},
+      const res = await fetchProxy({
+        accountId: props.accountId,
+        bucket: props.bucket,
+        mode: 'text',
+        key: p.key,
+        apiBase: api.base,
+        token: api.token,
         signal: ctrl.signal,
       })
       if (fetchCtrl !== ctrl) return
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
       text.value = await res.text()
       if (fetchCtrl !== ctrl) return
       truncated.value = res.headers.get('X-Preview-Truncated') === '1'
     } catch (err) {
       if (ctrl.signal.aborted || fetchCtrl !== ctrl) return
       text.value = tf('preview.fail', { msg: toErrorMessage(err) })
+    } finally {
+      if (fetchCtrl === ctrl) loading.value = false
+    }
+  } else if (isMediaKind(p.kind)) {
+    const ctrl = new AbortController()
+    fetchCtrl = ctrl
+    loading.value = true
+    try {
+      const blob = await fetchProxyBlob({
+        accountId: props.accountId,
+        bucket: props.bucket,
+        mode: 'inline',
+        key: p.key,
+        apiBase: api.base,
+        token: api.token,
+        signal: ctrl.signal,
+      })
+      if (fetchCtrl !== ctrl) return
+      mediaUrl.value = URL.createObjectURL(blob)
+    } catch (err) {
+      if (ctrl.signal.aborted || fetchCtrl !== ctrl) return
+      mediaError.value = toErrorMessage(err)
     } finally {
       if (fetchCtrl === ctrl) loading.value = false
     }
@@ -93,26 +154,31 @@ watch(() => props.preview, async (p) => {
           <div class="pv-head">
             <span class="mono" style="word-break:break-all">{{ preview.key }}</span>
             <div class="pv-actions">
-              <a :href="proxyUrl(props.accountId, props.bucket, 'download', preview.key, api.base)" class="btn secondary sm" style="text-decoration:none">{{ t('common.download') }}</a>
+              <button class="btn secondary sm" @click="downloadPreview(preview.key)">{{ t('common.download') }}</button>
               <button class="btn secondary sm" @click="emit('close')">{{ t('common.close') }}</button>
             </div>
           </div>
           <div class="pv-body">
-            <!-- 图片（含 SVG）：img 上下文脚本不执行 -->
-            <img v-if="preview.kind === 'image'" :src="preview.url" :alt="preview.key" @error="emit('close')" />
-            <!-- 视频/音频：原生播放器（服务端代理支持 Range 拖动） -->
-            <video v-else-if="preview.kind === 'video'" :src="preview.url" controls class="pv-media" />
-            <audio v-else-if="preview.kind === 'audio'" :src="preview.url" controls class="pv-audio" />
-            <!-- PDF：sandbox iframe，禁脚本/弹窗 -->
-            <iframe v-else-if="preview.kind === 'pdf'" :src="preview.url" sandbox="" class="pv-iframe" :title="t('preview.pdfTitle')" />
             <!-- 文本/代码：服务端强制纯文本，前端转义渲染 -->
-            <div v-else-if="preview.kind === 'text'" class="pv-text-wrap">
+            <div v-if="preview.kind === 'text'" class="pv-text-wrap">
               <pre class="pv-pre" v-if="!loading">{{ text }}</pre>
               <div v-else class="empty" style="padding:30px">{{ t('preview.loadingText') }}</div>
               <div v-if="truncated" class="badge" style="color:var(--warn)">
                 {{ t('preview.truncated') }}
               </div>
             </div>
+            <!-- 图片/PDF/媒体：带 Bearer 取回字节后以 objectURL 渲染 -->
+            <template v-else-if="isMediaKind(preview.kind)">
+              <div v-if="mediaError" class="empty">{{ tf('preview.fail', { msg: mediaError }) }}</div>
+              <div v-else-if="loading" class="empty" style="padding:30px">{{ t('preview.loadingText') }}</div>
+              <!-- 图片（含 SVG）：img 上下文脚本不执行 -->
+              <img v-else-if="preview.kind === 'image'" :src="mediaUrl" :alt="preview.key" @error="emit('close')" />
+              <!-- 视频/音频：原生播放器（服务端代理支持 Range 拖动） -->
+              <video v-else-if="preview.kind === 'video'" :src="mediaUrl" controls class="pv-media" />
+              <audio v-else-if="preview.kind === 'audio'" :src="mediaUrl" controls class="pv-audio" />
+              <!-- PDF：sandbox iframe，禁脚本/弹窗 -->
+              <iframe v-else :src="mediaUrl" sandbox="" class="pv-iframe" :title="t('preview.pdfTitle')" />
+            </template>
             <!-- 未知类型 -->
             <div v-else class="empty">
               <span class="empty-icon" aria-hidden="true">📄</span>

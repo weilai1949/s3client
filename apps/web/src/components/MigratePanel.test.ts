@@ -59,9 +59,9 @@ const acc1: Account = {
 }
 const acc2: Account = { ...acc1, id: 'acc-2', name: 'acc-two', bucket: 'dst-bucket' }
 
-const objA: ObjectItem = { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', contentType: 'text/plain', isDir: false }
-const objB: ObjectItem = { key: 'b.bin', size: 20, lastModified: '2024-01-02', etag: 'e2', contentType: '', isDir: false }
-const objDir: ObjectItem = { key: 'dir/', size: 0, lastModified: '', etag: '', contentType: '', isDir: true }
+const objA: ObjectItem = { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false }
+const objB: ObjectItem = { key: 'b.bin', size: 20, lastModified: '2024-01-02', etag: 'e2', isDir: false }
+const objDir: ObjectItem = { key: 'dir/', size: 0, lastModified: '', etag: '', isDir: true }
 
 const ModalDialogStub = {
   name: 'ModalDialog',
@@ -91,7 +91,7 @@ const ROW = ROW_HEIGHT
 
 /** 迁移测试用对象（分页 / 分片场景批量构造）。 */
 function makeObj(key: string): ObjectItem {
-  return { key, size: 1, lastModified: '2024-01-01', etag: 'e', contentType: '', isDir: false }
+  return { key, size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false }
 }
 
 function findButtonStartsWith(w: ReturnType<typeof mount>, prefix: string) {
@@ -708,18 +708,22 @@ describe('MigratePanel', () => {
     expect(w.find('.msg.err').text()).toContain('sse down')
   })
 
-  it('unmount during in-flight migration disconnects subscription', async () => {
+  it('unmount during in-flight migration: 断开订阅且 migrate() 以中止 settle（不悬挂）', async () => {
     const unsub = vi.fn()
     vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j6' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
     vi.mocked(subscribeMigrateEvents).mockReturnValue(unsub)
     const w = mountPanel()
     await flushPromises()
     await w.find('.toolbar input[type="checkbox"]').setValue(true)
-    await findButton(w, 'migrate.start').trigger('click')
+    const run = (w.vm as unknown as MigrateVm).migrate()
     await flushPromises()
     // 仍在途 → unmount 触发 activeUnsub
+    expect(unsub).not.toHaveBeenCalled()
     w.unmount()
+    // 卸载必须让等待中的 Promise 以中止收尾（旧实现 await 永远挂起 = 帧泄漏）
+    await expect(run).resolves.toBeUndefined()
     expect(unsub).toHaveBeenCalledTimes(1)
+    expect((w.vm as unknown as MigrateVm).error).toBe('')
   })
 
   it('account switch watch resets state and reloads', async () => {
@@ -791,10 +795,26 @@ describe('MigratePanel', () => {
     expect(requestTab).toHaveBeenCalledWith('objects')
   })
 
+  it('virtual 行高由 ROW_HEIGHT 绑定到行内样式（防 CSS 字面量 38/42 漂移回归）', async () => {
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: [
+        { key: 'a.dat', size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false },
+        { key: 'b.dat', size: 2, lastModified: '2024-01-01', etag: 'e', isDir: false },
+      ],
+      commonPrefixes: [], isTruncated: false, nextToken: '',
+    })
+    const w = mountPanel()
+    await flushPromises()
+    const row = w.find('.v-row')
+    expect(row.exists()).toBe(true)
+    // 渲染出的行高必须来自虚拟窗口同一个常量（此前 CSS 38px vs ROW_HEIGHT=42 漂移）
+    expect(row.attributes('style')).toContain(`height: ${ROW_HEIGHT}px`)
+  })
+
   it('virtualizes long object lists and scrolls with spacer rows', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
       key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
-      etag: 'e', contentType: '', isDir: false,
+      etag: 'e', isDir: false,
     }))
     vi.mocked(s3api.listObjects).mockReset()
     vi.mocked(s3api.listObjects).mockResolvedValue({
@@ -820,7 +840,7 @@ describe('MigratePanel', () => {
   it('重新列出对象后虚拟窗口回到顶部（不残留旧 scrollTop）', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
       key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
-      etag: 'e', contentType: '', isDir: false,
+      etag: 'e', isDir: false,
     }))
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: many, commonPrefixes: [], isTruncated: false, nextToken: '',

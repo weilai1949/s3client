@@ -14,7 +14,8 @@ import ModalDialog from './ModalDialog.vue'
 import type { BucketItem, JobRecord, ObjectItem } from '../types'
 
 // 大对象列表（listAll 上限 200×1000）走窗口化渲染，避免数十万行直接 v-for 冻结页面。
-// 行高常量与模板 CSS（.tbl-virtual .v-row { height: 42px }）共用同一来源，避免漂移。
+// 行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
+// 此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。
 const scrollEl = ref<HTMLElement | null>(null)
 const scrollTop = ref(0)
 const viewportH = ref(DEFAULT_VIEWPORT_H)
@@ -52,10 +53,8 @@ onBeforeUnmount(() => {
   resizeObs?.disconnect()
   // 组件卸载时若仍有进行中的 SSE 订阅，立即断开（避免后台 goroutine 持续推事件）。
   if (activeUnsub) activeUnsub()
-  if (activeJobId.value) {
-    // 后端 job 不主动取消（用户离开后任务可能仍在 server 端进行；
-    // 短期同步进度由 JobRegistry reap 处理）。
-  }
+  // 后端 job 不主动取消（用户离开后任务可能仍在 server 端进行；
+  // 短期同步进度由 JobRegistry reap 处理）。
 })
 
 const sourceBucket = ref('')
@@ -286,7 +285,7 @@ async function migrate() {
       activeUnsub = undefined
       finalStatus = ''
       await new Promise<void>((resolve, reject) => {
-        unsub = subscribeMigrateEvents(
+        const stopHere = subscribeMigrateEvents(
           jobId,
           (p) => {
             // 多分片：进度按已完成分片数累加，进度条不因切换 job 而回退。
@@ -299,7 +298,16 @@ async function migrate() {
           },
           reject,
         )
-        activeUnsub = unsub
+        /** 卸载路径：断开订阅并以 AbortError 收尾，让等待中的 Promise settle（不悬挂）。
+         * unsub 同步置空：finally 的 `unsub?.()` 不再二次调用 stop。 */
+        const teardown = () => {
+          activeUnsub = undefined
+          unsub = undefined
+          stopHere()
+          reject(new DOMException('Aborted', 'AbortError'))
+        }
+        unsub = stopHere
+        activeUnsub = teardown
       })
       unsub?.()
       unsub = undefined
@@ -331,6 +339,8 @@ async function migrate() {
       toast(tf('migrate.toastOk', { n: migrated }))
     }
   } catch (e) {
+    // 卸载中止（teardown 的 AbortError）：不弹结果框、不写 error，交由 finally 复位
+    if (e instanceof DOMException && e.name === 'AbortError') return
     // 分片失败：不吞掉已完成分片的结果，让用户看到真实的「已迁移 N / 失败 M」。
     if (migrated || failed) {
       resultTargetId.value = targetAccountId.value
@@ -513,7 +523,7 @@ onMounted(async () => {
             <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">
               <td :colspan="3" :style="{ height: windowed.padTop + 'px' }" />
             </tr>
-            <tr v-for="o in windowed.items" :key="o.key" class="v-row" :class="{ selected: selected.has(o.key) }">
+            <tr v-for="o in windowed.items" :key="o.key" class="v-row" :class="{ selected: selected.has(o.key) }" :style="{ height: `${ROW_HEIGHT}px` }">
               <td><input type="checkbox" :aria-label="tf('objects.selectItem', { name: o.key })" :checked="selected.has(o.key)" @change="toggle(o.key)" /></td>
               <td class="mono">{{ o.key }}</td>
               <td class="muted">{{ fmtSize(o.size) }}</td>
@@ -568,6 +578,5 @@ onMounted(async () => {
   max-height: 60vh;
   overflow: auto;
 }
-.tbl-virtual .v-row { height: 38px; }
 .tbl-virtual .v-spacer td { padding: 0; border: 0; }
 </style>

@@ -24,7 +24,9 @@ import (
 // version 由构建时注入（ldflags -X main.version=...）；缺省与发版号对齐，便于本地 go run/build。
 var version = "v1.0.0"
 
-// healthPath 供容器 HEALTHCHECK 使用。
+// healthPath 是 -healthcheck 子命令探测的服务端健康端点，容器 HEALTHCHECK 走该子命令。
+// 必须与 handler 注册的健康路由字面量保持一致：两处是各自硬编码（无共享常量），
+// 一旦漂移，健康检查会永远失败并触发容器无谓重启循环。
 const healthPath = "/api/health"
 
 func main() {
@@ -38,7 +40,9 @@ func main() {
 	os.Exit(runServer(ctx))
 }
 
-// runServer 组装并运行服务；返回进程退出码（0 正常、1 启动失败）。
+// runServer 组装并运行服务；返回进程退出码：0 = 正常优雅关停（信号 / 主动 Stop），
+// 1 = 启动失败或运行期服务错误（端口占用等）。错误终止必须非零，否则 systemd/Docker
+// 的 on-failure 重启策略不会生效，与自述退出码契约矛盾（review §R15a）。
 // 信号/上下文经 ctx 注入，便于测试直接驱动启停。
 func runServer(ctx context.Context) int {
 	cfg := config.FromEnv()
@@ -90,7 +94,7 @@ func runServer(ctx context.Context) int {
 	// 仅信任显式配置的反向代理 IP 的 X-Forwarded-For（默认不信任，防直连伪造绕过限速）。
 	h.SetTrustedProxies(cfg.TrustedProxies)
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
-	// 「复制成功但源未删除」的移动任务（todolist #19）。
+	// 「复制成功但源未删除」的移动任务（KNOWN_ISSUES #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))
 
 	srv := &http.Server{
@@ -107,6 +111,10 @@ func runServer(ctx context.Context) int {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// serveErrCh 容量 1：ListenAndServe 的失败先入 channel 再 cancel()，主流程关停收尾后
+	// 非阻塞读取即可区分「信号优雅关停（0）」与「服务自身出错（非 0）」；channel 通信天然
+	// 建立 happens-before，无需额外同步。
+	serveErrCh := make(chan error, 1)
 	go func() {
 		logger.Info("s3clinet server",
 			"version", version,
@@ -121,6 +129,7 @@ func runServer(ctx context.Context) int {
 		)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "err", err)
+			serveErrCh <- err
 			cancel()
 		}
 	}()
@@ -133,7 +142,13 @@ func runServer(ctx context.Context) int {
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx) // ctx 超时在生产不可达；shutting down 流程已写 INFO。
 	logger.Info("shutdown complete")
-	return 0
+	// goroutine 已记录过 "server error"；此处只决定退出码，不重复刷日志。
+	select {
+	case <-serveErrCh:
+		return 1
+	default:
+		return 0
+	}
 }
 func parseLevel(s string) slog.Level {
 	switch s {
@@ -148,10 +163,17 @@ func parseLevel(s string) slog.Level {
 	}
 }
 
-// runHealthcheck 探测自身健康端点，用于容器 HEALTHCHECK。
+// runHealthcheck 探测自身健康端点，用于容器 HEALTHCHECK（-healthcheck 子命令）：
+// GET http://<host>:<port>/healthPath，3 秒超时；200 → 0，连接失败 / 非 200 → 1。
+//
+// 地址取 S3C_ADDR：通配 host（如 ":8080"，服务绑全接口）时探测回退 127.0.0.1——回环上
+// 同一端口必可达，避免把探测打到外部网卡地址。SplitHostPort 失败（地址缺端口，如
+// "no-port-in-here"）时 host 与 port 均为空串：host 置 127.0.0.1、port 为空拼出
+// "http://127.0.0.1:/api/health"，按 http 方案默认 80 端口连接，几乎必然失败返回 1。
+// 这是刻意的 fail-closed：同一非法地址下服务端自身也无法监听（missing port），
+// 错误配置必须由健康检查暴露，而不是假装健康。
 func runHealthcheck() int {
 	addr := config.FromEnv().Addr
-	// net.SplitHostPort 对 "host:port" 格式失败时回退到 127.0.0.1:8080——主路径不会触发。
 	host, port, _ := net.SplitHostPort(addr)
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		host = "127.0.0.1"

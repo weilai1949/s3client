@@ -72,10 +72,18 @@ type Request struct {
 
 // Response 描述单个响应。
 // Ref 非空时输出为 {"$ref": "#/components/responses/<name>"}（复用共享响应，如 NotFound）。
+// JSON / Ref 带 `json:"-"`：结构体默认序列化会把二者静默丢弃，让 components.responses 里的
+// 共享响应变成无 schema 空壳（review §R15b），因此必须自定义 MarshalJSON，与端点级渲染同形。
 type Response struct {
 	Description string  `json:"description,omitempty"`
 	JSON        *Schema `json:"-"`
 	Ref         string  `json:"-"`
+}
+
+// MarshalJSON 输出 OpenAPI Response Object（$ref 或 description+content），
+// 形状由 renderResponse 统一负责（与端点级 responses 共用，防止两处漂移）。
+func (r Response) MarshalJSON() ([]byte, error) {
+	return json.Marshal(renderResponse(r))
 }
 
 // Op 单个操作的元数据。
@@ -290,20 +298,25 @@ func renderResponses(rs map[string]Response) map[string]any {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		r := rs[k]
-		if r.Ref != "" {
-			out[k] = map[string]any{"$ref": r.Ref}
-			continue
-		}
-		entry := map[string]any{"description": r.Description}
-		if r.JSON != nil {
-			entry["content"] = map[string]any{
-				"application/json": map[string]any{"schema": r.JSON},
-			}
-		}
-		out[k] = entry
+		out[k] = renderResponse(rs[k])
 	}
 	return out
+}
+
+// renderResponse 渲染单个响应条目：$ref 优先（复用共享响应），否则 description + 可选
+// JSON schema。components.responses（经 Response.MarshalJSON）与端点级 responses 共用
+// 此函数——两处输出必须同形，否则契约 SSOT 会漂移（review §R15b）。
+func renderResponse(r Response) map[string]any {
+	if r.Ref != "" {
+		return map[string]any{"$ref": r.Ref}
+	}
+	entry := map[string]any{"description": r.Description}
+	if r.JSON != nil {
+		entry["content"] = map[string]any{
+			"application/json": map[string]any{"schema": r.JSON},
+		}
+	}
+	return entry
 }
 
 // HTTPHandler 返回一个 http.Handler，吐出当前 Registry 的 JSON 快照。
@@ -413,7 +426,6 @@ func sharedSchemas() map[string]*Schema {
 			"size":         Int64(),
 			"lastModified": Str("date-time"),
 			"etag":         Str(),
-			"contentType":  Str(),
 			"storageClass": Str(),
 			"isDir":        Bool(),
 		}, "key", "size", "lastModified", "isDir"),

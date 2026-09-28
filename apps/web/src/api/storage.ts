@@ -278,12 +278,21 @@ function readActiveServerId(): string {
 
 /** 当前 API base（去掉尾部斜杠）；未设置时回退到默认（Tauri → 本地后端）。 */
 export function getBase(): string {
-  const stored = localStorage.getItem(LS_BASE)
-  return (stored !== null ? stored : defaultBase()).replace(/\/+$/, '')
+  try {
+    const stored = localStorage.getItem(LS_BASE)
+    return (stored !== null ? stored : defaultBase()).replace(/\/+$/, '')
+  } catch {
+    // localStorage 不可用（隐私模式/配额/损坏）：回退默认，与模块其余读取路径的降级策略一致。
+    return defaultBase()
+  }
 }
 
 export function setBase(v: string) {
-  localStorage.setItem(LS_BASE, v.replace(/\/+$/, ''))
+  try {
+    localStorage.setItem(LS_BASE, v.replace(/\/+$/, ''))
+  } catch {
+    /* 写失败静默降级：base 只影响本次会话，不阻断用户操作 */
+  }
 }
 
 /** 切换「跨会话保留」：开启时把 token 同时落到 localStorage；关闭时清除 localStorage 副本。 */
@@ -296,6 +305,42 @@ export function setTokenPersistent(enabled: boolean) {
     /* ignore */
   }
   writeToken(current)
+  syncServerTokens(enabled)
+}
+
+/**
+ * 「跨会话保留」开关同时作用于 per-server token（`s3c.token.<id>`）：
+ * - 开启：把 sessionStorage 里已有的各服务器 token 副本落到 localStorage（空值跳过），
+ *   否则开关打开前登录的服务器重启后 token 丢失；
+ * - 关闭：清掉 localStorage 里**所有** `s3c.token.*` 残留（含 session 已清、仅剩
+ *   localStorage 副本的场景），sessionStorage 里的 token 不受影响。
+ * 读键或写入抛异常时逐处吞掉，不打断开关本身。
+ */
+function syncServerTokens(enabled: boolean) {
+  const prefix = `${LS_TOKEN}.`
+  const src = enabled ? sessionStorage : localStorage
+  let keys: string[]
+  try {
+    keys = []
+    for (let i = 0; i < src.length; i++) {
+      const k = src.key(i)
+      if (k && k.startsWith(prefix)) keys.push(k)
+    }
+  } catch {
+    return
+  }
+  for (const k of keys) {
+    try {
+      if (enabled) {
+        const v = sessionStorage.getItem(k)
+        if (v) localStorage.setItem(k, v)
+      } else {
+        localStorage.removeItem(k)
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function listServers(): ServerProfile[] {

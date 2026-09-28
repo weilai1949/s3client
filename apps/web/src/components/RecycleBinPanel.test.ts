@@ -1,12 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import RecycleBinPanel from './RecycleBinPanel.vue'
 import { s3api } from '../api'
 import { state, toast, selectAccount, rememberedAccountId } from '../store'
 import { confirmDialog } from '../confirm'
+import { ROW_HEIGHT } from '../virtualList'
 import type { Account } from '../types'
 
 type ListTrashResult = Awaited<ReturnType<typeof s3api.listTrash>>
+
+// happy-dom 也提供 ResizeObserver，但统一用可控 stub 保证 clientHeight=0 → viewportH=480
+class RO {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+vi.stubGlobal('ResizeObserver', RO)
 
 vi.mock('../api', () => ({
   s3api: {
@@ -70,6 +80,15 @@ function page(
   nextVersionIdMarker = '',
 ): { deleteMarkers: TrashMarker[]; isTruncated: boolean; nextKeyMarker: string; nextVersionIdMarker: string } {
   return { deleteMarkers: markers, isTruncated, nextKeyMarker, nextVersionIdMarker }
+}
+
+function manyMarkers(n: number): TrashMarker[] {
+  return Array.from({ length: n }, (_, i) => ({
+    key: `mk${String(i).padStart(2, '0')}`,
+    versionId: `v${i}`,
+    isLatest: true,
+    lastModified: '2024-01-01T00:00:00Z',
+  }))
 }
 
 function mountPanel() {
@@ -375,5 +394,114 @@ describe('RecycleBinPanel', () => {
     expect(confirmDialog).not.toHaveBeenCalled()
     expect(s3api.restoreDeleteMarker).not.toHaveBeenCalled()
     expect(s3api.purgeTrashObject).not.toHaveBeenCalled()
+  })
+
+  it('virtual 行高由 ROW_HEIGHT 绑定到行内样式（防 CSS 字面量 38/42 漂移回归）', async () => {
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    vi.mocked(s3api.listTrash).mockResolvedValue(page([m1, m2]))
+    const w = mountPanel()
+    await flushPromises()
+    const row = w.find('tbody tr.v-row')
+    expect(row.exists()).toBe(true)
+    // 渲染行高必须来自虚拟窗口同一常量（此前 CSS 字面量 38 vs ROW_HEIGHT=42 漂移）
+    expect(row.attributes('style')).toContain(`height: ${ROW_HEIGHT}px`)
+  })
+
+  it('virtualizes long marker lists：只渲染窗口行 + spacer，滚动后 padTop 出现且首行正确', async () => {
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    vi.mocked(s3api.listTrash).mockResolvedValue(page(manyMarkers(50)))
+    const w = mountPanel()
+    await flushPromises()
+    // viewportH=480 → ceil(480/ROW_HEIGHT)+24 = 36 行窗口
+    expect(w.findAll('tbody tr.v-row')).toHaveLength(36)
+    expect(w.findAll('tbody tr.v-spacer')).toHaveLength(1) // 初始仅 padBottom（50-36 行）
+    const wrap = w.find('.tbl-wrap')
+    // 「加载更多」工具条留在滚动容器之外（不受滚动影响）
+    expect(wrap.element.contains(findButton(w, 'common.more').element)).toBe(false)
+    ;(wrap.element as HTMLElement).scrollTop = ROW_HEIGHT * 30
+    await wrap.trigger('scroll')
+    await nextTick()
+    // 滚动后 padTop 出现（18*42=756px），首行是第 18 条
+    const spacer = w.find('tbody tr.v-spacer')
+    expect(spacer.exists()).toBe(true)
+    expect(spacer.find('td').attributes('style')).toContain('756px')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('mk18')
+  })
+
+  it('切换桶后虚拟窗口回到顶部（不残留旧 scrollTop）', async () => {
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1, b2] })
+    vi.mocked(s3api.listTrash).mockImplementation(async (_id, opts) =>
+      opts.bucket === 'b1' ? page(manyMarkers(50)) : page([m1, m2]),
+    )
+    const w = mountPanel()
+    await flushPromises()
+    const wrap = w.find('.tbl-wrap')
+    ;(wrap.element as HTMLElement).scrollTop = ROW_HEIGHT * 30
+    await wrap.trigger('scroll')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('mk18')
+
+    // 切到只有 2 条标记的桶：窗口必须从头渲染，不能残留 start=18 的空窗口
+    await w.findAll('select.acc-select')[1].setValue('b2')
+    await flushPromises()
+    const rows = w.findAll('tbody tr.v-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text()).toContain('k1')
+    // 真实 DOM 滚动位置同步归零，避免下一次滚动事件把陈旧偏移写回
+    expect((w.find('.tbl-wrap').element as HTMLElement).scrollTop).toBe(0)
+  })
+
+  it('scrollEl 未绑定时空安全早退；容器缺席/出现时数据重置与视口测量都正确', async () => {
+    // 空标记列表 → 表格不渲染（scrollEl 为 null）
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    let w = mountPanel()
+    await flushPromises()
+    expect(w.find('.tbl-wrap').exists()).toBe(false)
+    const idle = w.vm as unknown as { onListScroll: () => void; measureViewport: () => void; viewportH: number }
+    idle.onListScroll()
+    idle.measureViewport()
+    expect(idle.viewportH).toBe(480)
+    // 空态点刷新：markers 重置触发归零，但无滚动容器 → 守卫不抛错
+    await findButton(w, 'common.refresh').trigger('click')
+    await flushPromises()
+    expect(w.text()).toContain('trash.emptyHint')
+    w.unmount()
+
+    // 表格渲染后 measureViewport 取实测 clientHeight（非 0 时不走 480 兜底）
+    vi.mocked(s3api.listTrash).mockResolvedValue(page(manyMarkers(5)))
+    w = mountPanel()
+    await flushPromises()
+    const vm = w.vm as unknown as { measureViewport: () => void; viewportH: number }
+    Object.defineProperty(w.find('.tbl-wrap').element, 'clientHeight', { value: 600, configurable: true })
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(600)
+  })
+
+  it('环境无 ResizeObserver 时列表仍正常渲染（不注册观察者）', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    try {
+      vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+      vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+      vi.mocked(s3api.listTrash).mockResolvedValue(page(manyMarkers(3)))
+      const w = mountPanel()
+      await flushPromises()
+      expect(w.findAll('tbody tr.v-row')).toHaveLength(3)
+      expect(() => w.unmount()).not.toThrow()
+    } finally {
+      vi.stubGlobal('ResizeObserver', RO)
+    }
+  })
+
+  it('unmount 时安全断开 ResizeObserver（onBeforeUnmount 分支）', async () => {
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    vi.mocked(s3api.listTrash).mockResolvedValue(page(manyMarkers(3)))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.tbl-wrap').exists()).toBe(true)
+    expect(() => w.unmount()).not.toThrow()
   })
 })

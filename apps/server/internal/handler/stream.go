@@ -45,7 +45,7 @@ func beginStreamResponse(w http.ResponseWriter) {
 //
 // 返回本次复制的字节数与错误。错误不再被丢弃：此前 `_, _ = io.Copy(...)` 会把
 // 「上游读中断 / 写超时 / 客户端断开」一律吞掉，大文件下载失败在日志与指标里不留
-// 任何痕迹（todolist #20 / ASSESSMENT S2）。
+// 任何痕迹（KNOWN_ISSUES #20 / ASSESSMENT S2）。
 //
 // 客户端主动断开（ctx.Err() != nil）属正常路径，由调用方降噪处理，不计入中断指标。
 func copyStream(w http.ResponseWriter, r *http.Request, src io.Reader) (int64, error) {
@@ -58,7 +58,7 @@ func copyStream(w http.ResponseWriter, r *http.Request, src io.Reader) (int64, e
 //
 // 响应头已发出，无法再改状态码，因此这里只做观测：真实中断计入
 // s3c_stream_interrupted_total 并 Warn；客户端主动断开（ctx 已取消）属正常路径，
-// 仅 Debug，避免用户取消下载就刷出告警（todolist #20）。
+// 仅 Debug，避免用户取消下载就刷出告警（KNOWN_ISSUES #20）。
 func (h *Handler) recordStreamOutcome(ctx context.Context, bucket, key string, n int64, err error) {
 	if n > 0 {
 		// 成功读出的字节数计入上游流字节指标（已闭环：features.md §M）；即使随后写失败也反映已读量。

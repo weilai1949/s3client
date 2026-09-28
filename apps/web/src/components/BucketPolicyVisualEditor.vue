@@ -20,12 +20,28 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update', json: string): void
-  (e: 'error', msg: string): void
 }>()
 
 const mode = ref<'visual' | 'json'>('visual')
 
-const doc = ref<PolicyDoc>({ Version: '2012-10-17', Statement: [] })
+/** 可视化语句行 = 领域模型 + 前端生成的稳定行键（v-for key；不参与序列化，不进策略 JSON）。 */
+type StatementRow = PolicyStatement & { rowKey: string }
+
+interface EditorDoc {
+  Version: '2012-10-17'
+  Statement: StatementRow[]
+}
+
+/** 行稳定键：组件内自增序列（同一实例的 v-for 内唯一；不用会碰撞的业务字段 Sid）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
+
+/** parsePolicy / 模板产出的 doc → 编辑态 doc（补齐稳定行键；序列化结果不受影响）。 */
+function toEditorDoc(d: PolicyDoc): EditorDoc {
+  return { ...d, Statement: d.Statement.map((s) => ({ ...s, rowKey: newRowKey() })) }
+}
+
+const doc = ref<EditorDoc>({ Version: '2012-10-17', Statement: [] })
 const parseError = ref(false)
 const dirty = ref(false)
 
@@ -43,7 +59,7 @@ watch(
     const parsed = parsePolicy(raw)
     if (parsed) {
       // 仅当解析结果与当前 doc 不同步（内容真正不同）时才重解析。
-      if (serializePolicy(doc.value) !== serializePolicy(parsed)) doc.value = parsed
+      if (serializePolicy(doc.value) !== serializePolicy(parsed)) doc.value = toEditorDoc(parsed)
       parseError.value = false
       dirty.value = false
     } else {
@@ -70,7 +86,7 @@ const previewJSON = computed(() => {
  * 单向同步核心：doc 变化（用户编辑）→ 设 dirty + emit update。
  * 与 raw watcher（外部 raw → 解析 doc 并清 dirty）互不覆盖，避免 watcher 级联。
  */
-function commitEdit(next: PolicyDoc) {
+function commitEdit(next: EditorDoc) {
   doc.value = next
   dirty.value = true
   emit('update', previewJSON.value)
@@ -79,7 +95,7 @@ function commitEdit(next: PolicyDoc) {
 function applyTemplate(id: string) {
   const tpl = POLICY_TEMPLATES.find((x) => x.id === id)
   if (!tpl) return
-  commitEdit(tpl.build(props.bucket))
+  commitEdit(toEditorDoc(tpl.build(props.bucket)))
 }
 
 function addStatement() {
@@ -93,6 +109,7 @@ function addStatement() {
         principal: '*',
         actions: ['s3:GetObject'],
         resources: [`arn:aws:s3:::${props.bucket}/*`],
+        rowKey: newRowKey(),
       },
     ],
   })
@@ -188,7 +205,7 @@ function templateLabel(tpl: { label: string }): string {
           </button>
         </fieldset>
 
-        <div v-for="(s, i) in doc.Statement" :key="i" class="stmt-card" :data-testid="`policy-stmt-${i}`">
+        <div v-for="(s, i) in doc.Statement" :key="s.rowKey" class="stmt-card" :data-testid="`policy-stmt-${i}`">
           <div class="row stmt-head">
             <strong>{{ tf('policy.statementN', { n: i + 1 }) }}</strong>
             <button class="btn sm danger" type="button" @click="removeStatement(i)">

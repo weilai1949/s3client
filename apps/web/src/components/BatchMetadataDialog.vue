@@ -2,7 +2,6 @@
 import { computed, reactive, ref } from 'vue'
 
 import { batchSetMetadata, type BatchMetaError } from '../batchMetadata'
-import { s3api } from '../api'
 import { toErrorMessage } from '../errors'
 import ModalDialog from './ModalDialog.vue'
 import { toast } from '../store'
@@ -31,7 +30,11 @@ const acl = ref<'private' | 'public-read' | 'public-read-write'>('private')
 
 const applyTags = ref(false)
 const tagsMode = ref<'replace' | 'clear' | 'none'>('none')
-const tags = ref<{ key: string; value: string }[]>([])
+const tags = ref<{ rowKey: string; key: string; value: string }[]>([])
+
+/** 标签行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
 
 // storageClass 选项来自 HEAD 当前桶内一个样本对象的可能值；前端不强校验，
 // 后端 changeStorageClass 已对非法值返 400。
@@ -65,7 +68,7 @@ function warnToast(msg: string): void {
 }
 
 function addTagRow() {
-  tags.value.push({ key: '', value: '' })
+  tags.value.push({ rowKey: newRowKey(), key: '', value: '' })
 }
 function removeTagRow(i: number) {
   const next = tags.value.slice()
@@ -100,10 +103,12 @@ async function onConfirm() {
   progress.total = props.keys.length
 
   // 构造输入：tags 仅在「replace」模式注入；「clear」传空数组；「none」不传。
+  // rowKey 是前端行键，只用于 v-for，不进请求体（显式挑出 key/value 两字段）。
   let tagsArg: { key: string; value: string }[] | undefined
   if (applyTags.value) {
-    if (tagsMode.value === 'replace') tagsArg = tags.value.filter((tg) => tg.key)
-    else if (tagsMode.value === 'clear') tagsArg = []
+    if (tagsMode.value === 'replace') {
+      tagsArg = tags.value.filter((tg) => tg.key).map((tg) => ({ key: tg.key, value: tg.value }))
+    } else if (tagsMode.value === 'clear') tagsArg = []
   }
 
   try {
@@ -141,9 +146,6 @@ async function onConfirm() {
     running.value = false
   }
 }
-
-// 静默导入以避免 lint 报「未使用」（保留扩展点：未来若需按桶探测可用存储类型）。
-void s3api
 </script>
 
 <template>
@@ -179,7 +181,7 @@ void s3api
         <option value="clear">{{ t('batchEdit.tagsClear') }}</option>
       </select>
       <div v-if="applyTags && tagsMode === 'replace'" style="margin-top:8px">
-        <div v-for="(tg, i) in tags" :key="i" class="tag-row">
+        <div v-for="(tg, i) in tags" :key="tg.rowKey" class="tag-row">
           <label class="sr-only" :for="'batch-tag-key-' + i">{{ t('batchEdit.tagKey') }}</label>
           <input :id="'batch-tag-key-' + i" v-model="tg.key" type="text" :placeholder="t('batchEdit.tagKey')" />
           <label class="sr-only" :for="'batch-tag-val-' + i">{{ t('batchEdit.tagValue') }}</label>

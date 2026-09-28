@@ -1,9 +1,15 @@
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { UPLOAD_CONCURRENCY, useUploadQueue } from './useUploadQueue'
+import { useUploadQueue } from './useUploadQueue'
 import type { UploadQueueItem, UploadQueueOptions } from './useUploadQueue'
 import { uploadObject } from '../upload'
+
+/**
+ * 直传并发上限（产品约定 2，见 useUploadQueue 注释）。
+ * 字面量写死在测试侧、不从实现导入：实现改了并发数而测试没改，这里就会红灯。
+ */
+const MAX_CONCURRENCY = 2
 
 vi.mock('../upload', () => ({ uploadObject: vi.fn() }))
 
@@ -51,11 +57,11 @@ describe('useUploadQueue 共享状态机', () => {
   it('cancel 策略：取消等待中的条目直接跳过（不发起请求、不占用并发位），cancelled 保持终态', async () => {
     const q = mountQueue() // 默认 cancel 策略 + drain（对象面板语义）
     // 并发位之外再多排 2 条：1 条待取消、1 条正常等待
-    const items = enqueue(q, Array.from({ length: UPLOAD_CONCURRENCY + 2 }, (_, i) => `f${i}.txt`))
+    const items = enqueue(q, Array.from({ length: MAX_CONCURRENCY + 2 }, (_, i) => `f${i}.txt`))
     const run = q.run()
-    await vi.waitFor(() => expect(inFlight.length).toBe(UPLOAD_CONCURRENCY))
+    await vi.waitFor(() => expect(inFlight.length).toBe(MAX_CONCURRENCY))
 
-    const cancelled = items[UPLOAD_CONCURRENCY]
+    const cancelled = items[MAX_CONCURRENCY]
     q.abortItem(cancelled)
     expect(cancelled.status).toBe('cancelled')
 
@@ -65,9 +71,9 @@ describe('useUploadQueue 共享状态机', () => {
     inFlight[0].resolve()
     await run
 
-    expect(uploadObject).toHaveBeenCalledTimes(UPLOAD_CONCURRENCY + 1)
+    expect(uploadObject).toHaveBeenCalledTimes(MAX_CONCURRENCY + 1)
     expect(cancelled.status).toBe('cancelled')
-    expect(q.items.value.filter((it) => it.status === 'done').length).toBe(UPLOAD_CONCURRENCY + 1)
+    expect(q.items.value.filter((it) => it.status === 'done').length).toBe(MAX_CONCURRENCY + 1)
   })
 
   it('requeue 策略（上传面板语义）：中止在途条目回 pending，可再次上传到 done', async () => {
@@ -92,14 +98,51 @@ describe('useUploadQueue 共享状态机', () => {
     expect(processed.map((it) => it.key)).toContain('a.txt')
   })
 
-  it('enqueue skips directory placeholders (size=0, type="")', () => {
+  it('requeue 策略：取消已入批未开始（pending）条目标 cancelled 终态，不再被后台上传', async () => {
+    const q = mountQueue({ onAbort: 'requeue', drain: false })
+    const items = enqueue(q, Array.from({ length: MAX_CONCURRENCY + 1 }, (_, i) => `f${i}.txt`))
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(MAX_CONCURRENCY))
+
+    const queued = items[MAX_CONCURRENCY]
+    expect(queued.status).toBe('pending') // 已入批、未轮到并发位
+    q.abortItem(queued)
+    expect(queued.status).toBe('cancelled') // requeue 只豁免在途条目；未开始的取消 = 终态
+
+    inFlight.splice(0).forEach((f) => f.resolve())
+    await run
+    // 被取消的那条从未发起上传（批次快照持有它，靠 cancelled 终态挡住）
+    expect(uploadObject).toHaveBeenCalledTimes(MAX_CONCURRENCY)
+    expect(queued.status).toBe('cancelled')
+  })
+
+  it('abortAll 中止运行中的队列：批内剩余 pending 不再被后台捞起（清空/切走后不残留）', async () => {
+    const q = mountQueue({ onAbort: 'requeue' }) // 对象面板式 drain：单批 + 继续吸收
+    const items = enqueue(q, Array.from({ length: MAX_CONCURRENCY + 2 }, (_, i) => `f${i}.txt`))
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(MAX_CONCURRENCY))
+
+    q.abortAll()
+    inFlight.splice(0).forEach((f) => f.reject(new DOMException('Aborted', 'AbortError')))
+    await new Promise((r) => setTimeout(r, 10)) // 让 worker 的 catch 与后续取件全部走完
+
+    // 只有最初两条发起过上传：剩余 pending 被停住，不在后台续传
+    expect(uploadObject).toHaveBeenCalledTimes(MAX_CONCURRENCY)
+    await run
+    expect(q.running.value).toBe(false)
+    // requeue 语义：在途两条中止后回 pending，未开始的保持 pending，全部可再次上传
+    expect(items.every((it) => it.status === 'pending')).toBe(true)
+  })
+
+  it('enqueue 入队 0 字节无 MIME 的空文件（不得当目录占位丢弃）', () => {
     const q = mountQueue()
-    const dirFile = new File([''], '', { type: '' })
+    const emptyFile = new File([''], '', { type: '' })
     const normalFile = new File(['x'], 'a.txt', { type: 'text/plain' })
-    const fileList = [dirFile, normalFile] as unknown as FileList
+    const fileList = [emptyFile, normalFile] as unknown as FileList
     q.enqueue(fileList)
-    expect(q.items.value.length).toBe(1)
-    expect(q.items.value[0].file.name).toBe('a.txt')
+    expect(q.items.value.length).toBe(2)
+    expect(q.items.value[0].file.name).toBe('')
+    expect(q.items.value[1].file.name).toBe('a.txt')
   })
 
   it('abortAll aborts all in-flight items', async () => {

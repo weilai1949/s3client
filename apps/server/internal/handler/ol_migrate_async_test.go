@@ -84,7 +84,10 @@ func TestOlMigrateJobCancelAndStatus(t *testing.T) {
 	// 运行中取消 → cancelled:true
 	_, jcancel := context.WithCancel(context.Background())
 	defer jcancel()
-	job := env.hnd.migrateJobs.Create(1, jcancel)
+	job, err := env.hnd.migrateJobs.TryCreate(1, jcancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 	rr = env.accDoRec("POST", "/api/migrate/jobs/"+job.ID+"/cancel", "")
 	olExpectStatus(t, rr, http.StatusOK, "cancel running")
 	var m map[string]any
@@ -121,7 +124,10 @@ func TestOlMigrateJobsListUsesFailedKeys(t *testing.T) {
 
 	_, jcancel := context.WithCancel(context.Background())
 	defer jcancel()
-	job := env.hnd.migrateJobs.Create(1, jcancel)
+	job, err := env.hnd.migrateJobs.TryCreate(1, jcancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 	job.Finish(migrateJobResult(), "done")
 
 	rr := env.accDoRec("GET", "/api/migrate/jobs", "")
@@ -146,7 +152,7 @@ func TestOlMigrateJobsListUsesFailedKeys(t *testing.T) {
 
 // migrateJobResult 带失败信息的终态结果。
 func migrateJobResult() service.JobResult {
-	return service.JobResult{Failed: 1, LastError: "boom", FailKeys: []string{"k"}}
+	return service.JobResult{Failed: 1, FirstError: "boom", FailKeys: []string{"k"}}
 }
 
 // TestOlMigrateEventsValidation SSE 订阅：404 / 非流式 writer / 写失败。
@@ -164,7 +170,10 @@ func TestOlMigrateEventsValidation(t *testing.T) {
 	// 非流式 writer（无 Flusher）→ 500
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	job := env.hnd.migrateJobs.Create(1, cancel)
+	job, err := env.hnd.migrateJobs.TryCreate(1, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 	defer job.Finish(migrateJobResult(), "done")
 	req = httptest.NewRequest("GET", "/x", nil)
 	req.SetPathValue("id", job.ID)
@@ -298,7 +307,10 @@ func TestOlMigrateEventsWriteErrStages(t *testing.T) {
 	// 初始事件共 3 次写：data 头 / 负载 / 尾换行；第 2、3 次 Writer 失败 → 对应错误分支
 	for _, at := range []int{2, 3} {
 		_, cancel := context.WithCancel(context.Background())
-		job := env.hnd.migrateJobs.Create(1, cancel)
+		job, err := env.hnd.migrateJobs.TryCreate(1, cancel)
+		if err != nil {
+			t.Fatalf("注册测试任务: %v", err)
+		}
 		w := &olFailAtW{rr: httptest.NewRecorder(), at: at}
 		req := httptest.NewRequest(http.MethodGet, "/x", nil)
 		req.SetPathValue("id", job.ID)

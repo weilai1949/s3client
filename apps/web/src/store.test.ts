@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProgressToast, toasts, requestTab, tabRequest, requestAccountForm, accountFormRequest, currentAccount, selectAccount, rememberedAccountId, toast, updateToast, dismissToast, state } from './store'
+import { createProgressToast, toasts, requestTab, tabRequest, requestAccountForm, accountFormRequest, currentAccount, selectAccount, rememberedAccountId, toast, dismissToast, state } from './store'
 import type { Account } from './types'
 
 describe('createProgressToast（SSE 进度节流）', () => {
@@ -18,7 +18,7 @@ describe('createProgressToast（SSE 进度节流）', () => {
     expect(toasts[0].text).toBe('1/10')
   })
 
-  it('窗口过后就地更新同一条 toast，而不是新发一条', () => {
+  it('窗口过后就地更新同一条 toast，而不是新发一条（私有 updateToast 的「命中已有 id → 就地改文本」路径）', () => {
     const progress = createProgressToast()
     progress('1/10')
     const firstId = toasts[0].id
@@ -29,7 +29,7 @@ describe('createProgressToast（SSE 进度节流）', () => {
     expect(toasts[0].text).toBe('2/10')
   })
 
-  it('toast 已自动消失后再次触发会发出新的一条', () => {
+  it('toast 已自动消失后再次触发会发出新的一条（私有 updateToast 的「id 不存在 → 不碰旧栈」路径）', () => {
     const progress = createProgressToast()
     progress('1/10')
     const firstId = toasts[0].id
@@ -167,23 +167,6 @@ describe('toast', () => {
     const action = { label: 'View', onClick: vi.fn() }
     toast('err', 'err', action)
     expect(toasts[toasts.length - 1].action).toStrictEqual(action)
-  })
-})
-
-describe('updateToast', () => {
-  beforeEach(() => {
-    toasts.splice(0, toasts.length)
-  })
-
-  it('updates text of existing toast', () => {
-    toasts.push({ id: 1, kind: 'ok', text: 'old' })
-    updateToast(1, 'new')
-    expect(toasts[toasts.length - 1].text).toBe('new')
-  })
-
-  it('no-op for missing id', () => {
-    updateToast(999, 'new')
-    expect(toasts).toHaveLength(0)
   })
 })
 

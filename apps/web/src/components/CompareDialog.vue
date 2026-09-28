@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api, api } from '../api'
-import { proxyUrl } from '../proxy'
+import { downloadProxyObject } from '../proxy'
 import { fmtDate, fmtSize } from '../format'
 import { storageClassLabel } from '../storageClass'
 import { lineDiff, looksBinary, type DiffLine } from '../versionDiff'
@@ -30,12 +30,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'error', msg: string): void
 }>()
 
 const baseIdx = ref(0)
 const targetIdx = ref(0)
 const loading = ref(false)
+/** 版本下载进行中：防重复点击（同一版本重复触发会并发两个 fetch+保存）。 */
+const downloading = ref(false)
 const diff = ref<DiffLine[]>([])
 const baseText = ref('')
 const targetText = ref('')
@@ -121,15 +122,34 @@ async function runCompare() {
   }
 }
 
-/** 通过服务端代理下载指定版本（force attachment，内容不进渲染管道）。 */
-function downloadVersion(v: CompareVersion) {
-  const a = document.createElement('a')
-  a.href = proxyUrl(props.accountId, props.bucket, 'download', props.objectKey, api.base, v.versionId)
-  // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
-  a.download = props.objectKey.split('/').pop() || 'object'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+/**
+ * 通过服务端代理下载指定版本（force attachment，内容不进渲染管道）。
+ * `<a href>` 直连无法携带 Authorization 头（review §C1）：启用 S3C_TOKEN 时会 401
+ * 且把错误 JSON 当文件存盘。改走带 Bearer 的 fetch → objectURL；失败写入
+ * compareError 并切到 error 态展示，不产生任何落盘动作。
+ */
+async function downloadVersion(v: CompareVersion) {
+  if (downloading.value) return
+  downloading.value = true
+  try {
+    await downloadProxyObject(
+      {
+        accountId: props.accountId,
+        bucket: props.bucket,
+        key: props.objectKey,
+        versionId: v.versionId,
+        apiBase: api.base,
+        token: api.token,
+      },
+      // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
+      props.objectKey.split('/').pop() || 'object',
+    )
+  } catch (err) {
+    diffState.value = 'error'
+    compareError.value = toErrorMessage(err)
+  } finally {
+    downloading.value = false
+  }
 }
 </script>
 
@@ -171,8 +191,8 @@ function downloadVersion(v: CompareVersion) {
     </table>
 
     <div style="margin-top:10px">
-      <button class="btn secondary sm" style="margin-right:8px" :disabled="loading" @click="downloadVersion(base!)">{{ t('compare.dlBase') }}</button>
-      <button class="btn secondary sm" :disabled="loading" @click="downloadVersion(target!)">{{ t('compare.dlTarget') }}</button>
+      <button class="btn secondary sm" style="margin-right:8px" :disabled="loading || downloading" @click="downloadVersion(base!)">{{ t('compare.dlBase') }}</button>
+      <button class="btn secondary sm" :disabled="loading || downloading" @click="downloadVersion(target!)">{{ t('compare.dlTarget') }}</button>
     </div>
 
     <!-- 内容差异 -->

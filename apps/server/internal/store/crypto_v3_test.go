@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/model"
@@ -22,11 +23,12 @@ func buildLegacyS3C2(t *testing.T, password string, list []*model.Account) []byt
 	t.Helper()
 	salt := randomSalt()
 	plain := marshalAccounts(list)
-	enc, err := encryptAESGCM(deriveKeyLegacy(password, salt), plain)
+	enc, err := encryptAESGCM(deriveKey(password, salt, legacyParams), plain)
 	if err != nil {
 		t.Fatalf("encrypt legacy: %v", err)
 	}
-	return envelope(encMagicV2, salt, enc)
+	// 手工拼 S3C2 信封（magic || salt || ciphertext，无参数头）。
+	return append(append(encMagicV2, salt...), enc...)
 }
 
 func TestEncryptedWritesS3C3WithParams(t *testing.T) {
@@ -97,7 +99,7 @@ func TestEncryptedReopenAfterV3Upgrade(t *testing.T) {
 func TestEnvelopeRoundTripParams(t *testing.T) {
 	salt := randomSalt()
 	ct := []byte("ciphertext")
-	v3 := envelope(encMagicV3, salt, ct)
+	v3 := envelope(salt, ct)
 	if !isEncryptedBlob(v3) {
 		t.Fatal("v3 envelope not recognized")
 	}
@@ -166,6 +168,57 @@ func TestParseEnvelopeRejectsZeroKDFParams(t *testing.T) {
 	}
 }
 
+// buildOverboundS3C3 手工构造头部参数越过安全上界的 S3C3 信封。
+// 密文内容随意——拒绝必须发生在派生之前（否则 memory=4GiB 会先 OOM/挂起）。
+func buildOverboundS3C3(t *testing.T, timeCost, memoryKiB uint32, threads uint8) []byte {
+	t.Helper()
+	blob := append([]byte{}, encMagicV3...)
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], timeCost)
+	blob = append(blob, buf[:]...)
+	binary.BigEndian.PutUint32(buf[:], memoryKiB)
+	blob = append(blob, buf[:]...)
+	blob = append(blob, threads)
+	blob = append(blob, randomSalt()...)
+	return append(blob, "ciphertext"...)
+}
+
+// TestParseEnvelopeRejectsOverboundKDFParams 上界与零值同罚：文件头可被篡改成
+// 任意 Argon2 参数，不设上界的话攻击者能把一次读放大成数分钟 CPU / 数 GiB 内存
+// （DoS）。拒绝发生在派生之前，错误文案与零参数一致（"invalid KDF params"）。
+func TestParseEnvelopeRejectsOverboundKDFParams(t *testing.T) {
+	for _, p := range []kdfParams{
+		{time: maxKDFTime + 1, memory: argonMemoryV3, threads: argonThreadsV3},
+		{time: argonTimeV3, memory: maxKDFMemoryKiB + 1, threads: argonThreadsV3},
+		{time: argonTimeV3, memory: argonMemoryV3, threads: maxKDFThreads + 1},
+		// 攻击值：全字段拉满（time=4G、memory=4GiB、threads=255）。
+		{time: 1<<32 - 1, memory: 1<<32 - 1, threads: 255},
+	} {
+		blob := buildOverboundS3C3(t, p.time, p.memory, p.threads)
+		_, _, _, err := parseEnvelope(blob)
+		if err == nil || !strings.Contains(err.Error(), "invalid KDF params") {
+			t.Fatalf("parseEnvelope(overbound %+v) = %v, want invalid KDF params", p, err)
+		}
+	}
+	// 上界本身必须合法可用：卡在边界值的文件仍可解析（防止上界误写成 < 而非 <=）。
+	boundary := buildOverboundS3C3(t, maxKDFTime, maxKDFMemoryKiB, maxKDFThreads)
+	if _, _, _, err := parseEnvelope(boundary); err != nil {
+		t.Fatalf("boundary params must still parse: %v", err)
+	}
+}
+
+// TestDecryptRejectsOverboundKDFParams 端到端：篡改后的加密库文件在 NewEncrypted
+// 加载路径上必须直接报错，而不是先派生巨量 KDF 再失败。
+func TestDecryptRejectsOverboundKDFParams(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "accounts.json.enc")
+	if err := os.WriteFile(p, buildOverboundS3C3(t, 1<<32-1, 1<<32-1, 255), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewEncrypted(p, "pw"); err == nil || !strings.Contains(err.Error(), "invalid KDF params") {
+		t.Fatalf("NewEncrypted(overbound KDF) = %v, want invalid KDF params before derive", err)
+	}
+}
+
 // TestDeriveKeyParamsDiffer 不同 KDF 参数必须产生不同密钥（参数确实生效）。
 func TestDeriveKeyParamsDiffer(t *testing.T) {
 	salt := randomSalt()
@@ -179,7 +232,7 @@ func TestDeriveKeyParamsDiffer(t *testing.T) {
 // TestS3C3HeaderEncoding 显式锁定头部字节序（大端），避免将来平台/实现漂移。
 func TestS3C3HeaderEncoding(t *testing.T) {
 	salt := randomSalt()
-	blob := envelope(encMagicV3, salt, nil)
+	blob := envelope(salt, nil)
 	if got := binary.BigEndian.Uint32(blob[4:8]); got != argonTimeV3 {
 		t.Fatalf("time field = %d, want %d", got, argonTimeV3)
 	}

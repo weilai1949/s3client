@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# 真实联调浏览器冒烟（todolist #37）本地 / CI 统一入口。
+# 真实联调浏览器冒烟（KNOWN_ISSUES #37）本地 / CI 统一入口。
 #
 # 做四件事，跑完自动清理：
 #   1) 起真实 RustFS（默认 docker 自拉一份；--no-rustfs 时复用外部对端）；
 #   2) 构建真实前端产物（vite build）与 Go 后端二进制；
-#   3) 起真实 Go 后端，用 S3C_STATIC_DIR 托管上面的产物（同源提供页面 + /api）；
+#   3) 起真实 Go 后端，用 S3C_STATIC_DIR 托管上面的产物（同源提供页面 + /api；
+#      **S3C_TOKEN 鉴权开启**，按生产形态验证 Bearer 全链路，见 C1 修复记录）；
 #   4) 用 Playwright 跑 apps/web/e2e-real/（**不 mock /api**），断言真实
 #      账号/建桶/浏览器预签名直传/签名 GET 回读。
 #
@@ -20,7 +21,7 @@
 #   scripts/e2e-real.sh --skip-build     # 复用已有 apps/web/dist 与后端二进制
 #
 # 环境变量：RUSTFS_ENDPOINT（--no-rustfs 时必填）/ RUSTFS_PORT / SERVER_PORT /
-#          RUSTFS_IMAGE / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY。
+#          RUSTFS_IMAGE / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY / S3C_TOKEN（可覆盖）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,7 +35,7 @@ for arg in "$@"; do
     --keep) KEEP=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
     -h|--help)
-      sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) echo "未知参数: $arg（-h 查看用法）" >&2; exit 2 ;;
@@ -51,6 +52,13 @@ RUSTFS_SECRET_KEY="${RUSTFS_SECRET_KEY:-rustfsadmin}"
 # 外部对端模式：调用方给出完整 endpoint（如 GitLab service 的 http://rustfs:9000）。
 RUSTFS_ENDPOINT="${RUSTFS_ENDPOINT:-}"
 SERVER_ORIGIN="http://127.0.0.1:${SERVER_PORT}"
+
+# /api 鉴权 token（C1 要求「修完必须在 S3C_TOKEN 开启下跑 e2e-real」）：
+# 缺省生成 48 位十六进制随机串（≥ 后端 MinTokenLength=16），同一 token 注入
+# 后端（校验方）与 Playwright（spec 里 requestWithRetry 的 Authorization 头 +
+# 页面 sessionStorage `s3c.token`）。可用环境变量 S3C_TOKEN 覆盖——但长度必须
+# ≥16，否则后端 config.Validate 拒绝启动（health 探测会随之失败并打印 server.log）。
+S3C_TOKEN="${S3C_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
 
 CONTAINER="s3clinet-e2e-rustfs"
 WORK_DIR="$ROOT/.run/e2e-real"
@@ -107,7 +115,7 @@ if (( MANAGE_RUSTFS )); then
   # RUSTFS_CORS_ALLOWED_ORIGINS 是**必需**的：真实浏览器直传（预签名 PUT）是跨源请求
   # （页面在 :$SERVER_PORT，S3 在 :$RUSTFS_PORT），无 CORS 会被浏览器拦下；而 curl /
   # Playwright 的 APIRequestContext 不经 CORS 因而会「假绿」。必须显式放行页面 Origin，
-  # 才真正验证到浏览器直传路径（todolist #37 的核心）。
+  # 才真正验证到浏览器直传路径（KNOWN_ISSUES #37 的核心）。
   docker run -d --name "$CONTAINER" \
     -p "127.0.0.1:${RUSTFS_PORT}:9000" \
     -e RUSTFS_VOLUMES=/data \
@@ -152,11 +160,12 @@ if port_busy "$SERVER_PORT"; then
 fi
 DATA_DIR="$WORK_DIR/data"
 rm -rf "$DATA_DIR"; mkdir -p "$DATA_DIR"
-log "启动真实 Go 后端（$SERVER_ORIGIN，静态目录 apps/web/dist）"
+log "启动真实 Go 后端（$SERVER_ORIGIN，静态目录 apps/web/dist，S3C_TOKEN 鉴权开启）"
 (
   cd "$ROOT"
   S3C_ADDR="127.0.0.1:${SERVER_PORT}" \
   S3C_STATIC_DIR="$ROOT/apps/web/dist" \
+  S3C_TOKEN="$S3C_TOKEN" \
   S3C_DATA_DIR="$DATA_DIR" \
   S3C_STORE_DRIVER=json \
   S3C_ALLOW_PLAINTEXT_STORE=1 \
@@ -177,6 +186,7 @@ log "运行 Playwright 真实联调（不 mock /api）"
 (
   cd "$ROOT/apps/web"
   PLAYWRIGHT_BASE_URL="$SERVER_ORIGIN" \
+  S3C_TOKEN="$S3C_TOKEN" \
   S3CLINET_ENDPOINT="$RUSTFS_ENDPOINT" \
   S3CLINET_ACCESS_KEY="$RUSTFS_ACCESS_KEY" \
   S3CLINET_SECRET_KEY="$RUSTFS_SECRET_KEY" \

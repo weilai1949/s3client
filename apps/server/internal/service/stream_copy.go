@@ -15,6 +15,13 @@ import (
 const MaxSinglePutBytes int64 = 5_000_000_000
 
 // multipartPartSize 分段大小（64MB）；var 以便单测注入小值覆盖多段路径。
+//
+// 它与 maxMultipartParts 共同固定出**单对象流式复制上限** = 64MB × 10000
+// = 640GB：超出的对象在段号耗尽前被明确拒绝并 abort（见 MultipartStreamCopy
+// 的 part-limit 错误），绝不静默截断。放宽上限需要按比例放大分段缓冲——峰值
+// 内存受 512MB 容器预算约束（见 maxIdlePartBufs），故 640GB 是刻意取舍，
+// 已登记为 KNOWN_ISSUES #63（已决策 ➖，维持现状；review Nit「stream_copy 固定
+// 64MB×10000=640GB 上限」的处置结论），要放宽先过内存预算这一关。
 var multipartPartSize int64 = 64 << 20
 
 // maxMultipartParts 是 S3 分段上传的段号上限（段号 1..10000，第 10000 段合法）。
@@ -98,7 +105,9 @@ func MultipartStreamCopy(ctx context.Context, dst *s3wrap.Client, bucket, key, c
 			// 上传后再判 partNum > 10000 会把「正好 10000 段」的合法对象误判为超限并 abort。
 			if partNum > maxMultipartParts {
 				abort()
-				return fmt.Errorf("object exceeds multipart part limit (%d parts)", maxMultipartParts)
+				// 错误信息带上「段数 × 段大小」上限，让用户能直接算出可复制的
+				// 最大对象体积（默认 10000 × 64MB = 640GB）而不是只看到段数。
+				return fmt.Errorf("object exceeds multipart stream limit (%d parts x %d bytes)", maxMultipartParts, multipartPartSize)
 			}
 			etag, uerr := dst.UploadPart(ctx, bucket, key, uploadID, partNum, bytes.NewReader(buf[:n]))
 			if uerr != nil {

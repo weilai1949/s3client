@@ -35,6 +35,7 @@ type svcFake struct {
 	failPart     bool  // UploadPart → 500
 	failComplete bool  // Complete → 500
 	failGet      bool  // GET → 404
+	copyDenied   bool  // COPY → 403 AccessDenied（目标桶私有、跨账号服务端复制被拒）
 	copyTooLarge bool  // COPY → EntityTooLarge
 	lieLength    int64 // GET 返回伪 Content-Length（实际 body 更小）
 	noLength     bool  // GET 不带 Content-Length
@@ -86,6 +87,11 @@ func newSvcFake(t *testing.T) *svcFake {
 				f.mu.Lock()
 				f.copies = append(f.copies, r.Header.Get("X-Amz-Copy-Source"))
 				f.mu.Unlock()
+				if f.copyDenied {
+					w.WriteHeader(http.StatusForbidden)
+					_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>denied by target bucket policy</Message></Error>`))
+					return true
+				}
 				if f.copyTooLarge {
 					w.WriteHeader(http.StatusBadRequest)
 					_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>EntityTooLarge</Code></Error>`))
@@ -338,6 +344,25 @@ func TestMigrateKeysEntityTooLargeFallsBackToStream(t *testing.T) {
 	}
 }
 
+// TestMigrateKeysAccessDeniedFallsBackToStream R10：同端点 CopyObject 用**源账号**凭证签名，
+// 目标桶私有时每个 key 回 403 AccessDenied；而流式路径各用各凭证本可成功。
+// 修复：AccessDenied 与 EntityTooLarge 同样逐 key 回退 StreamCopy。
+func TestMigrateKeysAccessDeniedFallsBackToStream(t *testing.T) {
+	f := newSvcFake(t)
+	f.copyDenied = true
+	f.src["k"] = []byte("payload")
+	out := MigrateKeys(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "dst", []string{"k"}, "", true, 1, nil)
+	if out.OK != 1 || out.Failed != 0 {
+		t.Fatalf("AccessDenied 应回退流式并成功: %+v", out)
+	}
+	if len(f.copies) != 1 {
+		t.Fatalf("copies = %v, want 1（应先尝试 CopyObject 再回退）", f.copies)
+	}
+	if string(f.dst["k"]) != "payload" {
+		t.Fatalf("stream fallback body = %q", f.dst["k"])
+	}
+}
+
 func TestMigrateKeysDifferentEndpointStreamsAndAggregates(t *testing.T) {
 	f := newSvcFake(t)
 	f.failGet = true
@@ -345,7 +370,7 @@ func TestMigrateKeysDifferentEndpointStreamsAndAggregates(t *testing.T) {
 	out := MigrateKeys(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "dst", []string{"a", "b"}, "", false, 0, func(p Progress) {
 		progress = append(progress, p)
 	})
-	if out.OK != 0 || out.Failed != 2 || out.LastError == "" || len(out.FailKeys) != 2 {
+	if out.OK != 0 || out.Failed != 2 || out.FirstError == "" || len(out.FailKeys) != 2 {
 		t.Fatalf("result = %+v", out)
 	}
 	if len(progress) == 0 || progress[len(progress)-1].Done != 2 {
@@ -368,6 +393,15 @@ func TestSameEndpointNormalizeEdges(t *testing.T) {
 	}
 	if !SameEndpoint("  ", "  ", "  ", "  ") {
 		t.Fatal("both blank endpoint+region should normalize to default and be equal")
+	}
+	// useSSL 固定 false 的钉死用例（review Nit「SameEndpoint 硬编码 useSSL=false」）：
+	// 裸端点一律补 http，因此「显式 https vs 裸」必须判异端（走流式，慢但正确），
+	// 「显式 http vs 裸」判同端（既有行为，不得回退）。
+	if SameEndpoint("https://a.com", "us-east-1", "a.com", "us-east-1") {
+		t.Fatal("https 显式 vs 裸端点（按 http 补全）不得判同端")
+	}
+	if !SameEndpoint("http://a.com", "us-east-1", "a.com", "us-east-1") {
+		t.Fatal("http 显式 vs 裸端点应归一化为同一端点")
 	}
 }
 
@@ -408,10 +442,11 @@ func TestJobReapUnsubscribeSnapshotCancel(t *testing.T) {
 	if !ok || final.Status == "" {
 		t.Fatalf("subscribe after done = %+v ok=%v", final, ok)
 	}
-	// Reap：过期完成任务被清理，未完成不受影响
+	// Reap：过期完成任务被清理，未完成不受影响。
+	// TTL 从完成时刻起算（review R8），故这里推进的是 finishedAt 而不是 Created。
 	j2 := r.Create(1, func() {})
 	j.mu.Lock()
-	j.Created = j.Created.Add(-(JobTTL + time.Minute))
+	j.finishedAt = j.finishedAt.Add(-(JobTTL + time.Minute))
 	j.mu.Unlock()
 	r.Reap()
 	if _, ok := r.Get(j.ID); ok {
@@ -443,6 +478,14 @@ func TestJobRegistryStopCancelsRunning(t *testing.T) {
 func TestRelKeyAndBaseKey(t *testing.T) {
 	if got := RelKey("docs/a/b.txt", "docs/", "tgt/"); got != "tgt/a/b.txt" {
 		t.Fatalf("RelKey = %q", got)
+	}
+	// R7：prefix 未落在段边界 → 按不匹配处理（与 sync 的 stripPrefix 同一内核）。
+	// 旧裸 TrimPrefix 会把 "backups/x.txt" 削成 "s/x.txt" → 目标侧错位 key。
+	if got := RelKey("backups/x.txt", "backup", "tgt/"); got != "tgt/backups/x.txt" {
+		t.Fatalf("RelKey 段边界外前缀 = %q, want %q（不得削段错位）", got, "tgt/backups/x.txt")
+	}
+	if got := RelKey("backup/x.txt", "backup", "tgt/"); got != "tgt/x.txt" {
+		t.Fatalf("RelKey 段边界命中 = %q, want %q", got, "tgt/x.txt")
 	}
 	if got := BaseKey("/x/y/c.txt", "dst/"); got != "dst/c.txt" {
 		t.Fatalf("BaseKey = %q", got)

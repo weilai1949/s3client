@@ -9,6 +9,7 @@
  * parsePolicy 返回 null，UI 会切换到「原始 JSON」模式并明确提示该结构需用原始 JSON 编辑，
  * 避免用户误以为已解析为可视化结构。
  */
+import { t, tf } from './i18n'
 export interface PolicyStatement {
   /** 可选 sid（AWS 标识）；留空时编辑器自动生成。 */
   sid?: string
@@ -105,7 +106,7 @@ function principalToJSON(p: string): Record<string, string> | string {
   return p === '*' ? '*' : { AWS: p }
 }
 
-export function normalizeStringArray(v: unknown): string[] | null {
+function normalizeStringArray(v: unknown): string[] | null {
   if (v == null) return null
   if (typeof v === 'string') return [v]
   if (Array.isArray(v)) {
@@ -178,18 +179,18 @@ export const POLICY_TEMPLATES: PolicyTemplate[] = [
   },
 ]
 
-/** 校验策略 doc 本身是否合法（前端提前拦下无效 JSON）。 */
+/** 校验策略 doc 是否合法（前端提前拦下无效 JSON）；错误文案经 i18n，随界面语言切换。 */
 export function validateDoc(doc: PolicyDoc): string | null {
-  if (doc.Version !== '2012-10-17') return 'Version 必须为 "2012-10-17"'
-  if (!Array.isArray(doc.Statement)) return 'Statement 必须为数组'
+  if (doc.Version !== '2012-10-17') return t('policy.errVersion')
+  if (!Array.isArray(doc.Statement)) return t('policy.errStatementArray')
   const seen = new Set<string>()
   for (const [i, s] of doc.Statement.entries()) {
-    if (s.effect !== 'Allow' && s.effect !== 'Deny') return `第 ${i + 1} 条 Effect 非法`
-    if (!s.principal) return `第 ${i + 1} 条 Principal 不能为空（用 * 表示所有人）`
-    if (!s.actions.length) return `第 ${i + 1} 条 Action 不能为空`
-    if (!s.resources.length) return `第 ${i + 1} 条 Resource 不能为空`
+    if (s.effect !== 'Allow' && s.effect !== 'Deny') return tf('policy.errEffect', { n: i + 1 })
+    if (!s.principal) return tf('policy.errPrincipalEmpty', { n: i + 1 })
+    if (!s.actions.length) return tf('policy.errActionEmpty', { n: i + 1 })
+    if (!s.resources.length) return tf('policy.errResourceEmpty', { n: i + 1 })
     if (s.sid) {
-      if (seen.has(s.sid)) return `Sid "${s.sid}" 重复（S3 桶策略 Sid 必须唯一）`
+      if (seen.has(s.sid)) return tf('policy.errSidDup', { sid: s.sid })
       seen.add(s.sid)
     }
   }

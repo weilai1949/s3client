@@ -116,7 +116,16 @@ func TestPurgeObjectRefusesPartialDelete(t *testing.T) {
 	if deleted != 0 {
 		t.Fatalf("deleted = %d, want 0 (the only version was refused)", deleted)
 	}
-	if got := UserMessage(err); got != "some objects could not be deleted" {
+	// 错误文本必须带上首个失败 key/code（运维排障依赖），且不含空字段。
+	if got := err.Error(); !strings.Contains(got, "t.txt") || !strings.Contains(got, "AccessDenied") {
+		t.Fatalf("err text = %q, want first failing key/code", got)
+	}
+	// UserMessage 透出已删计数（review §R17：本例 0 个删除成功）。
+	if got := UserMessage(err); got != "some objects could not be deleted (0 deleted)" {
 		t.Fatalf("UserMessage = %q", got)
+	}
+	// 部分删除映射 409（冲突），不再是通用 500。
+	if got := HTTPStatus(err); got != http.StatusConflict {
+		t.Fatalf("HTTPStatus = %d, want 409", got)
 	}
 }

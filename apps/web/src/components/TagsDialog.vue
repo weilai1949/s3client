@@ -19,9 +19,13 @@ const emit = defineEmits<{
   (e: 'error', msg: string): void
 }>()
 
-const rows = reactive<{ key: string; value: string }[]>([])
+const rows = reactive<{ rowKey: string; key: string; value: string }[]>([])
 const loading = ref(false)
 const saving = ref(false)
+
+/** 行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
 
 watch(() => props.open, async (o) => {
   if (!o) return
@@ -29,7 +33,7 @@ watch(() => props.open, async (o) => {
   loading.value = true
   try {
     const r = await s3api.getObjectTags(props.accountId, { bucket: props.bucket, key: props.objectKey })
-    for (const tag of r.tags ?? []) rows.push({ key: tag.key, value: tag.value })
+    for (const tag of r.tags ?? []) rows.push({ rowKey: newRowKey(), key: tag.key, value: tag.value })
   } catch (err) {
     emit('error', toErrorMessage(err))
   } finally {
@@ -38,7 +42,7 @@ watch(() => props.open, async (o) => {
 })
 
 function addTagRow() {
-  rows.push({ key: '', value: '' })
+  rows.push({ rowKey: newRowKey(), key: '', value: '' })
 }
 
 function removeTagRow(i: number) {
@@ -74,7 +78,7 @@ async function submitTags() {
         </div>
         <div v-if="loading" class="empty" style="padding:14px">{{ t('tags.loading') }}</div>
         <div v-else-if="!rows.length" class="empty" style="padding:14px">{{ t('tags.empty') }}</div>
-        <div v-for="(row, i) in rows" :key="i" class="row" style="margin-top:6px">
+        <div v-for="(row, i) in rows" :key="row.rowKey" class="row" style="margin-top:6px">
           <input v-model="row.key" :placeholder="t('tags.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <input v-model="row.value" :placeholder="t('tags.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <button class="btn secondary sm" :aria-label="t('common.delete')" @click="removeTagRow(i)">✕</button>

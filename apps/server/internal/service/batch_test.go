@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -153,9 +154,28 @@ func TestRunBatchProgressAndAggregate(t *testing.T) {
 	if !failSet["k2"] || !failSet["k4"] {
 		t.Fatalf("fail aggregation broken: %+v (want {k2, k4})", out)
 	}
-	// LastError 必非空，且来自某条失败键。
-	if out.LastError == "" {
-		t.Fatalf("last error empty: %+v", out)
+	// FirstError 必非空，且来自某条失败键。
+	if out.FirstError == "" {
+		t.Fatalf("first error empty: %+v", out)
+	}
+}
+
+// TestRunBatchKeepsFirstError FirstError 名副其实：workers=1 时按入序执行，
+// 多条失败必须保留**第一条**（k1），而不是被后续失败覆盖（旧名 LastError 的误导点）。
+func TestRunBatchKeepsFirstError(t *testing.T) {
+	out := RunBatch(context.Background(), []string{"k1", "k2"}, 1,
+		func(k string) string { return k },
+		func(context.Context, string) error { return context.DeadlineExceeded },
+		nil)
+	if out.Failed != 2 || len(out.FailKeys) != 2 {
+		t.Fatalf("out = %+v, want 2 failures", out)
+	}
+	// UserMessage 会把错误映射为通用文案，故只断言键名归属。
+	if !strings.Contains(out.FirstError, "k1") {
+		t.Fatalf("FirstError = %q, want first failing key k1", out.FirstError)
+	}
+	if strings.Contains(out.FirstError, "k2") {
+		t.Fatalf("FirstError = %q, must not be overwritten by later failure", out.FirstError)
 	}
 }
 

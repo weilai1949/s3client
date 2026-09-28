@@ -32,7 +32,7 @@ func fillUntilFull(t *testing.T, r *JobRegistry) int {
 
 // TestJobRegistryTryCreateRejectsBeyondCap JobRegistry 必须有总任务上限：
 // 每个任务都持有 goroutine、订阅者与落盘条目，无上限时短时间大量请求可耗尽资源
-// （todolist #17 / ASSESSMENT M4）。
+// （KNOWN_ISSUES #17 / ASSESSMENT M4）。
 func TestJobRegistryTryCreateRejectsBeyondCap(t *testing.T) {
 	r := NewJobRegistry()
 	defer r.Stop()

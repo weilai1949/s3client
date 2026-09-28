@@ -48,7 +48,7 @@ const account: Account = {
 }
 
 const sampleEntries: Entry[] = [
-  { kind: 'file', key: 'a.txt', name: 'a.txt', size: 10, lastModified: '2024-01-01', object: { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', contentType: 'text/plain', isDir: false } },
+  { kind: 'file', key: 'a.txt', name: 'a.txt', size: 10, lastModified: '2024-01-01', object: { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false } },
   { kind: 'folder', key: 'dir/', name: 'dir' },
 ]
 
@@ -366,9 +366,12 @@ describe('ObjectsPanel wiring', () => {
     }
     const detail = w.findComponent({ name: 'ObjectDetailDialog' })
     expect(detail.props('open')).toBe(true)
-    // error 转发
-    detail.vm.$emit('error', 'boom')
-    expect(vi.mocked(useObjectBrowser).mock.results[0].value.error.value).toBe('boom')
+    // F5b：零使用的 accountId/bucket props 已删除
+    expect(detail.props('accountId')).toBeUndefined()
+    expect(detail.props('bucket')).toBeUndefined()
+    // F5：该组件不再声明 error 事件（父级不再挂处理器）
+    const emits = (detail.vm.$options.emits ?? []) as string[]
+    expect(emits).not.toContain('error')
   })
 
   it('toolbar v-model 更新 filter / pathDraft', async () => {
@@ -522,8 +525,6 @@ describe('ObjectsPanel wiring', () => {
     expect(overlay.props('preview')).toEqual({ key: 'a.txt', kind: 'text' })
     overlay.vm.$emit('close')
     expect(preview.value).toBeNull()
-    overlay.vm.$emit('error', 'preview-err')
-    expect(browser.error.value).toBe('preview-err')
   })
 })
 

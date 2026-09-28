@@ -16,12 +16,16 @@ const emit = defineEmits<{
   (e: 'changed'): void
 }>()
 
-const rules = ref<CorsRule[]>([])
+const rules = ref<(CorsRule & { rowKey: string })[]>([])
 
 const METHOD_OPTIONS = ['GET', 'PUT', 'POST', 'DELETE', 'HEAD']
 
+/** 行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段 id）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
+
 function addRule() {
-  rules.value.push({ id: '', allowedMethods: ['GET'], allowedOrigins: ['*'], allowedHeaders: ['*'], exposeHeaders: [], maxAgeSeconds: 3600 })
+  rules.value.push({ id: '', allowedMethods: ['GET'], allowedOrigins: ['*'], allowedHeaders: ['*'], exposeHeaders: [], maxAgeSeconds: 3600, rowKey: newRowKey() })
 }
 
 const { loading, saving, save } = useBucketSetting({
@@ -30,7 +34,7 @@ const { loading, saving, save } = useBucketSetting({
   onChanged: () => emit('changed'),
   load: async () => {
     const r = await s3api.getBucketCors(props.accountId, props.bucket)
-    rules.value = (r.rules ?? []).map((x) => ({ ...x, allowedMethods: x.allowedMethods ?? [], allowedOrigins: x.allowedOrigins ?? [] }))
+    rules.value = (r.rules ?? []).map((x) => ({ ...x, allowedMethods: x.allowedMethods ?? [], allowedOrigins: x.allowedOrigins ?? [], rowKey: newRowKey() }))
     if (!rules.value.length) addRule()
   },
 })
@@ -64,7 +68,9 @@ async function clear() {
 
 async function saveCors() {
   await save(async () => {
-    await s3api.putBucketCors(props.accountId, { bucket: props.bucket, rules: rules.value })
+    // rowKey 是前端渲染用的行键（v-for key），只用于本地，不进请求体。
+    const payload = rules.value.map(({ rowKey: _rowKey, ...rule }) => rule)
+    await s3api.putBucketCors(props.accountId, { bucket: props.bucket, rules: payload })
   }, t('cors.toastSaved'))
 }
 </script>
@@ -72,7 +78,7 @@ async function saveCors() {
 <template>
   <div v-if="loading" class="empty" style="padding:20px">{{ t('cors.loading') }}</div>
   <div v-else>
-    <div v-for="(r, i) in rules" :key="i" class="cors-rule">
+    <div v-for="(r, i) in rules" :key="r.rowKey" class="cors-rule">
       <div class="row" style="gap:8px; align-items:center">
         <span class="badge">{{ tf('cors.ruleN', { n: i + 1 }) }}</span>
         <input v-model="r.id" class="mono" :placeholder="t('cors.ruleIdPh')" style="flex:1" />

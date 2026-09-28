@@ -54,7 +54,8 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 				maxBytes = n
 			}
 		}
-		out, err := client.GetObjectStream(r.Context(), bucket, key, "", "")
+		// versionID 必须透传：历史版本的文本预览此前恒查当前版本（review R5）。
+		out, err := client.GetObjectStream(r.Context(), bucket, key, versionID, "")
 		if err != nil {
 			h.proxyErr(w, err)
 			return

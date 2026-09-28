@@ -200,7 +200,7 @@ type errReader struct{ err error }
 func (e *errReader) Read(p []byte) (int, error) { return 0, e.err }
 
 // TestCopyStreamReportsUpstreamError copyStream 必须把上游读错误返回给调用方
-// （此前 `_, _ = io.Copy(...)` 会吞掉，下载中断在日志/指标里无痕迹 —— todolist #20）。
+// （此前 `_, _ = io.Copy(...)` 会吞掉，下载中断在日志/指标里无痕迹 —— KNOWN_ISSUES #20）。
 func TestCopyStreamReportsUpstreamError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/x", nil)
 	rr := httptest.NewRecorder()

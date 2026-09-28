@@ -34,7 +34,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{id}/mkdir", h.mkdirObject)
 	mux.HandleFunc("POST /api/accounts/{id}/rename", h.renameObject)
 	mux.HandleFunc("POST /api/accounts/{id}/copy-object", h.copyObject)
-	mux.HandleFunc("POST /api/accounts/{id}/copy-objects", h.copyMany)
+	mux.HandleFunc("POST /api/accounts/{id}/copy-objects", h.withStreamLimit(h.copyMany))
 	mux.HandleFunc("POST /api/accounts/{id}/copy-objects/async", h.copyManyAsync)
 	mux.HandleFunc("POST /api/accounts/{id}/delete", h.deleteObjects)
 	mux.HandleFunc("POST /api/accounts/{id}/delete-prefix", h.withStreamLimit(h.deletePrefix))
@@ -91,7 +91,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.Handle("/", h.spaHandler(spa))
 
 	// withOpenAPIGate 在 auth 外层：未开启时 openapi.json 直接 404（不暴露端点信息）。
-	return h.withLogging(h.withSecurityHeaders(h.withCORS(h.withOpenAPIGate(h.withAuth(h.withMetricsGate(h.withRateLimit(mux)))))))
+	// withRateLimit 在 auth **外层**：未鉴权请求同样消耗限速额度，否则刷鉴权失败
+	// 不受限速约束（攻击者可无限打 withAuth 而绕开限速，review R2）。
+	return h.withLogging(h.withSecurityHeaders(h.withCORS(h.withOpenAPIGate(h.withRateLimit(h.withAuth(h.withMetricsGate(mux)))))))
 }
 
 func (h *Handler) spaHandler(fs http.Handler) http.Handler {

@@ -32,7 +32,6 @@ export interface ObjectItem {
   size: number
   lastModified: string
   etag: string
-  contentType: string
   storageClass?: string
   isDir: boolean
 }

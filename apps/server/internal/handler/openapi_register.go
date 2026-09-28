@@ -105,12 +105,15 @@ func jobResultSchema() *openapi.Schema {
 // jobRecordSchema 对应 service.JobRecord 的 json tag（任务清单条目）。
 func jobRecordSchema() *openapi.Schema {
 	return openapi.BuildObj(map[string]*openapi.Schema{
-		"id":       openapi.Str(),
-		"created":  openapi.Str("date-time"),
-		"total":    openapi.Int(),
-		"status":   openapi.EnumStr("running", "done", "cancelled", "interrupted"),
-		"progress": jobProgressSchema(),
-		"result":   jobResultSchema(),
+		"id":      openapi.Str(),
+		"created": openapi.Str("date-time"),
+		// finishedAt 是完成时刻（Reap TTL 起点，review R8）。omitzero：运行中任务与
+		// 旧版落盘记录不出现该字段，故不进 required。
+		"finishedAt": openapi.Str("date-time"),
+		"total":      openapi.Int(),
+		"status":     openapi.EnumStr("running", "done", "cancelled", "interrupted"),
+		"progress":   jobProgressSchema(),
+		"result":     jobResultSchema(),
 	}, "id", "created", "total", "status", "progress", "result")
 }
 

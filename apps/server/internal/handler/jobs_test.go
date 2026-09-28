@@ -24,7 +24,10 @@ func TestJobsListEndpoint(t *testing.T) {
 
 	// 造一个已完成任务，确保清单能真实反映注册表内容。
 	_, cancel := context.WithCancel(context.Background())
-	job := h.migrateJobs.Create(2, cancel)
+	job, err := h.migrateJobs.TryCreate(2, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 	job.Finish(service.JobResult{Migrated: 2}, service.JobStatusDone)
 
 	rr := httptest.NewRecorder()
@@ -115,7 +118,10 @@ func TestSetJobPersisterReplacesRegistry(t *testing.T) {
 	old := h.migrateJobs
 
 	_, cancel := context.WithCancel(context.Background())
-	job := old.Create(1, cancel)
+	job, err := old.TryCreate(1, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 	job.Finish(service.JobResult{Migrated: 1}, service.JobStatusDone)
 
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(t.TempDir(), "j.json")))
@@ -129,7 +135,7 @@ func TestSetJobPersisterReplacesRegistry(t *testing.T) {
 }
 
 // TestNewJobReturns503AtCapacity 在册任务达上限时异步端点返回 503 而非无限接受
-// （todolist #17 / ASSESSMENT M4）。用 ctx 取消状态间接确认 cancel() 被调用，
+// （KNOWN_ISSUES #17 / ASSESSMENT M4）。用 ctx 取消状态间接确认 cancel() 被调用，
 // 避免注册失败时泄漏 WithTimeout 定时器。
 func TestNewJobReturns503AtCapacity(t *testing.T) {
 	h, _ := gapStoreHandler(t)
@@ -266,7 +272,10 @@ func TestMigrateJobEventsClosedWithoutTerminalFrame(t *testing.T) {
 
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	job := h.migrateJobs.Create(1, cancel)
+	job, err := h.migrateJobs.TryCreate(1, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 
 	w := &blockingWriter{started: make(chan struct{}), release: make(chan struct{})}
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -308,7 +317,10 @@ func TestMigrateJobEventsSubscriberCap(t *testing.T) {
 
 	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	job := h.migrateJobs.Create(1, cancel)
+	job, err := h.migrateJobs.TryCreate(1, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
 
 	var held []chan service.JobProgress
 	for {

@@ -112,17 +112,17 @@ func TestFileJobPersisterLoadErrors(t *testing.T) {
 }
 
 func TestFileJobPersisterSaveErrors(t *testing.T) {
-	origWrite, origRename, origMarshal := jobWriteFile, jobRename, jobMarshal
-	t.Cleanup(func() { jobWriteFile, jobRename, jobMarshal = origWrite, origRename, origMarshal })
+	origMarshal := jobMarshal
+	t.Cleanup(func() { jobMarshal = origMarshal })
 
 	boom := errors.New("boom")
 	rec := []JobRecord{{ID: "j", Status: JobStatusRunning}}
 
 	t.Run("write fails", func(t *testing.T) {
-		jobWriteFile = func(string, []byte, os.FileMode) error { return boom }
-		defer func() { jobWriteFile = origWrite }()
-		if err := NewFileJobPersister(filepath.Join(t.TempDir(), "j.json")).Save(rec); !errors.Is(err, boom) {
-			t.Fatalf("err = %v, want boom", err)
+		// 父目录不存在 → 原子写在创建临时文件阶段失败，必须冒泡而非静默丢更新。
+		missing := filepath.Join(t.TempDir(), "no-such-dir", "j.json")
+		if err := NewFileJobPersister(missing).Save(rec); err == nil {
+			t.Fatal("Save into missing dir must fail")
 		}
 	})
 
@@ -135,13 +135,16 @@ func TestFileJobPersisterSaveErrors(t *testing.T) {
 	})
 
 	t.Run("rename fails and removes temp file", func(t *testing.T) {
-		jobRename = func(string, string) error { return boom }
-		defer func() { jobRename = origRename }()
-		path := filepath.Join(t.TempDir(), "j.json")
-		if err := NewFileJobPersister(path).Save(rec); !errors.Is(err, boom) {
-			t.Fatalf("err = %v, want boom", err)
+		// 目标路径是已存在的目录 → rename 阶段失败，必须报错并清掉临时文件
+		//（否则下次 Load 可能读到 .tmp 半成品）。
+		dir := t.TempDir()
+		path := filepath.Join(dir, "j.json")
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
 		}
-		// rename 失败后不得留下半成品临时文件（否则下次 Load 读到残缺 JSON）。
+		if err := NewFileJobPersister(path).Save(rec); err == nil {
+			t.Fatal("Save onto existing dir must fail")
+		}
 		if _, err := os.Stat(path + ".tmp"); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("temp file left behind: %v", err)
 		}
@@ -170,6 +173,10 @@ func TestJobResultUnmarshalAcceptsLegacyFailKeys(t *testing.T) {
 	}
 	if len(legacy.FailKeys) != 1 || legacy.FailKeys[0] != "old.txt" {
 		t.Fatalf("legacy failKeys 未兼容读出: %+v", legacy)
+	}
+	// JSON 名保持历史契约 `lastError`（Go 字段已更正为 FirstError，review Nit）。
+	if legacy.FirstError != "old" {
+		t.Fatalf("FirstError = %q, want old（lastError 落盘名必须仍能读出）", legacy.FirstError)
 	}
 
 	var current JobResult

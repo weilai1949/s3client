@@ -35,7 +35,8 @@ make e2e-real
 | 开发规范 / 测试分层 / 门禁 / 验收清单 / Red Flags / 技术债 | [`docs/development.md`](docs/development.md) |
 | 改动要同步哪些文档（对照表） | [`docs/development.md`](docs/development.md) §4「文档同步门禁」 |
 | 接口与请求/响应字段（改 handler 请求体时同步 `openapi_register_*.go` 并跑契约测试） | [`docs/api.md`](docs/api.md) |
-| 待办（唯一来源） | [`docs/todolist.md`](docs/todolist.md) |
+| 问题（缺陷 / 外部阻塞 / 技术债，唯一来源） | [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) |
+| 功能候选 / 版本级规划（唯一来源） | [`docs/roadmap.md`](docs/roadmap.md) §三 |
 | 已实现 / 已修复台账 | [`docs/features.md`](docs/features.md) |
 | 每个 PR 都要补发版记录（`[Unreleased]`） | [`CHANGELOG.md`](CHANGELOG.md) |
 | 架构与关键决策 | [`docs/architecture.md`](docs/architecture.md) · [`docs/decisions/`](docs/decisions/index.md) |
@@ -45,7 +46,7 @@ make e2e-real
 ## 文档命名与存放
 
 - **根目录只放三个约定文件**：`README.md`（社区约定）、`AGENTS.md`（工具加载器**硬性要求**在根目录）、`CHANGELOG.md`（Keep a Changelog 约定名，主流 changelog 工具默认 `./CHANGELOG.md`）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放最高优先级位置可避免被将来的副本静默顶掉；其余文档统一放 `docs/`。
-- 普通文档用小写 kebab-case（如 `threat-model.md`、`todolist.md`）；只有名字被外部约定固定的才用大写：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`。
+- 普通文档用小写 kebab-case（如 `threat-model.md`、`roadmap.md`）；只有名字被外部约定固定、或**已显式登记进白名单**的才用大写：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`KNOWN_ISSUES.md`（2026-09-24 登记，见 [`docs/development.md`](docs/development.md) 命名约定）。
 - **任何两个路径不得仅大小写不同**——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。
 
 ## 修改本文件

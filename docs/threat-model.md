@@ -136,18 +136,19 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 ### 6.1 已闭环（证据归档）
 
 > 逐项证据见 [features.md](features.md) 与 [CHANGELOG.md](../CHANGELOG.md)；原始发现见
-> [archive/assessment.md](archive/assessment.md) §二。当前待办见 [todolist.md](todolist.md)「四、安全 / 供应链待办」——
-> 该节现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已于 2026-09-23 复审维持现状并移出 todolist（见 §6.2）。
+> [archive/assessment.md](archive/assessment.md) §二。当前待办见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 技术债）与
+> [`roadmap.md`](roadmap.md) §三 3.2（安全方向候选 #12 / #13）——
+> 安全 / 供应链类现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已于 2026-09-23 复审维持现状并移出待办台账（见 §6.2）。
 
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
 - ~~SQLite 明文密钥~~ ✅ 已修：设 `S3C_STORE_KEY` 时 secret_key 列加密；`S3C_STORE_KEY` 最短 16 字符
-- ~~安全审计日志缺失~~ ✅ 已闭环：`handler/audit.go`（原 todo #17，见 [features.md](features.md) §M）
+- ~~安全审计日志缺失~~ ✅ 已闭环：`handler/audit.go`（原 KNOWN_ISSUES #17，见 [features.md](features.md) §M）
 - ~~XFF 伪造绕过限速~~ ✅ 已闭环：`S3C_TRUSTED_PROXIES` 可信代理白名单（默认不信任 XFF）；JobRegistry 上限 256 个未终结任务，超限 503
 - ~~TLS 前置无 HSTS~~ ✅ 已在 TLS 示例配置加 HSTS + Permissions-Policy
 
 ### 6.2 仍接受的风险（有意维持，非缺陷）
 
-- `/api/health` 暴露 `version`（原 todolist #18，2026-09-23 复审维持；清单条目已按「只收录尚未完成」移出）：开源项目版本与依赖本就公开、指纹价值≈0，而该响应是安全补丁验证与运维定位的廉价通道；`withAuth` **显式跳过**该端点（Docker HEALTHCHECK 需无 token 探测），故其为免鉴权端点、不依赖鉴权兜底。移除属行为变更。
+- `/api/health` 暴露 `version`（KNOWN_ISSUES #18，2026-09-23 复审维持；清单条目已按「只收录尚未完成」移出）：开源项目版本与依赖本就公开、指纹价值≈0，而该响应是安全补丁验证与运维定位的廉价通道；`withAuth` **显式跳过**该端点（Docker HEALTHCHECK 需无 token 探测），故其为免鉴权端点、不依赖鉴权兜底。移除属行为变更。
 - `/api/metrics` 开启后免鉴权（内网 scrape 用途，见 §2；勿直接暴露公网）。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。

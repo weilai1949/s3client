@@ -531,7 +531,7 @@ func TestTrivyScansUseCacheAndRetry(t *testing.T) {
 	}
 }
 
-// ---- 真实后端 + RustFS 浏览器联调（todolist #37）----
+// ---- 真实后端 + RustFS 浏览器联调（KNOWN_ISSUES #37）----
 
 // rustfsImageRe 匹配 `rustfs/rustfs:<version>` 镜像引用。
 // 版本部分只取 `[0-9A-Za-z.-]`，避免把脚本里 `${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-rc.3}` 的 `}` 吞进来。

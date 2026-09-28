@@ -26,7 +26,7 @@ type Handler struct {
 	version        string   // 服务端版本号（ldflags 注入），用于 /api/health 上报
 	exposeMetrics  bool     // 是否暴露 /api/metrics（默认 false：404 假装不存在）
 	exposeOpenAPI  bool     // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
-	cspConnectSrc  string   // CSP connect-src 白名单
+	cspConnectSrc  string   // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
 	trustedProxies []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
 	clients        *clientCache
 	migrateJobs    *service.JobRegistry
@@ -43,7 +43,7 @@ func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins 
 	return &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,
 		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics, exposeOpenAPI: exposeOpenAPI,
-		cspConnectSrc: "'self' http://127.0.0.1:* http://localhost:*",
+		cspConnectSrc: defaultCSPConnectSrc,
 		clients:       newClientCache(),
 		migrateJobs:   service.NewJobRegistry(),
 		limiter:       newIPLimiter(),
@@ -106,7 +106,6 @@ type objectItem struct {
 	Size         int64     `json:"size"`
 	LastModified time.Time `json:"lastModified"`
 	ETag         string    `json:"etag"`
-	ContentType  string    `json:"contentType"`
 	StorageClass string    `json:"storageClass"`
 	IsDir        bool      `json:"isDir"`
 }
@@ -222,7 +221,13 @@ func (h *Handler) readJSON(r *http.Request, v any) error {
 func (h *Handler) accountClient(w http.ResponseWriter, r *http.Request) (*s3wrap.Client, *model.Account, bool) {
 	acc, err := h.store.Get(r.PathValue("id"))
 	if err != nil {
-		h.writeErr(w, http.StatusNotFound, "account not found")
+		// store 读取故障 ≠ 账号不存在：仅 ErrNotFound 回 404，其余 500
+		//（与 migrate 系列同一修复，误报 404 会让用户去查不存在的账号）。
+		if errors.Is(err, store.ErrNotFound) {
+			h.writeErr(w, http.StatusNotFound, "account not found")
+			return nil, nil, false
+		}
+		h.writeInternalErr(w, err, "failed to load account")
 		return nil, nil, false
 	}
 	client, err := h.clients.get(acc)
@@ -236,8 +241,9 @@ func (h *Handler) accountClient(w http.ResponseWriter, r *http.Request) (*s3wrap
 
 // bucketOr 解析 bucket；为空时写 400 并返回 ok=false。
 func (h *Handler) bucketOr(w http.ResponseWriter, acc *model.Account, b string) (string, bool) {
+	// b == "" 时回退账号默认桶（空则由下方统一报 400）。
 	if b == "" {
-		b = acc.BucketOrDefault()
+		b = acc.Bucket
 	}
 	if b == "" {
 		h.writeErr(w, http.StatusBadRequest, "bucket is required")

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
 import { fmtDate, fmtSize } from '../format'
+import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import CompareDialog from './CompareDialog.vue'
@@ -41,6 +42,51 @@ const compareOpen = ref(false)
 /** 达到分页上限后服务端仍有更多版本（此时不再静默丢弃，UI 明确提示）。 */
 const truncated = ref(false)
 const truncatedPages = ref(0)
+
+/* 版本大列表窗口化：仅渲染可视区 + overscan，避免上万条版本冻结弹窗（review Nit：大表无虚拟滚动）。
+   行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
+   此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。 */
+const scrollEl = ref<HTMLElement | null>(null)
+const scrollTop = ref(0)
+const viewportH = ref(DEFAULT_VIEWPORT_H)
+
+const windowed = computed(() => {
+  const win = virtualWindow(rows.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
+  return { ...win, items: rows.value.slice(win.start, win.end) }
+})
+
+function onListScroll() {
+  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
+}
+
+function measureViewport() {
+  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
+}
+
+let resizeObs: ResizeObserver | undefined
+
+// 弹窗内容随 open/loading 才渲染，scrollEl 的 ref 绑定晚于 onMounted：
+// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（同 ObjectList/MigratePanel）。
+watch(scrollEl, (el) => {
+  resizeObs?.disconnect()
+  resizeObs = undefined
+  if (!el || typeof ResizeObserver === 'undefined') return
+  measureViewport()
+  resizeObs = new ResizeObserver(measureViewport)
+  resizeObs.observe(el)
+})
+
+/* 数据整体更换（重开弹窗/重新加载/删除恢复后 rows 被整体重新赋值）必须把窗口起点归零，
+   否则残留的旧 scrollTop 会让 rows.slice(start, end) 为空 → 空白表（review §F2）。
+   只监听数组身份：rows 每次 load 都是整体替换，不存在 push 追加场景。
+   同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
+function resetWindowScroll() {
+  scrollTop.value = 0
+  if (scrollEl.value) scrollEl.value.scrollTop = 0
+}
+watch(() => rows.value, () => resetWindowScroll())
+
+onBeforeUnmount(() => resizeObs?.disconnect())
 
 /** 单次 load 最多翻多少页（页大小由后端固定 ≤1000），避免极端桶把弹窗拖死。 */
 const MAX_VERSION_PAGES = 20
@@ -209,32 +255,40 @@ async function removeVersion(v: VersionRow) {
         <span class="badge" v-if="rows.some((v) => v.isDeleteMarker)">{{ t('versions.hasDeleteMarker') }}</span>
         <span class="badge" v-if="truncated" style="color:#d64545">{{ tf('versions.truncated', { pages: truncatedPages }) }}</span>
       </div>
-      <table class="tbl">
-        <thead><tr><th style="width:96px">{{ t('versions.colType') }}</th><th>{{ t('versions.colVersionId') }}</th><th style="width:140px">{{ t('versions.colMtime') }}</th><th style="width:70px">{{ t('versions.colSize') }}</th><th style="width:96px">{{ t('versions.colStorage') }}</th><th style="width:190px">{{ t('versions.colActions') }}</th></tr></thead>
-        <tbody>
-          <tr v-for="v in rows" :key="v.versionId || 'del-' + v.lastModified">
-            <td>
-              <span v-if="v.isDeleteMarker" class="badge" style="color:#d64545">{{ t('versions.typeDeleteMarker') }}</span>
-              <span v-else-if="v.isLatest" class="badge" style="color:var(--primary)">{{ t('versions.typeLatest') }}</span>
-              <span v-else class="badge">{{ t('versions.typeHistory') }}</span>
-            </td>
-            <td class="mono" style="word-break:break-all">{{ v.versionId || 'null' }}</td>
-            <td>{{ fmtDate(v.lastModified) }}</td>
-            <td>{{ v.isDeleteMarker ? '—' : fmtSize(v.size) }}</td>
-            <td>{{ v.storageClass || '—' }}</td>
-            <td>
-              <template v-if="v.isDeleteMarker">
-                <button class="btn secondary sm" :disabled="busy" style="color:var(--primary)" @click="restoreDeleteMarker(v)">{{ t('trash.restore') }}</button>
-                <button class="btn danger sm" :disabled="busy" style="margin-left:6px" @click="removeVersion(v)">{{ t('versions.deleteMarker') }}</button>
-              </template>
-              <template v-else>
-                <button class="btn secondary sm" :disabled="busy" style="margin-right:4px" @click="restore(v)">{{ t('versions.restore') }}</button>
-                <button class="btn danger sm" :disabled="busy" @click="removeVersion(v)">{{ t('common.delete') }}</button>
-              </template>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
+        <table class="tbl">
+          <thead><tr><th style="width:96px">{{ t('versions.colType') }}</th><th>{{ t('versions.colVersionId') }}</th><th style="width:140px">{{ t('versions.colMtime') }}</th><th style="width:70px">{{ t('versions.colSize') }}</th><th style="width:96px">{{ t('versions.colStorage') }}</th><th style="width:190px">{{ t('versions.colActions') }}</th></tr></thead>
+          <tbody>
+            <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">
+              <td :colspan="6" :style="{ height: windowed.padTop + 'px' }" />
+            </tr>
+            <tr v-for="v in windowed.items" :key="v.versionId || 'del-' + v.lastModified" class="v-row" :style="{ height: `${ROW_HEIGHT}px` }">
+              <td>
+                <span v-if="v.isDeleteMarker" class="badge" style="color:#d64545">{{ t('versions.typeDeleteMarker') }}</span>
+                <span v-else-if="v.isLatest" class="badge" style="color:var(--primary)">{{ t('versions.typeLatest') }}</span>
+                <span v-else class="badge">{{ t('versions.typeHistory') }}</span>
+              </td>
+              <td class="mono" style="word-break:break-all">{{ v.versionId || 'null' }}</td>
+              <td>{{ fmtDate(v.lastModified) }}</td>
+              <td>{{ v.isDeleteMarker ? '—' : fmtSize(v.size) }}</td>
+              <td>{{ v.storageClass || '—' }}</td>
+              <td>
+                <template v-if="v.isDeleteMarker">
+                  <button class="btn secondary sm" :disabled="busy" style="color:var(--primary)" @click="restoreDeleteMarker(v)">{{ t('trash.restore') }}</button>
+                  <button class="btn danger sm" :disabled="busy" style="margin-left:6px" @click="removeVersion(v)">{{ t('versions.deleteMarker') }}</button>
+                </template>
+                <template v-else>
+                  <button class="btn secondary sm" :disabled="busy" style="margin-right:4px" @click="restore(v)">{{ t('versions.restore') }}</button>
+                  <button class="btn danger sm" :disabled="busy" @click="removeVersion(v)">{{ t('common.delete') }}</button>
+                </template>
+              </td>
+            </tr>
+            <tr v-if="windowed.padBottom" class="v-spacer" aria-hidden="true">
+              <td :colspan="6" :style="{ height: windowed.padBottom + 'px' }" />
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </template>
     <div class="row" style="margin-top:14px">
       <button class="btn secondary sm" @click="emit('close')">{{ t('common.close') }}</button>
@@ -247,7 +301,15 @@ async function removeVersion(v: VersionRow) {
       :object-key="objectKey"
       :versions="contentVersions"
       @close="compareOpen = false"
-      @error="emit('error', $event)"
     />
   </ModalDialog>
 </template>
+
+<style scoped>
+/* 虚拟滚动：固定可视高度，行高由 v-row 行内 ROW_HEIGHT 绑定（不在此存字面量）。 */
+.tbl-virtual {
+  max-height: min(60vh, 640px);
+  overflow: auto;
+}
+.tbl-virtual .v-spacer td { padding: 0; border: 0; }
+</style>

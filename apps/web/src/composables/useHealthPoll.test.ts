@@ -39,7 +39,6 @@ describe('useHealthPoll', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(api.health).toHaveBeenCalledTimes(2)
     expect(onRecover).not.toHaveBeenCalled()
-    expect(poll().polling.value).toBe(true)
     w.unmount()
   })
 
@@ -51,7 +50,6 @@ describe('useHealthPoll', () => {
 
     await vi.advanceTimersByTimeAsync(1000)
     expect(onRecover).toHaveBeenCalledTimes(1)
-    expect(poll().polling.value).toBe(false)
     // 停止后不再探测。
     await vi.advanceTimersByTimeAsync(5000)
     expect(api.health).toHaveBeenCalledTimes(1)
@@ -87,7 +85,6 @@ describe('useHealthPoll', () => {
     rejectProbe(new Error('down'))
     await vi.advanceTimersByTimeAsync(10_000)
     expect(api.health).toHaveBeenCalledTimes(1)
-    expect(poll().polling.value).toBe(false)
     w.unmount()
   })
 
@@ -95,7 +92,6 @@ describe('useHealthPoll', () => {
     const { w, poll } = host({ intervalMs: 1000, onRecover: vi.fn() })
     w.unmount()
     poll().start()
-    expect(poll().polling.value).toBe(false)
     await vi.advanceTimersByTimeAsync(10_000)
     expect(api.health).not.toHaveBeenCalled()
   })
@@ -113,7 +109,6 @@ describe('useHealthPoll', () => {
     await vi.advanceTimersByTimeAsync(5000)
     expect(onRecover).not.toHaveBeenCalled()
     expect(api.health).toHaveBeenCalledTimes(1)
-    expect(poll().polling.value).toBe(false)
   })
 
   it('卸载时在途探测失败后不再续跑（不叠加新定时器）', async () => {
@@ -129,6 +124,5 @@ describe('useHealthPoll', () => {
     await vi.advanceTimersByTimeAsync(10_000)
     // 卸载后不得再有探测：轮询已终结
     expect(api.health).toHaveBeenCalledTimes(1)
-    expect(poll().polling.value).toBe(false)
   })
 })

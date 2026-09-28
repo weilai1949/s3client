@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
 
 // migrateSyncRequest 增量同步请求体（与 migrate 一致 + 增量判定字段）。
@@ -26,6 +28,9 @@ type migrateSyncResponse struct {
 	Failed    int      `json:"failed"`
 	FailKeys  []string `json:"failedKeys,omitempty"`
 	LastError string   `json:"lastError,omitempty"`
+	// Truncated 表示列举被安全上限截断：有对象未被枚举、未参与同步（review R6）。
+	// 恒为 bool，与 service.SyncResult 口径一致。
+	Truncated bool `json:"truncated"`
 }
 
 // syncHandler 同步迁移（按 ETag / size+mtime 比对，仅复制差异对象）。
@@ -40,13 +45,22 @@ func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "sourceAccountId and targetAccountId are required")
 		return
 	}
+	// store 读取故障 ≠ 账号不存在：仅 ErrNotFound 回 404，其余 500（与 migrate.go 一致）。
 	src, err := h.store.Get(req.SourceAccountID)
 	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			h.writeInternalErr(w, err, "failed to load source account")
+			return
+		}
 		h.writeErr(w, http.StatusNotFound, "source account not found")
 		return
 	}
 	dst, err := h.store.Get(req.TargetAccountID)
 	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			h.writeInternalErr(w, err, "failed to load target account")
+			return
+		}
 		h.writeErr(w, http.StatusNotFound, "target account not found")
 		return
 	}
@@ -85,7 +99,7 @@ func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := migrateSyncResponse{
 		Scanned: out.Scanned, Skipped: out.Skipped, Copied: out.Copied, Failed: out.Failed,
-		FailKeys: capFailKeys(out.FailKeys), LastError: out.LastError,
+		FailKeys: capFailKeys(out.FailKeys), LastError: out.FirstError, Truncated: out.Truncated,
 	}
 	h.writeJSON(w, http.StatusOK, resp)
 }

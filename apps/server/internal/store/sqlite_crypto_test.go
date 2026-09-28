@@ -11,6 +11,7 @@ package store
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -188,5 +189,94 @@ func TestSQLiteDecryptSecretRejectsCorruptBlob(t *testing.T) {
 	s := &SQLiteStore{storeKey: "k"}
 	if _, err := s.decryptSecret(string(encMagicV3) + "xx"); err == nil {
 		t.Fatal("corrupt S3C3 blob must fail to parse")
+	}
+}
+
+// TestSQLiteGetRejectsOverboundKDFParams 库中 secret_key 列被篡改成越界 KDF 头时,
+// Get 必须在派生前拒绝(错误含 "invalid KDF params")。红灯区分点:若实现先派生后校验,
+// 错误会变成解密认证失败(且 memory=4GiB 会先耗尽内存),文案与断言不符即失败。
+func TestSQLiteGetRejectsOverboundKDFParams(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "accounts.db")
+	s, err := openSQLite(dbPath, "store-key")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer s.Close()
+	created, err := s.Create(&model.Account{
+		Name: "overbound", Endpoint: "e", AccessKey: "ak", SecretKey: "sk-secret", Region: "us-east-1",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	overbound := string(buildOverboundS3C3(t, 1<<32-1, 1<<32-1, 255))
+	if _, err := s.db.Exec(`UPDATE accounts SET secret_key = ? WHERE id = ?`, overbound, created.ID); err != nil {
+		t.Fatalf("plant overbound blob: %v", err)
+	}
+	if _, err := s.Get(created.ID); err == nil || !strings.Contains(err.Error(), "invalid KDF params") {
+		t.Fatalf("Get(overbound KDF secret) = %v, want invalid KDF params rejected before derive", err)
+	}
+}
+
+// TestSQLiteListNoDecryptContract R14:List 不再逐行 Argon2id 解密(旧实现在脱敏前
+// 白白解密 34ms/行),但对外契约必须与旧实现完全一致——每个字段都等于 Get+Sanitized;
+// 且密文损坏 / 未配置 S3C_STORE_KEY 时 List 仍返回完整脱敏列表(解密只在 Get 路径需要)。
+func TestSQLiteListNoDecryptContract(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "accounts.db")
+	s, err := openSQLite(dbPath, "list-contract-key")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	created, err := s.Create(&model.Account{
+		Name: "contract", Endpoint: "http://127.0.0.1:9000", PublicEndpoint: "https://pub",
+		Region: "cn-north-1", AccessKey: "ak", SecretKey: "sk-secret",
+		Bucket: "b", PathStyle: true, UseSSL: true,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if raw := sqliteRawSecret(t, s, created.ID); !strings.HasPrefix(raw, string(encMagicV3)) {
+		t.Fatalf("fixture must be encrypted at rest, got %q", raw)
+	}
+
+	// List 全字段与 Get+Sanitized 完全一致(锚定脱敏形态与响应字段)。
+	full, err := s.Get(created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	want := full.Sanitized()
+	got, err := s.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("List[0] = %+v, want DeepEqual %+v", got, want)
+	}
+
+	// 把密文改成截断信封:旧实现 List 会解密失败报错;新实现不碰密文,照常返回脱敏列表。
+	if _, err := s.db.Exec(`UPDATE accounts SET secret_key = ?`, string(encMagicV3)+"truncated-no-nonce"); err != nil {
+		t.Fatalf("corrupt secret: %v", err)
+	}
+	got, err = s.List()
+	if err != nil {
+		t.Fatalf("list with corrupt ciphertext must succeed (no decrypt in List): %v", err)
+	}
+	if len(got) != 1 || got[0].SecretKey != model.MaskedSecret {
+		t.Fatalf("corrupt ciphertext list = %+v, want one masked account", got)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// 未配置 S3C_STORE_KEY 重开:List 依旧成功且脱敏(Get 仍要求 key,另行覆盖)。
+	noKey, err := openSQLite(dbPath, "")
+	if err != nil {
+		t.Fatalf("reopen without key: %v", err)
+	}
+	got, err = noKey.List()
+	if err != nil {
+		t.Fatalf("list without S3C_STORE_KEY must succeed: %v", err)
+	}
+	if len(got) != 1 || got[0].SecretKey != model.MaskedSecret || got[0].Name != "contract" {
+		t.Fatalf("list without key = %+v, want masked contract account", got)
 	}
 }

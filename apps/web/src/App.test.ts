@@ -203,6 +203,15 @@ describe('App', () => {
     w.unmount()
   })
 
+  it('无可回退账号时仍 selectAccount("")（清理 localStorage 里的 remembered 残留）', async () => {
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
+    vi.mocked(rememberedAccountId).mockReturnValue('zz-gone')
+    const w = mountApp()
+    await flushPromises()
+    expect(vi.mocked(selectAccount)).toHaveBeenCalledWith('')
+    w.unmount()
+  })
+
   it('dark 主题渲染 moon 图标、Tauri 桌面徽章、英文 locale 标签', async () => {
     ;(api as unknown as { isTauri: boolean }).isTauri = true
     vi.mocked(resolvedTheme).mockReturnValueOnce('dark')

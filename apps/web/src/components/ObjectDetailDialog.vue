@@ -8,8 +8,6 @@ import type { ObjectMeta } from '../types'
 defineProps<{
   open: boolean
   detail: ObjectMeta | null
-  accountId: string
-  bucket: string
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +17,6 @@ const emit = defineEmits<{
   (e: 'openTags', key: string): void
   (e: 'openVersions', key: string): void
   (e: 'openStorageClass', key: string): void
-  (e: 'error', msg: string): void
 }>()
 </script>
 

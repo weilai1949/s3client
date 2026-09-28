@@ -272,6 +272,53 @@ it('非 API 运行期导出必须被生产代码引用（零引用即死代码�
   ).toEqual([])
 })
 
+/**
+ * 导出面死代码的源码形态补拦（review-2026-09-24 Nit「导出面死代码」）。
+ *
+ * 上面 B 半边按裸词计数：`updateToast` 这种「导出后只在**本模块内部**被调用」的符号，
+ * 在 `usageBody`（剥掉导出声明后的正文）里照样出现，会被算成生产引用 → 「全仓无人
+ * import」的导出能全绿混过，属该口径的结构性盲区（不是漏扫，是口径本身看不见）。
+ * 因此这里直接断言源码形态：下列符号必须是模块私有，源码里不得出现
+ * `export function updateToast` / `export const UPLOAD_CONCURRENCY` / `export { X }`。
+ *
+ * 允许的收口方式只有两种：删掉实现（若连内部引用一起消失），或让它真正被外部模块
+ * 引用（那就要同时满足 B 半边的生产引用口径）。二者都不是时本用例保持红灯。
+ */
+const MODULE_PRIVATE_NAMES = ['updateToast', 'applyTheme', 'UPLOAD_CONCURRENCY']
+
+/** `export function X` / `export const X` 形态。 */
+function isDirectExport(text: string, name: string): boolean {
+  return new RegExp(`\\bexport\\s+(?:async\\s+)?(?:function\\*?|class|const|let|var)\\s+${name}\\b`).test(text)
+}
+
+/** `export { X }` / `export { X as Y }` / `export { X } from ...` 列表形态（对外名取原名 X）。 */
+function isListedExport(text: string, name: string): boolean {
+  return new RegExp(`\\bexport\\s*\\{[^}]*\\b${name}\\b[^}]*\\}(?:\\s*from\\s*['"][^'"]+['"])?`).test(text)
+}
+
+it('仅模块内部使用的实现必须是模块私有（导出面死代码，B 半边裸词计数的盲区）', () => {
+  const offenders: string[] = []
+  const missing: string[] = []
+  for (const name of MODULE_PRIVATE_NAMES) {
+    const decl = new RegExp(`\\b(?:function|const|let|var)\\s+${name}\\b`)
+    if (!files.some(([, text]) => decl.test(text))) {
+      missing.push(name)
+      continue
+    }
+    for (const [path, text] of files) {
+      if (!decl.test(text)) continue
+      if (isDirectExport(text, name) || isListedExport(text, name)) offenders.push(`${path} → export ${name}`)
+    }
+  }
+  // 防空跑：符号被整段删除时不得静默变绿（本用例描述的符号必须真实存在且非导出）。
+  expect(missing, `MODULE_PRIVATE_NAMES 中的符号已从源码消失，请同步更新本用例：${missing.join(', ')}`).toEqual([])
+  expect(
+    offenders,
+    `以下实现只在本模块内部使用，却带着 export（导出面死代码）：\n  ${offenders.join('\n  ')}\n` +
+      '去掉 export 关键字（保留实现与内部调用），并把直接 import 它的测试改写为公开入口断言。',
+  ).toEqual([])
+})
+
 it('每个生产源模块都必须被生产代码 import（孤儿即死代码）', () => {
   const importedAny = new Set<string>()
   const importedAsComponent = new Set<string>()

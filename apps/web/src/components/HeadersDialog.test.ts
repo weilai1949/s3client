@@ -205,4 +205,67 @@ describe('HeadersDialog', () => {
     w.findComponent({ name: 'ModalDialog' }).vm.$emit('close')
     expect(w.emitted('close')).toBeTruthy()
   })
+
+  it('异步提交防重复：在途时双击「保存」只发一次 setHeaders', async () => {
+    vi.mocked(s3api.setHeaders).mockImplementationOnce(() => new Promise<never>(() => {})) // 请求挂起
+    const w = mountDialog()
+    await openDialog(w)
+    clickBody('common.save')
+    await flushPromises()
+    expect(bodyBtn('common.save').disabled).toBe(true) // 在途时提交按钮禁用
+    clickBody('common.save') // 第二次点击必须被守卫拦住
+    await flushPromises()
+    expect(vi.mocked(s3api.setHeaders)).toHaveBeenCalledTimes(1)
+  })
+
+  it('提交在途时直调 submitHeaders 被守卫拦截；失败后发出 error 且按钮恢复', async () => {
+    let rejectSave!: (e: Error) => void
+    vi.mocked(s3api.setHeaders).mockImplementationOnce(
+      () =>
+        new Promise<never>((_, rej) => {
+          rejectSave = rej
+        }),
+    )
+    const w = mountDialog()
+    await openDialog(w)
+    clickBody('common.save')
+    await flushPromises()
+    expect(bodyBtn('common.save').disabled).toBe(true) // 在途时提交按钮禁用
+    // 按钮 disabled 绕过点击后，提交入口自身必须仍拦住第二次提交
+    await (w.vm as unknown as { submitHeaders: () => Promise<void> }).submitHeaders()
+    expect(vi.mocked(s3api.setHeaders)).toHaveBeenCalledTimes(1)
+    // 失败 settle：error 事件、未发 saved、按钮恢复
+    rejectSave(new Error('headers-boom'))
+    await flushPromises()
+    expect(w.emitted('error')).toEqual([['headers-boom']])
+    expect(w.emitted('saved')).toBeUndefined()
+    expect(bodyBtn('common.save').disabled).toBe(false)
+  })
+})
+
+describe('HeadersDialog 稳定行键', () => {
+  it('删除中间 meta 行后其余行保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    const w = mountDialog({ ...DETAIL, metadata: { a: '1', b: '2', c: '3' } })
+    await openDialog(w)
+    const rows = () => keyInputs().map((el) => el.closest('.row') as HTMLElement)
+    const before = rows()
+    expect(before).toHaveLength(3)
+
+    // 删除按钮文案 ✕（排除 ModalDialog 自身的 ✕ 关闭按钮）
+    const removeBtns = Array.from(document.body.querySelectorAll('button')).filter(
+      (b) => !b.classList.contains('dlg-x') && (b.textContent ?? '').trim() === '✕',
+    )
+    expect(removeBtns).toHaveLength(3)
+    removeBtns[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const after = rows()
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 复用第 2 个节点承载第 3 行并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    // 存活行的输入值仍是原第 1、3 行（防串行）
+    expect(keyInputs().map((el) => el.value)).toEqual(['a', 'c'])
+    expect(valueInputs().map((el) => el.value)).toEqual(['1', '3'])
+  })
 })

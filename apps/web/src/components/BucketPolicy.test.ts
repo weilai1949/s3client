@@ -73,12 +73,14 @@ describe('BucketPolicy', () => {
     expect(removeBtn(w).exists()).toBe(true)
   })
 
-  it('编辑器 error 事件向上转发', async () => {
+  it('编辑器不再声明 error 死事件：父级不会收到转发（F5a）', async () => {
     const w = mountPolicy()
     await flushPromises()
-    w.findComponent(BucketPolicyVisualEditor).vm.$emit('error', 'editor-err')
+    const editor = w.findComponent(BucketPolicyVisualEditor)
+    // 即便外部强行 emit，父级也未挂处理器（不转发）
+    editor.vm.$emit('error', 'editor-err')
     await nextTick()
-    expect(w.emitted('error')).toEqual([['editor-err']])
+    expect(w.emitted('error')).toBeUndefined()
   })
 
   it('编辑器 update → 保存：put → toast → changed → 重新加载', async () => {

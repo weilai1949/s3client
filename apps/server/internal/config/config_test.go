@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"testing"
@@ -39,7 +40,7 @@ func TestFromEnvSSRFDenyPrivate(t *testing.T) {
 	}
 }
 
-// TestFromEnvAllowPlaintextStore 明文落盘显式 opt-in（todolist #29/#31）：默认关闭，
+// TestFromEnvAllowPlaintextStore 明文落盘显式 opt-in（KNOWN_ISSUES #29/#31）：默认关闭，
 // 仅显式 truthy 时开启，与其他 envTruthy 开关语义一致。
 func TestFromEnvAllowPlaintextStore(t *testing.T) {
 	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "")
@@ -111,6 +112,43 @@ func TestFromEnvOverrides(t *testing.T) {
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want debug", cfg.LogLevel)
+	}
+}
+
+// TestFromEnvStoreDriverNormalization R4:FromEnv 阶段归一化(TrimSpace+ToLower),
+// 使 "JSON" / "  Json  " 等写法与小写完全等价——明文落盘安全闸不再被大小写/空白绕过。
+func TestFromEnvStoreDriverNormalization(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"json", "json"},
+		{"JSON", "json"},
+		{"  Json  ", "json"},
+		{"SQLITE", "sqlite"},
+		{" Encrypted", "encrypted"},
+	}
+	for _, c := range cases {
+		t.Setenv("S3C_STORE_DRIVER", c.in)
+		if got := FromEnv().StoreDriver; got != c.want {
+			t.Errorf("FromEnv(StoreDriver=%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	// 关键回归:大写 json + 无 STORE_KEY + 未 opt-in 必须被明文闸拦住(R4 原缺陷)。
+	t.Setenv("S3C_STORE_DRIVER", "JSON")
+	t.Setenv("S3C_STORE_KEY", "")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "")
+	t.Setenv("S3C_TOKEN", "")
+	t.Setenv("S3C_ADDR", "")
+	cfg := FromEnv()
+	if err := cfg.Validate(); !errors.Is(err, ErrPlaintextStoreNotAllowed) {
+		t.Fatalf("JSON driver bypassed plaintext gate: Validate() = %v, want ErrPlaintextStoreNotAllowed", err)
+	}
+	// 未知值:FromEnv 归一化原样保留值,Validate 拒绝启动(而非 Open 静默当 json)。
+	t.Setenv("S3C_STORE_DRIVER", " pgsql ")
+	cfg = FromEnv()
+	if cfg.StoreDriver != "pgsql" {
+		t.Fatalf("StoreDriver = %q, want normalized pgsql", cfg.StoreDriver)
+	}
+	if err := cfg.Validate(); !errors.Is(err, ErrUnknownStoreDriver) {
+		t.Fatalf("unknown driver: Validate() = %v, want ErrUnknownStoreDriver", err)
 	}
 }
 

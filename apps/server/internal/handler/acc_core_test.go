@@ -2,7 +2,7 @@ package handler
 
 // acc_core_test.go —— handler.go / middleware.go / routes.go / metrics.go 的补测。
 // 覆盖：写响应辅助的错误分支、鉴权/CORS/安全头中间件分支、SPA 静态文件命中、
-// expvar 指标闭包、Shutdown 等。
+// 指标唯一出口（expvar 不再发布）、Shutdown 等。
 
 import (
 	"errors"
@@ -269,19 +269,14 @@ func TestAccSPAServesExistingFile(t *testing.T) {
 	}
 }
 
-// TestAccMetricsExpvar 补测 metrics.go 的 expvar 闭包（读取触发 Func 求值）。
-func TestAccMetricsExpvar(t *testing.T) {
-	total := expvar.Get("s3c_http_requests_total")
-	if total == nil {
-		t.Fatal("s3c_http_requests_total 未发布")
-	}
-	if s := total.String(); s == "" {
-		t.Fatal("total String() 为空")
-	}
-	if up := expvar.Get("s3c_uptime_seconds"); up == nil {
-		t.Fatal("s3c_uptime_seconds 未发布")
-	} else if up.String() == "" {
-		t.Fatal("s3c_uptime_seconds 为空")
+// TestAccMetricsPublishesNoExpvar /api/metrics 是唯一指标出口（Prometheus 文本）；
+// 包内不得再向 expvar 发布同名键——双出口各自演化必然漂移（review R18）。
+// 负向断言：expvar.Get 对未发布键返回 nil。
+func TestAccMetricsPublishesNoExpvar(t *testing.T) {
+	for _, key := range []string{"s3c_http_requests_total", "s3c_uptime_seconds"} {
+		if v := expvar.Get(key); v != nil {
+			t.Fatalf("%s 仍被发布到 expvar（%s），指标出口应只有 /api/metrics", key, v)
+		}
 	}
 }
 

@@ -37,6 +37,9 @@ func TestUserMessageCoversAllBranches(t *testing.T) {
 		{"ServiceUnavailable", fakeAPIError{code: "ServiceUnavailable"}, "storage temporarily unavailable"},
 		{"RequestTimeout", fakeAPIError{code: "RequestTimeout"}, "storage temporarily unavailable"},
 		{"NoSuchUpload", fakeAPIError{code: "NoSuchUpload"}, "multipart upload not found"},
+		// 部分删除：结构化载体透出已删计数；裸 sentinel 包装回退到基础文案（review §R17）。
+		{"partial delete with count", &partialDeleteError{deleted: 3, firstKey: "k.txt", firstCode: "AccessDenied"}, "some objects could not be deleted (3 deleted)"},
+		{"partial delete bare sentinel", fmt.Errorf("purge: %w", ErrPartialDelete), "some objects could not be deleted"},
 		{"unknown error", errors.New("connection refused"), "storage operation failed"},
 	}
 	for _, c := range cases {
@@ -73,6 +76,8 @@ func TestHTTPStatusCoversAllBranches(t *testing.T) {
 		{"SlowDown", fakeAPIError{code: "SlowDown"}, 503},
 		{"ServiceUnavailable", fakeAPIError{code: "ServiceUnavailable"}, 503},
 		{"NoSuchUpload unmapped", fakeAPIError{code: "NoSuchUpload"}, 500},
+		{"RequestTimeout", fakeAPIError{code: "RequestTimeout"}, 503},
+		{"partial delete sentinel", fmt.Errorf("purge: %w", ErrPartialDelete), 409},
 		{"unknown error", errors.New("boom"), 500},
 	}
 	for _, c := range cases {
@@ -81,6 +86,22 @@ func TestHTTPStatusCoversAllBranches(t *testing.T) {
 				t.Fatalf("HTTPStatus(%v) = %d, want %d", c.err, got, c.want)
 			}
 		})
+	}
+}
+
+// TestTemporarilyUnavailableTablesAgree 两张分类表必须同口径：UserMessage 把
+// SlowDown / ServiceUnavailable / RequestTimeout 归入「暂不可用，稍后重试」，HTTPStatus
+// 也必须回 503。此前 RequestTimeout 只在 UserMessage 表里、HTTPStatus 回落 500——
+// 同一错误对用户说「稍后重试」、对客户端却是通用 500（review Nit：两表分类不一致）。
+func TestTemporarilyUnavailableTablesAgree(t *testing.T) {
+	for _, code := range []string{"SlowDown", "ServiceUnavailable", "RequestTimeout"} {
+		err := fakeAPIError{code: code}
+		if got := UserMessage(err); got != "storage temporarily unavailable" {
+			t.Errorf("UserMessage(%s) = %q, want storage temporarily unavailable", code, got)
+		}
+		if got := HTTPStatus(err); got != 503 {
+			t.Errorf("HTTPStatus(%s) = %d, want 503（与 UserMessage 的「暂不可用」归类一致）", code, got)
+		}
 	}
 }
 
@@ -159,7 +180,9 @@ func TestIsAPIError(t *testing.T) {
 	}
 }
 
-// TestIsEntityTooLargeForms 错误码 / 文案 / 包装三种形态都能识别对象过大。
+// TestIsEntityTooLargeForms 只做结构化判定：S3 错误码 / 应用层 sentinel / 二者的包装
+// 三种形态可识别；纯文案（即便含 "EntityTooLarge" 子串）不得触发——文案匹配会随上游
+// 措辞变化静默失效（review Nit：冗余文案匹配）。
 func TestIsEntityTooLargeForms(t *testing.T) {
 	cases := []struct {
 		name string
@@ -168,9 +191,10 @@ func TestIsEntityTooLargeForms(t *testing.T) {
 	}{
 		{"nil", nil, false},
 		{"code", fakeAPIError{code: "EntityTooLarge"}, true},
-		{"user message path", fakeAPIError{code: "EntityTooLarge"}, true},
-		{"message contains code", errors.New("validation: EntityTooLarge for part 1"), true},
-		{"message lower case", errors.New("part is entity too large"), true},
+		{"wrapped code", fmt.Errorf("copy: %w", fakeAPIError{code: "EntityTooLarge"}), true},
+		{"sentinel wrapped", fmt.Errorf("put: %w", ErrObjectTooLarge), true},
+		{"plain text with code substring", errors.New("validation: EntityTooLarge for part 1"), false},
+		{"plain text lower case", errors.New("part is entity too large"), false},
 		{"unrelated", errors.New("boom"), false},
 		{"unrelated api error", fakeAPIError{code: "AccessDenied"}, false},
 	}

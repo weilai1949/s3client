@@ -20,7 +20,7 @@ func TestNormalizeEndpoint(t *testing.T) {
 		{"minio.example.com", true, "https://minio.example.com"},
 		{"", false, ""},
 		// 大小写 scheme：此前只做大小写敏感的前缀判断，会把 "HTTP://Host" 当成
-		// 无 scheme 的裸主机，产出损坏的 "http://HTTP://Host"（features.md §K，原 todolist #10）。
+		// 无 scheme 的裸主机，产出损坏的 "http://HTTP://Host"（features.md §K，KNOWN_ISSUES #10）。
 		{"HTTP://MinIO:9000", false, "http://minio:9000"},
 		{"HTTPS://S3.AmazonAWS.com/", false, "https://s3.amazonaws.com"},
 		// 首尾空白：账号 endpoint 由用户手填，创建时只校验非空、不 trim。

@@ -23,7 +23,12 @@ const emit = defineEmits<{
 }>()
 
 const contentType = ref('')
-const meta = reactive<{ key: string; value: string }[]>([])
+/** 行模型带前端生成的 rowKey：v-for 用它做稳定键（index 作 key 会让删除中间行复用错行 DOM）。 */
+const meta = reactive<{ rowKey: string; key: string; value: string }[]>([])
+
+/** 行稳定键：组件内自增序列（仅需在同一实例的 v-for 内唯一，不使用会碰撞的业务字段）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
 
 watch(() => props.open, (o) => {
   if (!o) return
@@ -33,25 +38,30 @@ watch(() => props.open, (o) => {
   if (d && d.key === props.objectKey) {
     contentType.value = d.contentType || ''
     for (const [k, v] of Object.entries(d.metadata ?? {})) {
-      meta.push({ key: k, value: v })
+      meta.push({ rowKey: newRowKey(), key: k, value: v })
     }
   }
 })
 
 function addMetaRow() {
-  meta.push({ key: '', value: '' })
+  meta.push({ rowKey: newRowKey(), key: '', value: '' })
 }
 
 function removeMetaRow(i: number) {
   meta.splice(i, 1)
 }
 
+/** 提交在途：防双击重复 setHeaders。 */
+const saving = ref(false)
+
 async function submitHeaders() {
+  if (saving.value) return
   const m: Record<string, string> = {}
   for (const item of meta) {
     const k = item.key.trim()
     if (k && item.value) m[k] = item.value
   }
+  saving.value = true
   try {
     await s3api.setHeaders(props.accountId, {
       bucket: props.bucket,
@@ -63,6 +73,8 @@ async function submitHeaders() {
     emit('saved')
   } catch (err) {
     emit('error', toErrorMessage(err))
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -80,7 +92,7 @@ async function submitHeaders() {
           <span>{{ t('headers.customMeta') }}</span>
           <button class="btn secondary sm" @click="addMetaRow">{{ t('headers.add') }}</button>
         </div>
-        <div v-for="(m, i) in meta" :key="i" class="row" style="margin-top:6px">
+        <div v-for="(m, i) in meta" :key="m.rowKey" class="row" style="margin-top:6px">
           <input v-model="m.key" :placeholder="t('headers.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <input v-model="m.value" :placeholder="t('headers.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <button class="btn secondary sm" :aria-label="t('common.delete')" @click="removeMetaRow(i)">✕</button>
@@ -88,7 +100,7 @@ async function submitHeaders() {
       </div>
     </div>
     <div class="row" style="margin-top:16px">
-      <button class="btn sm" @click="submitHeaders">{{ t('common.save') }}</button>
+      <button class="btn sm" :disabled="saving" @click="submitHeaders">{{ t('common.save') }}</button>
       <button class="btn secondary sm" @click="emit('close')">{{ t('common.cancel') }}</button>
     </div>
   </ModalDialog>

@@ -42,7 +42,6 @@ const actions = useObjectActions({
 })
 const previewComposable = usePreview({
   account: browser.account,
-  currentBucket: browser.currentBucket,
   getCtxEntry: () => browser.ctxMenu.value?.entry,
   closeCtx: browser.closeCtx,
   download: actions.download,
@@ -305,15 +304,12 @@ function dismissError() {
       <ObjectDetailDialog
         :open="!!detail"
         :detail="detail"
-        :account-id="account.id"
-        :bucket="currentBucket"
         @close="detail = null"
         @edit-headers="openHeadersDialog"
         @open-acl="openAcl"
         @open-tags="openTagsDialog"
         @open-versions="openVersions"
         @open-storage-class="openStorageClass"
-        @error="error = $event"
       />
       </template>
     </template>
@@ -429,7 +425,6 @@ function dismissError() {
       :account-id="account?.id ?? ''"
       :bucket="currentBucket"
       @close="preview = null"
-      @error="error = $event"
     />
 
     <!-- 右键菜单 -->

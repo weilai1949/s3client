@@ -11,14 +11,6 @@ vi.mock('../preview', async (importOriginal) => {
   }
 })
 
-vi.mock('../proxy', () => ({
-  proxyUrl: vi.fn(() => 'http://proxy/inline'),
-}))
-
-vi.mock('../api', () => ({
-  api: { base: 'http://localhost' },
-}))
-
 describe('usePreview', () => {
   it('showPreview sets preview state', () => {
     const ctx = {
@@ -35,12 +27,11 @@ describe('usePreview', () => {
     expect(result.preview.value!.key).toBe('test.txt')
   })
 
-  it('showPreview sets empty url for unknown kind', async () => {
+  it('showPreview 打开未知类型（无 url 字段：取回由组件内部带鉴权完成）', async () => {
     const mod = await import('../preview')
     vi.mocked(mod.previewKind).mockReturnValue('none')
     const ctx = {
       account: { value: { id: 'a1' } },
-      currentBucket: { value: 'b1' },
       getCtxEntry: vi.fn(),
       closeCtx: vi.fn(),
       download: vi.fn(),
@@ -48,7 +39,8 @@ describe('usePreview', () => {
     const result = usePreview(ctx as unknown as PreviewCtx)
     const o = { key: 'unknown.xyz' } as unknown as ObjectItem
     result.showPreview(o)
-    expect(result.preview.value!.url).toBe('')
+    expect(result.preview.value).toEqual({ key: 'unknown.xyz', kind: 'none' })
+    expect('url' in (result.preview.value ?? {})).toBe(false)
   })
 
   it('previewOrDownload calls download for unknown kind', async () => {

@@ -5,6 +5,15 @@ import VersionsDialog from './VersionsDialog.vue'
 import { s3api } from '../api'
 import { confirmDialog } from '../confirm'
 import { toast } from '../store'
+import { ROW_HEIGHT } from '../virtualList'
+
+// happy-dom 也提供 ResizeObserver，但统一用可控 stub 保证 clientHeight=0 → viewportH=480
+class RO {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+vi.stubGlobal('ResizeObserver', RO)
 
 vi.mock('../api', () => ({
   s3api: {
@@ -79,6 +88,34 @@ function bodyBtns(text: string): HTMLButtonElement[] {
 
 function clickBody(text: string) {
   bodyBtn(text).dispatchEvent(new MouseEvent('click', { bubbles: true }))
+}
+
+/* 虚拟滚动断言用的 DOM 查询：弹窗内容 Teleport 到 body，只能从 body 查。 */
+function bodyRows(): HTMLElement[] {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('tbody tr.v-row'))
+}
+
+function bodySpacers(): HTMLElement[] {
+  return Array.from(document.body.querySelectorAll<HTMLElement>('tbody tr.v-spacer'))
+}
+
+function bodyWrap(): HTMLElement {
+  const el = document.body.querySelector<HTMLElement>('.tbl-wrap')
+  expect(el, '.tbl-wrap 滚动容器应存在').toBeTruthy()
+  return el as HTMLElement
+}
+
+function manyVersions(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    key: 'k',
+    versionId: `v${i}`,
+    isLatest: i === n - 1,
+    // 升序时间戳 → 加载后按 lastModified 降序排列（第 0 行 = v{n-1}）
+    lastModified: `2024-01-01T00:00:${String(i).padStart(2, '0')}`,
+    size: 10,
+    etag: 'e',
+    storageClass: 'STANDARD',
+  }))
 }
 
 let mounted: Array<{ unmount: () => void }> = []
@@ -312,8 +349,9 @@ describe('VersionsDialog', () => {
     await nextTick()
     expect(compare.props('open')).toBe(false)
 
+    // F5a：CompareDialog 已删除 error 死事件，父级不再转发
     ;(compare.vm as { $emit: (e: string, ...a: unknown[]) => void }).$emit('error', 'compare-boom')
-    expect(w.emitted('error')).toEqual([['compare-boom']])
+    expect(w.emitted('error')).toBeUndefined()
   })
 
   it('requires at least two content versions for compare', async () => {
@@ -475,5 +513,84 @@ describe('VersionsDialog', () => {
 
     expect(vi.mocked(s3api.listVersions)).toHaveBeenCalledTimes(20)
     expect(document.body.textContent ?? '').toContain('versions.truncated')
+  })
+
+  it('virtual 行高由 ROW_HEIGHT 绑定到行内样式（防 CSS 字面量 38/42 漂移回归）', async () => {
+    const w = mountDialog()
+    await openDialog(w)
+    const rows = bodyRows()
+    expect(rows.length).toBeGreaterThan(0)
+    // 渲染行高必须来自虚拟窗口同一常量（此前 CSS 字面量 38 vs ROW_HEIGHT=42 漂移）
+    expect(rows[0].getAttribute('style')).toContain(`height: ${ROW_HEIGHT}px`)
+  })
+
+  it('virtualizes long version lists：只渲染窗口行 + spacer，滚动后 padTop 出现且首行正确', async () => {
+    const w = mountDialog()
+    await openDialog(w, { versions: manyVersions(50), deleteMarkers: [] })
+    // viewportH=480 → ceil(480/ROW_HEIGHT)+24 = 36 行窗口
+    expect(bodyRows()).toHaveLength(36)
+    expect(bodySpacers()).toHaveLength(1) // 初始仅 padBottom（50-36 行）
+    const wrap = bodyWrap()
+    // 「比较」按钮行留在滚动容器之外（不受滚动影响）
+    expect(wrap.contains(bodyBtn('versions.compare'))).toBe(false)
+    wrap.scrollTop = ROW_HEIGHT * 30
+    wrap.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    // 滚动后 padTop 出现（18*42=756px），首行是第 18 条（降序 → v31）
+    const spacers = bodySpacers()
+    expect(spacers).toHaveLength(1)
+    expect(spacers[0].querySelector('td')?.getAttribute('style')).toContain('756px')
+    const rows = bodyRows()
+    // 窗口 18..54 被总数 50 截断 → 只剩 18..49 共 32 行（padBottom 已归零）
+    expect(rows).toHaveLength(32)
+    expect(rows[0].textContent).toContain('v31')
+    expect(wrap.scrollTop).toBe(ROW_HEIGHT * 30)
+  })
+
+  it('重开弹窗重新加载后虚拟窗口回到顶部（不残留旧 scrollTop）', async () => {
+    const w = mountDialog()
+    await openDialog(w, { versions: manyVersions(50), deleteMarkers: [] })
+    const wrap = bodyWrap()
+    wrap.scrollTop = ROW_HEIGHT * 30
+    wrap.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(bodyRows()[0].textContent).toContain('v31')
+
+    await w.setProps({ open: false })
+    await flushPromises()
+    await w.setProps({ open: true })
+    await flushPromises()
+    const rows = bodyRows()
+    expect(rows).toHaveLength(36)
+    // 窗口必须从头渲染：残留 start=18 会让首行仍是 v31
+    expect(rows[0].textContent).toContain('v49')
+    expect(bodyWrap().scrollTop).toBe(0)
+  })
+
+  it('scrollEl 未绑定时空安全早退；绑定后 measureViewport 取实测 clientHeight', async () => {
+    // open=false：弹窗内容未渲染 → scrollEl 为 null
+    const w = mountDialog()
+    const vm = w.vm as unknown as { onListScroll: () => void; measureViewport: () => void; viewportH: number }
+    vm.onListScroll()
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(480)
+    // 打开后容器绑定：happy-dom clientHeight=0 → 480 兜底，覆写实测值后取真值
+    await openDialog(w)
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(480)
+    Object.defineProperty(bodyWrap(), 'clientHeight', { value: 600, configurable: true })
+    vm.measureViewport()
+    expect(vm.viewportH).toBe(600)
+  })
+
+  it('环境无 ResizeObserver 时弹窗列表仍正常渲染（不注册观察者）', async () => {
+    vi.stubGlobal('ResizeObserver', undefined)
+    try {
+      const w = mountDialog()
+      await openDialog(w, { versions: manyVersions(3), deleteMarkers: [] })
+      expect(bodyRows()).toHaveLength(3)
+    } finally {
+      vi.stubGlobal('ResizeObserver', RO)
+    }
   })
 })

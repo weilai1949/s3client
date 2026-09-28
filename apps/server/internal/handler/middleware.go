@@ -12,6 +12,11 @@ import (
 )
 
 // withSecurityHeaders 为所有响应设置基础安全头（含静态资源与 API）。
+//
+// defaultCSPConnectSrc 是 connect-src 的**唯一**字面量来源（New 的默认值共用）：
+// 两处各写一份字面量必然漂移（review Nit），新增引用请用常量而非复制字符串。
+const defaultCSPConnectSrc = "'self' http://127.0.0.1:* http://localhost:*"
+
 func (h *Handler) withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -22,7 +27,7 @@ func (h *Handler) withSecurityHeaders(next http.Handler) http.Handler {
 		// 自定义后端/远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
 		connect := h.cspConnectSrc
 		if connect == "" {
-			connect = "'self' http://127.0.0.1:* http://localhost:*"
+			connect = defaultCSPConnectSrc
 		}
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src "+connect+"; object-src 'none'; base-uri 'self'; form-action 'self'")

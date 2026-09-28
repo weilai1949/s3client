@@ -38,7 +38,7 @@ Object.defineProperty(document.documentElement, 'dataset', {
   writable: true,
 })
 
-const { readTheme, resolvedTheme, applyTheme, cycleTheme, systemThemeTick } = await import('./theme')
+const { readTheme, resolvedTheme, cycleTheme, systemThemeTick } = await import('./theme')
 
 describe('readTheme', () => {
   beforeEach(() => memLocal.clear())
@@ -82,23 +82,26 @@ describe('resolvedTheme', () => {
   })
 })
 
-describe('applyTheme', () => {
+// applyTheme 已是模块私有（导出面死代码，见 deadcode_gate.test.ts 源码形态门禁）：
+// 它的对外可见效果（data-theme + localStorage 持久化）一律经 cycleTheme 公开入口断言。
+describe('applyTheme（经 cycleTheme 公开入口）', () => {
   beforeEach(() => {
     memLocal.clear()
     delete dataset['theme']
     darkMatches = true
   })
 
-  it('sets data-theme and persists to localStorage', () => {
-    applyTheme('dark')
-    expect(dataset['theme']).toBe('dark')
-    expect(memLocal.get('s3c.theme')).toBe('dark')
+  it('应用新主题到 <html data-theme> 并持久化到 localStorage', () => {
+    expect(cycleTheme()).toBe('light') // auto → light
+    expect(dataset['theme']).toBe('light')
+    expect(memLocal.get('s3c.theme')).toBe('light')
   })
 
-  it('defaults to readTheme result', () => {
+  it('存储 light 时切换 dark：非 auto 分支也走同一套写入 + 持久化', () => {
     memLocal.set('s3c.theme', 'light')
-    applyTheme()
-    expect(dataset['theme']).toBe('light')
+    expect(cycleTheme()).toBe('dark')
+    expect(dataset['theme']).toBe('dark')
+    expect(memLocal.get('s3c.theme')).toBe('dark')
   })
 })
 
@@ -125,10 +128,11 @@ describe('system theme listener', () => {
 })
 
 describe('theme remaining branches', () => {
-  it('applyTheme auto 且系统偏好 light 时解析为 light（mq.matches 的 false 侧）', () => {
+  it('auto 且系统偏好 light 时解析为 light（applyTheme 的 mq.matches false 侧，经 cycleTheme 走到 auto）', () => {
     darkMatches = false
     memLocal.clear()
-    applyTheme('auto')
+    memLocal.set('s3c.theme', 'dark') // cycleTheme: dark → auto → 按系统偏好解析
+    expect(cycleTheme()).toBe('auto')
     expect(dataset['theme']).toBe('light')
     expect(memLocal.get('s3c.theme')).toBe('auto')
   })
@@ -156,16 +160,31 @@ describe('存储不可用（隐私模式/配额异常）时主题模块不抛错
     try {
       vi.resetModules()
       darkMatches = true
-      // 模块级 applyTheme() 过去会直接抛出 → 整个前端启动失败
+      delete dataset['theme']
+      // 模块级 applyTheme()（默认参数 + setItem 抛错的 catch 侧）过去会直接抛出 → 整个前端启动失败
       const mod = await import('./theme')
+      expect(dataset['theme']).toBe('dark') // 初始化已按 auto+暗色系统写入，存储全坏也不崩
       expect(mod.readTheme()).toBe('auto')
       expect(mod.resolvedTheme()).toBe('dark')
-      expect(() => mod.applyTheme('light')).not.toThrow()
-      expect(dataset['theme']).toBe('light')
+      // 写入路径（cycleTheme → applyTheme → setItem 抛错 → catch 降级）同样不许抛
       expect(() => mod.cycleTheme()).not.toThrow()
+      expect(dataset['theme']).toBe('light')
     } finally {
       getSpy.mockRestore()
       setSpy.mockRestore()
     }
+  })
+})
+
+describe('模块初始化（applyTheme 默认参数的唯一公开观察点）', () => {
+  it('启动时按 readTheme() 写入 data-theme（存储 light 而系统偏好暗色时不得误按 auto 解析）', async () => {
+    memLocal.clear()
+    memLocal.set('s3c.theme', 'light')
+    delete dataset['theme']
+    darkMatches = true // 默认参数若没读存储、误走 auto，这里会解析成 dark 而红灯
+    vi.resetModules()
+    await import('./theme')
+    expect(dataset['theme']).toBe('light')
+    expect(memLocal.get('s3c.theme')).toBe('light')
   })
 })

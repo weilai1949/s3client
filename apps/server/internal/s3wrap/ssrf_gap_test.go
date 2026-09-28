@@ -29,7 +29,7 @@ func TestValidateEndpointGaps(t *testing.T) {
 		{"volcano imds ip literal", "http://100.96.0.2", "endpoint host is blocked"},
 		{"metadata.goog hostname", "http://metadata.goog", "endpoint host is blocked"},
 		// 用户手填的 endpoint 常带首尾空白：此前 trim 后仅用于判空，解析仍用未 trim 的
-		// 原串，导致合法地址被判为 "invalid endpoint URL"（features.md §K，原 todolist #10）。
+		// 原串，导致合法地址被判为 "invalid endpoint URL"（features.md §K，KNOWN_ISSUES #10）。
 		{"leading and trailing space", " http://127.0.0.1:9000 ", ""},
 		{"uppercase scheme with spaces", " HTTP://127.0.0.1:9000/ ", ""},
 		// 回归护栏：归一化后必须仍然拦到危险主机。空白原本就是 fail-closed（解析失败），
@@ -54,6 +54,26 @@ func TestValidateEndpointGaps(t *testing.T) {
 				t.Fatalf("ValidateEndpoint(%q) = %v, want substring %q", c.endpoint, err, c.wantErr)
 			}
 		})
+	}
+}
+
+// TestValidateEndpointEmptyHostCleanError 空主机名（如 "http://:8080"、"file:///..."）
+// 解析成功但无 host：必须 fail-closed 且错误串干净。此前该分支与解析失败共用
+// `fmt.Errorf("...: %w", err)`，err 为 nil 时产出 "invalid endpoint URL: %!w(<nil>)"
+// 污染日志与 API 错误体（review Nit）。
+func TestValidateEndpointEmptyHostCleanError(t *testing.T) {
+	for _, endpoint := range []string{"http://:8080", "file:///etc/passwd"} {
+		err := ValidateEndpoint(endpoint)
+		if err == nil {
+			t.Fatalf("ValidateEndpoint(%q) 应 fail-closed，got nil", endpoint)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "invalid endpoint URL") {
+			t.Errorf("ValidateEndpoint(%q) = %q, want 前缀 invalid endpoint URL", endpoint, msg)
+		}
+		if strings.Contains(msg, "%!w") || strings.Contains(msg, "<nil>") {
+			t.Errorf("ValidateEndpoint(%q) 错误串被 nil 格式化污染: %q", endpoint, msg)
+		}
 	}
 }
 

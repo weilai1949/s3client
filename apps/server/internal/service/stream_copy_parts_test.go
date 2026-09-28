@@ -51,3 +51,33 @@ func TestMultipartStreamCopyRejectsPartOverLimit(t *testing.T) {
 		t.Fatalf("aborts = %d, want 1", f.aborts)
 	}
 }
+
+// TestMultipartStreamCopyByteCeiling 字节口径复刻生产边界（review Nit：
+// stream_copy 固定 64MB × 10000 段 = 640GB 上限）。用 4B/段 × 2 段精确验证：
+// 正好用满全部段的对象合法完成；多一个字节即在上传前拒绝并 abort，绝不静默截断。
+func TestMultipartStreamCopyByteCeiling(t *testing.T) {
+	oldLimit, oldSize := maxMultipartParts, multipartPartSize
+	maxMultipartParts, multipartPartSize = 2, 4
+	t.Cleanup(func() { maxMultipartParts, multipartPartSize = oldLimit, oldSize })
+
+	t.Run("exactly ceiling passes", func(t *testing.T) {
+		f := newSvcFake(t)
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("12345678")); err != nil {
+			t.Fatalf("8B / 4B = 正好 2 段应完成: %v", err)
+		}
+		if f.parts != 2 || f.comps != 1 || f.aborts != 0 {
+			t.Fatalf("parts=%d comps=%d aborts=%d, want 2/1/0", f.parts, f.comps, f.aborts)
+		}
+	})
+
+	t.Run("one byte over ceiling rejected", func(t *testing.T) {
+		f := newSvcFake(t)
+		err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("123456789"))
+		if err == nil || !strings.Contains(err.Error(), "2 parts x 4 bytes") {
+			t.Fatalf("err = %v, want limit error carrying 段数×段大小", err)
+		}
+		if f.parts != 2 || f.aborts != 1 {
+			t.Fatalf("parts=%d aborts=%d, want 2/1（第 3 段不应发出，且必须 abort）", f.parts, f.aborts)
+		}
+	})
+}

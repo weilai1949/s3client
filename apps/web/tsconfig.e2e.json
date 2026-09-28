@@ -1,6 +1,6 @@
 {
   "//": "E2E（Playwright）源码的独立类型检查配置。",
-  "//why": "主 tsconfig.json 只 include src/**，e2e/ 与 e2e-real/ 长期零静态检查——`pnpm typecheck` 看不见它们，而 e2e-real 是 todolist #37 的核心门禁。此配置把两套 E2E 与 playwright 配置纳入 vue-tsc，堵住该盲区。",
+  "//why": "主 tsconfig.json 只 include src/**，e2e/ 与 e2e-real/ 长期零静态检查——`pnpm typecheck` 看不见它们，而 e2e-real 是 KNOWN_ISSUES #37 的核心门禁。此配置把两套 E2E 与 playwright 配置纳入 vue-tsc，堵住该盲区。",
   "compilerOptions": {
     "target": "ES2021",
     "module": "ESNext",

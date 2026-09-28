@@ -59,13 +59,3 @@ func TestViewNil(t *testing.T) {
 		t.Fatal("nil account View should return nil")
 	}
 }
-
-// TestBucketOrDefault 默认桶回退：空返回空串由调用方处理，非空原样。
-func TestBucketOrDefault(t *testing.T) {
-	if got := (&Account{}).BucketOrDefault(); got != "" {
-		t.Fatalf("empty bucket = %q", got)
-	}
-	if got := (&Account{Bucket: "b"}).BucketOrDefault(); got != "b" {
-		t.Fatalf("bucket = %q", got)
-	}
-}

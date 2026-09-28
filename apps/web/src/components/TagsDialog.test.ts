@@ -232,3 +232,34 @@ describe('TagsDialog', () => {
     expect(w.emitted('close')).toBeTruthy()
   })
 })
+
+describe('TagsDialog 稳定行键', () => {
+  it('删除中间标签行后其余行保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    const w = mountDialog()
+    await openDialog(w, [
+      { key: 'env', value: 'prod' },
+      { key: 'team', value: 's3' },
+      { key: 'owner', value: 'ops' },
+    ])
+    const rows = () => keyInputs().map((el) => el.closest('.row') as HTMLElement)
+    const before = rows()
+    expect(before).toHaveLength(3)
+
+    // 删除按钮文案 ✕（排除 ModalDialog 自身的 ✕ 关闭按钮）
+    const removeBtns = Array.from(document.body.querySelectorAll('button')).filter(
+      (b) => !b.classList.contains('dlg-x') && (b.textContent ?? '').trim() === '✕',
+    )
+    expect(removeBtns).toHaveLength(3)
+    removeBtns[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const after = rows()
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 复用第 2 个节点承载第 3 行并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    // 存活行的输入值仍是原第 1、3 行（防串行）
+    expect(keyInputs().map((el) => el.value)).toEqual(['env', 'owner'])
+    expect(valueInputs().map((el) => el.value)).toEqual(['prod', 'ops'])
+  })
+})

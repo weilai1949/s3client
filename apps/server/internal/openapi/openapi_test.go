@@ -233,3 +233,106 @@ func TestEnumStr(t *testing.T) {
 		t.Errorf("type = %q", s.Type)
 	}
 }
+
+// resolveJSONPointer 测试内的本地 $ref 解析器：沿 "#/..." 逐段下钻，证明引用真实可解析。
+func resolveJSONPointer(t *testing.T, doc map[string]any, ref string) map[string]any {
+	t.Helper()
+	if !strings.HasPrefix(ref, "#/") {
+		t.Fatalf("ref %q 不是本地引用", ref)
+	}
+	cur := any(doc)
+	for _, seg := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			t.Fatalf("ref %q 的段 %q 父节点不是对象（%T）", ref, seg, cur)
+		}
+		next, ok := m[seg]
+		if !ok {
+			t.Fatalf("ref %q 无法解析：段 %q 不存在", ref, seg)
+		}
+		cur = next
+	}
+	out, ok := cur.(map[string]any)
+	if !ok {
+		t.Fatalf("ref %q 解析结果不是对象（%T）", ref, cur)
+	}
+	return out
+}
+
+// responseJSONSchema 从响应实体取出 application/json 的 schema 对象。
+func responseJSONSchema(t *testing.T, resp map[string]any) map[string]any {
+	t.Helper()
+	content, ok := resp["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("响应实体缺少 content：%v", resp)
+	}
+	mt, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("content 缺少 application/json：%v", content)
+	}
+	sch, ok := mt["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("application/json 缺少 schema：%v", mt)
+	}
+	return sch
+}
+
+// TestComponentsResponsesKeepSchema（R15b）：components.responses 的实体必须携带
+// description 与 content/ schema——Response.JSON / Ref 字段曾被 `json:"-"` 静默丢弃，
+// 端点级 $ref 解析到的共享响应是无 schema 空壳，契约 SSOT 失效。
+// 断言走「序列化 → 解析 JSON → 沿 $ref 解析到真实 schema」的完整消费路径，不检查 Go 结构体。
+func TestComponentsResponsesKeepSchema(t *testing.T) {
+	r := New("s3clinet API", "1.0.0-test")
+	r.Operation("GET", "/api/x", Op{
+		Summary:   "x",
+		Responses: map[string]Response{"404": {Ref: "#/components/responses/NotFound"}},
+	})
+	b, err := r.MarshalJSON()
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// 端点级 $ref 原样输出（复用共享响应，不内联）。
+	op := doc["paths"].(map[string]any)["/api/x"].(map[string]any)["get"].(map[string]any)
+	entry := op["responses"].(map[string]any)["404"].(map[string]any)
+	if ref, _ := entry["$ref"].(string); ref != "#/components/responses/NotFound" {
+		t.Fatalf("端点级 404 = %v, want $ref", entry["$ref"])
+	}
+
+	// 沿 $ref 解析共享响应实体：有 description，且 JSON schema 是对 Error 组件的引用。
+	nf := resolveJSONPointer(t, doc, entry["$ref"].(string))
+	if desc, _ := nf["description"].(string); desc == "" {
+		t.Errorf("共享响应实体缺少 description：%v", nf)
+	}
+	schemaRef, _ := responseJSONSchema(t, nf)["$ref"].(string)
+	if schemaRef != "#/components/schemas/Error" {
+		t.Fatalf("NotFound.schema = %v, want $ref #/components/schemas/Error", responseJSONSchema(t, nf))
+	}
+	// 再解析一层：schema 引用必须落到真实存在的组件（含 error 属性），不是空壳。
+	errSchema := resolveJSONPointer(t, doc, schemaRef)
+	if typ, _ := errSchema["type"].(string); typ != "object" {
+		t.Errorf("Error schema type = %v, want object", errSchema["type"])
+	}
+	props, _ := errSchema["properties"].(map[string]any)
+	if props["error"] == nil {
+		t.Errorf("Error schema 缺少 error 属性：%v", errSchema)
+	}
+
+	// 内联 JSON schema 的共享响应（BadRequest）同样带 schema。
+	bad := resolveJSONPointer(t, doc, "#/components/responses/BadRequest")
+	if typ, _ := responseJSONSchema(t, bad)["type"].(string); typ != "object" {
+		t.Errorf("BadRequest.schema type = %v, want object", responseJSONSchema(t, bad)["type"])
+	}
+	// 未声明 body 的共享响应（Unauthorized）保留 description，不产生空 content。
+	un := resolveJSONPointer(t, doc, "#/components/responses/Unauthorized")
+	if desc, _ := un["description"].(string); desc == "" {
+		t.Errorf("Unauthorized 缺少 description：%v", un)
+	}
+	if _, has := un["content"]; has {
+		t.Errorf("Unauthorized 不应有 content：%v", un)
+	}
+}

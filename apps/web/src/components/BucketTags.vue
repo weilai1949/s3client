@@ -15,7 +15,11 @@ const emit = defineEmits<{
   (e: 'changed'): void
 }>()
 
-const tags = ref<{ key: string; value: string }[]>([])
+const tags = ref<{ rowKey: string; key: string; value: string }[]>([])
+
+/** 行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段）。 */
+let rowSeq = 0
+const newRowKey = () => `row-${++rowSeq}`
 
 const { loading, saving, save } = useBucketSetting({
   bucket: () => props.bucket,
@@ -23,12 +27,12 @@ const { loading, saving, save } = useBucketSetting({
   onChanged: () => emit('changed'),
   load: async () => {
     const r = await s3api.getBucketTags(props.accountId, props.bucket)
-    tags.value = (r.tags ?? []).map((tag) => ({ key: tag.key, value: tag.value }))
+    tags.value = (r.tags ?? []).map((tag) => ({ rowKey: newRowKey(), key: tag.key, value: tag.value }))
   },
 })
 
 function addRow() {
-  tags.value.push({ key: '', value: '' })
+  tags.value.push({ rowKey: newRowKey(), key: '', value: '' })
 }
 
 function removeRow(i: number) {
@@ -60,7 +64,7 @@ async function saveTags() {
     <table class="tbl">
       <thead><tr><th style="width:40%">{{ t('bucketTags.colKey') }}</th><th>{{ t('bucketTags.colValue') }}</th><th style="width:60px"></th></tr></thead>
       <tbody>
-        <tr v-for="(row, i) in tags" :key="i">
+        <tr v-for="(row, i) in tags" :key="row.rowKey">
           <td><input v-model="row.key" class="mono" placeholder="key" /></td>
           <td><input v-model="row.value" class="mono" placeholder="value" /></td>
           <td><button class="btn secondary sm" @click="removeRow(i)">{{ t('common.remove') }}</button></td>

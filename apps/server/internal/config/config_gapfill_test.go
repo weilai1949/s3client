@@ -1,30 +1,32 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 )
 
-// TestEnvOrInt 表驱动覆盖 envOrInt 的全部分支：
-// 未设置/空串取默认；非数字、小于 1 取默认；合法值正常解析。
+// TestEnvOrInt 表驱动覆盖 envOrInt 的全部分支:未设置/空串取默认;非数字、<1
+// 一律返回错误(R9:不再静默回退,让运维误以为配置已生效);合法值正常解析。
 func TestEnvOrInt(t *testing.T) {
 	cases := []struct {
-		name string
-		val  string
-		set  bool
-		def  int
-		want int
+		name    string
+		val     string
+		set     bool
+		def     int
+		want    int
+		wantErr bool
 	}{
-		{"unset uses default", "", false, 30, 30},
-		{"empty uses default", "", true, 30, 30},
-		{"non numeric uses default", "abc", true, 30, 30},
-		{"mixed uses default", "5x", true, 30, 30},
-		{"zero uses default", "0", true, 30, 30},
-		{"negative uses default", "-3", true, 7, 7},
-		{"one is valid", "1", true, 30, 1},
-		{"positive parses", "42", true, 30, 42},
+		{"unset uses default", "", false, 30, 30, false},
+		{"empty uses default", "", true, 30, 30, false},
+		{"non numeric rejected", "abc", true, 30, 0, true},
+		{"mixed rejected", "5x", true, 30, 0, true},
+		{"zero rejected", "0", true, 30, 0, true},
+		{"negative rejected", "-3", true, 30, 0, true},
+		{"one is valid", "1", true, 30, 1, false},
+		{"positive parses", "42", true, 30, 42, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -33,30 +35,42 @@ func TestEnvOrInt(t *testing.T) {
 			} else {
 				t.Setenv("S3C_TEST_TIMEOUT", "") // 显式置空，隔离外部环境
 			}
-			if got := envOrInt("S3C_TEST_TIMEOUT", c.def); got != c.want {
+			got, err := envOrInt("S3C_TEST_TIMEOUT", c.def)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("envOrInt(%q, %d) err = %v, wantErr = %v", c.val, c.def, err, c.wantErr)
+			}
+			if err != nil && !errors.Is(err, ErrInvalidEnvValue) {
+				t.Fatalf("envOrInt(%q, %d) err = %v, want wraps ErrInvalidEnvValue", c.val, c.def, err)
+			}
+			if got != c.want {
 				t.Errorf("envOrInt(%q, %d) = %d, want %d", c.val, c.def, got, c.want)
 			}
 		})
 	}
 }
 
-// TestFromEnvShutdownTimeout 覆盖 FromEnv 中 S3C_SHUTDOWN_TIMEOUT 的默认/非法/合法三种取值。
+// TestFromEnvShutdownTimeout 覆盖 S3C_SHUTDOWN_TIMEOUT 的默认/合法/非法三种取值:
+// 非法值不再静默回退为默认——FromEnv 记录解析失败,Validate 原样上抛,走 main 已有的
+// 「配置校验失败 → 退出码 1」启动失败路径(R9)。
 func TestFromEnvShutdownTimeout(t *testing.T) {
-	cases := []struct {
-		name string
-		val  string
-		want int
-	}{
-		{"default", "", 30},
-		{"invalid falls back", "abc", 30},
-		{"zero falls back", "0", 30},
-		{"valid", "5", 5},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Setenv("S3C_SHUTDOWN_TIMEOUT", c.val)
-			if got := FromEnv().ShutdownTimeoutSec; got != c.want {
-				t.Errorf("ShutdownTimeoutSec = %d, want %d", got, c.want)
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("S3C_SHUTDOWN_TIMEOUT", "")
+		if got := FromEnv().ShutdownTimeoutSec; got != 30 {
+			t.Errorf("ShutdownTimeoutSec = %d, want 30", got)
+		}
+	})
+	t.Run("valid", func(t *testing.T) {
+		t.Setenv("S3C_SHUTDOWN_TIMEOUT", "5")
+		if got := FromEnv().ShutdownTimeoutSec; got != 5 {
+			t.Errorf("ShutdownTimeoutSec = %d, want 5", got)
+		}
+	})
+	for _, val := range []string{"abc", "0", "-3"} {
+		t.Run("invalid "+val+" fails validate", func(t *testing.T) {
+			t.Setenv("S3C_SHUTDOWN_TIMEOUT", val)
+			cfg := FromEnv()
+			if err := cfg.Validate(); !errors.Is(err, ErrInvalidEnvValue) {
+				t.Fatalf("Validate() = %v, want wraps ErrInvalidEnvValue", err)
 			}
 		})
 	}

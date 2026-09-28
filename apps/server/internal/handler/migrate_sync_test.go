@@ -314,6 +314,41 @@ func TestMigrateSync_PrefixFilter(t *testing.T) {
 	}
 }
 
+// TestMigrateSync_TruncatedPropagates 列举被截断（声称还有页却没有续传 token）时，
+// 200 响应必须带 truncated=true——否则第 100001 个对象永不同步且用户毫无信号（review R6）。
+func TestMigrateSync_TruncatedPropagates(t *testing.T) {
+	// 独立 fake：list 恒声称 IsTruncated=true 且不给 NextContinuationToken，
+	// service 侧按「声称未完却无有效 token」判定截断。
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		bucket := firstSegH(r.URL.Path)
+		switch {
+		case r.Method == http.MethodGet && r.URL.Query().Get("list-type") == "2":
+			w.Header().Set("Content-Type", "application/xml")
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">` +
+				`<Contents><Key>a.txt</Key><Size>10</Size><ETag>"a"</ETag><LastModified>2024-01-01T00:00:00.000Z</LastModified><StorageClass>STANDARD</StorageClass></Contents>` +
+				`<IsTruncated>true</IsTruncated></ListBucketResult>`))
+		case r.Method == http.MethodPut:
+			_ = syncPutObject(bucket, strings.TrimPrefix(r.URL.Path, "/"+bucket+"/"), syncEntry{size: 10, etag: "a"})
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet:
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write([]byte(strings.Repeat("x", 10)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	srcID, dstID, base := newSyncEnv(t, srv.URL, srv.URL)
+	out := doSync(t, base, map[string]any{
+		"sourceAccountId": srcID, "sourceBucket": "src-bucket",
+		"targetAccountId": dstID, "targetBucket": "dst-bucket", "mode": "etag",
+	})
+	if out["truncated"] != true {
+		t.Errorf("truncated = %v, want true（截断信号未从 service 透出到 200 响应）: %+v", out["truncated"], out)
+	}
+}
+
 // TestMigrateSync_CrossEndpoint 验证异端点（不同 URL）时走 StreamCopy，仍能同步成功。
 func TestMigrateSync_CrossEndpoint(t *testing.T) {
 	syncStore = map[string]map[string]syncEntry{

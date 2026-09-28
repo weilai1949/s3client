@@ -6,7 +6,7 @@ import { toast, createProgressToast } from '../store'
 import { confirmDialog } from '../confirm'
 import { promptDialog } from '../prompt'
 import { copyText } from '../clipboard'
-import { proxyUrl } from '../proxy'
+import { downloadProxyObject } from '../proxy'
 import { BATCH_META_CONCURRENCY, boundedPool } from '../batchMetadata'
 import { DELETE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { t, tf } from '../i18n'
@@ -200,16 +200,28 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     }
   }
 
-  // download 通过服务端代理下载：服务器强制 Content-Disposition: attachment，
-  // 浏览器直接保存文件，恶意内容（HTML/SVG 脚本等）不会被渲染执行。
-  function download(o: ObjectItem) {
-    const a = document.createElement('a')
-    a.href = proxyUrl(requireAccId(), ctx.currentBucket.value, 'download', o.key, api.base)
-    // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
-    a.download = o.key.split('/').pop() || 'object'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  // download 经服务端代理取回：服务器强制 Content-Disposition: attachment，恶意内容
+  // （HTML/SVG 脚本等）不会被渲染执行。`<a href>` 直连无法携带 Authorization 头，
+  // 启用 S3C_TOKEN 的部署下会 401 且把错误 JSON 当文件静默存盘（review §C1），
+  // 因此统一走带 Bearer 的 fetch → blob → objectURL 保存；失败只提示、不落盘。
+  async function download(o: ObjectItem) {
+    try {
+      await downloadProxyObject(
+        {
+          accountId: requireAccId(),
+          bucket: ctx.currentBucket.value,
+          key: o.key,
+          apiBase: api.base,
+          token: api.token,
+        },
+        // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
+        o.key.split('/').pop() || 'object',
+      )
+    } catch (err) {
+      const msg = toErrorMessage(err)
+      ctx.error.value = msg
+      toast(tf('objects.toastDownloadFail', { key: o.key, msg }), 'err')
+    }
   }
 
   /** 生成 1 小时签名链接并复制（右键菜单用）。 */
@@ -358,7 +370,6 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
   const uploadQueue = queue.items
   const uploading = queue.running
   const abortUploadItem = queue.abortItem
-  const abortAllUploads = queue.abortAll
 
   function keyForUpload(name: string): string {
     return (ctx.prefix.value ? ctx.prefix.value.replace(/\/+$/, '') + '/' : '') + name
@@ -480,7 +491,13 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       const delProgress = createProgressToast()
       const deleted = await new Promise<number>((resolve, reject) => {
         let n = 0
-        const stop = subscribeMigrateEvents(
+        /** 卸载路径：断开 SSE 并以 AbortError 收尾，让等待中的 Promise settle（不悬挂）。 */
+        const teardown = () => {
+          stopSse()
+          activeUnsub = undefined
+          reject(new DOMException('Aborted', 'AbortError'))
+        }
+        const stopSse = subscribeMigrateEvents(
           start.jobId,
           (p) => {
             n = p.migrated ?? 0
@@ -489,18 +506,18 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
             }
             if (p.status === 'done' || p.status === 'cancelled') {
               activeUnsub = undefined
-              stop()
+              stopSse()
               resolve(n)
             }
           },
           (err) => {
             activeUnsub = undefined
-            stop()
+            stopSse()
             reject(err)
           },
         )
-        // 记录当前订阅，供组件卸载时立即断开。
-        activeUnsub = stop
+        // 记录当前订阅，供组件卸载时立即断开并 settle。
+        activeUnsub = teardown
       })
       toast(
         start.truncated
@@ -509,6 +526,8 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       )
       await ctx.load(true)
     } catch (err) {
+      // 卸载中止（teardown 的 AbortError）：不写 ctx.error，交由 finally 复位忙碌态
+      if (err instanceof DOMException && err.name === 'AbortError') return
       ctx.error.value = toErrorMessage(err)
     } finally {
       ctx.opsBusy.value = false
@@ -605,7 +624,6 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     uploadQueue,
     uploading,
     abortUploadItem,
-    abortAllUploads,
     keyForUpload,
     pickUploadFiles,
     onPickUpload,

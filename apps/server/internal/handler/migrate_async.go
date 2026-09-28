@@ -32,7 +32,7 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 			job.Emit(service.ProgressFrom(p))
 		})
 		// RunBatch 在 ctx 取消时通过 s3wrap 错误为每个被中断的 key 记一条错误，
-		// out.LastError 必非空，故无需为取消场景提供默认文案。
+		// out.FirstError 必非空，故无需为取消场景提供默认文案。
 		status := "done"
 		if ctx.Err() != nil {
 			status = "cancelled"
@@ -75,7 +75,7 @@ func (h *Handler) migrateJobStatus(w http.ResponseWriter, r *http.Request) {
 	if done {
 		resp["result"] = migrateResultJSON(migrateResult{
 			Migrated: result.Migrated, Failed: result.Failed,
-			LastError: result.LastError, FailKeys: result.FailKeys,
+			LastError: result.FirstError, FailKeys: result.FailKeys,
 		})
 	}
 	h.writeJSON(w, http.StatusOK, resp)

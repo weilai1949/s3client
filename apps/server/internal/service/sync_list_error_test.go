@@ -71,12 +71,15 @@ func TestIndexDstStopsOnCancelledContext(t *testing.T) {
 		base.ServeHTTP(w, r)
 	})
 
-	idx, err := indexDst(ctx, newTestClient(t, srv.URL), listFakeBucket, "")
+	idx, truncated, err := indexDst(ctx, newTestClient(t, srv.URL), listFakeBucket, "")
 	if err == nil {
 		t.Fatal("取消后 indexDst 必须返回错误，而不是继续列举")
 	}
 	if len(idx) != 0 {
 		t.Fatalf("已取回的条目数 = %d, want 0", len(idx))
+	}
+	if truncated {
+		t.Fatal("ctx 取消是「客户端放弃」，不构成列举截断")
 	}
 	if reqs != 0 {
 		t.Fatalf("ctx 已取消时不应发起列举请求，实际发了 %d 次", reqs)

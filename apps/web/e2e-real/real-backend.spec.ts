@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 import { randomUUID } from 'node:crypto'
 
 /**
- * 真实联调浏览器冒烟（todolist #37）。
+ * 真实联调浏览器冒烟（KNOWN_ISSUES #37）。
  *
  * 与 `e2e/*.spec.ts` 的根本差异：**本文件不使用 `page.route()` mock 任何 `/api/**`**。
  * 页面由真实 Go 后端托管（`S3C_STATIC_DIR` 指向真实 `vite build` 产物），
@@ -20,6 +20,8 @@ import { randomUUID } from 'node:crypto'
  * 运行前提（由 `scripts/e2e-real.sh` / CI job 提供）：
  *   - `PLAYWRIGHT_BASE_URL` 指向**真实后端**（默认 http://127.0.0.1:8080）；
  *   - 后端 `S3C_STATIC_DIR` 指向真实构建产物；
+ *   - `S3C_TOKEN`：脚本自动生成并注入，**后端 /api 鉴权开启**（生产同构形态），
+ *     本文件负责把它带上——API 请求加 Authorization 头、页面预置 sessionStorage；
  *   - 一个可用的 RustFS（默认 127.0.0.1:9000，rustfsadmin/rustfsadmin），
  *     且 `RUSTFS_CORS_ALLOWED_ORIGINS` 放行页面 Origin。
  *
@@ -33,6 +35,12 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8080'
 const S3_ENDPOINT = process.env.S3CLINET_ENDPOINT || 'http://127.0.0.1:9000'
 const ACCESS_KEY = process.env.S3CLINET_ACCESS_KEY || 'rustfsadmin'
 const SECRET_KEY = process.env.S3CLINET_SECRET_KEY || 'rustfsadmin'
+/**
+ * `/api/*` 鉴权 token（`scripts/e2e-real.sh` 生成后注入环境变量）。
+ * 为空 = 后端未开鉴权（本地直接 `pnpm e2e:real` 打无 token 后端的兼容路径），
+ * 此时不加 Authorization、也不预置 sessionStorage。
+ */
+const API_TOKEN = process.env.S3C_TOKEN || ''
 
 /**
  * 后端有 IP 令牌桶限速（`ratelimit.go`：120 req/min、突发 30）。本套用例在
@@ -50,10 +58,14 @@ async function requestWithRetry(
   opts: Parameters<APIRequestContext['get']>[1] = {},
   attempts = 6,
 ): Promise<import('@playwright/test').APIResponse> {
-  let res = await request[method](url, opts)
+  // S3C_TOKEN 开启下所有 /api 调用必须带 Bearer——与生产部署同构地验证鉴权路径。
+  const optsWithAuth = API_TOKEN
+    ? { ...opts, headers: { ...opts.headers, Authorization: `Bearer ${API_TOKEN}` } }
+    : opts
+  let res = await request[method](url, optsWithAuth)
   for (let i = 0; i < attempts && res.status() === 429; i++) {
     await new Promise((r) => setTimeout(r, 1500))
-    res = await request[method](url, opts)
+    res = await request[method](url, optsWithAuth)
   }
   return res
 }
@@ -172,6 +184,22 @@ async function seedAccountAndBucket(page: Page, name: string, bucketPrefix: stri
 }
 
 test.describe('真实后端 + 真实 RustFS 联调冒烟', () => {
+  // token 注入（C1）：页面侧没有登录界面，与真实部署同构地把 token 放进
+  // sessionStorage（前端 storage.ts 的读取路径）；addInitScript 在每次导航的页面
+  // 脚本之前执行，覆盖首屏就发起的 /api 调用（列账号等）。同时预置一条「已配置
+  // 同源服务器」清单——否则首启走默认 server 分支会 applyProfile('') 把刚写入的
+  // token 从 sessionStorage 清掉（storage.ts readServers 一次性初始化路径）。
+  test.beforeEach(async ({ page }) => {
+    if (!API_TOKEN) return
+    await page.addInitScript((token) => {
+      if (!localStorage.getItem('s3c.servers')) {
+        localStorage.setItem('s3c.servers', JSON.stringify([{ id: 'e2e-real', name: 'e2e-real', base: '' }]))
+        localStorage.setItem('s3c.activeServerId', 'e2e-real')
+      }
+      sessionStorage.setItem('s3c.token', token)
+    }, API_TOKEN)
+  })
+
   test('账号 CRUD 真实落库：新增 → 列表 → 后端可见 → 测试连接', async ({ page }) => {
     await resetBackend(page.request)
     const name = `e2e-real-${randomUUID().slice(0, 8)}`

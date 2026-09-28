@@ -17,7 +17,7 @@ const ModalDialogStub = {
 
 function mountDialog(detail: ObjectMeta | null) {
   return mount(ObjectDetailDialog, {
-    props: { open: true, detail, accountId: 'acc-1', bucket: 'b1' },
+    props: { open: true, detail },
     global: { stubs: { ModalDialog: ModalDialogStub } },
   })
 }
@@ -93,5 +93,15 @@ describe('ObjectDetailDialog', () => {
     dlg.vm.$emit('close')
     await w.vm.$nextTick()
     expect(w.emitted('close')).toBeTruthy()
+  })
+
+  it('不声明从未 emit 的 error 事件与零使用的 accountId/bucket props（F5）', () => {
+    const w = mountDialog(fullDetail)
+    const emits = w.vm.$options.emits as string[]
+    const props = Object.keys(w.vm.$options.props as Record<string, unknown>)
+    expect(emits).not.toContain('error')
+    expect(props).not.toContain('accountId')
+    expect(props).not.toContain('bucket')
+    expect(props).toEqual(['open', 'detail'])
   })
 })

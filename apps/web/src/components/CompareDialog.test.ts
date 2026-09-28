@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import CompareDialog from './CompareDialog.vue'
-import { s3api } from '../api'
+import { api, s3api } from '../api'
 import type { CompareVersion } from './CompareDialog.vue'
 
 vi.mock('../api', () => ({
   s3api: {
     presign: vi.fn(async () => ({ url: 'https://cdn.test/v', method: 'GET' })),
   },
-  api: { base: 'http://localhost:8080' },
+  api: { base: 'http://localhost:8080', token: '' },
 }))
 
 vi.mock('../i18n', () => ({
@@ -86,6 +86,7 @@ afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
   fetchMock.mockReset()
+  api.token = ''
 })
 
 describe('CompareDialog', () => {
@@ -189,21 +190,61 @@ describe('CompareDialog', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('downloads base and target versions through proxy anchors', async () => {
-    fetchMock.mockImplementation(async () => ({ ok: true, text: async () => 'same' }))
-    const hrefs: string[] = []
+  it('downloads base and target versions via Bearer proxy fetch → objectURL 保存', async () => {
+    api.token = 'tok123'
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('mode=download')
+        ? { ok: true, blob: async () => new Blob(['d']) }
+        : { ok: true, text: async () => 'same' },
+    )
+    const saved: string[] = []
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-      hrefs.push(this.href)
+      saved.push(this.download)
     })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cv')
+    const revoked: string[] = []
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation((u: string) => { revoked.push(u) })
     const w = mountDialog()
     await openDialog(w)
     clickBody('compare.dlBase')
+    await flushPromises() // downloading 守卫：等第一次完成再点第二次
     clickBody('compare.dlTarget')
-    expect(hrefs).toHaveLength(2)
-    expect(hrefs[0]).toContain('mode=download')
-    expect(hrefs[0]).toContain('versionId=v1')
-    expect(hrefs[0]).toContain('/api/accounts/acc-1/proxy?')
-    expect(hrefs[1]).toContain('versionId=v2')
+    await flushPromises()
+
+    const dlCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes('mode=download'))
+    expect(dlCalls).toHaveLength(2)
+    expect(dlCalls[0]![0]).toContain('/api/accounts/acc-1/proxy?')
+    expect(dlCalls[0]![0]).toContain('versionId=v1')
+    expect((dlCalls[0]![1] as RequestInit).headers).toEqual({ Authorization: 'Bearer tok123' })
+    expect(dlCalls[1]![0]).toContain('versionId=v2')
+    expect(saved).toEqual(['k', 'k'])
+    expect(revoked).toEqual(['blob:cv', 'blob:cv'])
+  })
+
+  it('下载失败（如 401）：展示 compare.error 且不保存任何文件（C1 错误不静默）', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('mode=download')
+        ? { ok: false, status: 401, statusText: 'Unauthorized' }
+        : { ok: true, text: async () => 'same' },
+    )
+    const saved: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download)
+    })
+    const createSpy = vi.spyOn(URL, 'createObjectURL')
+    const w = mountDialog()
+    await openDialog(w)
+    clickBody('compare.dlBase')
+    await flushPromises()
+
+    expect(saved).toEqual([])
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('compare.error')
+  })
+
+  it('不再声明从未 emit 的 error 死事件（F5a 只剩 close）', () => {
+    const w = mountDialog()
+    expect(w.vm.$options.emits).toEqual(['close'])
   })
 
   it('dialog X button emits close', async () => {
@@ -313,11 +354,17 @@ describe('CompareDialog', () => {
   })
 
   it('对象名以斜杠结尾时 pop 为空回退下载名 object', async () => {
-    fetchMock.mockImplementation(async () => ({ ok: true, text: async () => 'same' }))
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('mode=download')
+        ? { ok: true, blob: async () => new Blob(['d']) }
+        : { ok: true, text: async () => 'same' },
+    )
     const downloads: string[] = []
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
       downloads.push(this.download)
     })
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
     const w = track(mount(CompareDialog, {
       props: {
         open: false,
@@ -330,6 +377,7 @@ describe('CompareDialog', () => {
     }))
     await openDialog(w)
     clickBody('compare.dlBase')
+    await flushPromises()
     // '' → || 'object' 兜底
     expect(downloads).toContain('object')
   })
@@ -350,5 +398,33 @@ describe('CompareDialog', () => {
     await openDialog(w)
     // lineDiff 产生 added 空行 → line.text 为 '' → 渲染 ␣
     expect(document.body.querySelector('.diff-added')?.textContent).toBe('␣')
+  })
+
+  it('下载在途：直调 downloadVersion 被守卫拦截；失败后展示 compare.error 且按钮恢复', async () => {
+    let rejectDl!: (e: Error) => void
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes('mode=download')
+        ? new Promise<never>((_, rej) => {
+            rejectDl = rej
+          })
+        : Promise.resolve({ ok: true, text: async () => 'same' }),
+    )
+    const w = mountDialog()
+    await openDialog(w)
+    clickBody('compare.dlBase')
+    await flushPromises()
+    const dlCalls = () => fetchMock.mock.calls.filter(([u]) => String(u).includes('mode=download'))
+    expect(dlCalls()).toHaveLength(1)
+    expect(bodyBtn('compare.dlBase').disabled).toBe(true) // 在途时按钮禁用
+    // 按钮 disabled 绕过点击后，下载入口自身必须仍拦住第二次下载
+    await (w.vm as unknown as { downloadVersion: (v: CompareVersion) => Promise<void> }).downloadVersion(
+      VERSIONS[1],
+    )
+    expect(dlCalls()).toHaveLength(1)
+    // 失败 settle：错误展示、按钮恢复
+    rejectDl(new Error('dl-boom'))
+    await flushPromises()
+    expect(document.body.textContent).toContain('compare.error')
+    expect(bodyBtn('compare.dlBase').disabled).toBe(false)
   })
 })

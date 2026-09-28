@@ -216,3 +216,33 @@ describe('BucketCors', () => {
     expect((w.vm as unknown as { joinList: (a?: string[]) => string }).joinList(undefined)).toBe('')
   })
 })
+
+describe('BucketCors 稳定行键', () => {
+  it('删除中间规则后其余规则卡片保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    vi.mocked(s3api.getBucketCors).mockResolvedValue({
+      bucket: 'b1',
+      rules: [
+        { ...sampleRules[0], id: 'r1', allowedOrigins: ['https://a.com'] },
+        { ...sampleRules[0], id: 'r2', allowedOrigins: ['https://b.com'] },
+        { ...sampleRules[0], id: 'r3', allowedOrigins: ['https://c.com'] },
+      ],
+    })
+    const w = mountCors()
+    await flushPromises()
+    const before = w.findAll('.cors-rule').map((r) => r.element)
+    expect(before).toHaveLength(3)
+
+    await w.findAll('.cors-rule')[1].find('button').trigger('click')
+
+    const after = w.findAll('.cors-rule').map((r) => r.element)
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 复用第 2 个节点承载第 3 行并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    // 存活行的输入值仍是原第 1、3 行（防串行）
+    expect(after.map((r) => (r.querySelector('input[placeholder="cors.ruleIdPh"]') as HTMLInputElement).value))
+      .toEqual(['r1', 'r3'])
+    expect(after.map((r) => (r.querySelector('input[placeholder="cors.originsPh"]') as HTMLInputElement).value))
+      .toEqual(['https://a.com', 'https://c.com'])
+  })
+})

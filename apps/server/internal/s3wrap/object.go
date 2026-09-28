@@ -2,7 +2,6 @@ package s3wrap
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/url"
 
@@ -332,8 +331,12 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 				deleted += end - i - len(out.Errors)
 				if len(out.Errors) > 0 {
 					first := out.Errors[0]
-					return deleted, fmt.Errorf("%w: %s (%s)", ErrPartialDelete,
-						aws.ToString(first.Key), aws.ToString(first.Code))
+					// 结构化载体携带已删计数：UserMessage 据此透出「删了多少」（review §R17）。
+					return deleted, &partialDeleteError{
+						deleted:   deleted,
+						firstKey:  aws.ToString(first.Key),
+						firstCode: aws.ToString(first.Code),
+					}
 				}
 			}
 		}

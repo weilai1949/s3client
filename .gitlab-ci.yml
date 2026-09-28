@@ -159,7 +159,7 @@ variables:
       when: on_success
     - when: never
 
-# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，todolist #37）
+# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，KNOWN_ISSUES #37）
 # 触发规则与 GitHub 侧一致：PR 按路径（前端 / 后端 / 脚本 / compose）+ 手动 + 每周定时，不阻塞 push。
 .e2e-real-trigger:
   rules:
@@ -486,7 +486,7 @@ playwright-e2e:
       - apps/web/playwright-report/
       - apps/web/test-results/
 
-# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，todolist #37）
+# ← e2e-real.yml（真实后端 + 真实 RustFS 浏览器联调，KNOWN_ISSUES #37）
 #
 # 与前两个 e2e job 的分工：
 #   - rustfs-e2e：真实 RustFS 的 **Go 客户端** E2E（无浏览器）；

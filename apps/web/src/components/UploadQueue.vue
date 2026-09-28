@@ -35,7 +35,7 @@ function statusText(it: UploadItem): string {
     <div class="progress" style="flex:1"><div class="bar" :style="{ width: uploadPct + '%' }" /></div>
     <span class="badge">{{ uploadDone }}/{{ items.length }} · {{ uploadPct }}%</span>
     <div class="upload-items">
-      <span v-for="it in items" :key="(it.bucket || '') + '|' + it.key" class="badge mono">
+      <span v-for="it in items" :key="it.id" class="badge mono">
         {{ it.key }} — {{ statusText(it) }}
         <button
           v-if="it.status === 'uploading' || it.status === 'pending'"

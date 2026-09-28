@@ -40,10 +40,12 @@ type JobProgress struct {
 // JSON 标签是落盘格式与公共契约的一部分：对外统一 `failedKeys`（OpenAPI / 前端 /
 // docs/api.md）；`job_persist.go` 的 UnmarshalJSON 兼容旧落盘格式里的 `failKeys`。
 type JobResult struct {
-	Migrated  int      `json:"migrated"`
-	Failed    int      `json:"failed"`
-	LastError string   `json:"lastError,omitempty"`
-	FailKeys  []string `json:"failedKeys,omitempty"`
+	Migrated int `json:"migrated"`
+	Failed   int `json:"failed"`
+	// FirstError 是首个失败的错误（仅在空时写入，永远取第一条；旧名 LastError
+	// 名不副实，review Nit）。JSON 名保持历史契约 `lastError` 不变。
+	FirstError string   `json:"lastError,omitempty"`
+	FailKeys   []string `json:"failedKeys,omitempty"`
 }
 
 // Job 单次异步批量任务。
@@ -56,8 +58,13 @@ type Job struct {
 	progress JobProgress
 	result   JobResult
 	done     bool
-	cancel   context.CancelFunc
-	subs     map[chan JobProgress]struct{}
+	// finishedAt 是进入终态（Finish/恢复标记 interrupted）的时刻，Reap 的 TTL
+	// 从它起算而非 Created：跑超 30 分钟的任务若按 Created 计时，Finish 后
+	// ≤5 分钟即被清掉——列表丢终态、轮询 404、jobs.json 记录消失（review R8）。
+	// 零值表示未记录（旧落盘记录），Reap 回退用 Created。
+	finishedAt time.Time
+	cancel     context.CancelFunc
+	subs       map[chan JobProgress]struct{}
 
 	// persist 由注册表注入（nil = 纯内存）；lastSave 用于节流中间进度落盘。
 	persist  func()
@@ -75,7 +82,7 @@ type JobRegistry struct {
 }
 
 // defaultMaxJobs 是在册任务上限：每个任务持有 goroutine、SSE 订阅与落盘条目，
-// 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（todolist #17 / ASSESSMENT M4）。
+// 无上限时短时间内的大量异步请求可耗尽内存与 goroutine（KNOWN_ISSUES #17 / ASSESSMENT M4）。
 const defaultMaxJobs = 256
 
 // NewJobRegistry 创建纯内存注册表（不落盘，与历史行为一致）并启动 reap 循环。
@@ -87,7 +94,7 @@ func NewJobRegistry() *JobRegistry {
 //
 // 恢复语义：上次进程退出时仍在 running 的任务不可能继续执行，一律标记为 interrupted，
 // 使「复制成功但源未删除」这类半途中断的移动任务在重启后仍可被前端看到并对账
-// （ASSESSMENT S1 / todolist #19）。已完成任务的终态原样保留。
+// （ASSESSMENT S1 / KNOWN_ISSUES #19）。已完成任务的终态原样保留。
 //
 // 任务清单属于辅助信息：Load/Save 失败只降级为内存态，不影响服务启动
 // （与账号存储「不可用则硬失败」的取舍不同，见 ADR-002）。
@@ -135,8 +142,10 @@ func (r *JobRegistry) restore() {
 			Total:    rec.Total,
 			progress: progress,
 			result:   rec.Result,
-			done:     true, // 重启后不可能再推进，直接视为终态
-			subs:     make(map[chan JobProgress]struct{}),
+			// 旧落盘记录无 finishedAt（零值），Reap 会回退用 Created 计 TTL。
+			finishedAt: rec.FinishedAt,
+			done:       true, // 重启后不可能再推进，直接视为终态
+			subs:       make(map[chan JobProgress]struct{}),
 		}
 	}
 	if changed {
@@ -174,18 +183,16 @@ func (r *JobRegistry) List() []JobRecord {
 //
 // 快照状态不得为空：JobProgress.Status 是 omitempty 的可选字段，进度帧允许不带状态
 // （service.Progress.Status 同样可选），但 JobRecord.Status 是落盘与恢复的判据——
-// 空状态会被 restore 当成「非终态」，把已完成任务误标为 interrupted（触发人工对账告警）。
-// 故状态缺失时按 done 兜底，而不是把空串写进清单。
+// 空状态会被 restore 当成「非终态」，把任务误标为 interrupted（触发人工对账告警）。
+// 状态缺失只可能是「运行中任务发过无状态帧」：Finish 恒写入终态（空 status 补
+// "done"），且 Emit 对已终结任务直接丢帧（review R9），故 done ⇒ Status 必非空，
+// 兜底只需按 running 补齐，不存在「done 且空状态」的分支。
 func (j *Job) record() JobRecord {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	status := j.progress.Status
 	if status == "" {
-		if j.done {
-			status = JobStatusDone
-		} else {
-			status = JobStatusRunning
-		}
+		status = JobStatusRunning
 	}
 	result := j.result
 	if j.result.FailKeys != nil {
@@ -195,7 +202,8 @@ func (j *Job) record() JobRecord {
 	progress.Status = status
 	return JobRecord{
 		ID: j.ID, Created: j.Created, Total: j.Total,
-		Status: status, Progress: progress, Result: result,
+		FinishedAt: j.finishedAt,
+		Status:     status, Progress: progress, Result: result,
 	}
 }
 
@@ -234,6 +242,11 @@ func (r *JobRegistry) reapLoop() {
 
 // Reap 清理过期已完成任务（测试可调用）。
 //
+// TTL 从**完成时刻**（finishedAt）起算而不是 Created：跑超 30 分钟的任务若按
+// Created 计时，Finish 后第一次 reap（≤5 分钟）就会被清掉——列表丢终态、轮询
+// 404、jobs.json 记录消失（review R8）。旧落盘记录没有 finishedAt，回退 Created
+// 保持历史行为。
+//
 // interrupted 任务用更长的保留期：它是「需人工对账」的证据（如复制成功但源未删除），
 // 若沿用 30 分钟 TTL，重启后首次 reap 就会把刚恢复的记录删掉，使恢复功能形同虚设。
 func (r *JobRegistry) Reap() {
@@ -244,9 +257,13 @@ func (r *JobRegistry) Reap() {
 	r.mu.Lock()
 	for id, j := range r.jobs {
 		j.mu.Lock()
-		expired := j.done && j.Created.Before(cutoff)
+		base := j.finishedAt
+		if base.IsZero() {
+			base = j.Created
+		}
+		expired := j.done && base.Before(cutoff)
 		if expired && j.progress.Status == JobStatusInterrupted {
-			expired = j.Created.Before(interruptedCutoff)
+			expired = base.Before(interruptedCutoff)
 		}
 		j.mu.Unlock()
 		if expired {
@@ -258,27 +275,6 @@ func (r *JobRegistry) Reap() {
 	if removed {
 		r.persistJobs()
 	}
-}
-
-// Create 注册新任务；注入 persister 时立即落盘，使进程随后崩溃仍能恢复出该任务。
-//
-// 保持历史签名（不返回 error）以免波及 70+ 处既有调用点；需要感知容量上限的
-// 调用方请用 TryCreate。
-func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
-	j, err := r.TryCreate(total, cancel)
-	if err != nil {
-		// 仅在调用方未走 TryCreate 时可能发生：给出一个已终结的任务，
-		// 使调用方拿到合法 *Job 而不 panic，且不会真正占用资源。
-		j = &Job{
-			ID:       uuid.NewString(),
-			Created:  time.Now(),
-			Total:    total,
-			progress: JobProgress{Total: total, Status: JobStatusCancelled},
-			done:     true,
-			subs:     make(map[chan JobProgress]struct{}),
-		}
-	}
-	return j
 }
 
 // ErrTooManyJobs 表示在册（未终结）任务数已达上限。
@@ -377,6 +373,14 @@ func (j *Job) Unsubscribe(ch chan JobProgress) {
 // 发送都是非阻塞的（default 分支丢帧），持锁时间有界。
 func (j *Job) Emit(p JobProgress) {
 	j.mu.Lock()
+	// Finish 之后迟到的进度帧必须丢弃（review R9）：RunBatch 每帧都带
+	// Status:"running"，异步批量 goroutine 收尾时该帧可能落在 Finish 之后；
+	// 改写终态会让内存与落盘快照退回非终态，重启后 restore() 把已完成任务
+	// 误标 interrupted，触发虚假对账告警。
+	if j.done {
+		j.mu.Unlock()
+		return
+	}
 	j.progress = p
 	shouldPersist := j.persist != nil && time.Since(j.lastSave) >= jobProgressPersistEvery
 	if shouldPersist {
@@ -405,6 +409,7 @@ func (j *Job) Finish(out JobResult, status string) {
 	}
 	j.result = out
 	j.done = true
+	j.finishedAt = time.Now() // Reap 的 TTL 起点：完成时刻（review R8）
 	if status == "" {
 		status = "done"
 	}
@@ -466,6 +471,6 @@ func ProgressFrom(p Progress) JobProgress {
 // ResultFromBatch 将 BatchResult 转为 JobResult。
 func ResultFromBatch(out BatchResult) JobResult {
 	return JobResult{
-		Migrated: out.OK, Failed: out.Failed, LastError: out.LastError, FailKeys: out.FailKeys,
+		Migrated: out.OK, Failed: out.Failed, FirstError: out.FirstError, FailKeys: out.FailKeys,
 	}
 }

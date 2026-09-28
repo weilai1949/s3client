@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"expvar"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,13 +27,6 @@ var (
 	metricZipFailed          atomic.Int64
 	metricStartedAt          = time.Now()
 )
-
-func init() {
-	expvar.Publish("s3c_http_requests_total", expvar.Func(func() any { return metricHTTPTotal.Load() }))
-	expvar.Publish("s3c_uptime_seconds", expvar.Func(func() any {
-		return int64(time.Since(metricStartedAt).Seconds())
-	}))
-}
 
 func recordHTTPMetric(status int) {
 	metricHTTPTotal.Add(1)

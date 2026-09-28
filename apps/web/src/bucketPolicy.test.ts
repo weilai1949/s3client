@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   POLICY_TEMPLATES,
-  normalizeStringArray,
   parsePolicy,
   serializePolicy,
   validateDoc,
   type PolicyDoc,
 } from './bucketPolicy'
+import { setLocale } from './i18n'
 
 describe('bucketPolicy', () => {
   it('parses empty string to empty doc', () => {
@@ -128,10 +128,11 @@ describe('bucketPolicy', () => {
     expect(parsed.Statement[0]).not.toHaveProperty('Sid')
   })
 
-  it('normalizeStringArray rejects non-string/array values', () => {
-    expect(normalizeStringArray(42)).toBeNull()
-    expect(normalizeStringArray(true)).toBeNull()
-    expect(normalizeStringArray({})).toBeNull()
+  it('Action/Resource 是非法标量时解析回退 null（走原始 JSON 编辑）', () => {
+    expect(parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":42,"Resource":"*"}]}')).toBeNull()
+    expect(parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":true,"Resource":"*"}]}')).toBeNull()
+    expect(parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":{},"Resource":"*"}]}')).toBeNull()
+    expect(parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:*","Resource":42}]}')).toBeNull()
   })
 
   it('clear template generates empty Statement', () => {
@@ -233,6 +234,39 @@ describe('validateDoc error branches', () => {
     expect(validateDoc(good())).toBeNull()
   })
 
+  it('validateDoc 文案走 i18n：默认 zh-CN 逐字一致，切 en-US 返回英文（不硬编码中文）', () => {
+    // 默认语言（zh-CN）：与历史硬编码文案逐字一致，保证既有断言与用户可见文案不漂移
+    expect(validateRaw({ Version: '2006-03-01', Statement: [] })).toBe('Version 必须为 "2012-10-17"')
+    expect(validateRaw({ Version: '2012-10-17', Statement: {} })).toBe('Statement 必须为数组')
+    setLocale('en-US')
+    try {
+      expect(validateRaw({ Version: '2006-03-01', Statement: [] })).toBe('Version must be "2012-10-17"')
+      expect(validateRaw({ Version: '2012-10-17', Statement: {} })).toBe('Statement must be an array')
+      expect(validateRaw({ ...good(), Statement: [{ ...good().Statement[0], effect: 'Bogus' }] })).toBe(
+        'Statement #1 has an invalid Effect',
+      )
+      expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], principal: '' }] })).toBe(
+        'Statement #1: Principal cannot be empty (use * for everyone)',
+      )
+      expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], actions: [] }] })).toBe(
+        'Statement #1: Action cannot be empty',
+      )
+      expect(validateDoc({ ...good(), Statement: [{ ...good().Statement[0], resources: [] }] })).toBe(
+        'Statement #1: Resource cannot be empty',
+      )
+      const dup = {
+        Version: '2012-10-17' as const,
+        Statement: [
+          { sid: 'A', effect: 'Allow' as const, principal: '*', actions: ['s3:*'], resources: ['*'] },
+          { sid: 'A', effect: 'Deny' as const, principal: '*', actions: ['s3:*'], resources: ['*'] },
+        ],
+      }
+      expect(validateDoc(dup)).toBe('Sid "A" is duplicated (S3 bucket policy Sids must be unique)')
+    } finally {
+      setLocale('zh-CN')
+    }
+  })
+
   it('normalizePrincipal: { AWS: "*" } 归一化为 "*"', () => {
     const raw = JSON.stringify({
       Version: '2012-10-17',
@@ -245,8 +279,9 @@ describe('validateDoc error branches', () => {
     expect(doc!.Statement[0].principal).toBe('*')
   })
 
-  it('normalizeStringArray: 数组含非字符串元素时返回 null', () => {
-    expect(normalizeStringArray(['s3:GetObject', 42])).toBeNull()
-    expect(normalizeStringArray(['s3:GetObject', 's3:PutObject'])).toEqual(['s3:GetObject', 's3:PutObject'])
+  it('Action 数组含非字符串元素时解析回退 null；全字符串则正常解析', () => {
+    expect(parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject",42],"Resource":"*"}]}')).toBeNull()
+    const doc = parsePolicy('{"Statement":[{"Effect":"Allow","Principal":"*","Action":["s3:GetObject","s3:PutObject"],"Resource":"*"}]}')
+    expect(doc?.Statement[0].actions).toEqual(['s3:GetObject', 's3:PutObject'])
   })
 })

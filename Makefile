@@ -101,7 +101,7 @@ govulncheck:
 # 本目标不含（见 docs/development.md）。
 check: vet lint test-cover web-test-cover web-typecheck-e2e
 
-# 真实联调浏览器冒烟（todolist #37）：docker 自动起一份真实 RustFS + 真实构建产物 +
+# 真实联调浏览器冒烟（KNOWN_ISSUES #37）：docker 自动起一份真实 RustFS + 真实构建产物 +
 # 真实 Go 后端，用 Playwright 跑 apps/web/e2e-real/（不 mock /api），跑完自动清理。
 # 需本机 docker / go / pnpm；参数透传（--keep / --skip-build）见 scripts/e2e-real.sh -h。
 e2e-real:

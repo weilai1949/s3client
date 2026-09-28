@@ -174,4 +174,52 @@ describe('CreateBucketDialog', () => {
     expect(w.emitted('close')).toBeTruthy()
     w.unmount()
   })
+
+  it('异步提交防重复：在途时双击「创建」只发一次 createBucket', async () => {
+    vi.mocked(s3api.createBucket).mockImplementationOnce(() => new Promise<never>(() => {})) // 请求挂起
+    const w = mountDialog()
+    await w.setProps({ open: true })
+    await flushPromises()
+    nameInput().value = 'b1'
+    nameInput().dispatchEvent(new Event('input'))
+    await flushPromises()
+    clickBody('common.create')
+    await flushPromises()
+    expect(bodyBtn('common.create').disabled).toBe(true) // 在途时提交按钮禁用
+    clickBody('common.create') // 第二次点击必须被守卫拦住
+    await flushPromises()
+    expect(vi.mocked(s3api.createBucket)).toHaveBeenCalledTimes(1)
+    w.unmount()
+  })
+
+  it('提交在途时 Enter 再触发提交被守卫拦截；失败后发出 error 且按钮恢复', async () => {
+    let rejectSave!: (e: Error) => void
+    vi.mocked(s3api.createBucket).mockImplementationOnce(
+      () =>
+        new Promise<never>((_, rej) => {
+          rejectSave = rej
+        }),
+    )
+    const w = mountDialog()
+    await w.setProps({ open: true })
+    await flushPromises()
+    nameInput().value = 'b1'
+    nameInput().dispatchEvent(new Event('input'))
+    await flushPromises()
+    // Enter 键路径发起提交（按钮 disabled 无法覆盖该路径）
+    nameInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(vi.mocked(s3api.createBucket)).toHaveBeenCalledTimes(1)
+    expect(bodyBtn('common.create').disabled).toBe(true)
+    // 在途：Enter 路径再次触发提交入口，必须被 saving 守卫拦截
+    nameInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(vi.mocked(s3api.createBucket)).toHaveBeenCalledTimes(1)
+    // 失败 settle：error 事件 + 按钮恢复
+    rejectSave(new Error('create-boom'))
+    await flushPromises()
+    expect(w.emitted('error')).toEqual([['create-boom']])
+    expect(bodyBtn('common.create').disabled).toBe(false)
+    w.unmount()
+  })
 })

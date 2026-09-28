@@ -600,6 +600,7 @@ GET /api/migrate/jobs
 返回异步任务清单（按创建时间倒序，最新在前），含进程重启后恢复的任务。
 `status` 取值：`running` | `done` | `cancelled` | `interrupted`。
 `interrupted` 表示服务重启导致任务中断，需人工对账——**移动（`deleteSource:true`）任务可能已复制但源未删除**。
+`finishedAt` 为**完成时刻**（Reap TTL 从此刻起算 30 分钟，而非 `created`——跑超 30 分钟的任务不会在完成后 ≤5 分钟即被清掉）；运行中任务与旧版落盘记录省略该字段。
 ```json
 200 {"jobs":[{"id":"uuid","created":"2026-09-16T10:00:00Z","total":100,"status":"interrupted","progress":{"done":42,"total":100,"migrated":42,"failed":0,"status":"interrupted"},"result":{"migrated":42,"failed":0,"failedKeys":["..."]}}]}
 ```
@@ -650,7 +651,7 @@ POST /api/migrate/sync
 ```
 
 行为：
-- 列举源 prefix 全部对象（递归，硬上限 100k 防卡死）；
+- 列举源 prefix 全部对象（递归，硬上限 100k 防卡死；命中上限时响应 `truncated=true`）；
 - 列举目标 prefix 全部元数据；
 - **目标 key 映射**：`targetPrefix + (源 key 去掉 sourcePrefix)`。`sourcePrefix` 必须落在 `/` 段边界上
   才算命中（`p` 不会命中 `prefix/x.txt`）；`sourcePrefix` 留空 = 整桶、目标 key 原样保留。
@@ -665,9 +666,11 @@ POST /api/migrate/sync
   "skipped": 60,            // 因 equal 跳过
   "copied": 38,             // 实际复制数
   "failed": 2,              // 复制失败数
-  "failedKeys": ["bad.txt"] // 上限 200
+  "failedKeys": ["bad.txt"],// 上限 200
+  "truncated": false        // 源侧列举命中 100k 硬上限（第 100001 个起未参与本次同步）
 }
 ```
+`truncated=true` 时必须继续处理剩余对象（再次同步会从同一位置继续列举），否则超出上限的源对象**永不同步**且无任何信号。
 
 ### API 契约（OpenAPI 3.0）
 

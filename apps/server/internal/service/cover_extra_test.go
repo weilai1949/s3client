@@ -273,9 +273,12 @@ func TestListAllPaginates(t *testing.T) {
 	f.keys[listFakeBucket] = []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	f.pageSize = 2
 
-	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, truncated, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
 	if err != nil {
 		t.Fatalf("listAll: %v", err)
+	}
+	if truncated {
+		t.Fatal("正常分页列举完不得标记 truncated")
 	}
 	want := []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	if len(got) != len(want) {
@@ -299,24 +302,32 @@ func TestListAllTruncationStopsWithoutToken(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	keys, err := listAll(context.Background(), newTestClient(t, srv.URL), listFakeBucket, "")
+	keys, truncated, err := listAll(context.Background(), newTestClient(t, srv.URL), listFakeBucket, "")
 	if err != nil {
 		t.Fatalf("listAll: %v", err)
 	}
 	if len(keys) != 1 {
 		t.Fatalf("len = %d, want 1", len(keys))
 	}
+	// 声称还有下一页却给不出 token：能取的都取到了，但列举不完整必须标记
+	// （review R6——静默截断会让「没枚举完」与「确实没有更多对象」不可区分）。
+	if !truncated {
+		t.Fatal("IsTruncated 却无可用 token 时必须标记 truncated")
+	}
 }
 
 func TestListAllError(t *testing.T) {
 	f := newListFake(t)
 	f.failList = true
-	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, truncated, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
 	if err == nil {
 		t.Fatal("listAll must surface the list error instead of reporting an empty result")
 	}
 	if len(got) != 0 {
 		t.Fatalf("listAll on error = %d keys, want 0", len(got))
+	}
+	if truncated {
+		t.Fatal("列举失败（错误上抛）不构成截断")
 	}
 }
 
@@ -330,12 +341,16 @@ func TestListAllHardCap(t *testing.T) {
 	f.keys[listFakeBucket] = keys
 	f.pageSize = total + 1 // single page returns everything
 
-	got, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	got, truncated, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
 	if err != nil {
 		t.Fatalf("listAll: %v", err)
 	}
 	if len(got) != total {
 		t.Fatalf("listAll hard cap returned %d, want %d", len(got), total)
+	}
+	// 超出上限的对象没有被枚举 → 必须标记截断（review R6：旧实现静默返回）。
+	if !truncated {
+		t.Fatal("超过 listMaxTotal 必须标记 truncated")
 	}
 }
 
@@ -346,9 +361,12 @@ func TestIndexDstPaginates(t *testing.T) {
 	f.keys[listFakeBucket] = []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
 	f.pageSize = 3
 
-	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, truncated, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
 	if err != nil {
 		t.Fatalf("indexDst: %v", err)
+	}
+	if truncated {
+		t.Fatal("正常分页收录完不得标记 truncated")
 	}
 	if len(idx) != 5 {
 		t.Fatalf("indexDst size = %d, want 5", len(idx))
@@ -366,7 +384,7 @@ func TestIndexDstPaginates(t *testing.T) {
 func TestIndexDstError(t *testing.T) {
 	f := newListFake(t)
 	f.failList = true
-	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, _, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
 	if err == nil {
 		t.Fatal("indexDst must surface the list error instead of reporting an empty index")
 	}
@@ -556,11 +574,16 @@ func TestIndexDstHardCap(t *testing.T) {
 	f.keys[listFakeBucket] = keys
 	f.pageSize = total + 1 // 单页超过总量上限 → 命中内层 break
 
-	idx, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
+	idx, truncated, err := indexDst(context.Background(), f.client(t), listFakeBucket, "")
 	if err != nil {
 		t.Fatalf("indexDst: %v", err)
 	}
 	if len(idx) != total {
 		t.Fatalf("indexDst hard cap = %d, want %d", len(idx), total)
+	}
+	// 有对象因上限未被收录 → 必须标记截断（否则已存在的对象每次同步被重拷，
+	// 且调用方无从得知索引不全；review R6）。
+	if !truncated {
+		t.Fatal("超过 listMaxTotal 必须标记 truncated")
 	}
 }

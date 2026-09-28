@@ -3,10 +3,10 @@
 > 本文件是 s3clinet 的**单一事实来源**：产品能力总览 + 全部已完成修复 / 优化记录。
 > 已把散落在各评估文档与 [`CHANGELOG.md`](../CHANGELOG.md) 中的「已实现 / 已修复 / 已完善」功能统一汇总于此；CHANGELOG 仍保留逐字发布历史。
 >
-> - 待处理事项：[`todolist.md`](todolist.md) · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
+> - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`roadmap.md`](roadmap.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-22（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾）
+> 最后更新：2026-09-24（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Y 各轮处置台账
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -461,7 +461,7 @@
 
 ### H. 2026-09-16 评估 P0 发布阻塞修复
 
-> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P0（H1 / H4 / M8+C2 / S7+C3）。对应 todolist 原 #5 / #6 / #7 / #15，均已归档。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P0（H1 / H4 / M8+C2 / S7+C3）。对应 KNOWN_ISSUES #5 / #6 / #7 / #15，均已归档。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -472,7 +472,7 @@
 
 ### I. 2026-09-16 P1 稳定版门槛修复
 
-> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P1 与 §二 L4 / S1。对应 todolist #13 / #14 / #19 / #24，以及 P0-1 的契约收尾。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §六 P1 与 §二 L4 / S1。对应 KNOWN_ISSUES #13 / #14 / #19 / #24，以及 P0-1 的契约收尾。
 > 修复后 `govulncheck ./...` 由 6 个可达 stdlib 漏洞降为 **0**；全仓 action SHA 经 GitHub API 核验均有效。
 > **P1 至此清零**，`v1.0.0` 稳定版门槛达成。
 
@@ -486,7 +486,7 @@
 
 ### J. 2026-09-16 P2 加固修复（第一批）
 
-> 来源：[`archive/assessment.md`](archive/assessment.md) §二 L1/L2、§二 S2、§二 M4/M6。对应 todolist #17（部分）/ #18（部分）/ #20 / #23（部分）。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 L1/L2、§二 S2、§二 M4/M6。对应 KNOWN_ISSUES #17（部分）/ #18（部分）/ #20 / #23（部分）。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -504,7 +504,7 @@
 
 ### K. 2026-09-17 P2 加固修复（第二批）
 
-> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D5/D6。对应 todolist #10。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D5/D6。对应 KNOWN_ISSUES #10。
 
 | # | 项 | 状态 | 修复内容 |
 |---|----|------|----------|
@@ -514,7 +514,7 @@
 
 ### L. 2026-09-17 目录迁移后的可移除项清理
 
-> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D7/D8/D10。对应 todolist #11。
+> 来源：[`archive/assessment.md`](archive/assessment.md) §二 D7/D8/D10。对应 KNOWN_ISSUES #11。
 
 | # | 项 | 状态 | 处理内容 |
 |---|----|------|----------|
@@ -661,7 +661,7 @@
 | 9 | S2 `.env.example` 占位 token | ✅ | 根 `.env.example` 的 `S3C_TOKEN` 由 `change-me-use-openssl-rand-hex-32`（33 字符，是**有效口令**）改为置空，对齐 `apps/server/.env.example` |
 | 10 | 配置类门禁（防复发） | ✅ | 新增 `apps/server/repo_infra_gate_test.go`：`.env.example` token 不得 ≥ `MinTokenLength`、运行镜像不得是 EOL alpine、发布 workflow 必须做 tag↔清单比对与平台内唯一 checksum、两套 CI 的 Trivy 必须缓存+重试。四项均为「YAML/配置正确但断言缺席」的盲区 |
 | 11 | §7.3 文档失真 D2 / D3 / D6 / D8 / D9（同批修正） | ✅ | D2：`openapi_handler.go` 鉴权注释改为与实测一致（401/404）；D3：`release-version.sh` 正则放宽到通用 semver（接受纯 `v1.0.0`/`v1.1.0`）、同步文件补到 12 处、`Cargo.lock` 只改本包；D6：`api.md` 的 presign `expiresIn` 改为「默认 1h、上限 24h」；D8：现行能力描述「3 路并发」→ **2 路**；D9：`development.md` 存放约定改为「除根目录约定文件与 `.github/` 外统一放 `docs/`」 |
-| 12 | SSOT：`docs/todolist.md` 补登记开放项 | ✅ | 此前写着「无待办」而审查仍有大量开放发现，违反「唯一待办来源」约定；现按 #26–#46 补登记 P2 全部条目（契约残留 / 安全 / 发布链 / 可观测性 / 文档失真），编号稳定不重排 |
+| 12 | SSOT：`docs/KNOWN_ISSUES.md`（时名 `todolist.md`）补登记开放项 | ✅ | 此前写着「无待办」而审查仍有大量开放发现，违反「唯一待办来源」约定；现按 #26–#46 补登记 P2 全部条目（契约残留 / 安全 / 发布链 / 可观测性 / 文档失真），编号稳定不重排 |
 
 **门禁实跑**：`gofmt -l` 干净 / `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** /
 `go test -race -count=1 ./...` 8/8 包通过且**每包 100.0% 语句覆盖**（`awk '$NF==0'` 零块）；
@@ -713,7 +713,7 @@
 | 8 | R10 无 workflow 推送镜像 | ✅ | 新增 `publish` job：`needs: docker`（Trivy 通过才推）、`if: github.event_name != 'pull_request'`、`permissions: packages: write`、`docker/login-action` 登录 GHCR、按 commit SHA + 分支双标签推送。因 buildx `push` 与 `load` 互斥且扫描需 `load`，拆为独立 job（同时避免推出未扫描镜像）。门禁 `TestGitHubWorkflowPushesImage` |
 | 9 | 测试质量：21 个用例名硬编码过期行号 | ✅ | 如 `api.test.ts` 写 `line 125 else`（当时 `listServers` 在 `storage.ts:301`）、`bucketPolicy.test.ts` 写 `line 111`（当时 `:108`）——测试在描述一个不存在的版本。已从全部用例名移除行号（改为描述行为，行号留在注释），新增门禁：`deadcode_gate.test.ts` 的「测试名不得硬编码源码行号」（含扫描下限自检防空跑） |
 | 10 | 测试质量：i18n 门禁两处盲区 | ✅ | ① `usedKeyTexts` 对整份源码做正则 → **注释里的键名也算「已使用」**；现先按字符扫描剥离注释（正确跳过字符串字面量，避免把 `'https://x'` 的 `//` 当注释）再匹配。② 双语只比**键数量** → `zh-CN` 缺 `a` 而 `en-US` 多 `b` 时数量相等仍绿；现按语言解析键集合做**集合级双向比对**，并新增「每个键两种语言取值都非空」。**变异验证**：改名一个 en-US 键（数量不变）→ 集合门禁红灯；删真实引用只留注释 → 死键门禁红灯 |
-| 11 | 文档失真小项 | ✅ | `openapi_contract_test.go` 的 `apiRouteCount` 注释算错（写「69 = 68 + 1」，常量与实际均为 70 → 改「70 = 69 + 1」）；`docs/todolist.md` 补记 #40 / #42 / #43 / #44 为**从未启用的保留空号**（避免被误读为漏登记），#15 补入已完成编号 |
+| 11 | 文档失真小项 | ✅ | `openapi_contract_test.go` 的 `apiRouteCount` 注释算错（写「69 = 68 + 1」，常量与实际均为 70 → 改「70 = 69 + 1」）；`docs/KNOWN_ISSUES.md`（时名 `todolist.md`）补记 #40 / #42 / #43 / #44 为**从未启用的保留空号**（避免被误读为漏登记），#15 补入已完成编号 |
 
 **门禁实跑**：后端 `gofmt -l` 干净 / `go vet ./...` 0 告警 / `go test -race -count=1 -coverprofile`
 8/8 包通过且**每包 100.0% 语句覆盖**；前端 `pnpm lint` 0 告警 / `pnpm typecheck` 通过 /
@@ -731,7 +731,7 @@ functions 1095 / lines 3503）。
 
 ---
 
-### V. 2026-09-22 真实后端 + 真实 RustFS 浏览器联调（todolist #37）
+### V. 2026-09-22 真实后端 + 真实 RustFS 浏览器联调（KNOWN_ISSUES #37）
 
 > 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) §9.3 的**唯一保留项**。此前
 > `e2e-playwright.yml` / `playwright-e2e` 的 `/api/**` 全被 `page.route` mock，没有任何门禁
@@ -851,6 +851,26 @@ functions 1095 / lines 3503）。
 > 裸词计数的同名抵消与注释 / 字符串命中（只漏报、不误报，与后端 Gate 1 同向）。`as` 重命名导入与 `default`
 > 导出属**前置断言**而非盲区：出现即红灯。
 
+### AA. 2026-09-24 全仓代码审查处置（2 Critical + 20 Required 全清；Nit 31/35 闭环、3 项转登记、1 项判定不成立）
+
+> 来源：[`code-review-2026-09-24.md`](code-review-2026-09-24.md)（该报告即唯一条目清单，逐条状态见其正文）。
+> 纪律：TDD——每项先写会失败的测试再改实现，断言外部可见行为（返回值 / HTTP 状态码 / 渲染结果）；
+> 被旧测试固化的缺陷行为按审查结论**改预期**（如 `main_test.go` 的 `:8080` 期望由 `true` 翻转为 `false`）。
+> 逐条改动与实现细节见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| C1 | 前端代理 URL 不带凭证 → S3C_TOKEN 部署下预览 / 下载全 401 | ✅ | `proxy.ts` 改带 `Authorization` 的 `fetch` → blob → objectURL（`downloadProxyObject`），401 不再把错误 JSON 当文件静默存盘；`scripts/e2e-real.sh` 注入 `S3C_TOKEN`、`e2e-real/real-backend.spec.ts` 全部 `/api` 调用带 Bearer。**未**用豁免 proxy 鉴权的捷径。实跑 `make e2e-real` **3 passed**（后端 `S3C_TOKEN` 开启、生产同构形态） |
+| C2 | `IsLoopbackAddr` 把 `:8080`（空 host）判为回环 → 非回环强制鉴权被绕过 | ✅ | 删 `config.go` 的 `\|\| host == ""`；`main_test.go` 缺陷预期翻转（`:8080` → `false`）+ 新增 `S3C_ADDR=":8080"` 无 token 必须启动失败的测试 |
+| R1–R4 | 安全四连：XFF 取首段可绕过限速 / 鉴权失败请求不过限速器 / 破坏性异步操作无审计 / StoreDriver 大小写与未知值绕过明文闸 | ✅ | 限速与审计 IP 改取可信代理追加的**末段**；`withRateLimit` 移到 `withAuth` 外层；`deletePrefixAsync` / `copyManyAsync` 移动模式写 202 前补 `h.audit`（含 jobId）；`FromEnv` 归一化 + `Validate` 白名单拒绝未知驱动 |
+| R5–R9 | 正确性：mode=text 丢 versionId / 同步静默截断 / `RelKey` 裸 TrimPrefix / Reap TTL 用 Created / Emit 无终态保护 | ✅ | text 分支传 `versionID` + 契约测试；`SyncResult` 透出 `truncated`（`sync_truncated_test.go`）；`RelKey` 改用 `stripPrefix` 作内核；`Job` 加 `finishedAt` 按其算 TTL（`job_finish_reap_test.go`）；`Emit` 锁内 `if j.done { return }` |
+| R10–R13 | 边界与持久化：AccessDenied 不回退流式 / 原子写无 fsync / 建表错误被吞 / `rows.Err()` 未查 | ✅ | 同端点跨账号迁移 `AccessDenied` 也回退 `StreamCopy`；原子写 `Sync()` + rename 后 fsync 父目录、两份实现收敛为 `internal/atomicfile`；`sqlite.go` 建表与迁移错误上抛走启动失败；`List()` 循环后检查并包装 `rows.Err()` |
+| R14–R17 | 性能 / 契约 / s3wrap：`List()` 每行 Argon2 解密即脱敏 / 三项契约违背 / presign 挂 metrics / `ErrPartialDelete` 未映射 | ✅ | `List` 查询不解密（合成 `secretSet`）；`ListenAndServe` 失败退出码非 0 + `components.responses` 字段可序列化 + `objectItem.ContentType` 补齐；presign client 不注册 `metricsMiddleware`；`HTTPStatus` 补 `ErrPartialDelete → 409`（已入 `docs/errors.md`） |
+| R18–R20 | 死代码三件 + 同步 copy-objects 缺背压 | ✅ | `expvar` 两指标删除；`errTestPresign` / `JobRegistry.Create` / `BucketOrDefault` / `deriveKeyLegacy` 与 `envelope` V2 分支——**源码级门禁测试（先红后绿）+ 迁移 / 内联**：`Create` 迁入 `service/export_test.go`（handler 8 处改 `TryCreate`）、`BucketOrDefault` 删除改内联 `acc.Bucket`、`deriveKeyLegacy` 删除且 `envelope()` 收敛为 V3-only；`copy-objects` 挂 `withStreamLimit` |
+| F1–F5 | 前端五项：per-server token 持久化失效 / requeue 无法取消 / 虚拟列表行高漂移 / 组合键可碰撞 / 死事件与防重复守卫 | ✅ | `setTokenPersistent` 迁移并清理 `s3c.token.<id>`；`abortItem` 覆盖 pending 条目；MigratePanel 行高改 `ROW_HEIGHT`；`UploadQueue` 改 `:key="it.id"`；四个死 `error` 事件与零使用 props 删除、四组件加异步提交防重复守卫（双击只发一次） |
+| Nit | 后端 18 项 + 前端 17 项（共 35；`withDefaults` 空 no-op 与 MigratePanel 空 if 原排在后端段、实为前端） | ⚠️ **31 ✅ + 3 转登记 + 1 不成立** | 后端已修：`%w` 格式化 nil、RequestTimeout 两表一致、IsEntityTooLarge 冗余匹配、WAL/-shm 0600、DSN `busy_timeout`、KDF 参数上界、`envOrInt` 显式报错、healthcheck 注释、migrate store 故障→500（非 404）、`getBucketInfo` 去 ListBuckets 全量拉取、copyMany 响应形状对齐、sync etag multipart 收敛、`LastError→FirstError`、CSP `connect-src` 单源化、EnumStr 冗余转换。**3 项未按原样修复、转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**：`SameEndpoint useSSL` 硬编码 → **#61**（技术债 ⬜）；**batch 删除编排下沉 `service` → #62（技术债 ⬜，本轮未完成——`objects.go` 删除族与 `copy.go` `copyKeysThenDelete` 仍在 handler，`service` 侧只有 `RunBatch`/`CopyKeys` 无删除编排，注释已在 `objects.go` `deleteObjects` 处指路）**；`stream_copy` 640GB 上限 → **#63**（已决策 ➖，S3 段号上限 × 512MB 容器内存预算的刻意取舍，注释 + 测试钉住默认值）。前端已修：五处导出面死代码清零（`updateToast` / `applyTheme` / `UPLOAD_CONCURRENCY` / `polling` / `normalizeStringArray`，**源码形态门禁先红后绿**）、`requestTab` 收窄 `TabKey`、`regions ?? []` 删除、`getBase`/`setBase` 降级 try/catch、分页 `PAGE_SIZE` 单源、abort 后 Promise settle、0 字节文件放行、`validateDoc` i18n 化、`selectedSize` 增量化、`t` 遮蔽改名、`withDefaults` 空 no-op 删除、MigratePanel 空 if 删除、**7 处可删除行 `v-for` 稳定行键**（含 7 个组件「删除中间行保留原 DOM 节点」测试，改回 `:key="i"` 即 6 红）、**账号回退三段复制提取 `useAccountSelect`**、**RecycleBinPanel / VersionsDialog 虚拟滚动**（复用 `virtualList.ts`）。`App.vue` 双 `JSON.parse` 经复核**不成立**（`App.vue` 全文 0 处 `JSON.parse`），不改（1 项 ℹ️）。**逐项处置明细（35 行）见审查报告「处置明细」表** |
+| 门禁 | 全绿实测 | ✅ | 后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test` **9/9 包**（`go list ./...` 共 9 个，含 R11 新建的 `internal/atomicfile`，**每包 100.0% statements**） / `go build` 干净 / `golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 / `pnpm test` **67 文件 1110 例** / `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` + `typecheck:e2e` exit 0；`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E` **4/4 PASS**；`SERVER_PORT=18090 make e2e-real` **3 passed**（本机 8080 被系统 `haproxy` 占用，改端口重跑） |
+
 ---
 
 ## 三、质量与覆盖率现状
@@ -876,23 +896,31 @@ functions 1095 / lines 3503）。
 > （roadmap §四 门禁基线同步为此轮实跑值）：`gofmt -l` 干净 / `go vet` 0 告警 / 后端 `go test` **8/8 包通过**、
 > `golangci-lint` **0 issues**、`go build` 干净；前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 /
 > **66 文件 1043 例全绿**（覆盖率 **4072 / 2843 / 1093 / 3501 四指标 100%**）/ `pnpm build` OK。
+>
+> 2026-09-24 全仓代码审查处置（2 Critical + 20 Required 全清；Nit 31/35 闭环 + 3 项转登记 + 1 项判定不成立，见 §AA）后复测：
+> `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / 后端 `go test` **9/9 包通过**（R11 新增 `internal/atomicfile`，
+> 故由 8 包增至 9 包；**每包 100.0% statements**）、`golangci-lint` **0 issues**；
+> 前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / **67 文件 1110 例全绿**（覆盖率
+> **4255 / 2908 / 1124 / 3653 四指标 100%**）/ `pnpm build` OK；真实 E2E 两项——
+> `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` **4/4 PASS**、`make e2e-real` **3 passed**
+> （后端 `S3C_TOKEN` 开启的生产同构形态，C1 修复的验收实跑）。
 
 | 门禁 | 结果 |
 |---|---|
 | `go vet ./...` | 干净 |
-| `go test -race -count=1 ./...` | 8/8 包通过 |
+| `go test -race -count=1 ./...` | 9/9 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`） |
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 66 文件 / **1043** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`） |
+| 前端 `pnpm test` | 67 文件 / **1110** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653） |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（360.52 KB，gzip 110.85 kB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |
 | E2E（Playwright，`/api` mock） | 15 passed / 0 skipped |
 | E2E（真实 RustFS，`S3CLINET_E2E=1`） | 按需运行，默认不阻塞 CI |
-| E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（todolist #37；不 mock `/api`，含浏览器直传） |
+| E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（KNOWN_ISSUES #37；不 mock `/api`，含浏览器直传） |
 | Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5） |
 
 ### 已知边界与取舍

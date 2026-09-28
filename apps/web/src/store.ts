@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import type { Account } from './types'
+import type { TabKey } from './router'
 
 /** 记住上次选中的账号（互联网应用习惯：刷新/重开后恢复现场）。 */
 const LS_CURRENT_ACCOUNT = 's3c.currentAccountId'
@@ -9,10 +10,11 @@ export const state = reactive({
   currentAccountId: '',
 })
 
-/** 跨面板跳转信号：任何组件可请求切换到某 tab（App 监听执行）。 */
-export const tabRequest = reactive({ tab: '', seq: 0 })
+/** 跨面板跳转信号：任何组件可请求切换到某 tab（App 监听执行）。
+ *  '' 表示「无目标」（seq 只用于触发 watcher，消费方按空值守卫跳过）。 */
+export const tabRequest = reactive<{ tab: TabKey | ''; seq: number }>({ tab: '', seq: 0 })
 
-export function requestTab(tab: string) {
+export function requestTab(tab: TabKey) {
   tabRequest.tab = tab
   tabRequest.seq++
 }
@@ -71,10 +73,15 @@ export function toast(text: string, kind: 'ok' | 'err' = 'ok', action?: ToastIte
   return id
 }
 
-/** 就地更新一条 toast 的文本（进度型反馈复用同一条，避免灌满 toast 栈）。 */
-export function updateToast(id: number, text: string) {
+/** 就地更新一条 toast 的文本（进度型反馈复用同一条，避免灌满 toast 栈）。
+ *  模块私有：唯一入口是 createProgressToast 的进度节流路径。
+ *  返回是否命中：id 已随自动 dismiss 消失时返回 false、不碰 toast 栈，由调用方改发新条
+ *  —— 存在性判断只此一处，调用方不再重复查一遍（原来两处各查一次）。 */
+function updateToast(id: number, text: string): boolean {
   const i = toasts.findIndex((t) => t.id === id)
-  if (i >= 0) toasts[i].text = text
+  if (i < 0) return false
+  toasts[i].text = text
+  return true
 }
 
 /**
@@ -87,8 +94,7 @@ export function createProgressToast(throttleMs = 500): (text: string) => void {
   return (text) => {
     const now = Date.now()
     if (id !== null && now - lastAt < throttleMs) return
-    if (id !== null && toasts.some((t) => t.id === id)) updateToast(id, text)
-    else id = toast(text)
+    if (id === null || !updateToast(id, text)) id = toast(text)
     lastAt = now
   }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api } from '../api'
@@ -18,6 +18,8 @@ const emit = defineEmits<{
 }>()
 
 const form = reactive({ name: '', acl: 'private' })
+/** 提交在途：防双击重复 createBucket（含 Enter 键路径）。 */
+const saving = ref(false)
 
 watch(() => props.open, (o) => {
   if (o) {
@@ -27,16 +29,20 @@ watch(() => props.open, (o) => {
 })
 
 async function submitCreateBucket() {
+  if (saving.value) return
   const name = form.name.trim()
   if (!name) {
     emit('error', t('buckets.nameRequired'))
     return
   }
+  saving.value = true
   try {
     const r = await s3api.createBucket(props.accountId, { name, acl: form.acl })
     emit('created', { name: r.created, region: r.region, acl: r.acl })
   } catch (err) {
     emit('error', toErrorMessage(err))
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -58,7 +64,7 @@ async function submitCreateBucket() {
       </label>
     </div>
     <div class="row" style="margin-top:16px">
-      <button class="btn sm" @click="submitCreateBucket">{{ t('common.create') }}</button>
+      <button class="btn sm" :disabled="saving" @click="submitCreateBucket">{{ t('common.create') }}</button>
       <button class="btn secondary sm" @click="emit('close')">{{ t('common.cancel') }}</button>
     </div>
   </ModalDialog>

@@ -141,6 +141,45 @@ describe('api token 存储', () => {
     expect(memSession.getItem('s3c.token')).toBeNull()
     expect(memLocal.getItem('s3c.token')).toBeNull()
   })
+
+  it('setTokenPersistent(true) 迁移已有 per-server token 到 localStorage，(false) 清掉全部残留副本', async () => {
+    const { api } = await loadApi()
+    api.token = 'global-token-abcdef'
+    const p = api.upsertServer({ name: 'mig', base: 'http://x:9000', token: 'mig-token-123456789' })
+    // 空值的 session 键不落盘；仅剩 localStorage 的残留（session 已清）也要能被关闭清理
+    memSession.setItem('s3c.token.ghost', '')
+    memLocal.setItem('s3c.token.stale', 'stale-token-123')
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBeNull()
+    api.setTokenPersistent(true)
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBe('mig-token-123456789')
+    expect(memLocal.getItem('s3c.token.ghost')).toBeNull()
+    api.setTokenPersistent(false)
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBeNull()
+    expect(memLocal.getItem('s3c.token.stale')).toBeNull()
+    // 关闭只清 localStorage 副本，session 里的 token 不受影响
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('mig-token-123456789')
+  })
+
+  it('setTokenPersistent 迁移 per-server token 时存储抛异常 → 吞掉不中断', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'x', base: 'http://x:9000', token: 'tok-abcdefghij' })
+    const origSet = memLocal.setItem
+    memLocal.setItem = () => { throw new Error('quota') }
+    api.setTokenPersistent(true) // 持久化标记 + per-server 副本两次 setItem 都会抛，均应被吞
+    memLocal.setItem = origSet
+    expect(api.isTokenPersistent).toBe(false)
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('tok-abcdefghij')
+  })
+
+  it('setTokenPersistent(true) 读取 sessionStorage 键列表抛异常 → 迁移中断但不抛', async () => {
+    const { api } = await loadApi()
+    const p = api.upsertServer({ name: 'y', base: 'http://y:9000', token: 'tok-zyxwvutsr' })
+    Object.defineProperty(memSession, 'length', { get() { throw new Error('boom') }, configurable: true })
+    api.setTokenPersistent(true)
+    expect(api.isTokenPersistent).toBe(true)
+    expect(memLocal.getItem(`s3c.token.${p.id}`)).toBeNull()
+    expect(memSession.getItem(`s3c.token.${p.id}`)).toBe('tok-zyxwvutsr')
+  })
 })
 
 // ── isTauri / defaultBase / newId ──────────────────────────────────────────
@@ -408,6 +447,25 @@ describe('api getter/setter', () => {
     api.base = 'https://s3.example.com'
     expect(api.base).toBe('https://s3.example.com')
     expect(memLocal.getItem('s3c.apiBase')).toBe('https://s3.example.com')
+  })
+
+  it('localStorage 读抛错时 base getter 回退默认值（降级策略与模块其余读取一致）', async () => {
+    const { api } = await loadApi()
+    vi.spyOn(memLocal, 'getItem').mockImplementation(() => {
+      throw new Error('storage broken')
+    })
+    expect(() => api.base).not.toThrow()
+    expect(api.base).toBe('')
+  })
+
+  it('localStorage 写抛错时 base setter 不抛异常（静默降级）', async () => {
+    const { api } = await loadApi()
+    vi.spyOn(memLocal, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded')
+    })
+    expect(() => {
+      api.base = 'https://s3.example.com'
+    }).not.toThrow()
   })
 })
 

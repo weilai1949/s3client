@@ -18,6 +18,7 @@ const (
 	auditBucketPolicyClear = "bucket.policy.delete"
 	auditObjectsDelete     = "objects.delete"
 	auditDeletePrefix      = "objects.delete_prefix"
+	auditObjectsMove       = "objects.move"
 	auditTrashPurge        = "trash.purge"
 	auditRateLimited       = "rate_limit.exceeded"
 )

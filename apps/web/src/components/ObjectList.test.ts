@@ -29,7 +29,6 @@ function file(key: string, overrides: Partial<Entry> = {}): Entry {
       size: 2048,
       lastModified: '2024-06-01T10:00:00Z',
       etag: 'e1',
-      contentType: 'application/octet-stream',
       isDir: false,
     },
     ...overrides,
@@ -97,7 +96,7 @@ describe('ObjectList', () => {
       entries: [
         file('a.bin', {
           size: undefined,
-          object: { key: 'a.bin', size: 0, lastModified: '', etag: 'e', contentType: 'x', isDir: false, storageClass: 'STANDARD' } as Entry['object'] & { storageClass: string },
+          object: { key: 'a.bin', size: 0, lastModified: '', etag: 'e', isDir: false, storageClass: 'STANDARD' } as Entry['object'] & { storageClass: string },
         }),
       ],
     })
@@ -210,7 +209,7 @@ describe('ObjectList', () => {
 
   it('list view: file row renders checkbox/storageClass/actions and emits events', async () => {
     const withSc = file('data.txt', { size: 3 })
-    withSc.object = { key: 'data.txt', size: 3, lastModified: '2024-06-01', etag: 'e1', contentType: 'text/plain', isDir: false, storageClass: 'STANDARD' }
+    withSc.object = { key: 'data.txt', size: 3, lastModified: '2024-06-01', etag: 'e1', isDir: false, storageClass: 'STANDARD' }
     const w = mountList({ entries: [withSc], selected: new Set(['data.txt']) })
     const row = w.find('tbody tr.v-row')
     expect(row.classes()).toContain('selected')

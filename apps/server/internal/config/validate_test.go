@@ -13,7 +13,8 @@ func TestValidate(t *testing.T) {
 		wantErr error
 	}{
 		{"loopback no token ok", Config{Addr: "127.0.0.1:8080", Token: ""}, nil},
-		{"empty host no token ok", Config{Addr: ":8080", Token: ""}, nil},
+		{"empty host no token rejected", Config{Addr: ":8080", Token: ""}, ErrTokenRequiredNonLoopback},
+		{"empty host with token ok", Config{Addr: ":8080", Token: strings.Repeat("a", MinTokenLength)}, nil},
 		{"non-loopback no token rejected", Config{Addr: "0.0.0.0:8080", Token: ""}, ErrTokenRequiredNonLoopback},
 		{"non-loopback with token ok", Config{Addr: "0.0.0.0:8080", Token: strings.Repeat("a", MinTokenLength)}, nil},
 		{"short token rejected (loopback)", Config{Addr: "127.0.0.1:8080", Token: "short"}, ErrShortToken},
@@ -48,7 +49,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestValidatePlaintextStoreRejected 安全默认（todolist #29/#31）：json / sqlite 且
+// TestValidatePlaintextStoreRejected 安全默认（KNOWN_ISSUES #29/#31）：json / sqlite 且
 // S3C_STORE_KEY 为空时，除非显式 AllowPlaintextStore，否则 Validate 必须硬失败，
 // 并给出两条出路（设 S3C_STORE_KEY / 显式 opt-in）。encrypted 与非空 key 不受影响。
 func TestValidatePlaintextStoreRejected(t *testing.T) {
@@ -65,7 +66,8 @@ func TestValidatePlaintextStoreRejected(t *testing.T) {
 		{"json with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", StoreKey: key}, nil},
 		{"sqlite with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite", StoreKey: key}, nil},
 		{"encrypted empty key not this sentinel", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted"}, nil},
-		{"unknown driver allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "pgsql"}, nil},
+		// R4:未知驱动值不再放行——Open 曾把它静默当 json,绕过明文落盘闸,现在启动即失败。
+		{"unknown driver rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "pgsql"}, ErrUnknownStoreDriver},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -89,6 +91,47 @@ func TestValidatePlaintextStoreRejected(t *testing.T) {
 	}
 }
 
+// TestValidateStoreDriverWhitelist R4:合法驱动名大小写/空白变体归一化后与小写完全等价
+// (行为一致才叫「合法值通过」);不在白名单 json|sqlite|encrypted 的值一律拒绝启动,
+// 不再依赖 Open 端「未知值静默默认 json」的旧行为。
+func TestValidateStoreDriverWhitelist(t *testing.T) {
+	key := strings.Repeat("k", MinStoreKeyLength)
+	cases := []struct {
+		name     string
+		driver   string
+		storeKey string
+		optin    bool
+		wantErr  error
+	}{
+		{"uppercase json trips plaintext gate", "JSON", "", false, ErrPlaintextStoreNotAllowed},
+		{"padded json trips plaintext gate", "  Json  ", "", false, ErrPlaintextStoreNotAllowed},
+		{"uppercase sqlite trips plaintext gate", "SQLITE", "", false, ErrPlaintextStoreNotAllowed},
+		{"lowercase json equivalent", "json", "", false, ErrPlaintextStoreNotAllowed},
+		{"uppercase json with key ok", "JSON", key, false, nil},
+		{"uppercase json with opt-in ok", "JSON", "", true, nil},
+		{"padded sqlite with key ok", " SQLITE ", key, false, nil},
+		{"uppercase encrypted ok", "Encrypted", "", false, nil},
+		{"unknown value rejected", "pgsql", "", false, ErrUnknownStoreDriver},
+		{"unknown value rejected even with key", "pgsql", key, false, ErrUnknownStoreDriver},
+		{"whitespace junk rejected", " postgre ", "", false, ErrUnknownStoreDriver},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := Config{Addr: "127.0.0.1:8080", StoreDriver: c.driver, StoreKey: c.storeKey, AllowPlaintextStore: c.optin}
+			err := cfg.Validate()
+			if c.wantErr == nil {
+				if err != nil {
+					t.Fatalf("Validate(%q) err=%v, want nil", c.driver, err)
+				}
+				return
+			}
+			if !errors.Is(err, c.wantErr) {
+				t.Fatalf("Validate(%q) err=%v, want wraps %v", c.driver, err, c.wantErr)
+			}
+		})
+	}
+}
+
 // TestStorePlaintextWarning 落盘明文告警：json / sqlite 无 key 时给出可执行提示，
 // 加密配置（encrypted，或任意驱动 + 非空 key）不告警（roadmap §5.1 R3）。
 func TestStorePlaintextWarning(t *testing.T) {
@@ -107,6 +150,9 @@ func TestStorePlaintextWarning(t *testing.T) {
 		{"sqlite with key silent", Config{StoreDriver: "sqlite", StoreKey: key}, false, nil},
 		{"encrypted silent", Config{StoreDriver: "encrypted"}, false, nil},
 		{"unknown driver silent", Config{StoreDriver: "pgsql"}, false, nil},
+		// R4:大小写/空白变体归一化后与小写一致,仍要告警(不得静默跳过)。
+		{"padded uppercase json warns", Config{StoreDriver: " JSON ", DataDir: "./d"}, true,
+			[]string{"json", "./d"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -137,8 +183,9 @@ func TestIsLoopbackAddr(t *testing.T) {
 		{"127.0.0.1:8080", true},
 		{"::1:8080", true},
 		{"[::1]:8080", true},
-		{":8080", true},
+		{":8080", false}, // 空 host 实际绑定 [::] 全部接口，必须按非回环处理（C2）
 		{"0.0.0.0:8080", false},
+		{"[::]:8080", false},
 		{"192.168.1.1:8080", false},
 		{"localhost:8080", false}, // 非 IP 视为非回环
 	}

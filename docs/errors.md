@@ -15,11 +15,11 @@
 | `EntityTooLarge` | 400 | `entity too large` | `PutObject`/`CopyObject` 会把该错误码归一为 `s3wrap.ErrObjectTooLarge`（见下） |
 | `BucketNotEmpty` | 409 | `bucket not empty` | |
 | `InvalidRange` | 416 | （proxy 专用文案） | `proxyErr` |
-| `SlowDown` / `ServiceUnavailable` | 503 | `storage temporarily unavailable` | |
+| `SlowDown` / `ServiceUnavailable` / `RequestTimeout` | 503 | `storage temporarily unavailable` | 两表（`HTTPStatus` / `UserMessageForCode`）对 `RequestTimeout` 同口径归 503（review §Nit） |
 | `NoSuchUpload` | 500* | `multipart upload not found` | *HTTP 默认走 fallback 500；消息单独映射 |
 | `errors.Is(err, s3wrap.ErrObjectTooLarge)` | 400** | `object exceeds 5GB single-put limit; use multipart upload` | 单次上传/复制 >5GB；`PutObject`/`CopyObject` 用 `%w` 包装 |
 | `errors.Is(err, s3wrap.ErrSourceDeleteFailed)` | 500* | `copied but failed to delete source` | 移动半成功；handler 用 `%w` 包装 |
-| `errors.Is(err, s3wrap.ErrPartialDelete)` | 409† | `some objects could not be deleted` | 批量删除/S3 在 **200 响应体内**逐 key 报错（桶策略 / 保留期 / MFA Delete）；† `HTTPStatus` 未收录该 sentinel（回落 500），409 来自回收站 purge handler 的显式响应（`{"purged":…,"deleted":n,"error":…}`） |
+| `errors.Is(err, s3wrap.ErrPartialDelete)` | 409 | `some objects could not be deleted` | 批量删除/S3 在 **200 响应体内**逐 key 报错（桶策略 / 保留期 / MFA Delete）；`HTTPStatus` 已收录该 sentinel → 409（review §R17，此前回落 500 使精细文案不可达、丢失已删计数）；回收站 purge 部分失败的 handler 显式响应同为 409 且带 `{"purged":…,"deleted":n,"error":…}` |
 | 其他 | 500 | `storage operation failed` | |
 
 > **已移除字符串匹配**：应用层错误（5GB 上限 / 删源失败）改用 sentinel + `errors.Is` 识别
@@ -40,8 +40,8 @@
 
 | 条件 | HTTP | 文案 | 备注 |
 |---|---:|---|---|
-| 预签名生成失败（取凭证、输入序列化等） | 500 | `failed to create presigned url` | 此前被 `u, _ :=` 吞掉，返回 `200 {"url":""}`（todolist #23） |
-| 在册异步任务数达上限 | 503 | `too many running jobs; retry later` | 上限 256 个未终结任务（todolist #17） |
+| 预签名生成失败（取凭证、输入序列化等） | 500 | `failed to create presigned url` | 此前被 `u, _ :=` 吞掉，返回 `200 {"url":""}`（KNOWN_ISSUES #23） |
+| 在册异步任务数达上限 | 503 | `too many running jobs; retry later` | 上限 256 个未终结任务（KNOWN_ISSUES #17） |
 | 并发流式请求数达上限 | 503 | `too many concurrent streaming requests` | `withStreamLimit`，上限 32 |
 | 单任务 SSE 订阅数达上限 | 503 | `too many subscribers for this job` | 每任务上限 16，防止终态关闭耗时随订阅数线性增长 |
 | 请求体超过上限（16MB） | 413 | `request body too large (max 16MB)` | 与「JSON 无效」的 400 区分开（此前被 `LimitReader` 截断成 400） |
@@ -51,9 +51,10 @@
 ## Handler 约定
 
 - `writeInternalErr`：可识别 S3 错误 → `s3HTTPStatus` + `s3UserMessage`；否则 500 + 通用文案。
+- 账号读取（`accountClient` 与 migrate 系列）：仅 `store.ErrNotFound` → 404 `account not found`；其余 store 读取故障 → 500 `failed to load … account`（误报 404 会让用户去查一个本来存在的账号；review §Nit）。
 - 批量操作：`lastError` / `failedKeys` 使用 `failed at {key}: {UserMessage}`。
 - 响应 JSON：`{"error":"..."}`（见 `docs/api.md`）。
-- `POST /api/migrate/sync`：`mode` 非法 → 400 `mode must be etag, size_mtime or always`；账号不存在 → 404；账号配置无效 → 400 `invalid ... account configuration`；成功返回 `scanned/skipped/copied/failed/failedKeys/lastError`（见 `api.md`）。
+- `POST /api/migrate/sync`：`mode` 非法 → 400 `mode must be etag, size_mtime or always`；账号不存在 → 404（store 读取故障 → 500 `failed to load … account`）；账号配置无效 → 400 `invalid ... account configuration`；成功返回 `scanned/skipped/copied/failed/failedKeys/truncated/lastError`（见 `api.md`）。
 - `GET /api/openapi.json`：默认（未设置 `S3C_EXPOSE_OPENAPI=1`）→ 404（不暴露 API 契约）；开启后配置了 `S3C_TOKEN` 时需 Bearer 鉴权，否则 401 `unauthorized`。
 
 ## 前端

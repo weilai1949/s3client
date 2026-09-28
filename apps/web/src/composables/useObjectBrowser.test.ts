@@ -6,6 +6,7 @@ import type { Account, BucketItem, Entry, ObjectItem } from '../types'
 import { s3api } from '../api'
 import { confirmDialog } from '../confirm'
 import { currentAccount, selectAccount, toast } from '../store'
+import { tf } from '../i18n'
 
 /** 被测 API 的真实返回类型：用于给 mock 数据做类型断言（保持运行时数据不变）。 */
 type ListBucketsResult = Awaited<ReturnType<typeof s3api.listBuckets>>
@@ -32,7 +33,7 @@ vi.mock('../store', async () => {
 
 vi.mock('../i18n', () => ({
   t: (k: string) => k,
-  tf: (k: string, _vars: Record<string, unknown>) => k,
+  tf: vi.fn((k: string) => k),
 }))
 
 vi.mock('../confirm', () => ({
@@ -104,8 +105,8 @@ describe('useObjectBrowser', () => {
   it('selectAll selects all when not all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', contentType: 'text/plain', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false },
     ]
     browser.selectAll()
     expect(browser.selected.value.size).toBe(2)
@@ -114,7 +115,7 @@ describe('useObjectBrowser', () => {
   it('selectAll clears when all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
     ]
     browser.selected.value = new Set(['a.txt'])
     browser.selectAll()
@@ -136,7 +137,7 @@ describe('useObjectBrowser', () => {
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
     ]
     browser.selected.value = new Set(['a.txt'])
 
@@ -184,7 +185,7 @@ describe('useObjectBrowser', () => {
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
     ]
     browser.selected.value = new Set(['a.txt'])
 
@@ -196,7 +197,7 @@ describe('useObjectBrowser', () => {
         kind: 'file',
         key: 'a.txt',
         name: 'a.txt',
-        object: { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
+        object: { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
       } as Entry),
     ).not.toThrow()
   })
@@ -248,9 +249,9 @@ describe('useObjectBrowser', () => {
   it('toggleWithShift selects range', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', contentType: 'text/plain', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', contentType: 'text/plain', isDir: false },
-      { key: 'c.txt', size: 3, lastModified: '', etag: 'e3', contentType: 'text/plain', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false },
+      { key: 'c.txt', size: 3, lastModified: '', etag: 'e3', isDir: false },
     ]
     browser.toggleWithShift('a.txt', false)
     expect(browser.selected.value.has('a.txt')).toBe(true)
@@ -1036,5 +1037,111 @@ describe('useObjectBrowser 100% branch completion', () => {
     expect(s3api.listBuckets).not.toHaveBeenCalled()
     expect(s3api.listObjects).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+})
+
+describe('useObjectBrowser 分页上限与选中合计', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(s3api.listObjects).mockReset()
+    vi.mocked(currentAccount).mockReturnValue({ id: 'acc-1', bucket: 'b1' } as unknown as Account)
+  })
+
+  function makeBindings() {
+    return { previewOrDownload: vi.fn(), ctxRenameKey: vi.fn(), removeSelected: vi.fn() }
+  }
+
+  it('loadAll 触顶提示的 n 由请求 maxKeys 推导（分页大小单一来源，不在文案处二次硬编码）', async () => {
+    vi.mocked(s3api.listObjects)
+      .mockResolvedValueOnce({
+        objects: [{ key: 'p1.txt', size: 1, lastModified: '', isDir: false }],
+        commonPrefixes: [], nextToken: 'tok1', isTruncated: true,
+      } as unknown as ListObjectsResult)
+      .mockResolvedValueOnce({
+        objects: [{ key: 'p2.txt', size: 2, lastModified: '', isDir: false }],
+        commonPrefixes: [], nextToken: '', isTruncated: true,
+      } as unknown as ListObjectsResult)
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    await browser.loadAll()
+    // 第二页 nextToken 为空 → 循环退出；isTruncated 仍为 true → 触顶提示
+    expect(s3api.listObjects).toHaveBeenCalledTimes(2)
+    const firstQuery = vi.mocked(s3api.listObjects).mock.calls[0]![1] as Record<string, string>
+    const n = 2 * Number(firstQuery.maxKeys)
+    expect(n).toBeGreaterThan(0)
+    expect(tf).toHaveBeenCalledWith('objects.toastLoadedCap', { n })
+    expect(toast).toHaveBeenCalledWith('objects.toastLoadedCap', 'err')
+  })
+
+  it('toggle 增量维护 selectedSize：选中/取消即时生效，列表外的 key 按 0 计', () => {
+    const browser = useObjectBrowser(makeBindings())
+    browser.objects.value = [
+      { key: 'a.txt', size: 10, lastModified: '', isDir: false },
+      { key: 'b.txt', size: 25, lastModified: '', isDir: false },
+    ] as unknown as ObjectItem[]
+    expect(browser.selectedSize.value).toBe(0)
+    browser.toggle('a.txt')
+    expect(browser.selectedSize.value).toBe(10)
+    browser.toggle('b.txt')
+    expect(browser.selectedSize.value).toBe(35)
+    browser.toggle('a.txt')
+    expect(browser.selectedSize.value).toBe(25)
+    // 不在列表中的 key：按 0 计，不影响合计
+    browser.toggle('ghost.txt')
+    expect(browser.selected.value.has('ghost.txt')).toBe(true)
+    expect(browser.selectedSize.value).toBe(25)
+    browser.toggle('ghost.txt')
+    expect(browser.selectedSize.value).toBe(25)
+  })
+
+  it('toggleWithShift 范围补选后 selectedSize 合计正确', () => {
+    const browser = useObjectBrowser(makeBindings())
+    browser.objects.value = [
+      { key: 'a.txt', size: 10, lastModified: '', isDir: false },
+      { key: 'b.txt', size: 25, lastModified: '', isDir: false },
+      { key: 'c.txt', size: 5, lastModified: '', isDir: false },
+    ] as unknown as ObjectItem[]
+    browser.toggleWithShift('a.txt', false)
+    expect(browser.selectedSize.value).toBe(10)
+    browser.toggleWithShift('c.txt', true)
+    expect([...browser.selected.value].sort()).toEqual(['a.txt', 'b.txt', 'c.txt'])
+    expect(browser.selectedSize.value).toBe(40)
+  })
+
+  it('selectAll / 外部重设 selected / 列表变化：selectedSize 同步兜底重算', () => {
+    const browser = useObjectBrowser(makeBindings())
+    const list = (a: number, b: number) =>
+      [
+        { key: 'a.txt', size: a, lastModified: '', isDir: false },
+        { key: 'b.txt', size: b, lastModified: '', isDir: false },
+      ] as unknown as ObjectItem[]
+    browser.objects.value = list(10, 25)
+    browser.selectAll()
+    expect(browser.selectedSize.value).toBe(35)
+    browser.selectAll() // 已全选 → 清空
+    expect(browser.selectedSize.value).toBe(0)
+    // 面板外部直接赋值（useObjectActions 的路径）
+    browser.selected.value = new Set(['a.txt'])
+    expect(browser.selectedSize.value).toBe(10)
+    // 列表变化（替换/分页追加改变尺寸）→ 选中合计按新尺寸重算
+    browser.objects.value = list(7, 25)
+    expect(browser.selectedSize.value).toBe(7)
+  })
+
+  it('load(reset) 清空选中后 selectedSize 归零', async () => {
+    vi.mocked(s3api.listObjects).mockResolvedValue({
+      objects: [{ key: 'x.txt', size: 3, lastModified: '', isDir: false }],
+      commonPrefixes: [], nextToken: '', isTruncated: false,
+    } as unknown as ListObjectsResult)
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [
+      { key: 'a.txt', size: 10, lastModified: '', isDir: false },
+    ] as unknown as ObjectItem[]
+    browser.selected.value = new Set(['a.txt'])
+    expect(browser.selectedSize.value).toBe(10)
+    await browser.load(true)
+    expect(browser.selected.value.size).toBe(0)
+    expect(browser.selectedSize.value).toBe(0)
   })
 })

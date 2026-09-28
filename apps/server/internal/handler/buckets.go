@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
@@ -99,14 +100,42 @@ func (h *Handler) getBucketInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	region, rerr := client.GetBucketLocation(r.Context(), bucket)
 	if rerr != nil {
+		if s3wrap.IsNotFound(rerr) {
+			// 桶不存在：属性全未知，直接短路返回空属性，
+			// 不再打 versioning / ListBuckets 两次注定无意义的上游调用。
+			h.writeJSON(w, http.StatusOK, map[string]any{
+				"bucket":     bucket,
+				"region":     "",
+				"createdAt":  "",
+				"versioning": "",
+			})
+			return
+		}
 		h.log.Warn("get bucket location failed", "bucket", bucket, "err", rerr)
 	}
-	versioning, verr := client.GetBucketVersioning(r.Context(), bucket)
+	// versioning 与 ListBuckets 相互独立，并行发起省掉一次串行往返。
+	var (
+		versioning string
+		verr       error
+		items      []s3wrap.BucketItem
+		cerr       error
+		wg         sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		versioning, verr = client.GetBucketVersioning(r.Context(), bucket)
+	}()
+	go func() {
+		defer wg.Done()
+		items, cerr = client.ListBuckets(r.Context())
+	}()
+	wg.Wait()
 	if verr != nil {
 		h.log.Warn("get bucket versioning failed", "bucket", bucket, "err", verr)
 	}
 	created := ""
-	if items, cerr := client.ListBuckets(r.Context()); cerr == nil {
+	if cerr == nil {
 		for _, b := range items {
 			if b.Name == bucket {
 				created = b.CreationDate.Format(time.RFC3339)

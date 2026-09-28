@@ -2,14 +2,15 @@
 
 > 本文件只描述 s3clinet 的**版本规划与优先级**（战略层）：每个里程碑的目标、验收标准与**尚未完成**的条目。
 > 已实现 / 已修复的内容不在此流水账，见 [`docs/features.md`](features.md)；
-> 逐条待办的**唯一来源**仍是 [`docs/todolist.md`](todolist.md)（战术层）；
+> 逐条待办自 2026-09-24 起**分两处维护、互不重复**：**问题**（缺陷 / 外部阻塞 / 技术债）的唯一来源为
+> [`docs/KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**功能候选与版本级规划**（本文件 §三）的唯一来源为本文件本身；
 > 逐字发布历史见 [`CHANGELOG.md`](../CHANGELOG.md)；
 > 评分与问题证据见 [`docs/archive/assessment.md`](archive/assessment.md)（2026-09-16 五维度评估：代码质量 82 /
 > 漏洞 72 / 死代码 70 / 服务降级 74 / 自我迭代 90，总分 78）。
 >
 > 状态图例：⬜ 未开始 · ⏳ 进行中（部分已落地） · ➖ 已决策（不做 / 维持现状） · ⛔ 外部阻塞（外部凭证未获取等非代码工作）
 >
-> 本文件的 `#N` 编号**独立于** `docs/todolist.md` 的 `#N`，两者不可互指。
+> 本文件的 `#N` 编号**独立于** `docs/KNOWN_ISSUES.md` 的 `#N`，两者不可互指。
 > 代码注释与历史提交里的 `roadmap #N` 指 **2026-09-17 收口前的旧编号**（条目已归档至
 > [`features.md`](features.md) §M 与 [`CHANGELOG.md`](../CHANGELOG.md)），**不要按当前编号回读**。
 >
@@ -35,7 +36,7 @@
 **结论**：**P0 与 P1 均已清零**，`v1.0.0` 已打 tag；`v1.0.0-rc1` → `v1.0.0` → `v1.0.x` → `v1.1.0`
 四个里程碑均已收口。已立项的未完成项只有长期性质的第 1 条：**桌面端分发与签名**——外部凭证阻塞
 （E6 未获取），代码层面已无剩余工作。2026-09-24 另在 §三 #4–#16 补录 **13 条趋势展望迭代方向**
-（⬜ 候选、未排期，每条已按 §六 第 1 条同步登记 [`docs/todolist.md`](todolist.md) #47–#59）；
+（⬜ 候选、未排期；按 §六 第 1 条的两源分工，**§三 3.2 表即这 13 条的唯一来源**）；
 排期进入里程碑后才转 ⏳，评估为不做则转 ➖ 并由 ADR / 决策记录兜底。
 
 > 已修复内容不在此流水账：P0 / P1 逐条记录与验证证据见 [`features.md`](features.md)「H」「I」段，
@@ -68,23 +69,24 @@
 >
 > **#4–#16 为 2026-09-24 补录的趋势展望方向**（来源标「趋势展望」：结合现有代码可承接点与
 > 2026 技术趋势评估得出）：全部 ⬜ **未排期候选池**，不是发布承诺——立项排期后状态改 ⏳ 并
-> 进入 §二 里程碑验收；评估为不做转 ➖。每条已同步登记 [`todolist.md`](todolist.md)（唯一待办
-> 来源）对应编号，两文件 `#N` 仍相互独立、引用须带各自前缀（§六 第 6 条）。
+> 进入 §二 里程碑验收；评估为不做转 ➖。按 §六 第 1 条的两源分工，**本节即这批条目的唯一来源**；
+> 2026-09-24 迁入前曾以 `KNOWN_ISSUES #47`–`#59` 登记，该编号**已停用**、仅作历史映射（见表「原编号」列）。
 
 ### 3.1 已立项 / 已决策项
 
 | # | 条目 | 来源 | 状态 | 说明 |
 |---|---|---|---|---|
-| 1 | 桌面端分发与签名 | 长期 | ⛔ | **已立项**（todolist #25），**外部阻塞**：Windows 代码签名证书 / Apple Developer ID + 公证均为外部凭证（**E6**，⬜ 未获取），未获取前无法完成签名与公证；自动更新通道依赖签名产物。**代码层面无剩余工作**——打包与发布链（tag↔清单校验、平台内唯一 `SHA256SUMS`、聚合 job）已收口，未签名产物以 `SHA256SUMS` + 手动放行说明过渡（[deployment.md](deployment.md) §5）；风险 **R5** 见 §五 |
+| 1 | 桌面端分发与签名 | 长期 | ⛔ | **已立项**（[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25），**外部阻塞**：Windows 代码签名证书 / Apple Developer ID + 公证均为外部凭证（**E6**，⬜ 未获取），未获取前无法完成签名与公证；自动更新通道依赖签名产物。**代码层面无剩余工作**——打包与发布链（tag↔清单校验、平台内唯一 `SHA256SUMS`、聚合 job）已收口，未签名产物以 `SHA256SUMS` + 手动放行说明过渡（[deployment.md](deployment.md) §5）；风险 **R5** 见 §五 |
 | 2 | 增量同步与批量能力的体验增强 | FEATURES | ➖ | 现有 `etag` / `size_mtime` / `always` 三模式满足需求，按用户反馈再评估 |
 
 ### 3.2 趋势展望候选池（2026-09-24 补录，⬜ 全部未排期）
 
 > 编号接续 3.1（§三 内全局唯一；3.1 原 #3「死代码纪律」于 2026-09-24 以前后端两道导出门禁收口移出，
-> 编号不重排故 #3 空号）；每行「对应」列为 `todolist` 编号（两套编号独立，引用须带前缀）。
-> 立项时在 todolist 状态改 ⏳ 并回本表同步；评估为不做改 ➖ 并写决策依据。
+> 编号不重排故 #3 空号）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
+> **已停用**、仅作历史映射——新建与引用一律用本表 `§三 #N`。
+> 立项时在本表把状态改 ⏳；评估为不做改 ➖ 并写决策依据（本表即唯一来源，无第二处需同步）。
 
-| # | 方向 | 对应 | 状态 | 现有代码可承接点 + 趋势依据 |
+| # | 方向 | 原编号 | 状态 | 现有代码可承接点 + 趋势依据 |
 |---|---|---|---|---|
 | 4 | MCP Server：把对象存储能力开放给 AI 代理 | #47 | ⬜ | 已有 70 端点 OpenAPI 3.0.3 全量契约 + `handler → service → s3wrap` 分层，工具面可由契约派生并复用既有鉴权 / 限速 / SSRF 防护；MCP 已是 AI 客户端接入外部工具的事实标准，只读工具可先行、写工具复用 Bearer 与危险操作二次确认 |
 | 5 | S3 新协议特性：条件写 / 端到端校验和 / Object Lock | #48 | ⬜ | 已有 CopyObject 复制链、`etag` 比对与版本控制；条件写（If-Match / If-None-Match）防并发覆盖、CRC64 全对象校验和、Object Lock / 合规保留是近两年 S3 API 演进主线，经 `s3wrap` 唯一边界接入并按厂商支持度降级（扩 E8 兼容矩阵） |
@@ -111,16 +113,17 @@
 | Go 格式 | `gofmt -l .`（`apps/server/`） | ✅ 干净 |
 | Go 静态检查 | `go vet ./...` | ✅ 0 告警 |
 | Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
-| Go 测试 | `go test -race -count=1 ./...` | ✅ 8/8 包通过 |
+| Go 测试 | `go test -race -count=1 ./...` | ✅ 9/9 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`） |
 | Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100% |
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ 1043 例全绿（66 文件） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4072 / 2843 / 1093 / 3501；含 `src/i18n/index.ts`） |
+| 前端测试 | `pnpm test` | ✅ 1110 例全绿（67 文件） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4255 / 2908 / 1124 / 3653；含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |
-| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物） |
+| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物；**`S3C_TOKEN` 开启的生产同构形态**，2026-09-24 审查 C1 验收实跑） |
+| E2E（真实 S3 协议） | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` | ✅ 4/4 PASS（真实 RustFS：分段 / 复制 / 桶属性 / 回收站） |
 | Rust 依赖审计 | `cargo audit`（两套 CI 的 desktop job + `make rust-audit`） | ✅ 0 漏洞；7 条 unmaintained/unsound 告警已 triage |
 
 > 后端覆盖率已补齐至**每包 100%**（2026-09 删除了确实不可达的防御分支，其余缺口改用行为断言，
@@ -155,8 +158,8 @@
 > **可管理性要求**：每条登记风险都要给出**可观测的触发信号**（或写清「缺口」）；没有信号的条目
 > 只是叙述，不进本表。
 >
-> 编号 `R*`（风险）/ `E*`（依赖）独立于 `docs/todolist.md` 的 `#N` 与 §三 的 `#`，不可互指；
-> **编号不重排**——已收敛 / 已接受的编号保留在索引里，避免 todolist / ADR / 代码注释的引用失真。
+> 编号 `R*`（风险）/ `E*`（依赖）独立于 `docs/KNOWN_ISSUES.md` 的 `#N` 与 §三 的 `#`，不可互指；
+> **编号不重排**——已收敛 / 已接受的编号保留在索引里，避免 KNOWN_ISSUES / ADR / 代码注释的引用失真。
 >
 > 状态：🟡 开放（人工跟踪）；➖ 已决策接受只出现在索引中（ADR 是唯一来源）
 > 等级 = 影响面 × 发生概率（高 / 中 / 低），仅用于排序。
@@ -210,11 +213,9 @@
 
 ## 六、维护约定
 
-1. **单一来源**：本文件只维护**版本级规划与优先级**，且**只列未完成项**；新增 / 关闭具体条目时，同步更新
-   [`docs/todolist.md`](todolist.md)（唯一待办来源），完成后归档至 [`docs/features.md`](features.md)
-   并**从本文件移除该条目**（必要时重编号）；风险条目收敛为自动化门禁后移入 §5.1「已收敛」索引、**编号不重排**。
+1. **两源分工**：本文件只维护**版本级规划与优先级**，且**只列未完成项**；**功能候选 / 版本级条目以本文件为唯一来源**，不在别处重复登记。**问题**（缺陷 / 外部阻塞 / 技术债）的唯一来源是 [`docs/KNOWN_ISSUES.md`](KNOWN_ISSUES.md)——评估或实现暴露出的*问题*记入那边、*方向*留在本文件，同一事项只在一个文件里是「当前条目」。条目完成后归档至 [`docs/features.md`](features.md) 并**从本文件移除**（必要时重编号）；风险条目收敛为自动化门禁后移入 §5.1「已收敛」索引、**编号不重排**。
 2. **评估驱动**：每次五维度评估（见 [`docs/archive/assessment.md`](archive/assessment.md)）产出后，按 P0/P1/P2 回写
-   本路线图与 todolist，形成「评估 → 修复 → 再评估」闭环。
+   本路线图与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)，形成「评估 → 修复 → 再评估」闭环。
 3. **状态真实性**：标 ⏳ 必须是工作区/分支已有代码变更，并在合并后改为 ✅（或按第 1 条移除）；禁止保留
    已完成条目的 ✅ 行——历史证据归 `features.md`。所有门禁数字必须来自实跑。
 4. **发版触发**：里程碑验收标准全部满足后，由 `scripts/release-version.sh` 同步版本号并更新

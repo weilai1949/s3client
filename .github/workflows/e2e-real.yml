@@ -1,6 +1,6 @@
 name: E2E (real backend + RustFS)
 
-# 真实联调浏览器冒烟（todolist #37）。
+# 真实联调浏览器冒烟（KNOWN_ISSUES #37）。
 #
 # 与另外两套 E2E 的分工：
 #   - e2e.yml：真实 RustFS 的 **Go 客户端** E2E（`s3wrap`，无浏览器）；

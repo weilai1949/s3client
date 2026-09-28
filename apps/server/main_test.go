@@ -41,7 +41,8 @@ func TestParseLevel(t *testing.T) {
 	}
 }
 
-// TestIsLoopbackAddr 回环判定：显式回环、无 host、无法解析均按回环处理。
+// TestIsLoopbackAddr 回环判定：显式回环与无法解析按回环处理；
+// 无 host（":8080"，net.Listen 绑 [::] 全接口）必须按**非**回环处理（C2）。
 func TestIsLoopbackAddr(t *testing.T) {
 	cases := []struct {
 		in   string
@@ -51,8 +52,8 @@ func TestIsLoopbackAddr(t *testing.T) {
 		{"127.0.0.1:", true},
 		{"[::1]:8080", true},
 		{"::1:8080", true},
-		{":8080", true}, // 未指定 host = 全接口，但解析 host 为空串按回环
-		{"not an addr", true},
+		{":8080", false},      // 未指定 host = 绑定全部网卡，等价 0.0.0.0（C2）
+		{"not an addr", true}, // 解析失败本就无法监听，按回环避免误报
 		{"0.0.0.0:8080", false},
 		{"192.168.1.5:8080", false},
 	}
@@ -73,7 +74,8 @@ func TestCorsSummary(t *testing.T) {
 	}
 }
 
-// TestRunHealthcheck 健康检查三态：200→0、非 200→1、连接失败→1。
+// TestRunHealthcheck 健康检查四态：200→0、非 200→1、连接失败→1；
+// 通配 host（":port"，服务绑全接口）回退 127.0.0.1 探测→0。
 func TestRunHealthcheck(t *testing.T) {
 	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -83,6 +85,10 @@ func TestRunHealthcheck(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(badSrv.Close)
+	_, okPort, err := net.SplitHostPort(okSrv.Listener.Addr().String())
+	if err != nil {
+		t.Fatalf("split okSrv addr: %v", err)
+	}
 
 	cases := []struct {
 		name string
@@ -92,6 +98,7 @@ func TestRunHealthcheck(t *testing.T) {
 		{"ok", okSrv.Listener.Addr().String(), 0},
 		{"non-200", badSrv.Listener.Addr().String(), 1},
 		{"refused", "127.0.0.1:1", 1},
+		{"wildcard host falls back to loopback", ":" + okPort, 0},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -193,8 +200,9 @@ func TestRunServerStoreInitFails(t *testing.T) {
 	}
 }
 
-// TestRunServerListenBindFailure 端口被占用 → ListenAndServe 失败进入优雅关闭并返回 0
-// （服务错误路径会触发内部 cancel，使 runServer 走完 shutdown 流程）。
+// TestRunServerListenBindFailure 端口被占用 → ListenServe败 → 走完清理流程后必须返回
+// 非零（review §R15a：曾返回 0，与自述退出码契约矛盾，systemd/Docker on-failure 不重启）。
+// 正常优雅关停仍返回 0，由 TestRunServerStartsAndShutsDownGracefully 锚定。
 func TestRunServerListenBindFailure(t *testing.T) {
 	// 先占用端口，使 ListenAndServe 绑定失败。
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -208,8 +216,41 @@ func TestRunServerListenBindFailure(t *testing.T) {
 	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
 	code := runServer(context.Background())
-	if code != 0 {
-		t.Fatalf("runServer(bind failure) = %d, want 0（失败也应走优雅关闭返回 0）", code)
+	if code == 0 {
+		t.Fatal("runServer(bind failure) = 0, want non-zero（服务因错误终止必须以非零码退出）")
+	}
+}
+
+// TestMainServerExitsNonZeroOnListenFailure 进程级退出码锚定（review §R15a）：
+// 端口占用导致 ListenAndServe 失败时，main() 必须以非零码退出并留下 server error 日志，
+// 部署侧的 on-failure 重启策略据此生效；-healthcheck 子命令的退出码互不影响。
+func TestMainServerExitsNonZeroOnListenFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("依赖类 unix 端口与进程退出码语义")
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("bind blocker: %v", err)
+	}
+	defer l.Close()
+	cmd := childCmd(t, "server", map[string]string{
+		"S3C_ADDR":                  l.Addr().String(),
+		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_TOKEN":                 "unit-test-token-0123456789",
+		"S3C_STORE_DRIVER":          "json",
+		"S3C_ALLOW_PLAINTEXT_STORE": "1",
+		"S3C_SHUTDOWN_TIMEOUT":      "5",
+	})
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("listen failure child must exit non-zero, out=%s", out)
+	}
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() == 0 {
+		t.Fatalf("want non-zero exit, got err=%v out=%s", err, out)
+	}
+	if !strings.Contains(string(out), "server error") {
+		t.Fatalf("exit非零但缺少 server error 日志（退出原因必须可见）, out=%s", out)
 	}
 }
 
@@ -349,7 +390,7 @@ func TestMainServerWarnsPlaintextStore(t *testing.T) {
 	}
 }
 
-// TestMainServerRejectsPlaintextStoreWithoutOptIn 安全默认（todolist #29/#31）：
+// TestMainServerRejectsPlaintextStoreWithoutOptIn 安全默认（KNOWN_ISSUES #29/#31）：
 // json / sqlite + 空 S3C_STORE_KEY 且未显式 S3C_ALLOW_PLAINTEXT_STORE=1 时，
 // 进程必须在启动阶段硬失败（非 0 退出），且报错指明两条出路；不得泄露密钥值。
 func TestMainServerRejectsPlaintextStoreWithoutOptIn(t *testing.T) {
@@ -470,7 +511,10 @@ func TestRunServerJSONLog(t *testing.T) {
 	}
 }
 
-// TestRunHealthcheckBadAddr 地址缺端口：SplitHostPort 失败回退 127.0.0.1:8080（探测失败→1）。
+// TestRunHealthcheckBadAddr 地址缺端口：SplitHostPort 失败时 host/port 均为空串，探测 URL
+// 退化为 http://127.0.0.1:/api/health——按 http 方案默认 80 端口连接，几乎必然失败返回 1。
+// 这是 fail-closed：同一非法地址下服务端自身也无法监听（missing port），错误配置必须由
+// 健康检查暴露，而不是假装健康。
 func TestRunHealthcheckBadAddr(t *testing.T) {
 	t.Setenv("S3C_ADDR", "no-port-in-here")
 	if got := runHealthcheck(); got != 1 {

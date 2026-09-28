@@ -48,6 +48,24 @@ type kdfParams struct {
 	threads uint8
 }
 
+// S3C3 文件头里的 KDF 参数由文件内容决定，可被篡改。只查零值不够：把 memory 改成
+// 4GiB、time 改成 4G 就能让一次普通读取吃掉数分钟 CPU / 数 GiB 内存（读放大 DoS），
+// 因此派生前必须同时拒绝零值与超上界的值。上界取「合法参数的 8 倍以上」，正常调参
+// 不会触碰，攻击值（1<<32-1 等）必然被拦。
+const (
+	maxKDFTime      = 10         // 合法值 argonTimeV3=2
+	maxKDFMemoryKiB = 512 * 1024 // 合法值 argonMemoryV3=64MiB，上界 512MiB
+	maxKDFThreads   = 16         // 合法值 argonThreadsV3=4
+)
+
+// kdfParamsValid 判定 KDF 参数既非零也未越上界（零值与越界合并为同一罚则，
+// 对外统一报 "invalid KDF params"，避免攻击者从文案差异推断上界位置）。
+func kdfParamsValid(p kdfParams) bool {
+	return p.time >= 1 && p.time <= maxKDFTime &&
+		p.memory >= 1 && p.memory <= maxKDFMemoryKiB &&
+		p.threads >= 1 && p.threads <= maxKDFThreads
+}
+
 // legacyParams 是 S3C2 文件隐含使用的参数（无文件头，按历史硬编码值派生）。
 var legacyParams = kdfParams{time: 1, memory: argonMemory, threads: argonThreads}
 
@@ -59,34 +77,24 @@ func deriveKey(password string, salt []byte, p kdfParams) []byte {
 	return argon2.IDKey([]byte(password), salt, p.time, p.memory, p.threads, keyLen)
 }
 
-// deriveKeyLegacy 按 S3C2 硬编码参数派生密钥（仅测试与旧格式读取使用）。
-func deriveKeyLegacy(password string, salt []byte) []byte {
-	return deriveKey(password, salt, legacyParams)
-}
-
 // isEncryptedBlob 判断磁盘字节是否为任一受支持的加密信封。
 func isEncryptedBlob(data []byte) bool {
 	return len(data) >= len(encMagicV2) &&
 		(string(data[:4]) == string(encMagicV2) || string(data[:4]) == string(encMagicV3))
 }
 
-// envelope 拼装加密信封：magic || [params] || salt || ciphertext。
-// 传入 encMagicV2 时按旧格式（无参数头）拼装，传入 encMagicV3 时写入参数头。
-func envelope(magic, salt, ciphertext []byte) []byte {
-	if string(magic) == string(encMagicV3) {
-		out := make([]byte, 0, 4+4+4+1+len(salt)+len(ciphertext))
-		out = append(out, encMagicV3...)
-		var buf [4]byte
-		binary.BigEndian.PutUint32(buf[:], currentParams.time)
-		out = append(out, buf[:]...)
-		binary.BigEndian.PutUint32(buf[:], currentParams.memory)
-		out = append(out, buf[:]...)
-		out = append(out, currentParams.threads)
-		out = append(out, salt...)
-		return append(out, ciphertext...)
-	}
-	out := make([]byte, 0, len(magic)+len(salt)+len(ciphertext))
-	out = append(out, magic...)
+// envelope 拼装 S3C3 加密信封：magic || params || salt || ciphertext。
+// 旧格式（S3C2，无参数头）**只读不写**——升级后一律回写 S3C3；
+// S3C2 的构造仅存在于测试（手工造旧库验证读取兼容）。
+func envelope(salt, ciphertext []byte) []byte {
+	out := make([]byte, 0, 4+4+4+1+len(salt)+len(ciphertext))
+	out = append(out, encMagicV3...)
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], currentParams.time)
+	out = append(out, buf[:]...)
+	binary.BigEndian.PutUint32(buf[:], currentParams.memory)
+	out = append(out, buf[:]...)
+	out = append(out, currentParams.threads)
 	out = append(out, salt...)
 	return append(out, ciphertext...)
 }
@@ -115,7 +123,8 @@ func parseEnvelope(data []byte) (kdfParams, []byte, []byte, error) {
 			memory:  binary.BigEndian.Uint32(data[8:12]),
 			threads: data[12],
 		}
-		if p.time == 0 || p.memory == 0 || p.threads == 0 {
+		// 派生前校验：零值（弱密钥）与越界值（读放大 DoS）一律拒绝。
+		if !kdfParamsValid(p) {
 			return kdfParams{}, nil, nil, fmt.Errorf("S3C3 file has invalid KDF params: %+v", p)
 		}
 		salt := make([]byte, encSaltLen)

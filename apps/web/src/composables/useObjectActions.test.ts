@@ -1,14 +1,13 @@
 import { computed, defineComponent, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useObjectActions, type ObjectBrowserCtx } from './useObjectActions'
 import { uploadObject, type UploadTarget } from '../upload'
-import { s3api, subscribeMigrateEvents, type MigrateProgress } from '../api'
+import { api, s3api, subscribeMigrateEvents, type MigrateProgress } from '../api'
 import { toast, createProgressToast } from '../store'
 import { confirmDialog } from '../confirm'
 import { promptDialog } from '../prompt'
 import { copyText } from '../clipboard'
-import { proxyUrl } from '../proxy'
 import type { UploadItem } from '../components/UploadQueue.vue'
 import type { Account, Entry, ObjectItem, ObjectMeta } from '../types'
 
@@ -35,8 +34,15 @@ vi.mock('../store', () => ({
 vi.mock('../confirm', () => ({ confirmDialog: vi.fn(async () => true) }))
 vi.mock('../prompt', () => ({ promptDialog: vi.fn(async () => 'x') }))
 vi.mock('../clipboard', () => ({ copyText: vi.fn(async () => {}) }))
-vi.mock('../proxy', () => ({ proxyUrl: vi.fn(() => 'https://p') }))
 vi.mock('../i18n', () => ({ t: (k: string) => k, tf: (k: string) => k }))
+
+/** C1：代理取回必须走带 Bearer 的 fetch（`<a href>` 直连会 401 且把错误体存盘）。 */
+const fetchMock = vi.fn()
+vi.stubGlobal('fetch', fetchMock)
+
+/** 已捕获的附件保存（anchor click），测试里断言保存名与 objectURL。 */
+interface SavedFile { href: string; download: string }
+let saved: SavedFile[] = []
 
 /** 默认上传实现：挂起直到手动推进（inFlight）。 */
 type UploadImpl = (file: File, target: UploadTarget, onProgress?: (p: number) => void, signal?: AbortSignal) => Promise<void>
@@ -68,7 +74,7 @@ const acc: Account = {
 }
 
 function fileObj(key: string): ObjectItem {
-  return { key, size: 1, lastModified: '2024-01-01', etag: 'e1', contentType: 'text/plain', isDir: false }
+  return { key, size: 1, lastModified: '2024-01-01', etag: 'e1', isDir: false }
 }
 
 function meta(key: string): ObjectMeta {
@@ -153,7 +159,24 @@ beforeEach(() => {
   vi.mocked(toast).mockClear()
   vi.mocked(createProgressToast).mockClear()
   vi.mocked(createProgressToast).mockReturnValue(vi.fn())
+  // C1 下载链路：fetch 桩 + 附件保存捕获；token 默认开启以断言 Bearer 头
+  fetchMock.mockReset()
+  saved = []
+  api.token = 'tok123'
 })
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** 捕获 downloadProxyObject 的落盘动作（objectURL + anchor click + revoke）。 */
+function captureSaves() {
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    saved.push({ href: this.href, download: this.download })
+  })
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:saved')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+}
 
 describe('上传取消状态机（cancelled 为终态）', () => {
   beforeEach(() => {
@@ -430,32 +453,48 @@ describe('删除对象', () => {
 })
 
 describe('下载', () => {
-  it('download 生成代理 URL 并触发点击', () => {
-    const actions = makeActions()
-    actions.download(fileObj('dir/a.txt'))
-    expect(vi.mocked(proxyUrl)).toHaveBeenCalledWith('a1', 'b1', 'download', 'dir/a.txt', '')
+  it('download 经带 Bearer 的代理 fetch 取回字节并以附件保存', async () => {
+    const actions = mountActions()
+    captureSaves()
+    fetchMock.mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) })
+
+    await actions.download(fileObj('dir/a.txt'))
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toContain('/api/accounts/a1/proxy?')
+    expect(url).toContain('mode=download')
+    expect(url).toContain('bucket=b1')
+    expect(url).toContain('key=dir%2Fa.txt')
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok123' })
+    expect(saved).toEqual([{ href: 'blob:saved', download: 'a.txt' }])
+
     // 无斜杠 key 分支
-    actions.download(fileObj('rootfile.txt'))
-    expect(vi.mocked(proxyUrl)).toHaveBeenCalledWith('a1', 'b1', 'download', 'rootfile.txt', '')
+    await actions.download(fileObj('rootfile.txt'))
+    expect(fetchMock.mock.calls[1][0]).toContain('key=rootfile.txt')
+    expect(saved[1]!.download).toBe('rootfile.txt')
   })
 
-  it('download key 以斜杠结尾时 basename 为空 → || 回退 object', () => {
-    const actions = makeActions()
-    const origCreate = document.createElement.bind(document)
-    let created: HTMLAnchorElement | undefined
-    const spy = vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
-      const el = origCreate(tag)
-      if (tag === 'a') created = el as HTMLAnchorElement
-      return el
-    }) as unknown as typeof document.createElement)
-    try {
-      actions.download(fileObj('dir/'))
-      expect(created).toBeTruthy()
-      // 'dir/'.split('/').pop() === ''：|| 兜底为 'object'
-      expect(created!.download).toBe('object')
-    } finally {
-      spy.mockRestore()
-    }
+  it('download 失败（如 401）：toast + 错误条提示，不产生任何落盘', async () => {
+    const actions = mountActions()
+    captureSaves()
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized' })
+
+    await actions.download(fileObj('a.txt'))
+
+    expect(saved).toEqual([])
+    expect(URL.createObjectURL).not.toHaveBeenCalled()
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastDownloadFail', 'err')
+    expect(lastCtx!.error.value).toBe('401 Unauthorized')
+  })
+
+  it('download key 以斜杠结尾时保存名为空 → || 回退 object', async () => {
+    const actions = mountActions()
+    captureSaves()
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['x']) })
+
+    await actions.download(fileObj('dir/'))
+
+    expect(saved).toEqual([{ href: 'blob:saved', download: 'object' }])
   })
 
   it('copySignLink 成功：复制 URL 并 toast', async () => {
@@ -536,25 +575,28 @@ describe('下载', () => {
 })
 
 describe('右键菜单派发', () => {
-  it('ctxOpen：文件夹进入 / 文件下载 / 空忽略', () => {
+  it('ctxOpen：文件夹进入 / 文件下载 / 空忽略', async () => {
     const actions = makeActions()
     setEntry({ kind: 'folder', key: 'dir/', name: 'dir' })
     actions.ctxOpen()
     expect(lastCtx!.enterPrefix).toHaveBeenCalledWith('dir/')
 
+    captureSaves()
+    fetchMock.mockResolvedValue({ ok: true, blob: async () => new Blob(['x']) })
     setEntry({ kind: 'file', key: 'a.txt', name: 'a.txt', object: fileObj('a.txt') })
     actions.ctxOpen()
-    expect(vi.mocked(proxyUrl)).toHaveBeenCalled()
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
 
     // 文件但无 object：不下载
-    const calls = vi.mocked(proxyUrl).mock.calls.length
     setEntry({ kind: 'file', key: 'b.txt', name: 'b.txt' })
     actions.ctxOpen()
-    expect(vi.mocked(proxyUrl).mock.calls.length).toBe(calls)
+    await flushPromises()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
 
     setEntry(null)
     actions.ctxOpen()
-    expect(vi.mocked(proxyUrl).mock.calls.length).toBe(calls)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('ctxCopyKey：复制条目 key；空条目忽略', async () => {
@@ -1082,7 +1124,7 @@ describe('删除文件夹（异步任务 + SSE 进度）', () => {
     expect(lastCtx!.opsBusy.value).toBe(false)
   })
 
-  it('组件卸载时断开进行中的 SSE 订阅', async () => {
+  it('组件卸载时断开进行中的 SSE 订阅，并让等待中的 Promise settle', async () => {
     let onProgress: ((p: Partial<MigrateProgress>) => void) | undefined
     const stop = vi.fn()
     vi.mocked(subscribeMigrateEvents).mockImplementation((_jobId, p) => {
@@ -1093,12 +1135,16 @@ describe('删除文件夹（异步任务 + SSE 进度）', () => {
     const { actions, unmount } = mountActionsHost()
     setEntry({ kind: 'folder', key: 'dir/', name: 'dir' })
 
-    void actions.ctxDeleteFolder()
+    const run = actions.ctxDeleteFolder()
     await vi.waitFor(() => expect(onProgress).toBeTruthy())
     expect(stop).not.toHaveBeenCalled()
 
     unmount()
+    // 卸载必须让等待中的 Promise 以中止收尾（旧实现 await 永远挂起 = 帧泄漏）
+    await expect(run).resolves.toBeUndefined()
     expect(stop).toHaveBeenCalledTimes(1)
+    expect(lastCtx!.error.value).toBe('') // 中止不算错误，不写 ctx.error
+    expect(lastCtx!.opsBusy.value).toBe(false) // finally 照常复位
   })
 })
 

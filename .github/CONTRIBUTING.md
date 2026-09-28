@@ -6,7 +6,7 @@
 ## 开发规范速览
 
 - **TDD 优先**、必验门禁、验收清单、Red Flags：见 [docs/development.md](../docs/development.md)
-- **文档同步**：修复 bug 或新增功能完成后**必须**更新相关文档（README / `docs/api.md` / `CHANGELOG.md` / `docs/todolist.md` 等），文档未同步视为改动未完成；对照表见 [docs/development.md](../docs/development.md) §4 与 [AGENTS.md](../AGENTS.md)
+- **文档同步**：修复 bug 或新增功能完成后**必须**更新相关文档（README / `docs/api.md` / `CHANGELOG.md` / `docs/KNOWN_ISSUES.md` 等），文档未同步视为改动未完成；对照表见 [docs/development.md](../docs/development.md) §4 与 [AGENTS.md](../AGENTS.md)
 - **架构**与关键决策：见 [docs/architecture.md](../docs/architecture.md) 与 [docs/decisions/](../docs/decisions/index.md)
 - **API 契约**：见 [docs/api.md](../docs/api.md)（与 OpenAPI 注册表一致；改 handler 请求体时同步更新 `openapi_register_*.go`）
 

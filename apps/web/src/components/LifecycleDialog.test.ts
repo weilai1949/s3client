@@ -188,4 +188,69 @@ describe('LifecycleDialog', () => {
     w.findComponent({ name: 'ModalDialog' }).vm.$emit('close')
     expect(w.emitted('close')).toBeTruthy()
   })
+
+  it('异步提交防重复：在途时双击「保存规则」只发一次 putLifecycle', async () => {
+    vi.mocked(s3api.putLifecycle).mockImplementationOnce(() => new Promise<never>(() => {})) // 请求挂起
+    const w = mountDialog()
+    await openDialog(w, [{ id: 'r1', prefix: 'logs', days: 30 }])
+    clickBody('lifecycle.saveRules')
+    await flushPromises()
+    expect(bodyBtn('lifecycle.saveRules').disabled).toBe(true) // 在途时提交按钮禁用
+    clickBody('lifecycle.saveRules') // 第二次点击必须被守卫拦住
+    await flushPromises()
+    expect(vi.mocked(s3api.putLifecycle)).toHaveBeenCalledTimes(1)
+  })
+
+  it('提交在途时直调 submitLifecycle 被守卫拦截；失败后发出 error 且按钮恢复', async () => {
+    let rejectSave!: (e: Error) => void
+    vi.mocked(s3api.putLifecycle).mockImplementationOnce(
+      () =>
+        new Promise<never>((_, rej) => {
+          rejectSave = rej
+        }),
+    )
+    const w = mountDialog()
+    await openDialog(w, [{ id: 'r1', prefix: 'logs', days: 30 }])
+    clickBody('lifecycle.saveRules')
+    await flushPromises()
+    expect(bodyBtn('lifecycle.saveRules').disabled).toBe(true) // 在途时提交按钮禁用
+    // 按钮 disabled 绕过点击后，提交入口自身必须仍拦住第二次提交
+    await (w.vm as unknown as { submitLifecycle: () => Promise<void> }).submitLifecycle()
+    expect(vi.mocked(s3api.putLifecycle)).toHaveBeenCalledTimes(1)
+    // 失败 settle：error 事件、未发 close、按钮恢复
+    rejectSave(new Error('lifecycle-save-boom'))
+    await flushPromises()
+    expect(w.emitted('error')).toEqual([['lifecycle-save-boom']])
+    expect(w.emitted('close')).toBeUndefined()
+    expect(bodyBtn('lifecycle.saveRules').disabled).toBe(false)
+  })
+})
+
+describe('LifecycleDialog 稳定行键', () => {
+  it('删除中间规则行后其余行保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    const w = mountDialog()
+    await openDialog(w, [
+      { id: 'r1', prefix: 'logs', days: 30 },
+      { id: 'r2', prefix: 'tmp', days: 10 },
+      { id: 'r3', prefix: 'arch', days: 7 },
+    ])
+    const rows = () => Array.from(document.body.querySelectorAll('table.tbl tbody tr'))
+    const before = rows()
+    expect(before).toHaveLength(3)
+
+    const middleDelete = before[1].querySelector('button') as HTMLButtonElement
+    middleDelete.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const after = rows()
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 复用第 2 个节点承载第 3 行并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    // 存活行的输入值仍是原第 1、3 行（防串行）
+    expect(after.map((r) => (r.querySelector('input[placeholder="lifecycle.prefixPh"]') as HTMLInputElement).value))
+      .toEqual(['logs', 'arch'])
+    expect(after.map((r) => (r.querySelector('input[type="number"]') as HTMLInputElement).value))
+      .toEqual(['30', '7'])
+  })
 })

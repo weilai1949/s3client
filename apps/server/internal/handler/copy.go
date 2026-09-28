@@ -96,18 +96,9 @@ func (h *Handler) copyMany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := copyKeysThenDelete(r.Context(), client, bucket, targetBucket, pairs, 4, nil)
-	copied, failed := out.OK, out.Failed
-	failMsg := out.LastError
-	// API 层统一裁剪：service 层不截断（见 service/batch.go），此处兑现「failedKeys ≤ 200」承诺。
-	failKeys := capFailKeys(out.FailKeys)
-	resp := map[string]any{"copied": copied, "failed": failed, "total": len(pairs)}
-	if failMsg != "" {
-		resp["lastError"] = failMsg
-	}
-	if len(failKeys) > 0 {
-		resp["failedKeys"] = failKeys
-	}
-	h.writeJSON(w, http.StatusOK, resp)
+	// 移动与纯复制共用 copyBatchJSON：响应形状不得随 deleteSource 漂移（review Nit），
+	// truncated 恒写 false（本端点不截断 keys 列表，openapi 契约要求该键存在）。
+	h.writeJSON(w, http.StatusOK, copyBatchJSON(out, len(pairs), false))
 }
 
 // copyManyAsync 异步批量复制/移动：立即返回 jobId，进度复用 migrate jobs SSE。
@@ -154,6 +145,12 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 	job, ok := h.newJob(w, len(pairs), cancel)
 	if !ok {
 		return
+	}
+	if req.DeleteSource {
+		// 移动是「复制成功后删源」的组合动作，半成功（复制了但没删/删了没复制）需按
+		// 任务审计对账；纯复制不记该事件（review R3）。
+		h.audit(r, auditObjectsMove, "jobId", job.ID, "bucket", bucket,
+			"targetBucket", targetBucket, "total", job.Total)
 	}
 	go func() {
 		defer cancel()
@@ -268,8 +265,8 @@ func (h *Handler) listPrefixKeys(ctx context.Context, client *s3wrap.Client, buc
 
 func copyBatchJSON(out service.BatchResult, total int, truncated bool) map[string]any {
 	resp := map[string]any{"copied": out.OK, "failed": out.Failed, "total": total, "truncated": truncated}
-	if out.LastError != "" {
-		resp["lastError"] = out.LastError
+	if out.FirstError != "" {
+		resp["lastError"] = out.FirstError
 	}
 	if keys := capFailKeys(out.FailKeys); len(keys) > 0 {
 		resp["failedKeys"] = keys

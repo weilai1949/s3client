@@ -7,9 +7,18 @@
 > ② **「2 个测试文件超 1000 行」已拆分完成**（本报告 §2 / §3 提出的约束缺口）：`openapi_contract_test.go`
 >    （1038 → 569 + 209 + 286 行）与 `objects_test.go`（1001 → 300 + 440 + 297 行）三路拆为 6 个文件，
 >    零断言改动、254 个测试名拆分前后完全一致；
-> ③ **文件总数 184 → 188**（71 生产 + 117 `_test.go`，因 ② 净增 4 个文件）——正文 §2「184 个」「168/184」
+> ③ **文件总数 184 → 188 → 199**（② 三路拆分净增 4 个；2026-09-24 §AA 审查处置再净增 11 个——`internal/atomicfile/`
+>    4 个新文件 + `store/atomic.go` 删除 −1 + 8 个新测试文件），当前 **73 生产 + 126 `_test.go`**
+>    ——正文 §2「184 个」「168/184」
 >    为审查时点值，保留原样；
-> ④ **仍开放的外部阻塞**：#25 桌面端签名与公证（外部凭证，⛔），由 [`todolist.md`](todolist.md) 单点跟踪。
+> ④ **仍开放的外部阻塞**：#25 桌面端签名与公证（外部凭证，⛔），由 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 单点跟踪。
+> ⑤ **2026-09-24 全仓代码审查已处置完毕**：[`code-review-2026-09-24.md`](code-review-2026-09-24.md) 的
+>    2 Critical + 20 Required **全部修复**；Nit 35 项中 **31 项修复**、**3 项转登记**
+>    [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（#61 / **#62 本轮未完成** / #63）、1 项复核后判定不成立
+>    （台账见 [`features.md`](features.md) §AA，逐项见该报告「处置明细」表），复测
+>    **9/9 包全绿 + 每包 100.0% statements + 前端 67 文件 1110 例 + 四指标 100%（4255 / 2908 / 1124 / 3653）**，
+>    真实 E2E 两项实跑——`S3CLINET_E2E=1` s3wrap **4/4 PASS**、`make e2e-real` **3 passed**
+>    （`S3C_TOKEN` 开启的生产同构形态）。下文正文中「1042 用例 / 66 文件」等为**审查时点值**，保留原样。
 
 ## 🎯 执行摘要
 
@@ -164,10 +173,10 @@ config      环境变量解析与校验
 2. **监控增强**：~~添加指标~~ **指标已齐**（`/api/metrics` 暴露 54 项 `s3c_*`：
    HTTP 计数/uptime/goroutine/GC/build_info/store_up/ssrf_deny/stream_interrupted/zip 系列，
    默认 404 需 `S3C_EXPOSE_METRICS=1`）；**分布式追踪是仓内已立项的开放项**：
-   [`todolist.md`](todolist.md) **#54** / [`roadmap.md`](roadmap.md) §三 #11——
+   [`roadmap.md`](roadmap.md) §三 #11（2026-09-24 前登记为 `todolist.md` #54）——
    在既有 Prometheus 指标 + `X-Request-ID` + `S3C_LOG_JSON` 基座上接 OTLP 导出
    （开关式、默认关、可零依赖降级），把请求 ID 升级为跨 presign / proxy / migrate 的 trace
-   并配 SLO 仪表盘。**本报告不重复立项，进度只看 #54**
+   并配 SLO 仪表盘。**本报告不重复立项，进度只看 [`roadmap.md`](roadmap.md) §三 #11**
 3. **安全审计**：~~定期进行安全漏洞扫描~~ **已自动化**：双 CI 每次 push 跑
    govulncheck（调用链可达性门禁）+ Trivy（CRITICAL/HIGH 镜像门禁 + 缓存重试）
    + cargo audit（RustSec），非人工定期扫描
@@ -243,22 +252,23 @@ config      环境变量解析与校验
 > 里没有任何对应条目**，属报告自行发挥，已替换为 roadmap 真实的
 > **§3.2 趋势展望候选池**（`#47`–`#59`，⬜ 全部未排期、非发布承诺）：
 
-1. **AI 代理接入**：MCP Server 把对象存储能力开放给 AI 代理（`#47`，由 OpenAPI 契约派生工具面）
-2. **规模化评估**：多副本 / HA 能力评估（`#58`，需先出 ADR 推翻 `flock` 单副本 R4）
+1. **AI 代理接入**：MCP Server 把对象存储能力开放给 AI 代理（[`roadmap.md`](roadmap.md) §三 #4，由 OpenAPI 契约派生工具面）
+2. **规模化评估**：多副本 / HA 能力评估（[`roadmap.md`](roadmap.md) §三 #15，需先出 ADR 推翻 `flock` 单副本 R4）
 3. **其余候选**：S3 新协议特性 / 计划任务备份 / FinOps 看板 / 断点续传 / 双向同步 + PWA /
    OpenAPI 代码生成 / OpenTelemetry / SBOM+SLSA / Token 作用域 / fuzz 门禁 / 多平台体验
-   —— 见 [`roadmap.md`](roadmap.md) §3.2，**进度一律以 todolist `#47`–`#59` 为准，本报告不另立项**
+   —— 见 [`roadmap.md`](roadmap.md) §三 3.2，**进度一律以该表为准，本报告不另立项**
 
 ## 📋 行动计划
 
 > **本节此前的时间线（「本周内 / 下两周 / 1个月内 / 季度级」）没有来源**——仓内无排期记录，
 > 且其中「短期：性能优化、监控增强」与上文结论矛盾（无已识别瓶颈、指标已齐）。
-> 现改为**只指向唯一排期来源** [`todolist.md`](todolist.md)：
+> 现改为**只指向两个唯一来源**——[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题：缺陷 / 阻塞 / 技术债）
+> 与 [`roadmap.md`](roadmap.md) §三（方向：功能候选 / 版本级规划）：
 
 | **类别** | **内容** | **跟踪点** |
 |----------|----------|------------|
-| ⛔ 外部阻塞 | 桌面端签名与公证（唯一阻塞项，非代码工作） | `#25` |
-| ⬜ 未排期候选 | AI/规模化/协议/可观测性等 13 项 | `#47`–`#59` |
+| ⛔ 外部阻塞 | 桌面端签名与公证（唯一阻塞项，非代码工作） | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25 |
+| ⬜ 未排期候选 | AI/规模化/协议/可观测性等 13 项 | [`roadmap.md`](roadmap.md) §三 3.2（#4–#16） |
 | ✅ 本轮已收口 | 编辑器约定（`.editorconfig`）、报告内事实性错误与编造指标 | 本报告 |
 
 ---

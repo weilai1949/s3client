@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"path"
-	"strings"
 	"sync"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
@@ -11,10 +10,12 @@ import (
 
 // BatchResult 批量复制/迁移汇总。
 type BatchResult struct {
-	OK        int
-	Failed    int
-	LastError string
-	FailKeys  []string
+	OK     int
+	Failed int
+	// FirstError 是首个失败条目的错误——仅在空时写入，永远取第一条
+	// （旧名 LastError 名不副实，review Nit）。
+	FirstError string
+	FailKeys   []string
 }
 
 // Progress 批量进度回调。
@@ -80,8 +81,8 @@ func RunBatch[I any](
 		if r.err != nil {
 			out.Failed++
 			out.FailKeys = append(out.FailKeys, r.key)
-			if out.LastError == "" {
-				out.LastError = "failed at " + r.key + ": " + s3wrap.UserMessage(r.err)
+			if out.FirstError == "" {
+				out.FirstError = "failed at " + r.key + ": " + s3wrap.UserMessage(r.err)
 			}
 			if onProgress != nil {
 				onProgress(Progress{
@@ -129,9 +130,12 @@ func CopyKeys(
 }
 
 // RelKey 将源 key 相对 prefix 映射到目标前缀。
+//
+// 相对路径用 stripPrefix（与增量同步同一内核）而不是裸 TrimPrefix：prefix 必须
+// 结束在「/」段边界上才算命中，否则 "backups/x.txt" 会被削成 "s/x.txt" → 目标侧
+// 出现错位 key（review R7；内核语义见 sync.go stripPrefix）。
 func RelKey(srcKey, srcPrefix, targetPrefix string) string {
-	rel := strings.TrimPrefix(srcKey, srcPrefix)
-	return targetPrefix + rel
+	return targetPrefix + stripPrefix(srcKey, srcPrefix)
 }
 
 // BaseKey 取 basename 拼到前缀（copyMany 用）。

@@ -25,6 +25,30 @@ func resetMetrics() {
 	globalS3Metrics = newS3Metrics()
 }
 
+// TestS3MetricsPresignNotCounted 预签名只构造 URL、不产生真实 S3 调用：presign client
+// 若挂上 metricsMiddleware，一次 PresignPut 就凭空 +1 Calls，分段直传每段预签名一次
+// 会注入 N 个假调用、把延迟 p99 拉向 0（review §R16）。
+func TestS3MetricsPresignNotCounted(t *testing.T) {
+	resetMetrics()
+	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	ctx := context.Background()
+	if _, err := c.PresignPut(ctx, "bkt", "k.txt", time.Minute); err != nil {
+		t.Fatalf("PresignPut: %v", err)
+	}
+	if _, err := c.PresignUploadPart(ctx, "bkt", "big.bin", "upid-1", 2, time.Minute); err != nil {
+		t.Fatalf("PresignUploadPart: %v", err)
+	}
+	snap := MetricsSnapshot()
+	if snap.Calls != 0 {
+		t.Fatalf("Calls = %d, want 0（presign 不是真实 S3 调用，不得计入 s3c_s3_calls_total）", snap.Calls)
+	}
+	if last := snap.Latency[len(snap.Latency)-1].Count; last != 0 {
+		t.Fatalf("+Inf 桶 = %d, want 0（假调用会污染延迟分位）", last)
+	}
+}
+
 func TestS3MetricsRecordsSuccess(t *testing.T) {
 	resetMetrics()
 	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

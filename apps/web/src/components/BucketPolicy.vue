@@ -78,7 +78,6 @@ async function savePolicy() {
       :bucket="bucket"
       :raw="policy"
       @update="draft = $event"
-      @error="(m) => emit('error', m)"
     />
     <div class="row" style="margin-top:12px">
       <button class="btn sm" :disabled="saving" @click="savePolicy">

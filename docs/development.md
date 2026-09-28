@@ -30,7 +30,7 @@
 - E2E 测试用 `S3CLINET_E2E=1` 门控，普通 `go test ./...` 不会执行，CI 因此不受影响。
 
 ### 真实后端 + RustFS 浏览器联调（历史任务 #37，已闭环）
-- #37 已于 2026-09-22 闭环并从 [`todolist.md`](todolist.md) 移除，归档证据见 [`features.md`](features.md) §V；当前待办以 [`todolist.md`](todolist.md) 为准。
+- #37 已于 2026-09-22 闭环并从 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 移除，归档证据见 [`features.md`](features.md) §V；当前待办以 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题）与 [`roadmap.md`](roadmap.md)（方向）为准。
 - 一条命令：`make e2e-real`（脚本 [`scripts/e2e-real.sh`](../scripts/e2e-real.sh)）。它会起一份**独立** RustFS 容器、构建真实前端产物与后端、起真实后端托管产物、跑 `pnpm e2e:real`，最后 `trap` 自动清理。
 - **该脚本是这套编排的唯一来源**：本地 `make e2e-real`、GitHub Actions 与 GitLab CI 都调用它，各自只负责「装工具链 / 装浏览器系统依赖」。门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都**实际调用** `bash scripts/e2e-real.sh`（仅出现在 `paths:`/`changes:` 里不算），防止又抄一份编排而漂移。
 - **必须给 RustFS 配 `RUSTFS_CORS_ALLOWED_ORIGINS`**（脚本自起时已默认配好，GitLab service 变量里也配了）：浏览器直传（预签名 PUT）是页面 → S3 的**跨源**请求，缺 CORS 会被浏览器拦下。注意 curl / Playwright `APIRequestContext` **不经 CORS**，只用它们验证会「假绿」——所以用例特意驱动真实浏览器 XHR。
@@ -154,7 +154,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 错误码 / 错误文案 | [`errors.md`](errors.md) |
 | **任何**新功能或 bug 修复 | [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段（Keep a Changelog：Added / Fixed / Changed） |
 | 已实现 / 已修复能力的台账 | [`features.md`](features.md) |
-| 待办事项状态变化 | [`todolist.md`](todolist.md)（单一待办来源） |
+| 待办事项状态变化 | **问题**（缺陷 / 阻塞 / 技术债）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**方向**（功能候选 / 版本级）→ [`roadmap.md`](roadmap.md) §三。两处各自唯一来源，同一事项只登记一处 |
 | 版本级规划 / 优先级 | [`roadmap.md`](roadmap.md)（不做逐条流水账） |
 | 分层 / 模块边界 / 目录结构 | [`architecture.md`](architecture.md)；重大决策另加 [`decisions/`](decisions/index.md) ADR |
 | 环境变量 / 配置项 | [`.env.example`](../.env.example) + [`deployment.md`](deployment.md) + `README.md` |
@@ -173,7 +173,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 文档命名与存放约定：
 
 - **位置**：根目录只保留三个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`，将来若加 `SUPPORT.md` 同理）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
-- **命名**：普通文档用小写 kebab-case（如 `threat-model.md`、`todolist.md`）；只有名字被外部约定固定的才用大写（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`）。**仓库内不存在白名单之外的大写文件名**——历史上按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` 已于 2026-09-17 小写化。
+- **命名**：普通文档用小写 kebab-case（如 `threat-model.md`、`roadmap.md`）；**白名单**内才用大写，白名单 = ① 名字被外部约定固定的：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`；② **显式登记的例外**：`KNOWN_ISSUES.md`（2026-09-24 登记——沿用社区通用名，便于外部工具与贡献者按字面检索）。**白名单之外不得新增大写文件名**——历史上按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` 已于 2026-09-17 小写化；新增例外必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)。
 - **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`apps/server/`、`apps/web/`）。目录不存在「约定大写」这一说——大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
 - **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
 - **禁止大小写冲突**：任何两个路径不得仅大小写不同——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。重命名后自检一次全仓。
@@ -199,7 +199,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - **账号存储**：`S3C_STORE_DRIVER` 支持 `json`（默认）/ `sqlite` / `encrypted`；`store.Open` 统一入口。
 - **安全**：用户输入在边界校验；敏感字段（`SecretKey`）不落地 localStorage、不写日志；输出转义（禁 `v-html`）；外部数据视为不可信。
 - **性能**：列表端点分页；分段上传有界并发；无 N+1 / 无界循环。
-- **文档**：本次改动涉及的文档已按 §4「文档同步门禁」更新（README / api.md / CHANGELOG / todolist 等），链接无死链，命令与路径实测一致。
+- **文档**：本次改动涉及的文档已按 §4「文档同步门禁」更新（README / api.md / CHANGELOG / KNOWN_ISSUES / roadmap 等），链接无死链，命令与路径实测一致。
 - **验证**：测试绿 + 构建绿 + 涉及 UI 的保留截图/手测记录。
 
 ## 6. Red Flags（遇到即停下修正）
@@ -210,14 +210,14 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - 一次升级一批依赖 / 手改 lockfile；
 - 功能逻辑渗入共享工具模块；
 - 「以后再说」的清理不会发生——提交前就清干净；
-- 改完代码不更新文档（README / api.md / CHANGELOG / todolist 等相关文档漏更，见 §4）；
+- 改完代码不更新文档（README / api.md / CHANGELOG / KNOWN_ISSUES / roadmap 等相关文档漏更，见 §4）；
 - 为凑覆盖率而写与实现耦合的测试（gap 测试模式）；
 - **死代码 / 未使用变量**：定义后无人引用的函数 / 类型 / 常量 / 变量 / 字段、不可达分支、未定义即使用的标识符、定义了却未使用的变量（含只写不读、赋值后即被覆盖、恒真/恒假的空断言）——**枚举值除外**。这类问题必须由 `golangci-lint`（`unused` + `staticcheck`）/ `go vet` / `pnpm lint` / `vue-tsc` 机械拦住，**门禁输出必须 0 issues**；不要用 `_ = x`、`var _ = f`、`//nolint` 或导出为 `_test` 辅助来「消音」，那只是把死代码藏起来。
 - **以为覆盖率达标就等于没死代码**：测试文件不参与 instrumentation（`go test -cover` 只统计生产代码），测试辅助里的死代码可以让 100% 门禁全绿——两者必须分别验证。本仓库就曾因此让一套失效的错误注入器长期存活（见 `CHANGELOG.md`）。
 
 ## 7. 已知技术债（来自 2026-09-16 综合评估）
 
-> 详见 [archive/assessment.md](archive/assessment.md) 与 [todolist.md](todolist.md)。开发时**避免扩大**以下模式：
+> 详见 [archive/assessment.md](archive/assessment.md) 与 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。开发时**避免扩大**以下模式：
 
 - OpenAPI 注册表与真实 handler 字段不一致（改 handler 请求体时同步更新 `openapi_register_*.go`）。
 - 复制粘贴式逻辑分叉（如 SSE 终态检测在 MigratePanel 与 useObjectActions 各一份）——优先收敛为共享实现。

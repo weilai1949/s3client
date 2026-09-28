@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/weilai1949/s3clinet/apps/server/internal/atomicfile"
 	"github.com/weilai1949/s3clinet/apps/server/internal/model"
 )
 
@@ -193,7 +194,7 @@ func (f *fileStore) snapshotLocked() []*model.Account {
 
 // persistLocked 假定调用方已持有写锁，把当前快照交给 codec 编码后原子写盘。
 func (f *fileStore) persistLocked() error {
-	return atomicWriteFile(f.path, f.codec.encode(f.snapshotLocked()))
+	return atomicfile.WriteFile(f.path, f.codec.encode(f.snapshotLocked()))
 }
 
 // marshalAccounts 把账号列表序列化为缩进 JSON（两个驱动的共同中间表示）。

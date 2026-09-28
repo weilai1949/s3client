@@ -64,5 +64,5 @@ export function useHealthPoll(opts: HealthPollOptions) {
     stop()
   })
 
-  return { polling, start, stop }
+  return { start, stop }
 }

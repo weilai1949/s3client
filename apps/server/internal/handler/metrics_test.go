@@ -87,7 +87,7 @@ func TestMetricsStoreUpAndSSRFPolicy(t *testing.T) {
 	}
 }
 
-// TestMetricsEndpointUnauthenticatedEvenWithToken 固定「设计如此」的行为（todolist #30）：
+// TestMetricsEndpointUnauthenticatedEvenWithToken 固定「设计如此」的行为（KNOWN_ISSUES #30）：
 // 即使配置了 S3C_TOKEN，/api/metrics 也**免鉴权**（内部 Prometheus 需在无 Bearer 的情况下
 // scrape），仅由 S3C_EXPOSE_METRICS 门控；其余 /api/* 仍强制鉴权。若未来要改鉴权行为，
 // 本测试必须先被有意识地改写——不要为「修安全项」而悄悄给 metrics 加鉴权。

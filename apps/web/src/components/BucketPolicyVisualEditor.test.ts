@@ -36,6 +36,13 @@ function editorVm(w: { vm: unknown }): VisualEditorVm {
 }
 
 describe('BucketPolicyVisualEditor', () => {
+  it('只声明会 emit 的事件（无 error 死事件，F5a）', () => {
+    const w = mount(BucketPolicyVisualEditor, {
+      props: { bucket: 'my-bucket', raw: validRaw },
+    })
+    expect(w.vm.$options.emits).toEqual(['update'])
+  })
+
   it('默认可视化模式，渲染模板与语句卡片', () => {
     const w = mount(BucketPolicyVisualEditor, {
       props: { bucket: 'my-bucket', raw: validRaw },
@@ -246,5 +253,36 @@ describe('BucketPolicyVisualEditor extra branches', () => {
     const w = mount(BucketPolicyVisualEditor, { props: { raw: rawInvalid, bucket: 'my-bucket' } })
     expect(w.find('.badge.error').exists()).toBe(true)
     expect(w.text()).toContain('Resource')
+  })
+})
+
+describe('BucketPolicyVisualEditor 稳定行键', () => {
+  function stmtRaw(sid: string): Record<string, unknown> {
+    return { Sid: sid, Effect: 'Allow', Principal: '*', Action: 's3:GetObject', Resource: 'arn:aws:s3:::my-bucket/*' }
+  }
+
+  it('删除中间语句后其余语句卡片保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    const raw = JSON.stringify({ Version: '2012-10-17', Statement: [stmtRaw('A'), stmtRaw('B'), stmtRaw('C')] })
+    const w = mount(BucketPolicyVisualEditor, { props: { bucket: 'my-bucket', raw } })
+    const before = w.findAll('.stmt-card').map((c) => c.element)
+    expect(before).toHaveLength(3)
+
+    await w.findAll('.stmt-card')[1].find('button.danger').trigger('click')
+
+    const after = w.findAll('.stmt-card').map((c) => c.element)
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 会复用第 2 个节点承载第 3 条语句并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    expect((after[1].querySelector('input') as HTMLInputElement).value).toBe('C')
+  })
+
+  it('序列化结果不含行键（rowKey 只存在于前端编辑态）', async () => {
+    const raw = JSON.stringify({ Version: '2012-10-17', Statement: [stmtRaw('A')] })
+    const w = mount(BucketPolicyVisualEditor, { props: { bucket: 'my-bucket', raw } })
+    await w.find('[data-testid="policy-mode-json"]').trigger('click')
+    const json = (w.find('textarea.policy-area').element as HTMLTextAreaElement).value
+    expect(json).not.toContain('rowKey')
+    expect(JSON.parse(json).Statement[0].Sid).toBe('A')
   })
 })

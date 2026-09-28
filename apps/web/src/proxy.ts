@@ -18,3 +18,61 @@ export function proxyUrl(
   if (versionId) p.set('versionId', versionId)
   return apiBase + `/api/accounts/${accountId}/proxy?${p.toString()}`
 }
+
+/**
+ * 代理请求参数：`<a href>` / `<img src>` / `<iframe src>` 这类资源加载**无法携带
+ * Authorization 头**，在启用 S3C_TOKEN 的部署下会 401（预览全挂 / 下载把 401 的
+ * JSON 错误体当文件静默存盘）。因此所有代理取回统一走下面的 fetch 辅助。
+ */
+export interface ProxyRequest {
+  accountId: string
+  bucket: string
+  mode: 'download' | 'inline' | 'text'
+  key: string
+  apiBase: string
+  /** Bearer Token（`api.token`）；空串时不携带鉴权头。 */
+  token: string
+  versionId?: string
+  signal?: AbortSignal
+}
+
+/**
+ * 统一带鉴权的代理请求：Bearer 头 + `res.ok` 校验，非 2xx 一律抛错。
+ * 错误响应体（如鉴权失败的 JSON）绝不作为内容返回——调用方拿到的要么是
+ * 真正的对象字节，要么是一个会走错误提示分支的异常。
+ */
+export async function fetchProxy(req: ProxyRequest): Promise<Response> {
+  const res = await fetch(proxyUrl(req.accountId, req.bucket, req.mode, req.key, req.apiBase, req.versionId), {
+    headers: req.token ? { Authorization: `Bearer ${req.token}` } : {},
+    signal: req.signal,
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res
+}
+
+/** 代理取回对象字节（媒体/PDF 预览与下载落盘共用）。失败抛错。 */
+export async function fetchProxyBlob(req: ProxyRequest): Promise<Blob> {
+  return (await fetchProxy(req)).blob()
+}
+
+/**
+ * 经代理下载对象为附件：带 Bearer 取回字节 → objectURL → 触发保存 → 释放 URL。
+ * 失败抛错且不产生任何落盘动作（错误体绝不当文件保存），由调用方转成错误提示。
+ */
+export async function downloadProxyObject(
+  req: Omit<ProxyRequest, 'mode' | 'signal'>,
+  filename: string,
+): Promise<void> {
+  const blob = await fetchProxyBlob({ ...req, mode: 'download' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}

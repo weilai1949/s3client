@@ -29,7 +29,7 @@
 ## 什么不该归档
 
 - **活跃 SSOT**：[`api.md`](../api.md) / [`architecture.md`](../architecture.md) /
-  [`errors.md`](../errors.md) / [`features.md`](../features.md) / [`todolist.md`](../todolist.md) /
+  [`errors.md`](../errors.md) / [`features.md`](../features.md) / [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) /
   [`roadmap.md`](../roadmap.md) / [`deployment.md`](../deployment.md) /
   [`development.md`](../development.md) / [`threat-model.md`](../threat-model.md)，
   以及根目录的 [`README.md`](../../README.md) / [`CHANGELOG.md`](../../CHANGELOG.md) /

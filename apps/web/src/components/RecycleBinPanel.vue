@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
-import { state, selectAccount, rememberedAccountId } from '../store'
+import { state, selectAccount } from '../store'
+import { resolveAccountSelect } from '../composables/useAccountSelect'
 import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
 import { fmtDate } from '../format'
+import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import { t, tf } from '../i18n'
 import type { BucketItem } from '../types'
 
@@ -30,6 +32,51 @@ const nextVersionIdMarker = ref('')
 const busy = ref(false)
 
 const account = () => state.accounts.find((a) => a.id === accSel.value)
+
+/* markers 大列表窗口化：仅渲染可视区 + overscan，避免上万条删除标记冻结 DOM。
+   行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
+   此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。 */
+const scrollEl = ref<HTMLElement | null>(null)
+const scrollTop = ref(0)
+const viewportH = ref(DEFAULT_VIEWPORT_H)
+
+const windowed = computed(() => {
+  const win = virtualWindow(markers.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
+  return { ...win, items: markers.value.slice(win.start, win.end) }
+})
+
+function onListScroll() {
+  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
+}
+
+function measureViewport() {
+  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
+}
+
+let resizeObs: ResizeObserver | undefined
+
+// markers 为空时容器不渲染（首屏/空桶），scrollEl 的 ref 绑定晚于 onMounted：
+// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（同 ObjectList/MigratePanel）。
+watch(scrollEl, (el) => {
+  resizeObs?.disconnect()
+  resizeObs = undefined
+  if (!el || typeof ResizeObserver === 'undefined') return
+  measureViewport()
+  resizeObs = new ResizeObserver(measureViewport)
+  resizeObs.observe(el)
+})
+
+/* 数据源整体更换（切桶/切账号/刷新/恢复与清除后的重新赋值）必须把窗口起点归零，
+   否则残留的旧 scrollTop 会让 markers.slice(start, end) 为空 → 空白表（review §F2）。
+   只监听数组身份、不做深监听：「加载更多」是原数组 push 追加，不重置用户滚动位置。
+   同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
+function resetWindowScroll() {
+  scrollTop.value = 0
+  if (scrollEl.value) scrollEl.value.scrollTop = 0
+}
+watch(() => markers.value, () => resetWindowScroll())
+
+onBeforeUnmount(() => resizeObs?.disconnect())
 
 async function loadBuckets() {
   if (!accSel.value) {
@@ -89,9 +136,7 @@ async function loadMarkers(reset: boolean) {
 }
 
 onMounted(() => {
-  const remembered = rememberedAccountId()
-  if (state.accounts.some((a) => a.id === remembered)) accSel.value = remembered
-  else accSel.value = state.currentAccountId && state.accounts.some((a) => a.id === state.currentAccountId) ? state.currentAccountId : (state.accounts[0]?.id ?? '')
+  accSel.value = resolveAccountSelect()
   selectAccount(accSel.value)
   loadBuckets()
 })
@@ -185,22 +230,30 @@ async function purge(m: TrashMarker) {
         <span class="empty-icon" aria-hidden="true">🗑️</span>
         {{ t('trash.emptyHint') }}
       </div>
-      <table v-else class="tbl">
-        <thead><tr><th>{{ t('trash.colKey') }}</th><th style="width:120px">{{ t('trash.colVersion') }}</th><th style="width:160px">{{ t('trash.colDeletedAt') }}</th><th style="width:180px; text-align:right">{{ t('trash.colActions') }}</th></tr></thead>
-        <tbody>
-          <tr v-for="m in markers" :key="m.key + ':' + m.versionId">
-            <td class="mono" style="word-break:break-all">{{ m.key }}</td>
-            <td class="mono" style="word-break:break-all">{{ m.versionId }}</td>
-            <td class="muted">{{ fmtDate(m.lastModified) }}</td>
-            <td>
-              <div class="actions" style="justify-content:flex-end; gap:6px">
-                <button class="btn secondary sm" :disabled="busy" style="color:var(--primary)" @click="restore(m)">{{ t('trash.restore') }}</button>
-                <button class="btn danger sm" :disabled="busy" @click="purge(m)">{{ t('trash.purge') }}</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div v-else ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
+        <table class="tbl">
+          <thead><tr><th>{{ t('trash.colKey') }}</th><th style="width:120px">{{ t('trash.colVersion') }}</th><th style="width:160px">{{ t('trash.colDeletedAt') }}</th><th style="width:180px; text-align:right">{{ t('trash.colActions') }}</th></tr></thead>
+          <tbody>
+            <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">
+              <td :colspan="4" :style="{ height: windowed.padTop + 'px' }" />
+            </tr>
+            <tr v-for="m in windowed.items" :key="m.key + ':' + m.versionId" class="v-row" :style="{ height: `${ROW_HEIGHT}px` }">
+              <td class="mono" style="word-break:break-all">{{ m.key }}</td>
+              <td class="mono" style="word-break:break-all">{{ m.versionId }}</td>
+              <td class="muted">{{ fmtDate(m.lastModified) }}</td>
+              <td>
+                <div class="actions" style="justify-content:flex-end; gap:6px">
+                  <button class="btn secondary sm" :disabled="busy" style="color:var(--primary)" @click="restore(m)">{{ t('trash.restore') }}</button>
+                  <button class="btn danger sm" :disabled="busy" @click="purge(m)">{{ t('trash.purge') }}</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="windowed.padBottom" class="v-spacer" aria-hidden="true">
+              <td :colspan="4" :style="{ height: windowed.padBottom + 'px' }" />
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="toolbar" style="margin-top:12px; margin-bottom:0">
         <button class="btn secondary sm" :disabled="!isTruncated || loadingMore" @click="loadMarkers(false)">
           {{ loadingMore ? t('common.loading') : t('common.more') }}
@@ -220,4 +273,11 @@ async function purge(m: TrashMarker) {
 <style scoped>
 .acc-select { max-width: 220px; padding: 5px 10px; font-size: 13px; }
 .actions { display: flex; }
+
+/* 虚拟滚动：固定可视高度，行高由 v-row 行内 ROW_HEIGHT 绑定（不在此存字面量）。 */
+.tbl-virtual {
+  max-height: min(60vh, 640px);
+  overflow: auto;
+}
+.tbl-virtual .v-spacer td { padding: 0; border: 0; }
 </style>

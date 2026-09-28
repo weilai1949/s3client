@@ -4,7 +4,8 @@ import { toErrorMessage } from './errors'
 
 import { s3api, api } from './api'
 import logoUrl from './assets/logo.svg'
-import { state, rememberedAccountId, selectAccount, tabRequest, accountFormRequest } from './store'
+import { state, selectAccount, tabRequest, accountFormRequest } from './store'
+import { resolveAccountSelect } from './composables/useAccountSelect'
 import { readTheme, resolvedTheme, cycleTheme, systemThemeTick, type Theme } from './theme'
 import { tabFromHash, setTabHash, onTabHashChange, type TabKey } from './router'
 import { t, cycleLocale, i18nState } from './i18n'
@@ -89,15 +90,12 @@ async function loadAccounts() {
   try {
     const res = await s3api.listAccounts()
     state.accounts = res.accounts
-    // 优先恢复上次选中的账号；其次沿用当前；否则取第一个
-    const remembered = rememberedAccountId()
-    if (state.accounts.some((a) => a.id === remembered)) {
-      selectAccount(remembered)
-    } else if (state.currentAccountId && state.accounts.some((a) => a.id === state.currentAccountId)) {
-      // 保持当前
-    } else {
-      selectAccount(state.accounts[0]?.id ?? '')
-    }
+    // 优先恢复上次选中的账号；其次沿用当前；否则取第一个（优先级统一在 resolveAccountSelect）。
+    const resolved = resolveAccountSelect()
+    // 只有「沿用当前」是空操作（resolved 与当前相同且非空）；
+    // 空串仍须落地 selectAccount('')，清掉 localStorage 里已失效的 remembered 残留。
+    const keepCurrent = resolved === state.currentAccountId && resolved !== ''
+    if (!keepCurrent) selectAccount(resolved)
     serverError.value = ''
     // 后端恢复：停止轮询。
     healthPoll.stop()

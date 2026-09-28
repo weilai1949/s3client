@@ -211,7 +211,7 @@ cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 # 可选环境变量：S3CLINET_ENDPOINT / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY
 ```
 
-真实联调浏览器冒烟（todolist #37）——真实 Go 后端 + 真实 RustFS + 真实构建产物，**不 mock `/api`**；
+真实联调浏览器冒烟（KNOWN_ISSUES #37）——真实 Go 后端 + 真实 RustFS + 真实构建产物，**不 mock `/api`**；
 一条命令自动用 docker 起一份 RustFS、跑完自动清理（覆盖 mock 版测不到的**浏览器直传**跨源链路）：
 
 ```bash
@@ -245,7 +245,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [REST API 参考](docs/api.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
 - [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
 - [功能大全（Features）](docs/features.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
-- [待办清单（To-do）](docs/todolist.md) — 待处理事项汇总（单一待办来源）
+- [已知问题（Known Issues）](docs/KNOWN_ISSUES.md) — 缺陷 / 外部阻塞 / 技术债（唯一来源）
 - [综合评估报告](docs/archive/assessment.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
 - [分支整体状态审查](docs/archive/review-2026-09-19.md) — 2026-09-19 时点性审查：七维度实跑复核 + P0/P1/P2 优先级
 - [路线图（Roadmap）](docs/roadmap.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）

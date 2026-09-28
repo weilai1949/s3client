@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/model"
 )
@@ -93,10 +92,10 @@ func (c *storeCodec) decode(data []byte) ([]*model.Account, error) {
 	if c.strict {
 		params, salt, ciphertext, err := parseEnvelope(data)
 		if err != nil {
-			if strings.Contains(err.Error(), "too short") {
-				return nil, errors.New("encrypted account file too short or not S3C2")
-			}
-			return nil, fmt.Errorf("encrypted account file magic %q is not S3C2", string(data[:min(4, len(data))]))
+			// 保留 parseEnvelope 的原始原因（过短 / 坏 magic / KDF 参数越界），不再
+			// 重写成笼统文案——KDF 上界拒绝（"invalid KDF params"）必须能被运维从
+			// 日志里看到，否则无法区分「文件损坏」与「被篡改成巨型 KDF 参数」。
+			return nil, fmt.Errorf("encrypted account file: %w", err)
 		}
 		c.salt = salt
 		plain, derr := decryptAESGCM(deriveKey(c.password, salt, params), ciphertext)
@@ -127,7 +126,7 @@ func (c *storeCodec) encode(list []*model.Account) []byte {
 	// strict（encrypted）：复用文件盐（missing/decode 时确定）。
 	if c.strict {
 		enc, _ := encryptAESGCM(deriveKey(c.password, c.salt, currentParams), plain)
-		return envelope(encMagicV3, c.salt, enc)
+		return envelope(c.salt, enc)
 	}
 	// permissive（json）：无 key 时明文落盘；有 key 时每次写盘换新盐。
 	if c.password == "" {
@@ -135,7 +134,7 @@ func (c *storeCodec) encode(list []*model.Account) []byte {
 	}
 	salt := randomSalt()
 	enc, _ := encryptAESGCM(deriveKey(c.password, salt, currentParams), plain)
-	return envelope(encMagicV3, salt, enc)
+	return envelope(salt, enc)
 }
 
 // randomSalt 生成 encSaltLen 字节的随机盐（crypto/rand 在 Linux 上不会失败）。

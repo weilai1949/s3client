@@ -47,13 +47,14 @@ func registerMigrate(r *openapi.Registry) {
 				"targetAccountId": openapi.Str(),
 				"targetBucket":    openapi.Str(),
 				"targetPrefix":    openapi.Str(),
-				"mode":            openapi.EnumStr(string("etag"), string("size_mtime"), string("always")),
+				"mode":            openapi.EnumStr("etag", "size_mtime", "always"),
 			})},
 		},
 		Responses: map[string]openapi.Response{
-			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"200": {Description: "含 scanned/skipped/copied/failed/failedKeys/lastError/truncated", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 				"scanned": openapi.Int(), "skipped": openapi.Int(), "copied": openapi.Int(), "failed": openapi.Int(),
 				"lastError": openapi.Str(), "failedKeys": openapi.Arr(openapi.Str()),
+				"truncated": openapi.Bool(),
 			})},
 			"400": {Description: "mode 非法 / 账号缺配置", JSON: refSchema("Error")},
 			"404": {Description: "账号不存在", JSON: refSchema("Error")},

@@ -311,3 +311,37 @@ describe('BatchMetadataDialog extra branches', () => {
     await flushPromises()
   })
 })
+
+describe('BatchMetadataDialog 稳定行键', () => {
+  it('删除中间标签行后其余行保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
+    const w = mountDialog(['k1'])
+    await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
+    await w.find('select[aria-label="Tag mode"]').setValue('replace')
+    const addBtn = w.findAll('button').find((b) => b.text() === '+')
+    expect(addBtn).toBeTruthy()
+    for (let n = 0; n < 3; n++) await addBtn!.trigger('click')
+    expect(w.findAll('.tag-row')).toHaveLength(3)
+
+    const keyInputs = w.findAll('.tag-row input[id^="batch-tag-key-"]')
+    const valueInputs = w.findAll('.tag-row input[id^="batch-tag-val-"]')
+    const seed: Array<[string, string]> = [['env', 'prod'], ['team', 's3'], ['owner', 'ops']]
+    for (let i = 0; i < 3; i++) {
+      await keyInputs[i].setValue(seed[i][0])
+      await valueInputs[i].setValue(seed[i][1])
+    }
+
+    const before = w.findAll('.tag-row').map((r) => r.element)
+    expect(before).toHaveLength(3)
+
+    await w.findAll('.tag-row button.danger')[1].trigger('click')
+
+    const after = w.findAll('.tag-row').map((r) => r.element)
+    expect(after).toHaveLength(2)
+    // index 作 key 时：Vue 复用第 2 个节点承载第 3 行并卸载原第 3 个节点
+    expect(after[0]).toBe(before[0])
+    expect(after[1]).toBe(before[2])
+    // 存活行的输入值仍是原第 1、3 行（防串行）
+    expect(after.map((r) => Array.from(r.querySelectorAll('input'))
+      .map((i) => (i as HTMLInputElement).value))).toEqual([['env', 'prod'], ['owner', 'ops']])
+  })
+})

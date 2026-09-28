@@ -80,6 +80,23 @@ describe('UploadQueue', () => {
     expect(w.text()).toContain('0/2 · 0%')
   })
 
+  it('v-for 用唯一 id 作 key：同 bucket+key 条目移除前者时保留后者的 DOM 节点', async () => {
+    // 两个目录选同名文件 / 重复入队同名文件 → bucket|key 组合键碰撞
+    const a = makeItem({ id: 1, bucket: 'b1', key: 'same.txt', status: 'pending', pct: 0 })
+    const b = makeItem({ id: 2, bucket: 'b1', key: 'same.txt', status: 'done', pct: 100 })
+    const w = mount(UploadQueue, { props: { items: [a, b] } })
+    const badges = w.findAll('.upload-items .badge.mono')
+    expect(badges).toHaveLength(2)
+    const survivor = badges[1].element
+
+    await w.setProps({ items: [b] })
+    const after = w.findAll('.upload-items .badge.mono')
+    expect(after).toHaveLength(1)
+    expect(after[0].text()).toContain('✓')
+    // 组合键碰撞时 keyed diff 把 b 的内容打到 a 的节点上（存活条目换节点）；id 键则原地保留
+    expect(after[0].element).toBe(survivor)
+  })
+
   it('空条目时 uploadPct 走 early-return 返回 0（避免 reduce 空数组）', () => {
     const w = mount(UploadQueue, { props: { items: [] } })
     expect((w.vm as unknown as { uploadPct: number }).uploadPct).toBe(0)

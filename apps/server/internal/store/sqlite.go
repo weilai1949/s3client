@@ -54,7 +54,7 @@ func (s *SQLiteStore) encryptSecret(secret string) string {
 	}
 	salt := randomSalt()
 	enc, _ := encryptAESGCM(deriveKey(s.storeKey, salt, currentParams), []byte(secret))
-	return string(envelope(encMagicV3, salt, enc))
+	return string(envelope(salt, enc))
 }
 
 // decryptSecret 解析库中的 secret_key 列：S3C2/S3C3 密文按 storeKey 解密，
@@ -83,18 +83,43 @@ func openSQLite(dbPath, storeKey string) (*SQLiteStore, error) {
 	}
 	// modernc sqlite 驱动注册于 init，sql.Open 仅解析 DSN 不实际打开；
 	// 后续 Ping 才是真实 IO 探活，故此处不处理 Open 错误。
-	db, _ := sql.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+	db, _ := sql.Open("sqlite", sqliteDSN(dbPath))
 	db.SetMaxOpenConns(1) // SQLite 单写；避免并发写锁冲突
 	if err := db.Ping(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("ping sqlite: %w", err)
 	}
-	// sqliteSchema/migrateSQLiteSchema 对合法 DSN + 空白文件不会失败（PRAGMA 等于初始值时 no-op）。
-	_, _ = db.Exec(sqliteSchema)
-	_ = migrateSQLiteSchema(db)
+	// 建表/迁移错误必须让启动失败：`_, _ =` 吞错的话，坏盘/半成品库会「启动成功、
+	// 运行时全挂」（R12）。两个错误合并到单一出口，db.Close 后上抛，避免出现
+	// 「migrate 失败但建表成功」这种无人测试的分叉分支。
+	_, err := db.Exec(sqliteSchema)
+	if err == nil {
+		err = migrateSQLiteSchema(db)
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("init sqlite schema: %w", err)
+	}
 	s := &SQLiteStore{db: db, path: dbPath, storeKey: storeKey}
-	_ = os.Chmod(dbPath, 0o600)
+	chmodSQLitePerms(dbPath)
 	return s, nil
+}
+
+// chmodSQLitePerms 把 SQLite 主库与两侧车统一收紧为 0600：侧车含明文页
+// （secret_key 列数据在其中），首次建库时侧车在主库 chmod 之前创建，典型 umask 022
+// 下是 0644（Nit）。侧车可能不存在（非 WAL / checkpoint 后），Chmod 对不存在文件
+// 报错与只读挂载等失败同属「尽力而为的加固」，一律忽略，不影响开库。
+func chmodSQLitePerms(dbPath string) {
+	for _, p := range []string{dbPath, dbPath + "-wal", dbPath + "-shm"} {
+		_ = os.Chmod(p, 0o600)
+	}
+}
+
+// sqliteDSN 拼 SQLite DSN：外键约束、WAL、busy_timeout 三个 pragma。
+// busy_timeout=5000 让并发写锁等待而非立刻报 "database is locked"
+// （默认 0ms：第二个写事务一上来就失败，UI 偶发 500）。
+func sqliteDSN(dbPath string) string {
+	return dbPath + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 const sqliteUserVersion = 1
@@ -139,7 +164,21 @@ func sqliteBool(b bool) int {
 	return 0
 }
 
-// sqliteScan 扫描一行并解密 secret_key（历史明文行原样通过）。
+// sqliteFillCommon 回填 Get/List 两条扫描路径共用的派生字段（bool 与时间），
+// 保证两条路径产出的 Account 形态永远一致，避免只改一处造成的字段漂移。
+func sqliteFillCommon(a *model.Account, pathStyle, useSSL int, created, updated string) {
+	a.PathStyle = pathStyle != 0
+	a.UseSSL = useSSL != 0
+	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
+		a.CreatedAt = t
+	}
+	if t, err := time.Parse(time.RFC3339Nano, updated); err == nil {
+		a.UpdatedAt = t
+	}
+}
+
+// sqliteScan 扫描一行并解密 secret_key（历史明文行原样通过）。Get/Update 路径用，
+// 它们需要真实密钥；对外返回前由调用方 Sanitized 脱敏。
 func (s *SQLiteStore) sqliteScan(row interface{ Scan(...any) error }) (*model.Account, error) {
 	var a model.Account
 	var pathStyle, useSSL int
@@ -155,23 +194,42 @@ func (s *SQLiteStore) sqliteScan(row interface{ Scan(...any) error }) (*model.Ac
 		return nil, err
 	}
 	a.SecretKey = secret
-	a.PathStyle = pathStyle != 0
-	a.UseSSL = useSSL != 0
-	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
-		a.CreatedAt = t
-	}
-	if t, err := time.Parse(time.RFC3339Nano, updated); err == nil {
-		a.UpdatedAt = t
-	}
+	sqliteFillCommon(&a, pathStyle, useSSL, created, updated)
 	return &a, nil
 }
 
 const sqliteAccountCols = `id,name,endpoint,public_endpoint,region,access_key,secret_key,bucket,path_style,use_ssl,created_at,updated_at`
 
+// sqliteListCols 是 List 的专用投影：不取 secret_key 密文本身，只合成 secret_set
+// 布尔（列值是否非空）。列表路径完全不碰密文，也就无需逐行 Argon2id 解密——
+// 旧实现解密完立刻被 Sanitized 丢弃，20 个加密账号 ≈0.7s/次白算（R14）。
+// 脱敏形态与 Get+Sanitized 完全一致：非空 → ******，空 → 空。
+const sqliteListCols = `id,name,endpoint,public_endpoint,region,access_key,` +
+	`(secret_key != '') AS secret_set,bucket,path_style,use_ssl,created_at,updated_at`
+
+// listScan 扫描 List 投影行：按 secret_set 合成脱敏，不解密也不接触密文，
+// 因此密文损坏 / 未配置 S3C_STORE_KEY 时 List 依然可用（解密只在 Get 路径要求）。
+func listScan(row interface{ Scan(...any) error }) (*model.Account, error) {
+	var a model.Account
+	var secretSet, pathStyle, useSSL int
+	var created, updated string
+	if err := row.Scan(
+		&a.ID, &a.Name, &a.Endpoint, &a.PublicEndpoint, &a.Region,
+		&a.AccessKey, &secretSet, &a.Bucket, &pathStyle, &useSSL, &created, &updated,
+	); err != nil {
+		return nil, err
+	}
+	if secretSet != 0 {
+		a.SecretKey = model.MaskedSecret
+	}
+	sqliteFillCommon(&a, pathStyle, useSSL, created, updated)
+	return &a, nil
+}
+
 func (s *SQLiteStore) List() ([]*model.Account, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows, err := s.db.Query(`SELECT ` + sqliteAccountCols + ` FROM accounts ORDER BY sort_order ASC`)
+	rows, err := s.db.Query(`SELECT ` + sqliteListCols + ` FROM accounts ORDER BY sort_order ASC`)
 	if err != nil {
 		// 不得伪装成「无账号」；把错误交给调用方映射 500。
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -179,13 +237,19 @@ func (s *SQLiteStore) List() ([]*model.Account, error) {
 	defer rows.Close()
 	out := make([]*model.Account, 0)
 	for rows.Next() {
-		a, err := s.sqliteScan(rows)
+		a, err := listScan(rows)
 		if err != nil {
 			return nil, fmt.Errorf("scan account row: %w", err)
 		}
+		// listScan 已按 secret_set 脱敏；再过一遍 Sanitized 是防御性兜底，
+		// 保证即使投影列将来漏改，密钥也不会流出 List。
 		out = append(out, a.Sanitized())
 	}
-	// rows.Err 在 SQLite 上极难触发（连接已 close 的话 Query 本身早已失败）。
+	// 迭代中途失败（并发 Close、库文件损坏）必须上抛：把截断列表当成功返回，
+	// UI 会静默丢账号（R13）。返回 nil 而非已收集的部分行，避免半份数据被当结果用。
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
 	return out, nil
 }
 

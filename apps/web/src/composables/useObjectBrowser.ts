@@ -26,6 +26,9 @@ export interface KeyBindings {
   removeSelected?: () => void
 }
 
+/** 单页列举条数：请求 maxKeys 与「加载全部」上限文案共用同一来源，避免两处硬编码漂移。 */
+const PAGE_SIZE = 100
+
 export function useObjectBrowser(bindings: KeyBindings = {}) {
   const prefix = ref('')
   const currentBucket = ref('')
@@ -92,7 +95,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   }
 
   // 单次排序：entries 已按当前列排好（文件夹恒在前），visibleEntries 只做过滤。
-  // 此前 entries 只排文件夹、visibleEntries 再排文件，过滤态下会重复排序（todolist #11）。
+  // 此前 entries 只排文件夹、visibleEntries 再排文件，过滤态下会重复排序（KNOWN_ISSUES #11）。
   const entries = computed<Entry[]>(() => {
     const folders: Entry[] = commonPrefixes.value.map((p) => ({
       kind: 'folder',
@@ -195,7 +198,19 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   /* ---- 统计（对象数 / 总大小 / 选中合计，控制台习惯） ---- */
   const loadedSize = computed(() => fileObjects.value.reduce((s, o) => s + o.size, 0))
-  const selectedSize = computed(() => fileObjects.value.filter((o) => selected.value.has(o.key)).reduce((s, o) => s + o.size, 0))
+  /** key → size 查找表：选中合计用它增量维护，避免每次勾选都全表扫 fileObjects。 */
+  const sizeByKey = computed(() => new Map(fileObjects.value.map((o) => [o.key, o.size])))
+  /** 选中合计大小：由 toggle/toggleWithShift 增量维护，赋值型变更与列表变化经下方 watcher 同步兜底。 */
+  const selectedSize = ref(0)
+  function recomputeSelectedSize() {
+    const byKey = sizeByKey.value
+    let sum = 0
+    for (const k of selected.value) sum += byKey.get(k) ?? 0
+    selectedSize.value = sum
+  }
+  // 原地增删 selected（Set 身份不变）不会触发本 watcher，故 toggle 内就地增减合计；
+  // 赋值型变更（selectAll / load 重置 / 面板外部赋值）与列表变化在此同步重算。
+  watch([selected, fileObjects], recomputeSelectedSize, { immediate: true, flush: 'sync' })
 
   // 导航序号：进入目录/切桶/重置时 +1；过期响应直接丢弃，避免快速导航串数据。
   const loadSeq = ref(0)
@@ -232,7 +247,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
         bucket: currentBucket.value,
         prefix: prefix.value,
         delimiter: '/',
-        maxKeys: '100',
+        maxKeys: String(PAGE_SIZE),
       }
       if (!reset && nextToken.value) q.continuationToken = nextToken.value
       const res = await s3api.listObjects(acc.id, q, { signal: ctrl.signal })
@@ -278,10 +293,15 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   }
 
   function toggle(k: string) {
-    const s = new Set(selected.value)
-    if (s.has(k)) s.delete(k)
-    else s.add(k)
-    selected.value = s
+    const s = selected.value
+    const size = sizeByKey.value.get(k) ?? 0
+    if (s.has(k)) {
+      s.delete(k)
+      selectedSize.value -= size
+    } else {
+      s.add(k)
+      selectedSize.value += size
+    }
   }
 
   /** 行点击：文件=切换选中，文件夹=进入（文件管理器习惯）。 */
@@ -302,8 +322,8 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   function onGlobalKey(e: KeyboardEvent) {
     // KeepAlive 缓存下监听仍存活：面板被切走后不得用旧 selected 触发删除/预览/全选
     if (!panelActive.value) return
-    const t = e.target as HTMLElement | null
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.tagName === 'BUTTON' || t.isContentEditable)) return
+    const el = e.target as HTMLElement | null
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.tagName === 'BUTTON' || el.isContentEditable)) return
     if (!account.value || !currentBucket.value) return
     const files = fileObjects.value.filter((o) => selected.value.has(o.key))
     const first = files[0]
@@ -379,10 +399,11 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   function toggleWithShift(k: string, shift: boolean) {
     const idx = fileList.value.findIndex((e) => e.key === k)
     if (shift && lastSelIdx.value >= 0 && idx >= 0) {
-      const s = new Set(selected.value)
+      const s = selected.value
       const [a, b] = [Math.min(lastSelIdx.value, idx), Math.max(lastSelIdx.value, idx)]
       for (let i = a; i <= b; i++) s.add(fileList.value[i].key)
-      selected.value = s
+      // 原地增删不触发 selected 身份 watcher：范围补齐后手动重算合计
+      recomputeSelectedSize()
     } else {
       toggle(k)
     }
@@ -402,7 +423,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   /** 加载全部：循环分页直到末尾（上限保护，避免超大桶卡死）。 */
   const loadingAll = ref(false)
-  const MAX_ALL_PAGES = 200 // 单页 100 条 → 最多 2 万条
+  const MAX_ALL_PAGES = 200 // 单页 PAGE_SIZE 条 → 最多 200 页（上限保护）
 
   async function loadAll() {
     const acc = account.value
@@ -428,7 +449,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
       // 任一分页失败时不发「已加载全部」成功提示（error.value 已在 UI 展示）。
       if (error.value) return
       toast(tf('objects.toastLoadedAll', { files: fileObjects.value.length, folders: commonPrefixes.value.length }))
-      if (isTruncated.value) toast(tf('objects.toastLoadedCap', { n: guard * 100 }), 'err')
+      if (isTruncated.value) toast(tf('objects.toastLoadedCap', { n: guard * PAGE_SIZE }), 'err')
     } finally {
       // load() 内部已捕获列表错误（不经 reject 上抛），此处无需 catch（原 catch 为死代码）。
       if (seq === loadSeq.value) loadingAll.value = false

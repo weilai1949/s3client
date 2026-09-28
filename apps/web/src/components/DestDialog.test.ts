@@ -277,6 +277,26 @@ describe('DestDialog', () => {
     expect(stop).toHaveBeenCalledTimes(1)
   })
 
+  it('卸载使在途的任务等待 Promise settle：不悬挂、不发 error/submit', async () => {
+    const stop = vi.fn()
+    vi.mocked(subscribeMigrateEvents).mockImplementation((() => stop) as never)
+    // 单独挂载（不 track）：本用例自行卸载，避免 afterEach 重复卸载。
+    const w = mount(DestDialog, {
+      props: { open: false, accountId: 'acc-1', sourceBucket: 'b1', kind: 'folder', mode: 'copy', objectKey: 'k' },
+      attachTo: document.body,
+    })
+    await openDialog(w)
+    const run = (w.vm as unknown as { submitDest: () => Promise<void> }).submitDest()
+    await flushPromises()
+    expect(stop).not.toHaveBeenCalled() // 任务仍在等待 SSE 终态
+    w.unmount()
+    // 卸载必须让等待中的 Promise 以中止收尾（旧实现永远挂起 = 帧泄漏）
+    await expect(run).resolves.toBeUndefined()
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(w.emitted('error')).toBeUndefined()
+    expect(w.emitted('submit')).toBeUndefined()
+  })
+
   it('folder copy partial failure toast (cancelled job)', async () => {
     vi.mocked(subscribeMigrateEvents).mockImplementation(((_jobId: string, onProgress: (p: MigrateProgress) => void) => {
       queueMicrotask(() => onProgress({ status: 'cancelled', migrated: 0, failed: 3, done: 0, total: 4 }))

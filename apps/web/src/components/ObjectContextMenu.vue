@@ -3,12 +3,9 @@ import { nextTick, ref, watch } from 'vue'
 import { t } from '../i18n'
 import type { Entry } from '../types'
 
-const props = withDefaults(
-  defineProps<{
-    menu: { x: number; y: number; entry: Entry } | null
-  }>(),
-  {},
-)
+const props = defineProps<{
+  menu: { x: number; y: number; entry: Entry } | null
+}>()
 
 const emit = defineEmits<{
   (e: 'open'): void

@@ -270,6 +270,12 @@ type deletePrefixResult struct {
 }
 
 // deleteObjects 批量删除。
+//
+// 分层备注：此处的删除族编排（deleteObjects 的分片、deletePrefix 的递归、
+// deletePrefixAsync 的任务体、copy.go 的 copyKeysThenDelete）仍留在 handler，
+// 而同类批量编排已在 service（RunBatch / CopyKeys）——口径不一已登记为
+// KNOWN_ISSUES #62（开放 ⬜，review Nit 本轮未完成；下沉需先把上面两个响应
+// 形状抽离 http.ResponseWriter，属不改外部可见行为的纯重构）。
 func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	client, acc, ok := h.accountClient(w, r)
 	if !ok {
@@ -373,6 +379,9 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// 任务启动即审计（与同步路径对齐）：异步删除是不可逆动作，202 之后只能靠日志追溯。
+	h.audit(r, auditDeletePrefix, "jobId", job.ID, "bucket", bucket, "prefix", req.Prefix,
+		"total", job.Total, "truncated", truncated)
 	go func() {
 		defer cancel()
 		var counts deleteCounts
@@ -419,7 +428,7 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 			status = "cancelled"
 		}
 		job.Finish(service.JobResult{
-			Migrated: counts.Deleted, Failed: counts.Failed, LastError: counts.LastError, FailKeys: failKeys,
+			Migrated: counts.Deleted, Failed: counts.Failed, FirstError: counts.LastError, FailKeys: failKeys,
 		}, status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
