@@ -53,6 +53,7 @@ const defaults = {
   nextToken: '',
   isTruncated: false,
   loadingAll: false,
+  listGen: 0,
 }
 
 function mountList(props: Partial<typeof defaults> = {}) {
@@ -337,6 +338,34 @@ describe('ObjectList', () => {
     expect(w.text()).not.toContain('f18.txt')
     // 真实 DOM 滚动位置同步归零，避免下一次滚动事件把陈旧偏移写回
     expect(el.scrollTop).toBe(0)
+  })
+
+  it('数据源整体更换（listGen 变化）即使条目变多也必须归零', async () => {
+    const short = Array.from({ length: 4 }, (_, i) => file(`s${i}.txt`))
+    const w = mountList({ entries: short })
+    const list = w.find('.tbl-wrap')
+    const el = list.element as HTMLElement
+    el.scrollTop = ROW * 3
+    await list.trigger('scroll')
+    const many = Array.from({ length: 60 }, (_, i) => file(`m${String(i).padStart(2, '0')}.txt`))
+    await w.setProps({ entries: many, listGen: 1 })
+    expect(el.scrollTop, '换源必须归零（条目变多也不能残留旧偏移）').toBe(0)
+  })
+
+  it('「加载更多」追加不重置滚动位置（只追加、未换源）', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => file(`f${String(i).padStart(2, '0')}.txt`))
+    const w = mountList({ entries: many })
+    const list = w.find('.tbl-wrap')
+    const el = list.element as HTMLElement
+    el.scrollTop = ROW * 30
+    await list.trigger('scroll')
+    expect(w.findAll('tbody tr.v-row')[0].text()).toContain('f18.txt')
+
+    // 追加 10 条：listGen 不变（不是换源），父层把更长的数组传下来
+    const more = Array.from({ length: 10 }, (_, i) => file(`z${i}.txt`))
+    await w.setProps({ entries: [...many, ...more] })
+    expect(el.scrollTop, '追加不得把用户滚到的位置清零').toBe(ROW * 30)
+    expect(w.findAll('tbody tr.v-row')[0].text(), '窗口应保持在原位置').toContain('f18.txt')
   })
 
   it('列表项减少后再次滚动：窗口从顶部开始（偏移已被重置）', async () => {

@@ -67,6 +67,7 @@ function makeBrowser(overrides: Record<string, unknown> = {}): BrowserApi {
     filterActive: ref(false),
     visibleEntries: ref(sampleEntries),
     entries: ref(sampleEntries),
+    listGen: ref(0),
     allSelected: ref(false),
     selected: ref(new Set<string>()),
     selectedSize: ref(0),

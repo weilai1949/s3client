@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -917,14 +917,11 @@ functions 1095 / lines 3503）。
 | 4 | `-healthcheck` 对 **IPv6 字面量监听地址**必然失败：`[::1]:8080` 拼成 `http://::1:8080/api/health`，`url.Parse` 报 `invalid port` → 恒返回 1，Docker `HEALTHCHECK` 会把**完全健康**的服务判死并反复重启（`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置） | ✅ | 红：`TestRunHealthcheck/ipv6_loopback_literal` → **`= 1, want 0`**。绿：`net.JoinHostPort(host, port)` 产出 `http://[::1]:8080/api/health`（实测 `url.Parse` 通过）；无 IPv6 的环境自动 `t.Skip`，`no-port-in-here` 的 fail-closed 用例仍绿 |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（新增守卫分支各补 1 个用例，否则 `service` 会跌到 99.8%）/ `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**（前端本轮无改动） |
 
-#### ⬜ 待处置（原 15 条，`handler` 审计见 §AE、前端 4 条见 §AF、`config`/`main` 3 条见 §AG、`s3wrap` 2 条见 §AH，现余 **5** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
+#### ⬜ 待处置（原 15 条，`handler` 审计见 §AE、前端 4 条见 §AF、`config`/`main` 3 条见 §AG、`s3wrap` 2 条见 §AH、前端另 4 条见 §AI，现余 **1** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
 
 | 区域 | 条目 | 首要 / 次要 |
 |---|---|---|
-| 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
-| 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
 | 后端 `store` | `store.Open` 的 json 分支丢弃入参 `storeKey` 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一生产调用方传的 `cfg.StoreKey` 就来自同一环境变量，**零生产影响**）。**2026-09-28 实测后仍挂起**，不是嫌麻烦：① 改 `Open` 走 `newStore` 会让 `store.New` 变成零生产引用，被 `deadcode_gate_test.go` 的 `TestNoUnusedExportedProdSymbols` **红灯拦住**（已实测）；② 要解开就得改 `New` 签名，而 `store.New` / 裸 `New` 共 **~100 处调用、24 个测试文件**，其中 `crossdriver_test.go` 与 `encrypt_at_rest_test.go` **刻意依赖 `S3C_STORE_KEY` 环境变量**读 key，`+ ""` 机械替换会静默改掉它们的语义；③ 收益是消除一个「未来可能踩」的契约不一致，代价是一次跨 24 文件的重构——**比例失衡，留到有真实非 `FromEnv` 调用方时再做** | Nit（挂起，理由见左） |
-| 后端 `store` | `store.Open` 的 json 分支丢弃入参 `storeKey` 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一调用方恰好同源，无生产影响） | Nit |
 
 ### AE. 2026-09-28 破坏性操作审计覆盖补齐（#64 Security，3 条先红后绿）
 
@@ -981,6 +978,20 @@ functions 1095 / lines 3503）。
 | 1 | `ValidateUserMetadata` 的**值**只查 UTF-8 合法性与长度，**控制字符只有键在查** ⇒ 值含 `CRLF` / CTL 能一路过边界，走到 Go transport 才被 `invalid header field value` 拒发，**边界该给的 400 变成传输期 500**——恰好违背该文件自述的「提前在 API 边界校验，避免落到 S3 端再以 500 形式返回」 | 值侧按 `httpguts.ValidHeaderFieldValue` 的同一口径拒绝 `<0x20`（**HTAB 除外**，空格本就 `<0x20` 之外）与 `0x7F`；`>=0x80` 属 obs-text，仍由既有 UTF-8 校验把关。**已确认不存在头注入**（Go transport 对 `Header.Set` 与直接赋值两条路径都硬拒），所以这是 400/500 的**可用性**问题，不是注入面 | 红 4 条：`value with CRLF` / `lone LF` / `control char` / `DEL` → 全绿；`tab` / `space` / UTF-8 文本三个**放行**用例同批钉住，防误伤正常多行备注 |
 | 2 | `ValidateEndpoint` 对非 ASCII 主机名（IDN）按「DNS 失败**按设计 fail-open**」放行 ⇒ 账号建得成，而 Go 的 `net.Resolver` / `http.Transport` **都不自带 IDNA 转换**，`münchen.de` 每次调用都 `no such host`，用户只看到莫名其妙的网络错误、看不出是端点主机名非法 | 在 `isBlockedHostname` 之前加边界拒绝，错误串直接给出出路（`use punycode xn-- instead`）。**不引入 `golang.org/x/net/idna`**——完整 IDNA 映射表不值得为这一处加依赖（仓库依赖纪律：能用标准库就不用第三方）；punycode 形式是纯 ASCII，仍走原流程 | 红 `ValidateEndpoint("http://münchen.de:9000") = nil, want error`；同批钉住 punycode 端点仍放行 |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0%**、**零未覆盖块**（正确口径）/ 前端未改，`pnpm test` **72 文件 1114 例** |
+
+### AI. 2026-09-28 前端另四条（#64）：代次守卫 / 追加重置滚动 / `loadingAll` 提前可点 / 桶列举共用标志——4 条先红后绿
+
+> §AD「待处置」表前端第二行的 4 条，逐条亲自读码复核后修复。至此 §AD 的 15 条**只剩 1 条挂起的 Nit**。
+
+| # | 缺陷 | 修法 | 红 → 绿 |
+|---|---|---|---|
+| 1 | `VersionsDialog.vue` 的 `load()` **无代次守卫**：关闭再开另一个对象时，上一个对象的列举仍在飞，迟到响应会把 `rows` 覆盖成旧对象的版本（标题已是新对象、列表却是旧的），`finally` 还会把新对象的 `loading` 提前清掉、`catch` 会把旧对象的错误报到新对象头上 | 加 `loadSeq`：每个 `await` 后判代次，过期则**静默丢弃**；`catch` 与 `finally` 都按 `seq === loadSeq` 收口（与 `RecycleBinPanel.loadSeq` 同口径） | 红 `过期的版本列举不得覆盖新对象的列表: expected '…stale…' not to contain 'stale'`；另补「过期请求失败不得上抛」用例 |
+| 2 | `ObjectList.vue` 只 `watch(() => props.entries)` 就归零窗口——`entries` 是**过滤+排序后的 computed，每次重算都是新数组身份**，「加载更多」的追加同样换身份 ⇒ 滚到第 300 行点「更多」视口立刻跳回第 1 行（`RecycleBinPanel` 的 `markers` 是 `push` 追加、身份稳定，所以没这问题） | 由 `useObjectBrowser` 暴露**换源代次 `listGen`**（`load(reset=true)` 才递增，`loadMore`/`loadAll` 续页不递增），`ObjectsPanel` 透传给 `ObjectList`；归零只在 **① `listGen` 变 ② 过滤/排序变 ③ 条目数变少（兜底防空白表 §F2）** 三处触发 | 红 `追加不得把用户滚到的位置清零: expected +0 to be 1260`；同批补「换源即使条目变多也归零」的**回归守卫**，既有两条（换源归零 / 缩短归零）保持绿 |
+| 3 | `useObjectBrowser.load()` 里 `if (reset) loadingAll.value = false`，而 `loadAll` 的首轮正是以 `reset=true` 加载第一页 ⇒ 批次刚起步就把 `loadingAll` 清掉，「加载全部」按钮中途重新可点、能重复触发把当前批次顶掉 | 改成 `if (reset && seqOverride === undefined)`——`loadAll` 通过 `seqOverride` **认领** `loadingAll` 并由自己的 `finally` 归位；外部导航/刷新（不带 seq）仍然清 | 红 `loadAll 自己发起的 reset 不得清掉自己的 loadingAll: expected false to be true` |
+| 4 | `MigratePanel.vue` 源 / 目标桶列举**共用一个 `loadingBuckets` 且都无代次守卫**：先完成的一方在 `finally` 里把标志清掉，另一个 `select` 在请求未完成时就被解除禁用；切账号后旧响应仍会落地 | 拆成 `loadingSourceBuckets` / `loadingTargetBuckets` + `sourceBucketGen` / `targetBucketGen`，`catch`/`finally` 均按代次收口，账号被清空的早退路径也递增代次作废在飞请求 | 红 `目标完成不得解锁仍在飞的源 select: expected undefined to be defined`、`过期列举不得覆盖新账号的桶` |
+| 覆盖率补强 | 上述修复新增的 **stale / catch 分支**必须逐条可执行（否则四指标掉到 99.97% / 99.82% 被门禁拦下） | 补 6 条：源列举失败清空、目标列举失败清空、源过期成功不落地、**源过期失败不清空**、**目标过期失败不清空**、**过期版本列举失败不上抛** | 红 → 绿，`pnpm test:coverage` 回到**四指标 100%** |
+| 连带 | `ObjectsPanel.test.ts` 的 `makeBrowser()` 未提供 `listGen` → 运行时刷 `Invalid prop … got Undefined`；helper `opts()` 被 prettier 折成 `findAll(…)\n[i]` 触发 `no-unexpected-multiline` | mock 补 `listGen: ref(0)`；helper 改取中间变量（**该 error 曾让 `pnpm lint` 红灯**） | lint 0 告警 |
+| 门禁 | 全绿实测 | ✅ | `pnpm lint` **0 告警** / `pnpm typecheck` + `pnpm typecheck:e2e` exit 0 / `pnpm test` **72 文件 1126 例**（1120 → 1126）/ `pnpm test:coverage` **四指标 100%（4294 / 2934 / 1130 / 3677）** / `pnpm build` OK；后端未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** |
 
 ---
 

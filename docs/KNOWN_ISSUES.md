@@ -45,7 +45,7 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 64 | 2026-09-28 三路五轴复审**待处置清单**（5 项，**均未复核**） | 2026-09-28 全仓五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web） | ⬜ | 同轮已闭环 **14 条**：两处列举循环无界、收满上限误报 `truncated`、`-healthcheck` IPv6 字面量恒 1（见 [`features.md`](features.md) §AD「已闭环」）；**三处破坏性操作缺审计**（§AE）；**前端四条**（§AF）；**`config` 三条**（§AG）；**`s3wrap` 两条**（metadata 值控制字符致 400→500、IDN 端点建得成却永远连不上，§AH）。余下 **5 条见 §AD「待处置」表**：**前端 4**（`VersionsDialog` 无代次守卫、`ObjectList` 追加也重置滚动、`useObjectBrowser` `loadingAll` 首页即清、`MigratePanel` 桶列举无代次且共用 `loadingBuckets`）；**store 1（Nit，实测后挂起）**——`store.Open` json 分支丢 `storeKey`，但改它会被 `TestNoUnusedExportedProdSymbols` 红灯拦住，解开需改 `New` 签名并波及 **~100 处调用 / 24 个测试文件**（其中 2 个刻意依赖环境变量读 key），而缺陷**零生产影响**，**比例失衡故挂起**，完整理由与实测记录见 §AD 该行。**处置前必须先逐条读码复核，勿直接采信子代理结论** |
+| 64 | 2026-09-28 三路五轴复审**待处置清单**（1 项挂起，**均未复核**） | 2026-09-28 全仓五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web） | ⬜ | 同轮已闭环 **18 条 / 共 19 条**：两处列举循环无界、收满上限误报 `truncated`、`-healthcheck` IPv6 字面量恒 1（§AD「已闭环」）；**三处破坏性操作缺审计**（§AE）；**前端四条** sticky error / `DestDialog` 并发 / `signing` 死状态（§AF）；**`config` 三条**（§AG）；**`s3wrap` 两条**（§AH）；**前端另四条** `VersionsDialog` 代次守卫、`ObjectList` 追加重置滚动、`loadingAll` 提前可点、`MigratePanel` 桶列举共用标志（§AI）。**余 1 条为挂起的 Nit**：`store.Open` json 分支丢 `storeKey`——实测改它会被 `TestNoUnusedExportedProdSymbols` 红灯拦住，解开需改 `New` 签名并波及 **~100 处调用 / 24 个测试文件**（其中 2 个刻意依赖环境变量读 key），而缺陷**零生产影响**，**比例失衡故挂起**，完整理由与实测记录见 [features.md](features.md) §AD 该行 |
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动 |
 
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
@@ -83,7 +83,7 @@
 | #61 | **已闭环移除** | `SameEndpoint` 精确判定纳入 `useSSL`（跨包契约变更），2026-09-28 闭环（[features.md](features.md) §AB） |
 | #62 | **已闭环移除** | 批量删除编排下沉 `service`（2026-09-24 审查 Nit 本轮未完成），2026-09-28 闭环（[features.md](features.md) §AB） |
 | #63 | **已决策** ➖ | 已知限制（流式复制单对象 640GB 上限，维持现状），见 §二 |
-| #64 | **开放** ⬜ | 2026-09-28 三路五轴复审待处置清单（5 项，均未复核），见 §二与 [features.md](features.md) §AD–§AH |
+| #64 | **开放** ⬜ | 2026-09-28 三路五轴复审：19 条已闭环 18、余 1 条挂起 Nit，见 §二与 [features.md](features.md) §AD–§AI |
 
 ---
 

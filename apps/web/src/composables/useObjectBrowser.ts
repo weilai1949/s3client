@@ -214,6 +214,10 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   // 导航序号：进入目录/切桶/重置时 +1；过期响应直接丢弃，避免快速导航串数据。
   const loadSeq = ref(0)
+  // 换源代次：仅在「整体替换列表」（切目录/切桶/刷新/换账号）时 +1，「加载更多」的
+  // 追加不递增。ObjectList 据此区分「该把虚拟窗口归零」与「该保住用户滚动位置」——
+  // entries 是过滤+排序后的 computed，每次重算都是新数组身份，单看它分不出这两种。
+  const listGen = ref(0)
   // 进行中的列表请求 AbortController：每次新 load 取消旧的；卸载时取消所有。
   let loadCtrl: AbortController | undefined
 
@@ -235,7 +239,12 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     const acc = account.value
     if (!acc || !currentBucket.value) return
     const seq = seqOverride ?? ++loadSeq.value
-    if (reset) loadingAll.value = false
+    // 只有「不是 loadAll 自己发起的 reset」才清 loadingAll：loadAll 的首轮正是以
+    // reset 语义加载第一页（needFirstPage），清了它就等于批次刚起步就把按钮重新打开，
+    // 用户能重复点「加载全部」把当前批次顶掉（UI 进度失真、可重复触发）。
+    // loadAll 通过 seqOverride 认领 loadingAll，其 finally 负责归位。
+    if (reset && seqOverride === undefined) loadingAll.value = false
+    if (reset) listGen.value++ // 换源：ObjectList 需要把虚拟窗口归零（追加不走这条路径）
     loading.value = true
     error.value = ''
     // 取消上一次仍在飞的请求，避免过期响应浪费带宽。
@@ -584,6 +593,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     onRowDblClick,
     refreshAll,
     loadingAll,
+    listGen,
     loadAll,
     onBucketSelect,
     backToBuckets,

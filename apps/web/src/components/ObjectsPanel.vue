@@ -67,6 +67,7 @@ const {
   filterActive,
   visibleEntries,
   entries,
+  listGen,
   allSelected,
   selected,
   selectedSize,
@@ -276,6 +277,7 @@ function dismissError() {
       <!-- 对象列表（网格 / 表格 / 分页加载） -->
       <ObjectList
         :entries="visibleEntries"
+        :list-gen="listGen"
         :bucket-view="bucketView"
         :selected="selected"
         :sort-key="sortKey"

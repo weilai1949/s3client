@@ -23,6 +23,7 @@ const props = defineProps<{
   nextToken: string
   isTruncated: boolean
   loadingAll: boolean
+  listGen: number // 换源代次：父层整体替换列表时 +1，「加载更多」的追加不递增
 }>()
 
 const emit = defineEmits<{
@@ -69,9 +70,14 @@ function measureViewport() {
 
 let resizeObs: ResizeObserver | undefined
 
-/** 窗口起点回到列表顶部：entries 变化（切目录/过滤/重新列出）后必须重置，
- *  否则 start 仍取旧偏移，`entries.slice(start, end)` 为空 → 渲染 0 行空白表
- *  （review §F2）。同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
+/** 窗口起点回到列表顶部的三种触发：
+ *  ① 换源（`listGen`：切目录 / 切桶 / 刷新 / 换账号）——`entries` 是过滤+排序后的
+ *     computed，每次重算都是**新数组身份**，「加载更多」的追加同样换身份，所以单靠
+ *     entries 变化分不出「换源」与「追加」，必须由父层的换源代次表达；
+ *  ② 过滤 / 排序变化；
+ *  ③ 条目数**变少**——残留偏移会让 `entries.slice(start, end)` 为空 → 渲染 0 行
+ *     空白表（review §F2），这是兜底守卫。
+ *  同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
 function resetWindowScroll() {
   scrollTop.value = 0
   if (scrollEl.value) scrollEl.value.scrollTop = 0
@@ -92,9 +98,14 @@ watch(scrollEl, (el) => {
 })
 
 watch(
-  () => props.entries,
+  [() => props.listGen, () => props.filter, () => props.filterActive, () => props.sortKey, () => props.sortDir],
   () => resetWindowScroll(),
 )
+
+// 兜底：条目数变少说明数据源被换短了（或过滤收窄），残留偏移会让窗口落空 → 空白表。
+watch(() => props.entries.length, (n, prev) => {
+  if (prev !== undefined && n < prev) resetWindowScroll()
+})
 
 /* 网格视图窗口化：网格是 CSS grid 自适应列数，无法用固定行高做精确窗口化，
    因此按「最大渲染条数」设上限：超出部分显示提示条，用户可切列表视图或翻页。

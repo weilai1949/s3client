@@ -69,7 +69,14 @@ const busy = ref(false)
 const error = ref('')
 const sourceBuckets = ref<BucketItem[]>([])
 const targetBuckets = ref<BucketItem[]>([])
-const loadingBuckets = ref(false)
+
+// 源与目标是两条独立的列举，各有自己的 loading 与代次：
+// 此前共用一个 loadingBuckets，先完成的一方在 finally 里把标志清掉，另一个 select
+// 会在请求未完成时就被解除禁用；也没有代次守卫，切账号后旧响应仍会落地。
+const loadingSourceBuckets = ref(false)
+const loadingTargetBuckets = ref(false)
+let sourceBucketGen = 0
+let targetBucketGen = 0
 
 // 见上：objects 变化（重新列出/切换前缀）后虚拟窗口必须回到顶部。
 watch(objects, resetWindowScroll)
@@ -130,31 +137,41 @@ const selectedSize = computed(() => objects.value.filter((o) => selected.value.h
 
 async function loadSourceBuckets() {
   const acc = sourceAccount.value
-  if (!acc) return
-  loadingBuckets.value = true
+  if (!acc) {
+    sourceBucketGen++ // 源账号消失：作废在飞的列举，过期结果不得落地
+    loadingSourceBuckets.value = false
+    return
+  }
+  const gen = ++sourceBucketGen
+  loadingSourceBuckets.value = true
   try {
     const res = await s3api.listBuckets(acc.id)
+    if (gen !== sourceBucketGen) return // 过期：源账号已切换
     sourceBuckets.value = res.buckets ?? []
   } catch {
-    sourceBuckets.value = []
+    if (gen === sourceBucketGen) sourceBuckets.value = []
   } finally {
-    loadingBuckets.value = false
+    if (gen === sourceBucketGen) loadingSourceBuckets.value = false
   }
 }
 
 async function loadTargetBuckets() {
   if (!targetAccountId.value) {
+    targetBucketGen++ // 目标账号被清空：作废在飞的列举
+    loadingTargetBuckets.value = false
     targetBuckets.value = []
     return
   }
-  loadingBuckets.value = true
+  const gen = ++targetBucketGen
+  loadingTargetBuckets.value = true
   try {
     const res = await s3api.listBuckets(targetAccountId.value)
+    if (gen !== targetBucketGen) return // 过期：目标账号已切换
     targetBuckets.value = res.buckets ?? []
   } catch {
-    targetBuckets.value = []
+    if (gen === targetBucketGen) targetBuckets.value = []
   } finally {
-    loadingBuckets.value = false
+    if (gen === targetBucketGen) loadingTargetBuckets.value = false
   }
 }
 
@@ -450,7 +467,7 @@ onMounted(async () => {
       <div class="toolbar">
         <label class="field">
           {{ t('migrate.sourceBucket') }}
-          <select v-model="sourceBucket" :disabled="loadingBuckets" style="min-width:180px">
+          <select v-model="sourceBucket" :disabled="loadingSourceBuckets" style="min-width:180px">
             <option value="">{{ tf('migrate.defaultBucket', { name: sourceAccount.bucket || 'default' }) }}</option>
             <option v-for="b in sourceBuckets" :key="b.name" :value="b.name">{{ b.name }}</option>
           </select>
@@ -477,7 +494,7 @@ onMounted(async () => {
         </label>
         <label class="field">
           {{ t('migrate.targetBucket') }}
-          <select v-model="targetBucket" :disabled="!targetAccountId || loadingBuckets" style="min-width:180px">
+          <select v-model="targetBucket" :disabled="!targetAccountId || loadingTargetBuckets" style="min-width:180px">
             <option value="">{{ tf('migrate.defaultBucket', { name: targetAccount?.bucket || 'default' }) }}</option>
             <option v-for="b in targetBuckets" :key="b.name" :value="b.name">{{ b.name }}</option>
           </select>

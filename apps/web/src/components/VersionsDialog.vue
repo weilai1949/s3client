@@ -105,7 +105,12 @@ const contentVersions = computed<CompareVersion[]>(() =>
     })),
 )
 
+// 加载代次：每次 load +1。关闭再打开另一个对象时，上一个对象的列举可能仍在飞，
+// 过期响应不得写进 rows（否则标题已是新对象、列表却还是旧对象的版本）。
+let loadSeq = 0
+
 async function load() {
+  const seq = ++loadSeq
   rows.value = []
   truncated.value = false
   truncatedPages.value = 0
@@ -125,6 +130,7 @@ async function load() {
         keyMarker,
         versionIdMarker,
       })
+      if (seq !== loadSeq) return // 过期请求：新对象已接管 rows / loading，静默丢弃
       for (const m of r.deleteMarkers ?? []) {
         if (m.key !== props.objectKey) continue
         merged.push({
@@ -165,9 +171,11 @@ async function load() {
     merged.sort((a, b) => (b.lastModified || '').localeCompare(a.lastModified || ''))
     rows.value = merged
   } catch (err) {
-    emit('error', toErrorMessage(err))
+    // 过期请求的失败不该报到已切走的对象头上
+    if (seq === loadSeq) emit('error', toErrorMessage(err))
   } finally {
-    loading.value = false
+    // 同理：过期请求不得把新对象的 loading 提前清掉（否则骨架屏闪走、列表未到位）
+    if (seq === loadSeq) loading.value = false
   }
 }
 

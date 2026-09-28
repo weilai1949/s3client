@@ -208,6 +208,27 @@ describe('useObjectBrowser loadAll guards + keepalive reactivation', () => {
     expect(s3api.listObjects).not.toHaveBeenCalled()
   })
 
+  it('loadAll 首页加载期间不得清 loadingAll（否则「加载全部」跑到一半按钮重新可点）', async () => {
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    let releasePage2!: () => void
+    const page2 = new Promise<void>((resolve) => { releasePage2 = resolve })
+    vi.mocked(s3api.listObjects)
+      .mockResolvedValueOnce({ objects: [], commonPrefixes: [], nextToken: 't1', isTruncated: true } as unknown as ListObjectsResult)
+      .mockImplementationOnce(async () => {
+        await page2
+        return { objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult
+      })
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    browser.nextToken.value = '' // needFirstPage=true → 首轮以 reset 语义加载
+    const run = browser.loadAll()
+    await vi.waitFor(() => expect(browser.nextToken.value).toBe('t1')) // 首页已回、第二页仍在飞
+    expect(browser.loadingAll.value, 'loadAll 自己发起的 reset 不得清掉自己的 loadingAll').toBe(true)
+    releasePage2()
+    await run
+    expect(browser.loadingAll.value).toBe(false)
+  })
+
   it('loadAll breaks and returns when navigation invalidates seq', async () => {
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'

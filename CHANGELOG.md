@@ -6,6 +6,53 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 前端另四条：版本列举代次守卫 / 追加重置滚动 / `loadingAll` 提前可点 / 桶列举共用标志——#64 4 条先红后绿）
+
+> `KNOWN_ISSUES #64`「待处置」表前端第二行的 4 条，**逐条亲自读码复核**后修复。至此 #64 的 19 条
+> **只剩 1 条挂起的 Nit**。证据台账见 [`docs/features.md`](docs/features.md) **§AI**。
+
+- **`VersionsDialog.load()` 无代次守卫**：关闭再开另一个对象时上一个对象的列举仍在飞，迟到响应会把
+  `rows` 覆盖成旧对象的版本（标题已是新对象、列表却是旧的），`finally` 还会提前清掉新对象的 `loading`、
+  `catch` 会把旧对象的错误报到新对象头上。
+  **修法**：加 `loadSeq`，每个 `await` 后判代次、过期静默丢弃；`catch` / `finally` 都按
+  `seq === loadSeq` 收口（与 `RecycleBinPanel.loadSeq` 同口径）。
+  **红灯**：`过期的版本列举不得覆盖新对象的列表: expected … not to contain 'stale'`。
+- **`ObjectList` 只 `watch(() => props.entries)` 就归零窗口**：`entries` 是**过滤+排序后的 computed，
+  每次重算都是新数组身份**，「加载更多」的追加同样换身份 ⇒ 滚到第 300 行点「更多」视口立刻跳回第 1 行。
+  （`RecycleBinPanel` 没这问题，因为它的 `markers` 是 `push` 追加、数组身份稳定。）
+  **修法**：`useObjectBrowser` 暴露**换源代次 `listGen`**（`load(reset=true)` 才递增，
+  `loadMore` / `loadAll` 续页不递增），`ObjectsPanel` 透传给 `ObjectList`；归零只在
+  **① `listGen` 变 ② 过滤 / 排序变 ③ 条目数变少（兜底防空白表 §F2）** 三处触发。
+  **红灯**：`追加不得把用户滚到的位置清零: expected +0 to be 1260`；同批补「换源即使条目变多也归零」
+  的回归守卫，既有两条（换源归零 / 缩短归零）保持绿。
+- **`useObjectBrowser.load()` 的 `if (reset) loadingAll.value = false`**：`loadAll` 的首轮正是以
+  `reset=true` 加载第一页 ⇒ 批次刚起步就清掉 `loadingAll`，「加载全部」按钮中途重新可点、可重复触发
+  把当前批次顶掉。
+  **修法**：`if (reset && seqOverride === undefined)`——`loadAll` 通过 `seqOverride` **认领**
+  `loadingAll` 并由自己的 `finally` 归位；外部导航 / 刷新（不带 seq）仍照常清。
+  **红灯**：`loadAll 自己发起的 reset 不得清掉自己的 loadingAll: expected false to be true`。
+- **`MigratePanel` 源 / 目标桶列举共用 `loadingBuckets` 且都无代次守卫**：先完成的一方在 `finally`
+  把标志清掉，另一个 `select` 在请求未完成时就被解除禁用；切账号后旧响应仍会落地。
+  **修法**：拆成 `loadingSourceBuckets` / `loadingTargetBuckets` + `sourceBucketGen` / `targetBucketGen`，
+  `catch` / `finally` 均按代次收口，账号被清空的早退路径也递增代次作废在飞请求。
+  **红灯**：`目标完成不得解锁仍在飞的源 select: expected undefined to be defined`、
+  `过期列举不得覆盖新账号的桶`。
+- **覆盖率补强（门禁拦下来的）**：新增的 **stale / catch 分支**必须逐条可执行，否则四指标掉到
+  **99.97% / 99.82%** 被 `test:coverage` 拦下。补 6 条用例（源/目标列举失败清空、源过期成功不落地、
+  **源过期失败不清空**、**目标过期失败不清空**、**过期版本列举失败不上抛**）→ 回到**四指标 100%**。
+- **两处连带修正**：① `ObjectsPanel.test.ts` 的 `makeBrowser()` 未提供 `listGen`，运行时刷
+  `Invalid prop … got Undefined` → mock 补 `listGen: ref(0)`；② helper `opts()` 被 prettier 折成
+  `findAll(…)\n[i]` 触发 `no-unexpected-multiline`，**曾让 `pnpm lint` 红灯** → 改取中间变量。
+- **文档同 commit 同步**：[`docs/features.md`](docs/features.md) 新增 **§AI**；§AD「待处置」表移出前端行
+  （5 → **1**，TOC 加 AI）。**并清理该表既有的重复行**——前端行与 `store` 行各有一条重复（其中
+  `store` 还新旧两版并存，旧版缺挂起理由），系此前某次替换只命中一处所致，本次一并删除。
+  [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64** 改「19 条已闭环 18、余 1 条挂起 Nit」；本条记录。
+- **门禁复跑（全绿）**：前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `pnpm typecheck:e2e` exit 0 /
+  `pnpm test` **72 文件 1126 例**（1120 → 1126，连跑两轮均全绿）/
+  `pnpm test:coverage` **四指标 100%（4294 / 2934 / 1130 / 3677）** / `pnpm build` OK；
+  后端本轮未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race -count=1` **9/9 包、每包 100.0%**、
+  **零未覆盖块** / `golangci-lint` **0 issues**。
+
 ### 修复（2026-09-28 `s3wrap` 两条：metadata 值控制字符致 400→500 / IDN 端点建得成却永远连不上——#64 2 条先红后绿）
 
 > `KNOWN_ISSUES #64`「待处置」表 `后端 s3wrap` 一行的 2 条，**逐条亲自读码复核**后修复。
