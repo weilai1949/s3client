@@ -215,10 +215,15 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - **死代码 / 未使用变量**：定义后无人引用的函数 / 类型 / 常量 / 变量 / 字段、不可达分支、未定义即使用的标识符、定义了却未使用的变量（含只写不读、赋值后即被覆盖、恒真/恒假的空断言）——**枚举值除外**。这类问题必须由 `golangci-lint`（`unused` + `staticcheck`）/ `go vet` / `pnpm lint` / `vue-tsc` 机械拦住，**门禁输出必须 0 issues**；不要用 `_ = x`、`var _ = f`、`//nolint` 或导出为 `_test` 辅助来「消音」，那只是把死代码藏起来。
 - **以为覆盖率达标就等于没死代码**：测试文件不参与 instrumentation（`go test -cover` 只统计生产代码），测试辅助里的死代码可以让 100% 门禁全绿——两者必须分别验证。本仓库就曾因此让一套失效的错误注入器长期存活（见 `CHANGELOG.md`）。
 
-## 7. 已知技术债（来自 2026-09-16 综合评估）
+## 7. 历史技术债的现行守卫（2026-09-16 综合评估三条，均已闭环）
 
-> 详见 [archive/assessment.md](archive/assessment.md) 与 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。开发时**避免扩大**以下模式：
+> **登记问题的唯一来源是 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**，本节不登记问题。
+> 原文三条来自 [`archive/assessment.md`](archive/assessment.md)（H1 / S7 / D5），当时记作「已知技术债」；
+> 三条现已全部闭环，故改写为**闭环状态 + 现行守卫 + 开发规则**——它们已经修好，但
+> 「什么动作会把它改坏」仍是每次改动都要知道的规则。台账见 [`features.md`](features.md)。
 
-- OpenAPI 注册表与真实 handler 字段不一致（改 handler 请求体时同步更新 `openapi_register_*.go`）。
-- 复制粘贴式逻辑分叉（如 SSE 终态检测在 MigratePanel 与 useObjectActions 各一份）——优先收敛为共享实现。
-- endpoint 归一化多份实现——改端点逻辑时统一到单一 helper。
+| 曾登记的技术债 | 闭环状态与守卫（回归即红灯） | 开发时仍须遵守 |
+|---|---|---|
+| **H1** OpenAPI 注册表与真实 handler 字段不一致（SSOT 失真） | 人工比对已换成**机械门禁**：`openapi_request_fields_test.go` 的 `TestOpenAPIRequestFieldsMatchHandlerDTOs`（注册表 ⇔ handler 字段集全量遍历）、`openapi_requestbody_test.go` 的 `TestOpenAPI_ContractRequestBodyMatchesHandlers`、`openapi_inputsource_test.go` 的 `TestOpenAPIRequestDeclarationMatchesHandlerInput`、`api_doc_test.go` 的 `TestAPIDocMatchesRoutes` / `TestAPIDocDocumentsRequestBodyFields`、`openapi_response_contract_test.go` 的 `TestOpenAPI_EndpointResponseSchemasMatchHandlers` | 改 handler 请求 / 响应体时**同 PR** 同步 `openapi_register_*.go`（见 §4 文档同步门禁），别等红灯才发现 |
+| **S7 / P0-4** SSE 终态检测分叉（MigratePanel 与 `useObjectActions` / `DestDialog` 各写一份 → 流以 EOF 结束时 Promise 悬挂、`opsBusy` 永不复位、按钮永久禁用） | 收敛为**单一实现** `apps/web/src/api/jobs.ts` 的 `subscribeMigrateEvents`（EOF 后轮询回读直到终态 + 合成终态事件 + 心跳空闲超时 + 连续回读失败快速 `onError`），三个调用方共用；用例见 `api.transfer.test.ts` / `api.gaps.test.ts` 的 `subscribeMigrateEvents …` 组 | 新增异步任务消费方**只调 `subscribeMigrateEvents`**，不得自己开 SSE 流、自己判终态、自己加超时——三者都会把分叉再带回来 |
+| **D5** endpoint 归一化多份实现（行为不一致） | 收敛为**单一 helper** `s3wrap.NormalizeEndpoint`，四处共用：建 client（`s3wrap/client.go`）、预签名（`s3wrap/presign.go`）、SSRF 拨号校验（`s3wrap/ssrf.go`）、同端判定（`service/migrate.go`）；用例 `s3wrap_test.go` 的 `TestNormalizeEndpoint` / `TestNormalizeEndpointNeverDoubleScheme` | 改端点逻辑一律走 `NormalizeEndpoint`，不要在调用点重写 scheme 补全 / 去尾斜杠 / 大小写归一——这正是当年分叉的来源 |

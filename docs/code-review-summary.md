@@ -18,7 +18,28 @@
 >    （台账见 [`features.md`](features.md) §AA，逐项见该报告「处置明细」表），复测
 >    **9/9 包全绿 + 每包 100.0% statements + 前端 67 文件 1110 例 + 四指标 100%（4255 / 2908 / 1124 / 3653）**，
 >    真实 E2E 两项实跑——`S3CLINET_E2E=1` s3wrap **4/4 PASS**、`make e2e-real` **3 passed**
->    （`S3C_TOKEN` 开启的生产同构形态）。下文正文中「1042 用例 / 66 文件」等为**审查时点值**，保留原样。
+>    （`S3C_TOKEN` 开启的生产同构形态）。
+> ⑥ **2026-09-28 KNOWN_ISSUES 收口 + `development.md` §7 双源消除**（⑤ 之后）：**#60–#62 全部闭环移除**——
+>    #60 前端 4 个超 1000 行测试文件拆为 9 个（`api.test.ts` 1986 → 887 / 677 / 573、`MigratePanel.test.ts`
+>    1230 → 871 + 463、`useObjectActions.test.ts` 1164 → 872 + 447、`useObjectBrowser.test.ts` 1147 → 558 + 641，
+>    最大 887 行，1110 例与测试名清单不变，前端 **67 → 72 文件**）；#61 `SameEndpoint` 纳入 `useSSL`
+>    （6 参签名 + `(*s3wrap.Client).UseSSL()`）；#62 批量删除编排下沉 `internal/service/delete.go`
+>    （`handler/objects.go` 538 → 432 行，顺带清出死代码 `copyKeysThenDelete` / `s3UserMessageForCode` /
+>    `olListPagesFake`）；#63 补齐证据（新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住 64MB 分段）后
+>    维持 ➖ 已决策。[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §二 现只剩 **#63**、§四 编号台账 #60–#62 标
+>    「已闭环移除」。同批把 `development.md` §7「已知技术债」三条（**H1** OpenAPI 注册表 / **S7** SSE 终态分叉 /
+>    **D5** endpoint 归一化）逐条复核后改写为「闭环状态 + 现行守卫 + 开发规则」，**消除与
+>    [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 的双源**（台账见 [`features.md`](features.md) §AC）。由此，
+>    下方「⚠️ 待解决的技术问题」第 2 条（**CORS**：`corsAllowedOrigin` 显式白名单 + `isTrustedDefaultOrigin`
+>    已放行 tauri 自定义协议 + `S3C_CORS_ORIGINS` + CSRF 双防）与第 3 条（**单文件超限**：Go 侧由 ② 拆完、
+>    前端侧本轮拆完）**均已在正文之外追平**，正文按「时点快照不回写」保留原样。**③ 的「当前 73 生产 +
+>    126 `_test.go`（199）」现为 74 生产 + 127 `_test.go`（**201**，`go list ./...` **9 包**、41410 行）**——
+>    ①②③⑤ 的数字同为时点值。复测全绿：`gofmt` 干净 / `go vet` 0 / `go build` 干净 /
+>    `go test -race -count=1` **9/9 包、每包 100.0% statements**（零未覆盖块）/ `golangci-lint` **0 issues**；
+>    前端 `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** /
+>    `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` + `typecheck:e2e` exit 0。
+>
+> 下文正文中「1042 用例 / 66 文件」等为**审查时点值**，保留原样。
 
 ## 🎯 执行摘要
 

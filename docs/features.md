@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`roadmap.md`](roadmap.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-24（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置）
+> 最后更新：2026-09-28（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -885,6 +885,21 @@ functions 1095 / lines 3503）。
 | 62 | 批量删除编排下沉 `service`（§AA 遗留 Nit，本轮未完成） | ✅ | 新增 `internal/service/delete.go`（189 行）承载 `DeleteCounts` / `DeletePrefixResult` / `DeleteKeys` / `RunDeletePrefix` / `DeleteKeysBatched` / `MoveKeys`，与 `batch.go` 的 `RunBatch` / `CopyKeys` 同层；`handler/objects.go` **538 → 432 行**、`handler/copy.go` 删 `copyKeysThenDelete`（净 -21 行），handler 只剩 HTTP 边界（入参校验 → 调 service → 写状态码/响应体 → 审计）。**响应体形状不变**（`{"deleted","failed","lastError"}` 与前缀递归口径），故仍按既有先例在 `writeJSON` 处内联构造 map，`TestOpenAPI_EndpointResponseSchemasMatchHandlers` 全量核对不受影响。新增 `internal/service/delete_test.go`（436 行）逐条搬移原 handler 3 个白盒用例（`TestOlRunDeletePrefix*`），并删掉随之死掉的 `handler.s3UserMessageForCode` 与 `olListPagesFake` |
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | ➖ **维持现状，证据补齐** | 新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住**分段默认值 64MB**——640GB 是「分段 × 段数」两个默认值的乘积，此前只有 `TestMaxMultipartPartsIsProtocolLimit` 钉段数，证据缺一半；复核 `docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务确为 `deploy.resources.limits.memory: 512M`（一块分段缓冲即 64MB）。口径三处一致：`service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #63 → 本行 |
 | 门禁 | 全绿实测 | ✅ | 后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test -race -count=1` **9/9 包、每包 100.0% statements** / `go build` 干净 / `golangci-lint run ./...` **0 issues**；前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **72 文件 1110 例**（与拆分前测试名清单逐条一致）/ `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` OK |
+
+### AC. 2026-09-28 `development.md` §7 历史技术债收口（H1 / S7 / D5 三条均已闭环）
+
+> 来源：[`development.md`](development.md) §7 原题为「已知技术债（来自 2026-09-16 综合评估）」，
+> 与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)「问题唯一来源」的约定构成**双源**；逐条复核后三条**实际均已闭环**，
+> 只是文档没跟上。本节**不新增问题登记**——§7 改写为「闭环状态 + 现行守卫 + 开发规则」，
+> 原登记出处仍指 [`archive/assessment.md`](archive/assessment.md)（H1 / S7 / D5）。以下为本轮实跑验证。
+
+| 原条目 | 复核结论 | 闭环证据（本轮实跑） |
+|---|---|---|
+| **H1** OpenAPI 注册表与真实 handler 字段不一致（SSOT 失真） | ✅ 已从「人工比对」变成**机械门禁**，不再是待修技术债，只剩流程规则 | `go test ./internal/handler/ -run 'TestOpenAPI\|TestAPIDoc'` 全绿：`TestOpenAPIRequestFieldsMatchHandlerDTOs`（注册表 ⇔ handler 字段全量遍历）、`TestOpenAPI_ContractRequestBodyMatchesHandlers`、`TestOpenAPIRequestDeclarationMatchesHandlerInput`、`TestAPIDocMatchesRoutes`、`TestAPIDocDocumentsRequestBodyFields`、`TestOpenAPI_EndpointResponseSchemasMatchHandlers`（连同 `openapi_path_params` / `openapi_query_params` / `openapi_semantics` / `openapi_shape` 等，共 11 个 `api_doc_test.go` + `openapi_*_test.go` 契约测试文件） |
+| **S7 / P0-4** SSE 终态检测在 MigratePanel 与 `useObjectActions` / `DestDialog` 各一份 | ✅ 已收敛为单一实现 `apps/web/src/api/jobs.ts` 的 `subscribeMigrateEvents`，三调用方共用 | `pnpm test src/api.transfer.test.ts src/api.gaps.test.ts` **64 例全绿**，含 `subscribeMigrateEvents: ping+status+Authorization+EOF-done fallback`（EOF 回读兜底 / 合成终态 / 心跳超时） |
+| **D5** endpoint 归一化多份实现（行为不一致） | ✅ 已收敛为单一 helper `s3wrap.NormalizeEndpoint`，建 client / 预签名 / SSRF 拨号校验 / 同端判定四处共用 | `go test ./internal/s3wrap/ -run TestNormalizeEndpoint` → `TestNormalizeEndpoint` 与 `TestNormalizeEndpointNeverDoubleScheme` **PASS** |
+| 文档活状态块同步 | ✅ | [`code-review-summary.md`](code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
+| 门禁 | ✅ | 只改 `docs/`，复跑 `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** —— 零回归 |
 
 ---
 
