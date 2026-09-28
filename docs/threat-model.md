@@ -37,7 +37,7 @@
 | **S**poofing 仿冒 | ➖ 不适用：本地文件系统位于应用信任边界外（OS / 容器隔离；容器 `USER app` 非 root） | ➖ |
 | **T**ampering 篡改 | 原子写（临时文件 + rename）+ 写失败回滚内存；GCM 认证标签使密文被改即解密失败 → `store.Open` 失败 → 进程硬失败退出（[ADR-002](decisions/0002-store-fail-closed.md)）；数据目录 flock 单写者锁（`store/lock.go` `AcquireDataDirLock`，第二实例立即失败） | ✅ 已缓解 |
 | **R**epudiation 抵赖 | 账号 CRUD 记安全审计日志（`handler/audit.go` `account.*`，见边界 A）；落盘动作本身不单独记审计 | ✅ 已缓解（审计在边界 A） |
-| **I**nfo disclosure 泄露 | 核心威胁：配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id（文件盐建时随机并复用，key 最短 16 字符）；数据目录 0700 + 文件 0600；json / sqlite 无 key 拒绝启动（`S3C_ALLOW_PLAINTEXT_STORE=1` 仅限联调，见下） | ✅ 已缓解 |
+| **I**nfo disclosure 泄露 | 核心威胁：配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id（文件盐建时随机并复用，key 最短 16 字符）；数据目录 0700 + 文件 0600（目录在 `store.Open` / `store.AcquireDataDirLock` 启动时**主动 chmod 收紧**，Docker volume / systemd 预建的 0755 也会被改成 0700；文件侧 `chmodSQLitePerms` 同口径）；json / sqlite 无 key 拒绝启动（`S3C_ALLOW_PLAINTEXT_STORE=1` 仅限联调，见下） | ✅ 已缓解 |
 | **D**oS 拒绝服务 | ➖ 不适用：本地文件无网络面；可用性按 ADR-002 硬失败不降级 | ➖ |
 | **E**levation 提权 | 文件 0600 仅属主可读写 + 容器非 root 运行 | ✅ 已缓解 |
 

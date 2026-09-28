@@ -114,7 +114,7 @@ curl http://127.0.0.1:8080/api/health
 
 ### 6.2 优雅关闭
 
-- Go server：`SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（超时 `S3C_SHUTDOWN_TIMEOUT`）
+- Go server：`SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（超时 `S3C_SHUTDOWN_TIMEOUT`，取值 **1–3600 秒**，超上界拒绝启动——秒数过大时 `time.Duration` 会溢出为负时长，把优雅关停静默清零）
 - nginx：`SIGQUIT`（等待 worker 处理完当前请求）
 - 脚本：`make restart-server` / `make stop` / `make status`（`scripts/graceful-restart.sh`）
 

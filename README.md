@@ -70,11 +70,11 @@ docker-compose.yml   一键起 server + RustFS
 ## 配置（服务端）
 
 所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
-`.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
+`.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源，且路径不存在 / 不可读时**拒绝启动**，不静默回退默认值）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选 |
+| `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选，且**路径不存在 / 不可读时拒绝启动**（防止写在里面的 `S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` 等加固项或 `S3C_DATA_DIR` 静默失效） |
 | `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080` |
 | `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`，以及单写者锁文件 `.s3clinet.lock`） |
 | `S3C_STATIC_DIR` | `../web/dist` | Web 静态资源目录（相对进程工作目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist`） |
@@ -82,7 +82,7 @@ docker-compose.yml   一键起 server + RustFS
 | `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换（以最短者判定长度） |
 | `S3C_CORS_ORIGINS` | 空 | CORS 白名单；留空=仅同源 + localhost/127.0.0.1/tauri |
 | `S3C_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
-| `S3C_SHUTDOWN_TIMEOUT` | `30` | 收到 SIGTERM 后等待活跃连接结束的最长时间（秒） |
+| `S3C_SHUTDOWN_TIMEOUT` | `30` | 收到 SIGTERM 后等待活跃连接结束的最长时间（秒）；取值 **1–3600**，超上界拒绝启动（秒数过大时 `time.Duration` 会溢出为负时长，让优雅关停被静默跳过） |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
 | `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`）。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式设置 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
 | `S3C_ALLOW_PLAINTEXT_STORE` | 空 | 仅本地联调：`1`/`true`/`yes`/`on` 时允许 `json`/`sqlite` 在无 `S3C_STORE_KEY` 下运行，`secretKey` **明文落盘**并在启动日志打出 WARN。**不要在生产设置** |

@@ -17,5 +17,6 @@ func AcquireDataDirLock(dataDir string) (release func(), err error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
+	ensureDataDirPerm(dataDir)
 	return acquireDataDirLock(dataDir)
 }

@@ -195,3 +195,17 @@ func TestIsLoopbackAddr(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateRejectsOversizedShutdownTimeout S3C_SHUTDOWN_TIMEOUT 必须有上界。
+// main.go 用 time.Duration(n) * time.Second 换算，n 超过 MaxInt64/1e9（≈92.2 亿）
+// 时会溢出成**负时长** → context.WithTimeout 立即过期 → srv.Shutdown 秒回、
+// 错误被 `_ =` 丢弃、退出码仍是 0，日志只有 "shutting down…" / "shutdown complete"，
+// 在途的大文件流式下载被硬切断却看不出是超时配置把保护窗口清零了。
+func TestValidateRejectsOversizedShutdownTimeout(t *testing.T) {
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	cfg := FromEnv()
+	cfg.ShutdownTimeoutSec = 9_999_999_999
+	if err := cfg.Validate(); !errors.Is(err, ErrInvalidEnvValue) {
+		t.Fatalf("Validate(shutdown=%d) = %v, want ErrInvalidEnvValue", cfg.ShutdownTimeoutSec, err)
+	}
+}

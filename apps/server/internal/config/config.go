@@ -39,6 +39,16 @@ var ErrUnknownStoreDriver = errors.New("unknown store driver")
 // 静默回退默认值会让运维误以为配置已生效，改为拒绝启动。
 var ErrInvalidEnvValue = errors.New("invalid numeric environment variable")
 
+// ErrInvalidEnvFile 表示显式指定的 S3C_ENV_FILE 不存在或不可读。
+// 显式路径是运维的显式选择：静默回退默认值会让写在该文件里的加固项静默失效
+// （或让 S3C_DATA_DIR 静默丢失导致账号列表「凭空清空」），与上面同口径 fail-closed。
+var ErrInvalidEnvFile = errors.New("unreadable explicit env file")
+
+// maxShutdownTimeoutSec 是 S3C_SHUTDOWN_TIMEOUT 的上界（秒）。
+// main.go 以 time.Duration(n) * time.Second 换算，n 超过 MaxInt64/1e9（≈92.2 亿）
+// 会溢出成负时长 ⇒ 关停保护窗口被静默清零。3600 秒远超任何合理关停窗口，且远离溢出点。
+const maxShutdownTimeoutSec = 3600
+
 // normalizeStoreDriver 归一化驱动名（去空白 + 小写）。FromEnv / Validate /
 // StorePlaintextWarning 三处共用，保证 "JSON" / " json " 与小写行为完全一致——
 // 任何一处漏归一化都会重新打开 R4 的安全闸绕过口子。
@@ -48,10 +58,11 @@ func normalizeStoreDriver(v string) string {
 
 // loadDotEnvFile 从指定路径加载 KEY=VALUE 到环境变量（已存在的环境变量优先）。
 // 支持注释行、引号与空行；实现为 30 行的极简解析器，不引入第三方依赖。
-func loadDotEnvFile(path string) {
+// 返回读取失败的错误，由调用方决定是否 fail-closed（显式 S3C_ENV_FILE 必须拒绝启动）。
+func loadDotEnvFile(path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return
+		return err
 	}
 	for _, line := range strings.Split(string(b), "\n") {
 		line = strings.TrimSpace(line)
@@ -71,6 +82,7 @@ func loadDotEnvFile(path string) {
 			_ = os.Setenv(k, v)
 		}
 	}
+	return nil
 }
 
 // envFileCandidates 返回 .env 的候选路径（按优先级）：
@@ -91,15 +103,29 @@ func envFileCandidates() []string {
 	return out
 }
 
-// loadDotEnv 加载第一个存在的候选 .env 文件（不存在则静默跳过，保持零配置可启动）。
-func loadDotEnv() {
+// loadDotEnv 加载第一个存在的候选 .env 文件。
+//
+// 未显式指定 S3C_ENV_FILE 时保持零配置可启动：候选缺失就跳过（本地开发常态，
+// 非显式路径不该有 fail-closed）。显式指定时（envFileCandidates 此时只有一项）
+// **必须 fail-closed**——文件缺失 / 不可读一律返回 ErrInvalidEnvFile，否则写在
+// 该文件里的加固项（S3C_TOKEN、S3C_SSRF_DENY_PRIVATE、S3C_TRUSTED_PROXIES、
+// S3C_CSP_CONNECT_SRC…）会静默失效，S3C_DATA_DIR 更会静默丢失，启动后账号列表
+// 「凭空清空」（原数据其实没坏，极易引发重复建号）。
+func loadDotEnv() error {
+	explicit := strings.TrimSpace(os.Getenv("S3C_ENV_FILE")) != ""
 	for _, p := range envFileCandidates() {
 		if _, err := os.Stat(p); err != nil {
+			if explicit {
+				return fmt.Errorf("%w: %s 不存在或不可读", ErrInvalidEnvFile, p)
+			}
 			continue
 		}
-		loadDotEnvFile(p)
-		return
+		if err := loadDotEnvFile(p); err != nil && explicit {
+			return fmt.Errorf("%w: %s 读取失败: %v", ErrInvalidEnvFile, p, err)
+		}
+		return nil
 	}
+	return nil
 }
 
 // Config 汇总服务端配置。所有项均可通过环境变量覆盖，并内置安全默认值。
@@ -153,10 +179,15 @@ func envOrInt(key string, def int) (int, error) {
 }
 
 // FromEnv 从环境变量构建配置；启动时按 envFileCandidates 加载 .env（真实环境变量优先）。
-// 环境变量解析失败记入 Config.envErr，由 Validate 首查上抛使启动失败。
+// 显式 S3C_ENV_FILE 不可读、或数值型环境变量解析失败，都记入 Config.envErr
+// 由 Validate 首查上抛使启动失败——**不静默回退默认值**。
 func FromEnv() Config {
-	loadDotEnv()
-	shutdownTimeout, envErr := envOrInt("S3C_SHUTDOWN_TIMEOUT", 30)
+	loadErr := loadDotEnv()
+	shutdownTimeout, secErr := envOrInt("S3C_SHUTDOWN_TIMEOUT", 30)
+	envErr := loadErr
+	if envErr == nil {
+		envErr = secErr
+	}
 	return Config{
 		Addr:                envOr("S3C_ADDR", "127.0.0.1:8080"),
 		DataDir:             envOr("S3C_DATA_DIR", "./data"),
@@ -227,6 +258,12 @@ func IsLoopbackAddr(addr string) bool {
 func (c Config) Validate() error {
 	if c.envErr != nil {
 		return c.envErr
+	}
+	// S3C_SHUTDOWN_TIMEOUT 必须有上界，否则 time.Duration(n) * time.Second 溢出为负时长
+	// → 优雅关停被静默跳过（错误被丢弃、退出码仍 0），在途流式下载被硬切断。
+	if c.ShutdownTimeoutSec > maxShutdownTimeoutSec {
+		return fmt.Errorf("%w: S3C_SHUTDOWN_TIMEOUT=%d 超过上界 %d 秒",
+			ErrInvalidEnvValue, c.ShutdownTimeoutSec, maxShutdownTimeoutSec)
 	}
 	driver := normalizeStoreDriver(c.StoreDriver)
 	switch driver {

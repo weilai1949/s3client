@@ -6,6 +6,53 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 `config` 三条：显式 env 文件静默回退改 fail-closed / 关停超时加上界 / 预建数据目录收紧 0700——#64 3 条先红后绿）
+
+> `KNOWN_ISSUES #64`「待处置」表 `后端 config / main` 一行的 3 条，**逐条亲自读码复核**后修复。
+> 第 1 条是这一批里唯一接近 Required 的。证据台账见 [`docs/features.md`](docs/features.md) **§AG**。
+
+- **显式 `S3C_ENV_FILE` 不可读时静默回退默认值（接近 Required）**：`loadDotEnv()` 对缺失候选直接
+  `continue`，而 `envFileCandidates()` 在显式设置时**只返回这一项** ⇒ 整个 `.env` 被跳过、无任何信号。
+  与 `config.go` 自述口径直接矛盾（「静默回退默认值会让运维误以为配置已生效 → 改为拒绝启动」）。
+  实际危害：写在该文件里的 `S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` / `S3C_TRUSTED_PROXIES` /
+  `S3C_CSP_CONNECT_SRC` **静默失效**；`S3C_DATA_DIR` 更会静默丢失 → 启动后账号列表「凭空清空」
+  （原数据没坏，极易引发重复建号）。
+  **修法**：`loadDotEnvFile` / `loadDotEnv` 返回 error；**仅在显式路径**下 `Stat` 失败或 `ReadFile`
+  失败一律返回新哨兵 `ErrInvalidEnvFile`，经既有 `Config.envErr` → `Validate` **首查**上抛使启动失败。
+  **未显式指定时行为完全不变**（缺 `.env` 是零配置可启动的常态）。
+  **红灯**：`Validate() = <nil>, want ErrInvalidEnvFile`——两条用例，一条路径不存在、一条路径存在但
+  读不到（用**目录**触发 `EISDIR`，不依赖 `chmod 000`：容器里 root 会绕过权限位）。
+- **`S3C_SHUTDOWN_TIMEOUT` 无上界 ⇒ 优雅关停被静默清零**：`envOrInt` 只校验 `>=1`，而 `main.go` 用
+  `time.Duration(n) * time.Second` 换算，`n > MaxInt64/1e9`（≈92.2 亿）会**溢出成负时长** →
+  `context.WithTimeout` 立即过期 → `srv.Shutdown` 秒回、错误被 `_ =` 丢弃、**退出码仍 0**，日志只有
+  `shutting down…` / `shutdown complete`，在途大文件流式传输被硬切断却无从察觉
+  （代码注释「ctx 超时在生产不可达」也随之失真）。
+  **修法**：`Validate` 加上界 `maxShutdownTimeoutSec = 3600`，超界复用既有 `ErrInvalidEnvValue`
+  拒绝启动（与数值校验同一条错误链）。
+  **红灯**：`Validate(shutdown=9999999999) = <nil>, want ErrInvalidEnvValue`。
+- **预建 `0755` 数据目录永不收紧，与威胁模型声明不符**：`os.MkdirAll(dir, 0o700)` 的 mode **只在新建时
+  生效**（umask 只减位不补位），Docker volume / systemd `StateDirectory` 预建的 `0755` 此后永远保持，
+  而 `threat-model.md` 边界 A 明写「数据目录 0700 + 文件 0600」；文件侧早有 `chmodSQLitePerms` 主动收紧到
+  `0600` 的先例，目录侧没有。
+  **修法**：新增 `store.ensureDataDirPerm`，在 `store.Open` 与 `store.AcquireDataDirLock` 建目录后各调一次，
+  **尽力而为**、Chmod 失败一律忽略（对齐 `chmodSQLitePerms` 的「只读挂载 / 非本进程属主不影响开库拿锁」口径）。
+  **红灯**：`Open 后 data dir perm = 0755, want 0700` 与 `AcquireDataDirLock 后 … = 0755, want 0700`。
+- **既有用例不动**：`TestFromEnvExplicitEnvFileMissingUsesDefaults` 仍然成立（取值层面确实回落默认值），
+  只补注释指向新的 fail-closed 用例——启动层面失败与取值回落是两件事。
+- **文档同 commit 同步**：[`README.md`](README.md) 的 `S3C_ENV_FILE` / `S3C_SHUTDOWN_TIMEOUT` 两行与
+  `.env` 查找顺序说明、`apps/server/.env.example` 两处注释、[`docs/architecture.md`](docs/architecture.md)
+  环境变量段、[`docs/deployment.md`](docs/deployment.md) SIGTERM 段、
+  [`docs/threat-model.md`](docs/threat-model.md) 边界 A（注明「启动时主动 chmod 收紧」）；台账
+  [`docs/features.md`](docs/features.md) 新增 **§AG**、§AD 待处置表移出该行（10 → **7**，TOC 加 AG）；
+  [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64** 改「已闭环 12 条 / 余 7 条」；本条记录。
+- **覆盖率口径修正（流程）**：零覆盖块必须用**默认空白分隔**的 `awk 'NR>1 && $NF+0==0'` 判断；
+  用 `-F,` 会取到 `line.col` 字段而**永远数出 0**（形同虚设的空信号）。另注意 `go test` 打印的
+  `100.0%` 只保留 1 位小数，几千条语句漏 1 条仍显示 100.0%，**零覆盖块检查才是权威信号**。
+- **门禁复跑（全绿）**：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
+  `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0%
+  statements** 且**零未覆盖块**（正确口径复核）；前端本轮未改，`pnpm lint` 0 告警 /
+  `pnpm test` **72 文件 1114 例** / `pnpm build` OK。
+
 ### 修复（2026-09-28 前端四条：sticky error 两处 / `DestDialog` 并发重复提交 / `signing` 死状态——#64 前端 4 条先红后绿）
 
 > `KNOWN_ISSUES #64`「待处置」表前端第一行的 4 条，**逐条亲自读码复核**后修复，每条都先写失败测试。

@@ -7,6 +7,17 @@ import (
 	"strings"
 )
 
+// ensureDataDirPerm 把数据目录收紧为 0700，兑现 threat-model.md 边界 A「数据目录 0700
+// + 文件 0600」的声明。
+//
+// os.MkdirAll 的 mode 只在**新建**时生效：Docker volume / systemd StateDirectory 预先
+// 创建的目录多为 0755，此后永远保持 0755（umask 只会减位，不会补位）。文件侧已有
+// chmodSQLitePerms 主动收紧到 0600 的先例，目录侧同样按「尽力而为的加固」处理：
+// 只读挂载、目录非本进程属主等 Chmod 失败一律忽略，不影响建目录 / 拿锁。
+func ensureDataDirPerm(dir string) {
+	_ = os.Chmod(dir, 0o700)
+}
+
 // Open 按 driver 打开账号存储。
 //   - json（默认）：明文 accounts.json（0600）；S3C_STORE_KEY 非空时 S3C3 加密
 //   - sqlite：SQLite accounts.db（纯 Go modernc driver）；storeKey 非空时 secret_key 列加密
@@ -19,6 +30,7 @@ func Open(dataDir, driver, storeKey string) (AccountStore, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create data dir: %w", err)
 	}
+	ensureDataDirPerm(dataDir)
 	switch strings.ToLower(strings.TrimSpace(driver)) {
 	case "sqlite":
 		return openSQLite(filepath.Join(dataDir, "accounts.db"), storeKey)

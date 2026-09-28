@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -63,11 +64,47 @@ func TestFromEnvHonorsExplicitEnvFile(t *testing.T) {
 
 // TestFromEnvExplicitEnvFileMissingUsesDefaults 显式路径不存在时不静默回退到 CWD .env，
 // 而是退回内置默认值（显式配置就是唯一来源，避免加载到非预期的文件）。
+// 取值层面确实回落默认值；但**启动层面必须失败**——见
+// TestFromEnvExplicitEnvFileMissingFailsClosed（Validate 报 ErrInvalidEnvFile）。
 func TestFromEnvExplicitEnvFileMissingUsesDefaults(t *testing.T) {
 	unsetEnv(t, "S3C_LOG_LEVEL")
 	t.Setenv("S3C_ENV_FILE", filepath.Join(t.TempDir(), "definitely-missing.env"))
 	if got := FromEnv().LogLevel; got != "info" {
 		t.Fatalf("LogLevel = %q, want info", got)
+	}
+}
+
+// TestFromEnvExplicitEnvFileMissingFailsClosed 显式 S3C_ENV_FILE 是运维的**显式选择**：
+// 文件缺失 / 不可读必须 fail-closed。静默回退默认值会让写在该文件里的加固项
+// （S3C_TOKEN、S3C_SSRF_DENY_PRIVATE、S3C_TRUSTED_PROXIES、S3C_CSP_CONNECT_SRC…）
+// 静默失效，或让 S3C_DATA_DIR 静默丢失——启动后账号列表「凭空清空」（原数据其实没坏，
+// 极易引发重复建号）。这与 config.go 的既定口径矛盾：「静默回退默认值会让运维误以为
+// 配置已生效 → 改为拒绝启动」。未显式设置 S3C_ENV_FILE 时行为不变（缺 .env 是
+// 零配置可启动的常态）。
+func TestFromEnvExplicitEnvFileMissingFailsClosed(t *testing.T) {
+	unsetEnv(t, "S3C_LOG_LEVEL")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	t.Setenv("S3C_ENV_FILE", filepath.Join(t.TempDir(), "definitely-missing.env"))
+	cfg := FromEnv()
+	if err := cfg.Validate(); !errors.Is(err, ErrInvalidEnvFile) {
+		t.Fatalf("Validate() = %v, want ErrInvalidEnvFile（显式 env 文件不可读必须拒绝启动）", err)
+	}
+}
+
+// TestFromEnvExplicitEnvFileUnreadableFailsClosed 路径存在但读不出来（此处用目录触发
+// EISDIR：不能依赖 chmod 000，容器里 root 会绕过权限位）同样必须拒绝启动——
+// 「能 Stat 到」不等于「能读到」。
+func TestFromEnvExplicitEnvFileUnreadableFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	asDir := filepath.Join(dir, "looks-like.env")
+	if err := os.Mkdir(asDir, 0o500); err != nil {
+		t.Fatalf("mkdir stand-in: %v", err)
+	}
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	t.Setenv("S3C_ENV_FILE", asDir)
+	cfg := FromEnv()
+	if err := cfg.Validate(); !errors.Is(err, ErrInvalidEnvFile) {
+		t.Fatalf("Validate() = %v, want ErrInvalidEnvFile（能 Stat 到但读不到必须拒绝启动）", err)
 	}
 }
 
