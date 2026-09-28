@@ -2,11 +2,11 @@
 
 > **处置状态(2026-09-24 收口)**:2 Critical + 20 Required(后端 15 + 前端 5)**全部修复**;
 > Nit(正文两段共 **35 项**:后端 18 + 前端 17)——**31 项 ✅ 已修复**、**2 项 ⚠️ 转登记开放技术债 ⬜**
-> (`SameEndpoint useSSL` → [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#61**;batch 删除编排下沉 → **#62**,
+> (`SameEndpoint useSSL` → [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **#61**;batch 删除编排下沉 → **#62**,
 > **本轮未完成**)、**1 项 ⚠️ 转登记已决策 ➖**(stream_copy 640GB 上限 → **#63**)、**1 项 ℹ️ 复核后判定不成立**
 > (App.vue 双 `JSON.parse`)。逐条状态见正文各级标题的 ✅ / ⚠️ / ℹ️ 标记与本报告
-> 「Nit」节末尾的**处置明细**表;证据台账见 [`features.md`](features.md) **§AA**,
-> 逐项改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目。
+> 「Nit」节末尾的**处置明细**表;证据台账见 [`features.md`](../features.md) **§AA**,
+> 逐项改动见 [`CHANGELOG.md`](../../CHANGELOG.md) `[Unreleased]` 同日条目。
 >
 > 复测(全绿):后端 `gofmt` 干净 / `go vet` 0 告警 / `go test` **9/9 包**(`go list ./...` 9 个包,**每包 100.0% statements**,
 > 含 R11 新建的 `internal/atomicfile`) / `go build` 干净 /
@@ -15,15 +15,15 @@
 > 真实 E2E 两项实跑——`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` **4/4 PASS**、
 > `make e2e-real` **3 passed**(后端 `S3C_TOKEN` 开启的生产同构形态,即 C1 要求的验收实跑)。
 >
-> 标记含义:**✅ 已修复** · **⚠️ 未按原样修复——转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)(#61 / #62 开放 ⬜,#63 已决策 ➖)** · **ℹ️ 复核后判定非问题,不改**。
-> 未完成项不静默略过:一律在 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 留条目(本轮 #61 / #62 保持开放,可回溯、可排期)。
+> 标记含义:**✅ 已修复** · **⚠️ 未按原样修复——转登记 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)(#61 / #62 开放 ⬜,#63 已决策 ➖)** · **ℹ️ 复核后判定非问题,不改**。
+> 未完成项不静默略过:一律在 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 留条目(本轮 #61 / #62 保持开放,可回溯、可排期)。
 > 下方「门禁基线」与正文 file:line 为**审查时点快照**,按仓内「不追溯篡改」纪律保留原样。
 >
 > **后续状态更新（2026-09-28）**：本报告转登记的 **#61 / #62 已闭环**——`SameEndpoint` 精确判定纳入 `useSSL`
 > （6 参签名 + `(*s3wrap.Client).UseSSL()`）、批量删除编排下沉 `service`（新增 `internal/service/delete.go`，
 > `handler/objects.go` 538 → 432 行）；**#63 证据补齐**（新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住 64MB 分段），
-> 决策仍为 ➖ 维持现状。三项收口见 [`features.md`](features.md) **§AB** 与 [`CHANGELOG.md`](../CHANGELOG.md)
-> `[Unreleased]` 同日条目；[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §二 现只剩 #63。上文「开放 ⬜」等措辞为
+> 决策仍为 ➖ 维持现状。三项收口见 [`features.md`](../features.md) **§AB** 与 [`CHANGELOG.md`](../../CHANGELOG.md)
+> `[Unreleased]` 同日条目；[`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) §二 现只剩 #63。上文「开放 ⬜」等措辞为
 > **2026-09-24 时点快照**，按「不追溯篡改」纪律保留原样。
 
 > 范围:全仓**代码**(apps/server Go 后端 / apps/web Vue3 前端 / apps/desktop Tauri 壳),不含文档评审。
@@ -149,7 +149,7 @@
 | # | 项 | 处置 | 实现与证据 |
 |---|----|------|------------|
 | B1 | `ssrf.go:48` `%!w(<nil>)` 污染错误串 | ✅ | 无主机名分支改 `fmt.Errorf("invalid endpoint URL: %q (missing host)", endpoint)`,与「解析失败」的 `%w` 分支分开 |
-| B2 | `RequestTimeout` 两表分类不一致 | ✅ | `s3wrap/errors.go` 两处 `case` 统一含 `RequestTimeout`;[errors.md](errors.md) 同步 |
+| B2 | `RequestTimeout` 两表分类不一致 | ✅ | `s3wrap/errors.go` 两处 `case` 统一含 `RequestTimeout`;[errors.md](../errors.md) 同步 |
 | B3 | `IsEntityTooLarge` 冗余文案匹配 | ✅ | 改「只做结构化判定」(应用层 sentinel / S3 结构化错误码),删字符串包含判断 |
 | B4 | sqlite WAL / `-shm` 侧车 0644 | ✅ | 建库后侧车文件 chmod `0600`,与主库文件一致 |
 | B5 | DSN 无 `busy_timeout` | ✅ | DSN 补 `busy_timeout(5000)`,避免写锁竞争下立即 `database is locked` |
@@ -159,13 +159,13 @@
 | B9 | migrate 系列把 store 故障误报 404 | ✅ | 仅 `errors.Is(err, store.ErrNotFound)` → 404,其余 500 |
 | B10 | `getBucketInfo` 串行 3 次上游调用 | ✅ | 桶不存在即短路返回空属性;不再 `ListBuckets` 拉全量;versioning / 标签并行取 |
 | B11 | `copyMany` `DeleteSource` 分支响应形状漂移 | ✅ | 移动与纯复制共用 `copyBatchJSON`,`truncated` 恒写 `false` 并注释 openapi 契约要求 |
-| B12 | sync `etag` 模式对 multipart 对象永不收敛 | ✅ | `service/sync.go` 新增 `isMultipartETag` 判定,分段 ETag 回退 size 比对;[sync_multipart_etag_test.go](../apps/server/internal/service/sync_multipart_etag_test.go) |
-| B13 | `SameEndpoint` 硬编码 `useSSL=false` | ⚠️ **#61** | 精确判定需改 `SameEndpoint` 跨包签名与全部调用点;现有归一化对称(裸端点恒按 http 互比)且失败方向偏安全。口径说明写入 `service/migrate.go` 注释 + 钉死用例,登记 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) #61(开放 ⬜) |
-| B14 | `stream_copy` 固定 64MB × 10000 = 640GB 上限 | ⚠️ **#63** | 10000 段是 S3 协议上限,放大分段缓冲会突破 512MB 容器预算——**刻意取舍,维持现状**。已写入 `service/stream_copy.go` 注释(段号在**上传前**判,不误杀第 10000 段的合法对象)+ 测试钉住默认值;登记 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) #63(已决策 ➖) |
-| B15 | `LastError` 名不副实(实为首个错误) | ✅ | 全量改名 `FirstError`(job 结果 / SSE 帧 / 持久化字段 / 调用点),[objects.go](../apps/server/internal/handler/objects.go) `deletePrefixAsync` 同步 |
+| B12 | sync `etag` 模式对 multipart 对象永不收敛 | ✅ | `service/sync.go` 新增 `isMultipartETag` 判定,分段 ETag 回退 size 比对;[sync_multipart_etag_test.go](../../apps/server/internal/service/sync_multipart_etag_test.go) |
+| B13 | `SameEndpoint` 硬编码 `useSSL=false` | ⚠️ **#61** | 精确判定需改 `SameEndpoint` 跨包签名与全部调用点;现有归一化对称(裸端点恒按 http 互比)且失败方向偏安全。口径说明写入 `service/migrate.go` 注释 + 钉死用例,登记 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) #61(开放 ⬜) |
+| B14 | `stream_copy` 固定 64MB × 10000 = 640GB 上限 | ⚠️ **#63** | 10000 段是 S3 协议上限,放大分段缓冲会突破 512MB 容器预算——**刻意取舍,维持现状**。已写入 `service/stream_copy.go` 注释(段号在**上传前**判,不误杀第 10000 段的合法对象)+ 测试钉住默认值;登记 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) #63(已决策 ➖) |
+| B15 | `LastError` 名不副实(实为首个错误) | ✅ | 全量改名 `FirstError`(job 结果 / SSE 帧 / 持久化字段 / 调用点),[objects.go](../../apps/server/internal/handler/objects.go) `deletePrefixAsync` 同步 |
 | B16 | XFF 之外的 `connect-src` 字面量两处维护 | ✅ | `handler/middleware.go` 抽 `defaultCSPConnectSrc` 为唯一字面量来源,`SetCSPConnectSrc` 空值时共用 |
 | B17 | `EnumStr` 冗余 `string()` 转换 | ✅ | 全部调用点改传字符串字面量,`EnumStr(string(...))` 全仓 0 处 |
-| B18 | batch 删除编排留在 handler(同类均在 service) | ⚠️ **#62(本轮未完成)** | `handler/objects.go` 的 `deleteObjects` / `deletePrefix` / `deletePrefixAsync`(含 `deleteCounts` 计数)与 `handler/copy.go:177` `copyKeysThenDelete` 仍在 handler;`service` 侧只有 `RunBatch` / `CopyKeys`,**无对应的删除编排**。下沉需把响应形状(`deleteCounts` / `deletePrefixResult`)抽离 `http.ResponseWriter` 并重排测试,属可独立成 PR 的纯重构——本轮未做,登记 [KNOWN_ISSUES.md](KNOWN_ISSUES.md) #62(开放 ⬜) |
+| B18 | batch 删除编排留在 handler(同类均在 service) | ⚠️ **#62(本轮未完成)** | `handler/objects.go` 的 `deleteObjects` / `deletePrefix` / `deletePrefixAsync`(含 `deleteCounts` 计数)与 `handler/copy.go:177` `copyKeysThenDelete` 仍在 handler;`service` 侧只有 `RunBatch` / `CopyKeys`,**无对应的删除编排**。下沉需把响应形状(`deleteCounts` / `deletePrefixResult`)抽离 `http.ResponseWriter` 并重排测试,属可独立成 PR 的纯重构——本轮未做,登记 [KNOWN_ISSUES.md](../KNOWN_ISSUES.md) #62(开放 ⬜) |
 
 **前端(17)**
 
@@ -182,7 +182,7 @@
 | F9 | 0 字节无 MIME 文件被当目录占位丢弃 | ✅ | 0 字节文件放行 |
 | F10 | `validateDoc` 硬编码中文错误串破坏 i18n | ✅ | 改 i18n key,随界面语言切换 |
 | F11 | 7 处可删除行 `v-for` 用 index 作 key | ✅ | 改稳定行键 + 7 个组件「删除中间行保留原 DOM 节点」测试(改回 `:key="i"` 即 **6 红**,验证门禁有效) |
-| F12 | 账号回退初始化逻辑逐字复制 | ✅ | 提取 `composables/useAccountSelect.ts` `resolveAccountSelect()`,`App.vue` / `BucketsPanel` / `RecycleBinPanel` 三处改用;[useAccountSelect.test.ts](../apps/web/src/composables/useAccountSelect.test.ts) 17 例 |
+| F12 | 账号回退初始化逻辑逐字复制 | ✅ | 提取 `composables/useAccountSelect.ts` `resolveAccountSelect()`,`App.vue` / `BucketsPanel` / `RecycleBinPanel` 三处改用;[useAccountSelect.test.ts](../../apps/web/src/composables/useAccountSelect.test.ts) 17 例 |
 | F13 | `RecycleBinPanel` / `VersionsDialog` 大表无虚拟滚动 | ✅ | 复用 `virtualList.ts`。**行高沿用 `ROW_HEIGHT=42`**(按钮行实测 50px,滚动条略短 ~19%,与 `ObjectList` 既有行为一致)——已知取舍,不改常量以免重排既有组件 |
 | F14 | `selectedSize` computed O(n) 全表扫 | ✅ | 增量化(选中 / 取消时增减) |
 | F15 | `t` 局部变量遮蔽 i18n `t` | ✅ | 局部变量改名 |
@@ -196,7 +196,7 @@
 ## 修复优先级建议
 
 > **执行状态(2026-09-24 收口)**:下列 6 档**已全部按序执行完毕**——2 Critical + 20 Required 全量闭环;
-> Nit 31/35 闭环,余下 4 项中 **3 项转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**(#61 / #62 / #63)、
+> Nit 31/35 闭环,余下 4 项中 **3 项转登记 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)**(#61 / #62 / #63)、
 > **1 项复核后判定不成立**,逐项见「处置明细」。
 
 1. **C2**(一行删除,鉴权绕过)+ **C1**(核心功能损坏,需 blob fetch 重构)

@@ -6,6 +6,33 @@
 
 ## [Unreleased]
 
+### 变更（2026-09-28 文档归档：`code-review-2026-09-24.md` 与 `code-review-summary.md` 冻结入 `docs/archive/`）
+
+- 按 [`docs/archive/index.md`](docs/archive/index.md) 的 4 步规程 `git mv` 归档两份**时点性审查文档**
+  （保留重命名历史，不复制、不删了重加）：
+  - [`docs/code-review-2026-09-24.md`](docs/archive/code-review-2026-09-24.md) → `docs/archive/`：
+    2026-09-24 全仓代码审查，2 Critical + 20 Required 全清、Nit 31/35 闭环；转登记的 #61/#62
+    已于 2026-09-28 闭环，**再无未了结的发现**，只余 #63（已决策 ➖）。
+  - [`docs/code-review-summary.md`](docs/archive/code-review-summary.md) → `docs/archive/`：
+    审查总结与改进建议，正文数字全是**审查时点值**（「1042 用例 / 66 文件」），且其头部本就标注
+    「**归档前收口**」——本次把这一步做完。
+- **归档前先做成干净状态**：其「⚠️ 待解决的技术问题」里已闭环的第 2 条（**CORS 配置**）与第 3 条
+  （**单文件超限**）**直接移除**——那是在办事项清单、不是时点快照，留着已解决项只会误导；
+  现只剩第 1 条 #25（外部凭证）。移除理由写在清单下方引注里。
+- **链接修正（不悬空）**：移动后两份文件的出链按归档约定加 `../`（`docs/*.md`）/ `../../`（根目录）
+  前缀、`archive/` 前缀就地化；全仓 **10 个文件**的入链与源码注释同步改指 `docs/archive/…`
+  （含 **8 个 Go 测试文件**注释里的 `docs/code-review-2026-09-24.md`）。
+  **自检：26 个 md 悬空链接 0 处、源码 `docs/*.md` 路径 0 处悬空、旧路径 0 处残留。**
+- [`docs/archive/index.md`](docs/archive/index.md) 归档清单 **2 → 4 份**（含各自的原路径 /
+  归档日期 / 冻结的结论）。
+- **顺带同步两处「当前态」门禁基线的过期计数**（此前停在 #60 拆分当时的时点值，而这是**当前事实**
+  表、不是历史快照）：[`docs/roadmap.md`](docs/roadmap.md) §四 前端测试 **1110 → 1126 例**、
+  前端覆盖率 **4255/2908/1124/3653 → 4294/2934/1130/3677**；[`docs/features.md`](docs/features.md) §三
+  同两行同步，并注明 1110 → 1126 系 §AF / §AI 修复新增 16 条红灯用例。
+- **`docs/KNOWN_ISSUES.md` #64 收敛**：从「19 条复审处置清单」缩为它**唯一未闭环的那 1 条**
+  （`store.Open` json 分支丢 `storeKey`，Nit 实测后挂起）——已闭环的 18 条属
+  [`docs/features.md`](docs/features.md) §AD–§AI 的台账，不该继续占着「问题唯一来源」的位置。
+
 ### 修复（2026-09-28 前端另四条：版本列举代次守卫 / 追加重置滚动 / `loadingAll` 提前可点 / 桶列举共用标志——#64 4 条先红后绿）
 
 > `KNOWN_ISSUES #64`「待处置」表前端第二行的 4 条，**逐条亲自读码复核**后修复。至此 #64 的 19 条
@@ -276,17 +303,17 @@
 - **S7 / P0-4（SSE 终态检测分叉）**：已收敛为单一实现 `apps/web/src/api/jobs.ts` 的 `subscribeMigrateEvents`（EOF 后轮询回读直到终态 + 合成终态事件 + 心跳空闲超时 + 连续回读失败快速 `onError`），`MigratePanel` / `DestDialog` / `useObjectActions` 三调用方共用；实跑 `pnpm test src/api.transfer.test.ts src/api.gaps.test.ts` **64 例全绿**。§7 保留的规则是「新增异步任务消费方只调 `subscribeMigrateEvents`，不得自己开 SSE 流 / 判终态 / 加超时」。
 - **D5（endpoint 归一化多份实现）**：已收敛为单一 helper `s3wrap.NormalizeEndpoint`，建 client（`s3wrap/client.go`）/ 预签名（`s3wrap/presign.go`）/ SSRF 拨号校验（`s3wrap/ssrf.go`）/ 同端判定（`service/migrate.go`）四处共用；实跑 `go test ./internal/s3wrap/ -run TestNormalizeEndpoint` → `TestNormalizeEndpoint` 与 `TestNormalizeEndpointNeverDoubleScheme` **PASS**。§7 保留的规则是「改端点逻辑一律走 `NormalizeEndpoint`，不要在调用点重写补全 / 去尾斜杠 / scheme 判断」。
 - **顺带修正两处未跟上的「最后更新」**：[`docs/features.md`](docs/features.md) 与 [`docs/roadmap.md`](docs/roadmap.md) 的头部日期停在 2026-09-24，而 §AB 台账与 §四 门禁基线已于 2026-09-28 改写，一并推到 2026-09-28。
-- **[`docs/code-review-summary.md`](docs/code-review-summary.md) 头部「状态更新」活块追加 ⑥**（该块的既定用法就是「正文时点值不回写、只在头部追加后续事实」）：记 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，`go list ./...` **9 包**、41410 行）、§7 双源消除；并把正文「⚠️ 待解决的技术问题」里第 2 条 **CORS**（`corsAllowedOrigin` 显式白名单 + `isTrustedDefaultOrigin` 已放行 tauri 自定义协议 + CSRF 双防）与第 3 条 **单文件超限**（Go 侧由 ② 拆完、前端侧本轮拆完）标为**已在块内追平**——两条正文条目本身按快照纪律保留。
+- **[`docs/archive/code-review-summary.md`](docs/archive/code-review-summary.md) 头部「状态更新」活块追加 ⑥**（该块的既定用法就是「正文时点值不回写、只在头部追加后续事实」）：记 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，`go list ./...` **9 包**、41410 行）、§7 双源消除；并把正文「⚠️ 待解决的技术问题」里第 2 条 **CORS**（`corsAllowedOrigin` 显式白名单 + `isTrustedDefaultOrigin` 已放行 tauri 自定义协议 + CSRF 双防）与第 3 条 **单文件超限**（Go 侧由 ② 拆完、前端侧本轮拆完）标为**已在块内追平**——两条正文条目本身按快照纪律保留。
 - **门禁复跑（只改 `docs/`，零回归）**：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0% statements**（含 `doc_number_gate_test.go` 文档数字门禁）/ `golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** / `pnpm build` OK。
 
-### 修复（2026-09-24 全仓代码审查 [`docs/code-review-2026-09-24.md`](docs/code-review-2026-09-24.md)：2 Critical + 20 Required 全清，Nit 31/35 闭环 + 3 项转登记 + 1 项判定不成立）
+### 修复（2026-09-24 全仓代码审查 [`docs/archive/code-review-2026-09-24.md`](docs/archive/code-review-2026-09-24.md)：2 Critical + 20 Required 全清，Nit 31/35 闭环 + 3 项转登记 + 1 项判定不成立）
 - **2 Critical**：**C1** 前端代理 URL 不带凭证——`S3C_TOKEN` 开启的部署下预览 / 下载全部 401（且 401 的错误 JSON 被当文件静默存盘）。`proxy.ts` 改带 `Authorization` 的 `fetch` → blob → objectURL（`downloadProxyObject`），**未**走「豁免 proxy 鉴权」的捷径；`scripts/e2e-real.sh` 注入 `S3C_TOKEN`、`e2e-real/real-backend.spec.ts` 全部 `/api` 调用带 Bearer，`make e2e-real` 在该形态下实跑 **3 passed** 即验收。**C2** `IsLoopbackAddr` 把 `:8080`（空 host）判为回环 → 非回环强制鉴权被绕过；删 `config.go` 的 `|| host == ""`，`main_test.go` 缺陷预期翻转（`:8080` → `false`）并新增「`S3C_ADDR=":8080"` 无 token 必须启动失败」用例。
 - **后端 Required R1–R20**：安全四连（XFF 取末段、`withRateLimit` 移到 `withAuth` 外层、破坏性异步操作写 202 前补审计、`StoreDriver` 归一化 + 白名单）；正确性五连（mode=text 丢 `versionId`、同步列举静默截断透出 `truncated`、`RelKey` 改用 `stripPrefix` 内核、Reap TTL 改按 `finishedAt`、`Emit` 加终态保护）；边界与持久化（同端点跨账号迁移 `AccessDenied` 也回退 `StreamCopy`、原子写 `Sync()` + rename 后 fsync 父目录并两份实现收敛为 `internal/atomicfile`、建表 / 迁移错误上抛走启动失败、`List()` 循环后检查 `rows.Err()`）；性能 / 契约 / s3wrap（`List()` 查询不解密 SecretKey、`ListenAndServe` 失败退出码非 0 + `components.responses` 可序列化 + `objectItem.ContentType` 补齐、presign 不挂 `metricsMiddleware`、`HTTPStatus` 补 `ErrPartialDelete → 409`）；死代码三件（`expvar` 两指标、`errTestPresign` / `JobRegistry.Create` / `BucketOrDefault` / `deriveKeyLegacy` 与 `envelope` V2 分支——**源码级门禁测试先红后绿** + 迁移 / 内联）；同步 `copy-objects` 挂 `withStreamLimit`。
 - **前端 Required F1–F5**：`setTokenPersistent` 迁移并清理 `s3c.token.<id>`（默认 sessionStorage，跨会话保留开关同时作用于 per-server token）；requeue 模式可取消已入批未开始条目；`MigratePanel` 虚拟列表行高回归 `ROW_HEIGHT=42`；`UploadQueue` 改 `:key="it.id"`；四个从未 emit 的 `error` 事件与零使用 props 删除 + 四组件异步提交防重复守卫（双击只发一次）。
 - **Nit 35 项（后端 18 + 前端 17）——31 项修复、3 项转登记、1 项判定不成立**，逐项见审查报告「处置明细」表：已修含 `%w` 格式化 nil、WAL/`-shm` 0600、DSN `busy_timeout(5000)`、KDF 参数上界、`envOrInt` 显式报错、migrate 仅 `ErrNotFound` → 404、`getBucketInfo` 去 `ListBuckets` 全量拉取、`copyMany` 两分支共用 `copyBatchJSON`、sync `etag` 对分段 ETag 回退 size 比对（新增 `isMultipartETag`）、`LastError → FirstError` 全量改名、CSP `connect-src` 单源化、`EnumStr` 冗余 `string()` 清零，前端 `PAGE_SIZE` 单源、abort 后 Promise settle、0 字节文件放行、`validateDoc` i18n 化、7 处可删除行改稳定行键（改回 `:key="i"` 即 6 红）、账号回退三段复制提取 `composables/useAccountSelect.ts`、`RecycleBinPanel` / `VersionsDialog` 接 `virtualList.ts`、`selectedSize` 增量化、`t` 遮蔽改名、`withDefaults` 空 no-op 与 `MigratePanel` 空 `if` 删除、五处死导出去 `export`（保留实现）+ `deadcode_gate.test.ts` 源码形态门禁（先红后绿）。**4 项未按原样修复（3 项转登记、1 项判定不成立），一律登记不静默略过**：`SameEndpoint useSSL` → [`KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#61**（技术债 ⬜）、**batch 删除编排下沉 `service` → #62（技术债 ⬜，本轮未完成**：`handler/objects.go` 删除族与 `handler/copy.go` `copyKeysThenDelete` 仍在 handler，`service` 侧只有 `RunBatch` / `CopyKeys`，已在 `deleteObjects` 注释处指路）、`stream_copy` 640GB 上限 → **#63**（已决策 ➖，S3 段号上限 × 512MB 容器内存预算的刻意取舍，注释 + 测试钉住默认值）；`App.vue` 双 `JSON.parse` 经复核**不成立**（全文 0 处），不改。
 - **门禁复测（全绿）**：后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test ./...` **9/9 包**（R11 新增 `internal/atomicfile`，故由 8 包增至 9 包；**每包 100.0% statements**） / `go build` 干净 / `golangci-lint run` **0 issues**；前端 `pnpm lint` 0 告警 / `pnpm test` **67 文件 1110 例** / `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` + `pnpm typecheck:e2e` exit 0；真实 E2E 两项——`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` **4/4 PASS**、`SERVER_PORT=18090 make e2e-real` **3 passed**（本机 8080 被系统 `haproxy` 占用，改端口重跑；后端 `S3C_TOKEN` 开启的生产同构形态）。
 - **测试纪律**：全部按 TDD——先写会失败的测试再改实现，断言外部可见行为（返回值 / HTTP 状态码 / 渲染结果 / DOM 保留）；被旧测试固化的缺陷行为按审查结论**改预期**。新增测试文件 `internal/handler/review_20260924_test.go`、`internal/service/{review_20260924,job_finish_reap,sync_truncated,sync_multipart_etag,export}_test.go`、`internal/model/review_20260924_test.go`、`internal/store/review_20260924_test.go`、`internal/atomicfile/`、`apps/web/src/composables/useAccountSelect.test.ts`，前端 +67 例（1043 → 1110）。
-- **文档同 commit 同步**：审查报告 [`docs/code-review-2026-09-24.md`](docs/code-review-2026-09-24.md)（含处置状态块、逐条 ✅ / ⚠️ / ℹ️、**处置明细 35 行**、修复优先级建议执行标注）+ 台账 [`docs/features.md`](docs/features.md) §AA + [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 新增 #62 / #63 与编号台账两行 + [`docs/api.md`](docs/api.md) / [`docs/errors.md`](docs/errors.md)（`ErrPartialDelete → 409`、`RequestTimeout` 分类一致）+ [`docs/roadmap.md`](docs/roadmap.md) §四 门禁基线 + [`docs/code-review-summary.md`](docs/code-review-summary.md) 头部追加 ⑤ 条 + 本条记录。
+- **文档同 commit 同步**：审查报告 [`docs/archive/code-review-2026-09-24.md`](docs/archive/code-review-2026-09-24.md)（含处置状态块、逐条 ✅ / ⚠️ / ℹ️、**处置明细 35 行**、修复优先级建议执行标注）+ 台账 [`docs/features.md`](docs/features.md) §AA + [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 新增 #62 / #63 与编号台账两行 + [`docs/api.md`](docs/api.md) / [`docs/errors.md`](docs/errors.md)（`ErrPartialDelete → 409`、`RequestTimeout` 分类一致）+ [`docs/roadmap.md`](docs/roadmap.md) §四 门禁基线 + [`docs/archive/code-review-summary.md`](docs/archive/code-review-summary.md) 头部追加 ⑤ 条 + 本条记录。
 
 ### 变更（2026-09-24 待办来源拆分：`docs/todolist.md` → `docs/KNOWN_ISSUES.md`，功能候选归位 `roadmap`）
 - **重命名 `docs/todolist.md` → `docs/KNOWN_ISSUES.md`（`git mv`，保留重命名历史）**：文件语义从「待办清单」收敛为「**已知问题**」——只收**缺陷 / 外部阻塞 / 技术债**。
@@ -294,7 +321,7 @@
 - **#47–#59 迁出至 `docs/roadmap.md` §三 3.2**：这 13 条是 ROADMAP 派生的**功能候选（非问题）**，唯一来源回归 roadmap 本身；该表「对应」列改名「原编号」并标注**已停用**（仅作历史映射），roadmap 文件头、§一结论、§三 3.2 前言同步改写。
 - **SSOT 条款改写为「两源分工」**：`AGENTS.md` 文档入口表（一行 → 问题 / 方向两行）、`docs/development.md` §4「文档同步门禁」对照表、`docs/roadmap.md` §六 第 1 条（「单一来源」→「两源分工」，明确问题记 `KNOWN_ISSUES.md`、方向留 roadmap，同一事项只在一处登记）。
 - **文档命名规则登记例外**：`KNOWN_ISSUES.md` 计入大写文件名**白名单**——`AGENTS.md` 与 `docs/development.md` 命名约定两处同步（此前规则为「仓库内不存在白名单之外的大写文件名」，2026-09-17 曾把 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` 全部小写化）。理由：沿用社区通用名，便于外部工具与贡献者按字面检索；并补「新增例外必须同 PR 同时改这两处」，避免白名单分叉。
-- **全仓引用收敛（51 个跟踪文件 / 128 处）**：带路径链接 29 处、裸编号引用 41 处、历史叙述 21 处。源码 / 脚本 / 配置注释（Go / Vue / TS / GitHub Actions / GitLab CI / `Makefile` / compose / nginx 示例配置）里 `todolist #N` → `KNOWN_ISSUES #N`；`README.md`、`docs/features.md`、`docs/threat-model.md`、`docs/errors.md`、`docs/code-review-summary.md`、`.github/CONTRIBUTING.md` 与归档索引按新名改写。`docs/features.md` 的历史台账条目加「（时名 `todolist.md`）」限定，避免读者以为当时就叫新名。
+- **全仓引用收敛（51 个跟踪文件 / 128 处）**：带路径链接 29 处、裸编号引用 41 处、历史叙述 21 处。源码 / 脚本 / 配置注释（Go / Vue / TS / GitHub Actions / GitLab CI / `Makefile` / compose / nginx 示例配置）里 `todolist #N` → `KNOWN_ISSUES #N`；`README.md`、`docs/features.md`、`docs/threat-model.md`、`docs/errors.md`、`docs/archive/code-review-summary.md`、`.github/CONTRIBUTING.md` 与归档索引按新名改写。`docs/features.md` 的历史台账条目加「（时名 `todolist.md`）」限定，避免读者以为当时就叫新名。
 - **豁免与死链处理**：`CHANGELOG.md` 历史条目与 `docs/archive/` 冻结正文的**时点叙述不改写**（沿用仓内「快照不回写」纪律），仅把 CHANGELOG 两条历史条目的 markdown 链接**目标**改指新文件（标签保留当时文件名）以免死链；全仓 markdown 死链自检 0 条。
 - **门禁影响已确认**：无门禁枚举 `docs/` 目录或硬编码 `todolist.md`——`apps/server/doc_number_gate_test.go` 只登记 `README.md` / `docs/api.md` / `docs/roadmap.md` / `docs/features.md` 四个文件的数字声明，`repo_infra_gate_test.go` 与 `review_20260924_test.go` 的目录扫描范围是源码目录；故本次重命名不触达任何机械门禁。
 
@@ -310,9 +337,9 @@
 - **文档同 commit 同步**：`docs/roadmap.md` §三 #3 行移出（编号不重排、#3 留空号并在 3.2 注中说明；证据指针入 `docs/features.md` §Z）+ §四 基线日期 2026-09-24 与前端数字实测更新 + R2 守卫注补两半口径；`docs/development.md` §3 门禁落点补生产导出符号与前端落点；`docs/architecture.md` §3 提法扩为两半。
 
 ### 新增（2026-09-24 仓根 `.editorconfig`：补报告「开发工具·IDE 集成」缺口）
-- **新增 [`.editorconfig`](.editorconfig)**：`docs/code-review-summary.md` 改进建议里唯一非桌面、可立即落地的缺口（代码质量工具 golangci-lint/staticcheck/eslint/vue-tsc 本已齐备）。只声明**已被现有工具链强制**的规则——Go / Makefile = tab（gofmt / make 强制）、TS / Vue / YAML / JSON / shell = 2 空格、Rust = 4 空格（rustfmt 默认）、统一 UTF-8 / LF / 末行换行；`*.md` 关闭行尾空格裁剪（3 份文档依赖两空格硬换行，含本报告自身）。**不新增 CI 门禁**、只影响编辑器内即时行为，与 `gofmt` / `rustfmt` 无冲突。[`docs/development.md`](docs/development.md) §3 同步登记（文档与代码同 commit）。
+- **新增 [`.editorconfig`](.editorconfig)**：`docs/archive/code-review-summary.md` 改进建议里唯一非桌面、可立即落地的缺口（代码质量工具 golangci-lint/staticcheck/eslint/vue-tsc 本已齐备）。只声明**已被现有工具链强制**的规则——Go / Makefile = tab（gofmt / make 强制）、TS / Vue / YAML / JSON / shell = 2 空格、Rust = 4 空格（rustfmt 默认）、统一 UTF-8 / LF / 末行换行；`*.md` 关闭行尾空格裁剪（3 份文档依赖两空格硬换行，含本报告自身）。**不新增 CI 门禁**、只影响编辑器内即时行为，与 `gofmt` / `rustfmt` 无冲突。[`docs/development.md`](docs/development.md) §3 同步登记（文档与代码同 commit）。
 
-### 修复（2026-09-24 `docs/code-review-summary.md` 事实性错误 + 已完成项误列待办 + 编造指标）
+### 修复（2026-09-24 `docs/archive/code-review-summary.md` 事实性错误 + 已完成项误列待办 + 编造指标）
 - **可核实的事实错误逐项修正**：架构分层图缺 `service` / `openapi` / `config` 三包且把「对象存储」记在 `store` 名下（实际 `store` 只管账号 / 配置落盘，对象字节读写全走 `s3wrap`，依赖方向 `handler → service → s3wrap`、`handler/store → model`）；前端「Svelte + TypeScript」→ **Vue 3 + Vite**；「179 个 Go 文件 / 约 15 万行 / 25 个包」→ 实测 **184（71 生产 + 113 测试）/ 约 3.84 万行 / 8 包**；「约 120 个 TS/JS」→ **113 个 TS/JS + 37 个 `.vue` = 150**；「所有文件 <1000 行」「大部分 500-800 行」→ **168/184 <500 行，2 个测试文件超 1000**（`handler/openapi_contract_test.go` 1038、`handler/objects_test.go` 1002，触及 AGENTS.md「约 1000 行」约束）——该两项拆分**待 handler 包 15 个测试文件的在途外部改动收敛后再动**，本轮只如实记录不硬改；测试类型「四种」→ 按 `development.md` §2 口径「三类测试 + 前端构建检查」；发布日期 2026-09-02 → `v1.0.0` 实际 **2026-09-22**。
 - **已完成却列为「待解决 / 改进建议」的改判**：监控指标（`/api/metrics` 已有 54 项 `s3c_*`，默认 404 需 `S3C_EXPOSE_METRICS=1`）、安全审计（双 CI 已自动化 govulncheck + Trivy + cargo audit，非人工定期扫描）、API 文档自动生成（`/api/openapi.json` 由 9 个 `openapi_register_*.go` 运行时生成 SSOT + `api_doc_test.go` 双向门禁）、代码质量检查工具（已齐）、蓝绿部署（单实例 Compose + 桌面安装包无流量切换对象，`graceful-restart.sh` 已够，判为过度设计）、性能优化（0 个 `func Benchmark`、无已识别瓶颈，先建基准再谈）；**分布式追踪改指已立项的 `todolist` #54 / `roadmap` §三 #11，报告不另立项**。
 - **编造指标与无来源内容移除**：「成功指标」的 测试通过率≥99.9% / CI<10min / 用户满意度≥4.5/5 / 可用性≥99.99% / 安全事件≤0.5次/年 在仓内**无任何采集来源**（无 SLO、无反馈通道、无事件台账），改为「已有门禁钉住的 / 可测量但未纳入 / 需先建采集通道」三档如实标注；「未来展望」的 K8s + AI 运维 + 插件架构在 `roadmap` 无对应条目，替换为真实 §3.2 候选池 `#47`–`#59`；「行动计划」的「本周内 / 下两周 / 1个月内 / 季度级」无排期来源且与正文结论矛盾，改为只指向唯一排期来源 `todolist`；「两套 CI 完全一致」改判为门禁一致、`publish` / `release-desktop` 为 GitHub 侧有意单边。

@@ -853,7 +853,7 @@ functions 1095 / lines 3503）。
 
 ### AA. 2026-09-24 全仓代码审查处置（2 Critical + 20 Required 全清；Nit 31/35 闭环、3 项转登记、1 项判定不成立）
 
-> 来源：[`code-review-2026-09-24.md`](code-review-2026-09-24.md)（该报告即唯一条目清单，逐条状态见其正文）。
+> 来源：[`code-review-2026-09-24.md`](archive/code-review-2026-09-24.md)（该报告即唯一条目清单，逐条状态见其正文）。
 > 纪律：TDD——每项先写会失败的测试再改实现，断言外部可见行为（返回值 / HTTP 状态码 / 渲染结果）；
 > 被旧测试固化的缺陷行为按审查结论**改预期**（如 `main_test.go` 的 `:8080` 期望由 `true` 翻转为 `false`）。
 > 逐条改动与实现细节见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目。
@@ -898,7 +898,7 @@ functions 1095 / lines 3503）。
 | **H1** OpenAPI 注册表与真实 handler 字段不一致（SSOT 失真） | ✅ 已从「人工比对」变成**机械门禁**，不再是待修技术债，只剩流程规则 | `go test ./internal/handler/ -run 'TestOpenAPI\|TestAPIDoc'` 全绿：`TestOpenAPIRequestFieldsMatchHandlerDTOs`（注册表 ⇔ handler 字段全量遍历）、`TestOpenAPI_ContractRequestBodyMatchesHandlers`、`TestOpenAPIRequestDeclarationMatchesHandlerInput`、`TestAPIDocMatchesRoutes`、`TestAPIDocDocumentsRequestBodyFields`、`TestOpenAPI_EndpointResponseSchemasMatchHandlers`（连同 `openapi_path_params` / `openapi_query_params` / `openapi_semantics` / `openapi_shape` 等，共 11 个 `api_doc_test.go` + `openapi_*_test.go` 契约测试文件） |
 | **S7 / P0-4** SSE 终态检测在 MigratePanel 与 `useObjectActions` / `DestDialog` 各一份 | ✅ 已收敛为单一实现 `apps/web/src/api/jobs.ts` 的 `subscribeMigrateEvents`，三调用方共用 | `pnpm test src/api.transfer.test.ts src/api.gaps.test.ts` **64 例全绿**，含 `subscribeMigrateEvents: ping+status+Authorization+EOF-done fallback`（EOF 回读兜底 / 合成终态 / 心跳超时） |
 | **D5** endpoint 归一化多份实现（行为不一致） | ✅ 已收敛为单一 helper `s3wrap.NormalizeEndpoint`，建 client / 预签名 / SSRF 拨号校验 / 同端判定四处共用 | `go test ./internal/s3wrap/ -run TestNormalizeEndpoint` → `TestNormalizeEndpoint` 与 `TestNormalizeEndpointNeverDoubleScheme` **PASS** |
-| 文档活状态块同步 | ✅ | [`code-review-summary.md`](code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
+| 文档活状态块同步 | ✅ | [`code-review-summary.md`](archive/code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
 | 门禁 | ✅ | 只改 `docs/`，复跑 `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** —— 零回归 |
 
 ### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，另 15 条转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64
@@ -1039,8 +1039,8 @@ functions 1095 / lines 3503）。
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 72 文件 / **1110** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**） |
+| 前端 `pnpm test` | 72 文件 / **1126** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**） |
 | `vue-tsc --noEmit` / `vite build` | 干净 / OK（366.10 kB，gzip 112.50 kB，2026-09-28 实测） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |

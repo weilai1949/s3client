@@ -1,6 +1,6 @@
 package service
 
-// job_finish_reap_test.go —— docs/code-review-2026-09-24.md:
+// job_finish_reap_test.go —— docs/archive/code-review-2026-09-24.md:
 //   - R8：Reap 的 TTL 必须以「完成时间」为准——跑超 30 分钟的任务 Finish 后
 //     不得在 ≤5 分钟内被清掉（列表丢终态、轮询 404、jobs.json 记录消失）；
 //   - R9：Finish 之后迟到的 running 帧不得把已完成任务改写为非终态，

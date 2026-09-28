@@ -1,6 +1,6 @@
 package handler
 
-// review_20260924_test.go —— docs/code-review-2026-09-24.md 分派到 handler 域的
+// review_20260924_test.go —— docs/archive/code-review-2026-09-24.md 分派到 handler 域的
 // R1/R2/R3/R5/R15c/R18/R19a/R20 与 4 个 Nit（migrate 误报 404、copyMany 响应漂移、
 // CSP 字面量两处维护、getBucketInfo 串行 3 次调用）的回归测试。
 // 全部断言**外部可见行为**（HTTP 状态 / 响应体 / 审计日志 / 对假 S3 的调用次数 /

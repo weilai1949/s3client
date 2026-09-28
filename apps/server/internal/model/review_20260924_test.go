@@ -1,6 +1,6 @@
 package model
 
-// review_20260924_test.go —— docs/code-review-2026-09-24.md 分派到 model 域的
+// review_20260924_test.go —— docs/archive/code-review-2026-09-24.md 分派到 model 域的
 // 死代码门禁（R19c）：Account.BucketOrDefault 是恒等函数（等价 a.Bucket），
 // 属生产赘余封装，已内联到调用方并删除。
 

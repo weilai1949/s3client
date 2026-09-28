@@ -118,8 +118,8 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ 1110 例全绿（72 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4255 / 2908 / 1124 / 3653；含 `src/i18n/index.ts`） |
+| 前端测试 | `pnpm test` | ✅ 1126 例全绿（72 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4294 / 2934 / 1130 / 3677；含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |
 | E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物；**`S3C_TOKEN` 开启的生产同构形态**，2026-09-24 审查 C1 验收实跑） |

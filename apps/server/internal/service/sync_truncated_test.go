@@ -1,6 +1,6 @@
 package service
 
-// sync_truncated_test.go —— docs/code-review-2026-09-24.md R6：
+// sync_truncated_test.go —— docs/archive/code-review-2026-09-24.md R6：
 // 列举命中安全上限（listMaxTotal）时，SyncKeys 必须透出 truncated，否则
 // 「没枚举完」与「对端确实没有更多对象」不可区分——源侧第 100_001 个对象
 // 会静默漏拷、超限的目标对象每次同步被误判缺失而重拷。

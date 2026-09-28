@@ -1,6 +1,6 @@
 package service
 
-// review_20260924_test.go —— docs/code-review-2026-09-24.md 分派到 service 域的
+// review_20260924_test.go —— docs/archive/code-review-2026-09-24.md 分派到 service 域的
 // 死代码门禁（R19b）：JobRegistry.Create 生产零引用（生产统一走 handler newJob →
 // TryCreate），只允许作为测试接缝存在于 export_test.go。
 

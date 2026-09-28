@@ -9,7 +9,7 @@ import (
 
 // export_test.go —— 仅在 `go test` 编译本包时参与构建，不进入生产二进制
 //（与 handler/export_test.go 同一纪律：测试接缝不进生产文件，
-// 见 docs/code-review-2026-09-24.md R19b）。
+// 见 docs/archive/code-review-2026-09-24.md R19b）。
 
 // Create 注册新任务的测试便利封装：容量超限时不返回 error，而是给出一个
 // 已终结的任务，使测试不必逐处处理 ErrTooManyJobs。生产路径一律走

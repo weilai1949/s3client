@@ -1,6 +1,6 @@
 package store
 
-// review_20260924_test.go —— docs/code-review-2026-09-24.md 分派到 store 域的
+// review_20260924_test.go —— docs/archive/code-review-2026-09-24.md 分派到 store 域的
 // 死代码门禁（R19d）：deriveKeyLegacy 生产零引用；envelope 的 S3C2（无参数头）
 // 写入分支生产不可达（写路径恒为 S3C3，旧格式只读不写）。
 

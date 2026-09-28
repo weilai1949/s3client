@@ -1,6 +1,6 @@
 package service
 
-// sync_multipart_etag_test.go —— docs/code-review-2026-09-24.md Nit：
+// sync_multipart_etag_test.go —— docs/archive/code-review-2026-09-24.md Nit：
 // etag 模式对 multipart 对象永不收敛（每次都重拷）。
 //
 // 分段上传的 ETag 形如 "hash-N"（各段 MD5 的 MD5），跨实现/跨分段大小不可比；
