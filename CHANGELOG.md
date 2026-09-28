@@ -52,6 +52,12 @@
   `pnpm test:coverage` **四指标 100%（4294 / 2934 / 1130 / 3677）** / `pnpm build` OK；
   后端本轮未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race -count=1` **9/9 包、每包 100.0%**、
   **零未覆盖块** / `golangci-lint` **0 issues**。
+- **真实 E2E 验收（2026-09-28 收口，三项全过）**：`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E -v`
+  **4/4 PASS**（`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash`；自起
+  `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000`，跑完已拆除）；`SERVER_PORT=18090 make e2e-real`
+  **3 passed**（真实后端 + 真实 RustFS + 真实 `pnpm build` 产物，`S3C_TOKEN` 开启的生产同构形态；
+  本机 **8080 被系统 `haproxy` 占用**故改端口；`e2e-real` 自管 RustFS 且 9000 被占会直接 `die`，
+  故两套**串行**跑，跑完容器与端口已核验自动回收）；`pnpm e2e` mock 版 **15 passed**。
 
 ### 修复（2026-09-28 `s3wrap` 两条：metadata 值控制字符致 400→500 / IDN 端点建得成却永远连不上——#64 2 条先红后绿）
 
