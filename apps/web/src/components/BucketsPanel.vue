@@ -54,7 +54,13 @@ async function loadBuckets() {
     if (!selectedBucket.value || !r.buckets.some((b) => b.name === selectedBucket.value)) {
       selectedBucket.value = r.buckets[0]?.name ?? ''
     }
+    // 成功即清：横幅不得永久粘住（与 AccountsPanel / ObjectsPanel 同口径），
+    // 否则重试成功后列表仍被 v-else-if="error" 顶掉，用户必须刷新页面。
+    error.value = ''
   } catch (err) {
+    // 失败必须清桶列表：保留上一次成功的结果会把**上一个账号**的桶渲染在
+    // 当前账号选择器之下（watch(accSel) 只清 selectedBucket，不清 buckets）。
+    buckets.value = []
     error.value = toErrorMessage(err)
   } finally {
     loadingBuckets.value = false

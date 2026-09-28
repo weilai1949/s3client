@@ -119,8 +119,19 @@ export function useUploadQueue(options: UploadQueueOptions): UploadQueue {
               options.onItemStart?.(it)
               it.status = 'signing'
               it.err = undefined
-              it.status = 'uploading'
-              await uploadObject(it.file, options.target(it), (p) => writePct(it, p), ctrl.signal)
+              // 首次收到字节进度才离开签名阶段：presign 是一次网络往返，期间该状态
+              // 必须停得住。此前把 `status='uploading'` 直接写在下一行（同一同步块、
+              // 中间无 await）→ 渲染永远插不进来，「签名中…」标签与 abortItem 的
+              // signing 分支都成了被覆盖率掩盖的死状态。
+              await uploadObject(
+                it.file,
+                options.target(it),
+                (p) => {
+                  if (it.status === 'signing') it.status = 'uploading'
+                  writePct(it, p)
+                },
+                ctrl.signal,
+              )
               it.status = 'done'
               it.pct = 100
             } catch (err) {

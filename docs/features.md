@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -901,7 +901,7 @@ functions 1095 / lines 3503）。
 | 文档活状态块同步 | ✅ | [`code-review-summary.md`](code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
 | 门禁 | ✅ | 只改 `docs/`，复跑 `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** —— 零回归 |
 
-### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，余 14 条转登记待复核
+### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，另 15 条转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64
 
 > 按 `code-review-and-quality` 五轴方法对全仓重新审一轮（三路并行），发现经**逐条亲自读码复核**后只修
 > **有把握且已完成红绿**的 4 条；其余**未复核的不直接采信、也不静默丢弃**——登记为
@@ -917,11 +917,11 @@ functions 1095 / lines 3503）。
 | 4 | `-healthcheck` 对 **IPv6 字面量监听地址**必然失败：`[::1]:8080` 拼成 `http://::1:8080/api/health`，`url.Parse` 报 `invalid port` → 恒返回 1，Docker `HEALTHCHECK` 会把**完全健康**的服务判死并反复重启（`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置） | ✅ | 红：`TestRunHealthcheck/ipv6_loopback_literal` → **`= 1, want 0`**。绿：`net.JoinHostPort(host, port)` 产出 `http://[::1]:8080/api/health`（实测 `url.Parse` 通过）；无 IPv6 的环境自动 `t.Skip`，`no-port-in-here` 的 fail-closed 用例仍绿 |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（新增守卫分支各补 1 个用例，否则 `service` 会跌到 99.8%）/ `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**（前端本轮无改动） |
 
-#### ⬜ 待处置（原 15 条，其中后端 `handler` 的审计缺口已于同日闭环见 §AE，现余 **14** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
+#### ⬜ 待处置（原 15 条，后端 `handler` 审计缺口已闭环见 §AE、前端 4 条已闭环见 §AF，现余 **10** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
 
 | 区域 | 条目 | 首要 / 次要 |
 |---|---|---|
-| 前端 `apps/web/src` | `RecycleBinPanel.vue` `error` 只写不清 ⇒ 一次失败就用横幅取代整页且重试后仍不恢复（`ObjectsPanel` 有 `dismissError`、此处没有）；`BucketsPanel.vue` `error` 同样无清空点且失败不清 `buckets` ⇒ 展示**上一个账号**的桶；`DestDialog.vue` 开启时无条件 `busy=false` 而 `ModalDialog` 的 Esc / ✕ / 背景点击都不看 `busy` ⇒ 飞行中的任务被并发重复提交；`useUploadQueue.ts` `status='signing'` 赋值后立即被 `'uploading'` 覆盖（中间无 `await`）⇒ 模板「签名中…」与 `abortItem` 分支生产不可达，属**被覆盖率掩盖的死状态** | 前 3 条接近 Required、第 4 条为死代码红线 |
+| 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
 | 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
 | 后端 `config` / `main` | 显式 `S3C_ENV_FILE` 路径缺失 / 不可读**静默回退默认值**（与本文件 `config.go:38-40` 自述的 fail-closed 约定冲突，`S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` 等加固项会静默失效）；`S3C_SHUTDOWN_TIMEOUT` 无上界，`int64` 溢出为负时长 ⇒ `Shutdown` 秒回、错误被 `_ =` 丢弃、退出码仍 0（同型问题见 presign `expiresIn`）；`MkdirAll(0700)` 只对**新建**目录生效，Docker volume / systemd 预建的 `0755` 永不收紧，与 `threat-model.md:40` 声明不符 | Optional（第 1 条偏 Required） |
 | 后端 `s3wrap` | `ValidateUserMetadata` 只校验键的可打印性，**值**里的 `CRLF` / 控制字符漏过 ⇒ 走到 Go transport 才报 `invalid header field value`，边界 400 变成传输期 500（恰好违背该文件自述目标；已确认**不存在**头注入，transport 硬拒）；`NormalizeEndpoint` 不做 IDNA 归一 ⇒ 国际化域名端点「校验通过但永远连不上」（DNS 失败按设计 fail-open，账号建得成、每次调用都 `no such host`） | Optional |
@@ -944,6 +944,21 @@ functions 1095 / lines 3503）。
 | 新测试 | [`handler/audit_coverage_test.go`](../apps/server/internal/handler/audit_coverage_test.go)：`TestCopyManySyncMoveAudits` / `TestRenameObjectAudits` / `TestDeleteObjectVersionAudits` | — | 3 红 → 3 绿；既有 `TestCopyManyAsyncMoveAuditsJobStart` / `TestAudit*` / `TestRenameObject` / `TestTrash` 全部保持绿 |
 | 文档 | [`threat-model.md`](threat-model.md) 边界 A 的 R 行补「移动与重命名（同步批量 / 异步批量 / `rename`）与版本永久删除（带 `versionId`）」，闭环指向本节；「最后更新」推到 2026-09-28 | — | — |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块** / 前端 `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例** |
+
+### AF. 2026-09-28 前端四条（#64）：sticky error 两处 / `DestDialog` 并发 / `signing` 死状态——4 条先红后绿
+
+> §AD「待处置」表前端第一行的 4 条，逐条亲自读码复核后修复。**每条都先写失败测试再改实现。**
+
+| # | 缺陷 | 修法 | 红 → 绿 |
+|---|---|---|---|
+| 1 | `RecycleBinPanel.vue` 的 `error` **只写不清**（4 处赋值、0 处清空），而模板 `v-if="!account()"` → `v-else-if="error"` → `v-else-if="bucketSel"` 三分支**互斥** ⇒ 一次失败就用横幅**取代整页**，「重试」成功后仍不清除，必须刷新页面；另 `loadBuckets` 失败时 `bucketSel` 为空，而重试只调 `loadMarkers(true)`（缺 bucket 直接 return）⇒ 横幅永久卡死 | `loadBuckets` / `loadMarkers` **成功即清 `error`**；重试改为 `retry()` = 先 `loadBuckets()` 补桶选择再 `loadMarkers(true)` | 红 `重试成功后错误横幅必须消失: expected true to be false` |
+| 2 | `BucketsPanel.vue` 的 `error` 同样无清空点，且 `loadBuckets` 失败分支**不重置 `buckets`**，而 `watch(accSel)` 只清 `selectedBucket` ⇒ 切到凭据失效的账号会把**上一个账号的桶**渲染在当前账号选择器之下 | 成功即清 `error`；失败时 `buckets = []` | 红 `失败后不得渲染上一个账号的桶表: expected true to be false` |
+| 3 | `DestDialog.vue` 在 `watch(props.open)` 里**无条件 `busy.value = false`**，而 `ModalDialog` 的 Esc / ✕ / 背景点击三条关闭路径都不看 `busy`，组件又是常驻（`ObjectsPanel` 只绑 `:open`、无 `v-if`）⇒ 飞行中任务期间关掉再开，第二次 `submitDest` 不被挡；先到的那次 `emit('submit')` 还会在第二个任务运行中把弹窗关掉 | **删掉 open watcher 里的复位**——`busy` 本就由 `submitDest` 的 `finally` 在成功 / 失败 / 中止三条路径归位，打开时已是 false，这行复位是多余且有害的 | 红 `在途任务期间 busy 不得被复位: expected false to be true` |
+| 4 | `useUploadQueue.ts` 把 `it.status = 'signing'` 与 `it.status = 'uploading'` 写在**同一个同步块**（中间无 `await`）⇒ 渲染永远插不进来，`UploadPanel` 的「签名中…」标签与 `abortItem` 的 `signing` 分支**永不可达**——典型的「被覆盖率掩盖的死状态」 | 把过渡挪到**首次字节进度回调**（`if (it.status === 'signing') it.status = 'uploading'`），presign 的一次网络往返期间该状态停得住；守卫保证不会把已 `cancelled` 的条目改回 `uploading` | 红 `在途且尚无字节进度应停在 signing: expected 'uploading' to be 'signing'` |
+| 连带 | 既有用例「`加载失败显示错误与重试」原本靠**错误粘住**才看得到横幅（mount 触发 2 次 `loadBuckets`，第 1 次失败、第 2 次成功——正确行为本就该清掉），夹具改为两个初始调用都失败；`requeue` 用例的中间断言由 `uploading` 改为 `signing`；`桶列表加载失败…` 由「重试为空操作」改为「重试先重拉桶」 | 三处**均为夹具 / 断言随正确行为更新，测试意图未变** | — |
+| 事件名 | 不涉及后端契约 | — | — |
+| 文档 | [`threat-model.md`](threat-model.md) 无涉 | — | — |
+| 门禁 | 全绿实测 | ✅ | `pnpm lint` **0 告警** / `pnpm typecheck` + `pnpm typecheck:e2e` exit 0 / `pnpm test` **72 文件 1114 例**（1110 → 1114，净增 4 条红灯用例）/ `pnpm test:coverage` **四指标 100%（4260 / 2908 / 1124 / 3658）** / `pnpm build` OK；后端本轮未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** |
 
 ---
 

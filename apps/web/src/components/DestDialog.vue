@@ -33,7 +33,10 @@ watch(() => props.open, async (o) => {
   if (!o) return
   targetBucket.value = props.sourceBucket
   targetPath.value = props.kind === 'multi' ? '' : props.objectKey
-  busy.value = false
+  // 这里**不复位 busy**：ModalDialog 的 Esc / ✕ / 背景点击三条关闭路径都不看 busy，
+  // 任务可能仍在飞；复位会让重开后并发提交第二个任务，而先到的那次 emit('submit')
+  // 还会在第二个任务运行中把弹窗关掉。busy 由 submitDest 的 finally 归位
+  // （成功 / 失败 / 中止三条路径都走），打开时本就该已是 false。
   buckets.value = []
   try {
     const res = await s3api.listBuckets(props.accountId)

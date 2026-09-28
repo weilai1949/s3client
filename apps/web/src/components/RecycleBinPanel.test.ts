@@ -352,17 +352,39 @@ describe('RecycleBinPanel', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 
-  it('桶列表加载失败显示错误；重试在无桶选择时为空操作', async () => {
+  it('桶列表加载失败显示错误；重试先重拉桶，桶仍缺则标记不重拉', async () => {
     state.accounts = [acc1]
     vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
     vi.mocked(s3api.listBuckets).mockRejectedValue(new Error('list boom'))
     const w = mountPanel()
     await flushPromises()
     expect(w.find('.msg.err').text()).toContain('list boom')
+    const listBucketsCalls = vi.mocked(s3api.listBuckets).mock.calls.length
     await w.find('.msg.err button.link').trigger('click')
     await flushPromises()
-    // bucketSel 为空 → loadMarkers 提前返回
+    // 重试必须重新拉桶（否则 bucketSel 永远为空、横幅永久卡死且无任何反馈）
+    expect(vi.mocked(s3api.listBuckets).mock.calls.length).toBeGreaterThan(listBucketsCalls)
+    // 桶仍然没拉到 → bucketSel 为空 → loadMarkers 提前返回
     expect(s3api.listTrash).not.toHaveBeenCalled()
+  })
+
+  it('重试成功后错误横幅必须消失并恢复列表（横幅不得永久遮蔽整页）', async () => {
+    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
+    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
+    let fail = true
+    vi.mocked(s3api.listTrash).mockImplementation(async () => {
+      if (fail) throw new Error('trash down')
+      return page([m1])
+    })
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('trash down')
+
+    fail = false
+    await w.find('.msg.err button.link').trigger('click')
+    await flushPromises()
+    expect(w.find('.msg.err').exists(), '重试成功后错误横幅必须消失').toBe(false)
+    expect(w.text(), '成功后列表必须恢复渲染').toContain('k1')
   })
 
   it('刷新按钮重新加载标记（reset 语义）', async () => {

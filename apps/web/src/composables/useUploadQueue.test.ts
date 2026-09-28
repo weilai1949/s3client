@@ -1,4 +1,4 @@
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUploadQueue } from './useUploadQueue'
@@ -13,19 +13,23 @@ const MAX_CONCURRENCY = 2
 
 vi.mock('../upload', () => ({ uploadObject: vi.fn() }))
 
-vi.mocked(uploadObject).mockImplementation((_file, _target, _p, signal) => {
+vi.mocked(uploadObject).mockImplementation((_file, _target, onProgress, signal) => {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException('Aborted', 'AbortError'))
       return
     }
     signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
-    inFlight.push({ resolve, reject })
+    inFlight.push({ resolve, reject, progress: onProgress })
   })
 })
 
-/** 挂起中的上传，测试里手动推进完成。 */
-const inFlight: { resolve: () => void; reject: (e: unknown) => void }[] = []
+/** 挂起中的上传，测试里手动推进完成；progress 用于手动投递字节进度回调。 */
+const inFlight: {
+  resolve: () => void
+  reject: (e: unknown) => void
+  progress?: (pct: number) => void
+}[] = []
 
 /** 挂一个宿主组件：setup 内调用组合式，把返回值存到外层变量供断言。 */
 function mountQueue(options: Partial<UploadQueueOptions> = {}): ReturnType<typeof useUploadQueue> {
@@ -82,8 +86,8 @@ describe('useUploadQueue 共享状态机', () => {
     const run = q.run()
     await vi.waitFor(() => expect(inFlight.length).toBe(1))
 
-    q.abortItem(a) // 仅中止，不标记 cancelled（状态仍 uploading，待 catch 回 pending）
-    expect(a.status).toBe('uploading')
+    q.abortItem(a) // 仅中止，不标记 cancelled（状态仍 signing，待 catch 回 pending）
+    expect(a.status).toBe('signing')
     inFlight.splice(0).forEach((f) => f.reject(new DOMException('Aborted', 'AbortError')))
     await run
     expect(a.status).toBe('pending')
@@ -96,6 +100,28 @@ describe('useUploadQueue 共享状态机', () => {
     expect(a.status).toBe('done')
     expect(a.pct).toBe(100)
     expect(processed.map((it) => it.key)).toContain('a.txt')
+  })
+
+  it('尚无字节进度时状态停在 signing（不是赋值后立即被覆盖）', async () => {
+    const q = mountQueue()
+    const [a] = enqueue(q, ['a.txt'])
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+
+    // presign 是一次网络往返：期间必须停在 signing。旧实现把
+    // `status='signing'` 与 `status='uploading'` 写在同一个同步块里（中间无 await），
+    // 渲染永远插不进来 ⇒「签名中…」标签与 abortItem 的 signing 分支全是死代码。
+    expect(a.status, '在途且尚无字节进度应停在 signing').toBe('signing')
+
+    // 首次收到字节进度 → 离开签名阶段进入上传阶段
+    inFlight[0].progress?.(10)
+    await nextTick()
+    expect(a.status, '首次字节进度后转 uploading').toBe('uploading')
+    expect(a.pct).toBe(10)
+
+    inFlight.splice(0).forEach((f) => f.resolve())
+    await run
+    expect(a.status).toBe('done')
   })
 
   it('requeue 策略：取消已入批未开始（pending）条目标 cancelled 终态，不再被后台上传', async () => {

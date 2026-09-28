@@ -6,6 +6,49 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 前端四条：sticky error 两处 / `DestDialog` 并发重复提交 / `signing` 死状态——#64 前端 4 条先红后绿）
+
+> `KNOWN_ISSUES #64`「待处置」表前端第一行的 4 条，**逐条亲自读码复核**后修复，每条都先写失败测试。
+> 证据台账见 [`docs/features.md`](docs/features.md) **§AF**。
+
+- **`RecycleBinPanel.vue` 的 `error` 只写不清（接近 Required）**：4 处赋值、**0 处清空**，而模板
+  `v-if="!account()"` → `v-else-if="error"` → `v-else-if="bucketSel"` 三分支**互斥** ⇒ 一次网络抖动就用横幅
+  **取代整页**，点「重试」成功后 `loadMarkers` 仍不清 `error` ⇒ 必须刷新页面。另 `loadBuckets` 失败时
+  `bucketSel` 为空、而重试只调 `loadMarkers(true)`（缺 bucket 直接 return）⇒ 横幅永久卡死且无任何反馈。
+  **修法**：`loadBuckets` / `loadMarkers` **成功即清**；重试改为 `retry()` = 先 `loadBuckets()` 补桶选择
+  再 `loadMarkers(true)`。**红灯**：`重试成功后错误横幅必须消失: expected true to be false`。
+- **`BucketsPanel.vue` 同样 sticky error + 展示上一个账号的桶（接近 Required）**：`error` 无清空点，
+  且 `loadBuckets` 失败分支**不重置 `buckets`**，而 `watch(accSel)` 只清 `selectedBucket` ⇒ 切到凭据失效的
+  账号，会把**上一个账号的桶**渲染在当前账号选择器之下。
+  **修法**：成功即清 `error`、失败时 `buckets = []`。
+  **红灯**：`失败后不得渲染上一个账号的桶表: expected true to be false`。
+- **`DestDialog.vue` 并发重复提交（接近 Required）**：`watch(props.open)` 里**无条件 `busy.value = false`**，
+  而 `ModalDialog` 的 Esc / ✕ / 背景点击三条关闭路径都不看 `busy`，组件又是常驻（`ObjectsPanel` 只绑 `:open`、
+  无 `v-if`）⇒ 飞行中任务期间关掉再开，第二次 `submitDest` 不被挡；先到的那次 `emit('submit')` 还会在第二个
+  任务运行中把弹窗关掉。**修法**：**删掉这行复位**——`busy` 本就由 `submitDest` 的 `finally` 在
+  成功 / 失败 / 中止三条路径归位，打开时已是 false，这行复位是多余且有害的（删代码而非加条件）。
+  **红灯**：`在途任务期间 busy 不得被复位: expected false to be true`。
+- **`useUploadQueue.ts` 的 `signing` 死状态（死代码红线）**：`it.status = 'signing'` 与 `it.status = 'uploading'`
+  写在**同一个同步块**（中间无 `await`）⇒ 渲染永远插不进来，`UploadPanel` 的「签名中…」标签与 `abortItem` 的
+  `signing` 分支**永不可达**——正是 AGENTS.md 所说「被覆盖率掩盖的死代码」（测试直接构造该状态把它们盖绿）。
+  **修法**：把过渡挪到**首次字节进度回调**（`if (it.status === 'signing') it.status = 'uploading'`），presign 的
+  一次网络往返期间该状态停得住；该守卫同时保证不会把已 `cancelled` 的条目改回 `uploading`。
+  **选「让它可达」而不是「删掉状态」**：删除要连带动 `UploadPanel` / `i18n` / 3 个混合状态夹具共 6 个文件的
+  无关断言，且会废掉 AGENTS.md 明确豁免的枚举成员；让它可达只改 1 个生产文件 3 行，既有测试从 gap 变为真实覆盖。
+  **红灯**：`在途且尚无字节进度应停在 signing: expected 'uploading' to be 'signing'`。
+- **三处既有夹具随正确行为更新（意图未变）**：①「加载失败显示错误与重试」原本**靠错误粘住**才看得到横幅
+  （mount 触发 2 次 `loadBuckets`，第 1 次失败、第 2 次成功——正确行为本就该清掉），夹具改为两个初始调用
+  都失败；② `requeue` 用例的中间断言由 `uploading` 改为 `signing`；③「桶列表加载失败…」由「重试为空操作」
+  改为「重试先重拉桶」（并补断言 `listBuckets` 调用数增加）。
+- **门禁复跑（全绿）**：前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `pnpm typecheck:e2e` exit 0 /
+  `pnpm test` **72 文件 1114 例**（1110 → 1114，净增 4 条红灯用例）/
+  `pnpm test:coverage` **四指标 100%（4260 / 2908 / 1124 / 3658）** / `pnpm build` OK；
+  后端本轮未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race -count=1` **9/9 包、每包 100.0%** /
+  `golangci-lint` **0 issues**。
+- **文档同 commit 同步**：[`docs/features.md`](docs/features.md) 新增 **§AF**、§AD 待处置表移出该行（14 → **10**，
+  TOC 加 AF）；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64** 改「已闭环 9 条 / 余 10 条」（§二 + §四台账）；
+  本条记录。
+
 ### 修复（2026-09-28 破坏性操作审计覆盖补齐：同步批量移动 / 重命名删源 / 版本永久删除三处无审计——#64 Security 3 条先红后绿）
 
 > `KNOWN_ISSUES #64`「待处置」表的后端 `handler` 一条，**亲自读码复核后确认属实**。

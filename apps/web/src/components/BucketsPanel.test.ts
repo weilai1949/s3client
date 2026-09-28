@@ -164,17 +164,43 @@ describe('BucketsPanel', () => {
     expect(w.text()).toContain('buckets.empty')
   })
 
-  it('加载失败显示错误与重试', async () => {
-    vi.mocked(s3api.listBuckets)
-      .mockRejectedValueOnce(new Error('list failed'))
-      .mockResolvedValueOnce({ buckets })
+  it('加载失败显示错误；重试后横幅消失并恢复内容', async () => {
+    // 两个初始调用都必须失败：mount 时 onMounted + accSel watch 各触发一次
+    // loadBuckets，第 2 次成功本就该清掉错误（不再是靠「错误粘住」才看得到横幅）。
+    let fail = true
+    vi.mocked(s3api.listBuckets).mockImplementation(async () => {
+      if (fail) throw new Error('list failed')
+      return { buckets }
+    })
     const w = mountPanel()
     await flushPromises()
     expect(w.find('.msg.err').text()).toContain('list failed')
+    fail = false
     await btnByText(w, 'common.retry').trigger('click')
     await flushPromises()
-    // mount 时 onMounted + accSel watch 各触发一次 loadBuckets，重试为第三次
+    // mount 时两次 + 重试一次
     expect(vi.mocked(s3api.listBuckets)).toHaveBeenCalledTimes(3)
+    // 横幅不得永久粘住：成功后必须让位给内容（否则用户只能刷新页面）
+    expect(w.find('.msg.err').exists(), '重试成功后错误横幅必须消失').toBe(false)
+    expect(w.findComponent(BucketOverview).exists(), '成功后必须渲染桶内容').toBe(true)
+  })
+
+  it('切到加载失败的账号：不得展示上一个账号的桶', async () => {
+    const w = mountPanel()
+    await flushPromises()
+    // mount 后自动打开首个桶详情，先回列表才能拿到桶表
+    await btnByText(w, 'buckets.backList').trigger('click')
+    await flushPromises()
+    expect(w.find('table.tbl').exists(), '账号一正常应渲染桶表').toBe(true)
+
+    vi.mocked(s3api.listBuckets).mockImplementationOnce(async () => {
+      throw new Error('no creds')
+    })
+    await w.find('select.acc-select').setValue('acc-2')
+    await flushPromises()
+
+    expect(w.find('.msg.err').text()).toContain('no creds')
+    expect(w.find('table.tbl').exists(), '失败后不得渲染上一个账号的桶表').toBe(false)
   })
 
   it('页签切换渲染对应设置组件并转发 error，lifecycle 打开对话框', async () => {

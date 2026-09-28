@@ -87,9 +87,18 @@ async function loadBuckets() {
     const r = await s3api.listBuckets(accSel.value)
     buckets.value = r.buckets
     if (!bucketSel.value || !r.buckets.some((b) => b.name === bucketSel.value)) bucketSel.value = r.buckets[0]?.name ?? ''
+    // 成功即清：横幅不得永久遮蔽整页（v-if 三分支互斥，error 一旦置位列表就再也出不来）。
+    error.value = ''
   } catch (e) {
     error.value = toErrorMessage(e)
   }
+}
+
+/** 重试：先补桶选择再重拉标记——loadMarkers 在无 bucketSel 时直接返回，
+ *  只重拉标记会让「loadBuckets 失败」那次的横幅永久卡死、且无任何反馈。 */
+async function retry() {
+  await loadBuckets()
+  await loadMarkers(true)
 }
 
 // 加载序号：每次 loadMarkers +1；过期循环在首个 await 后静默终止，
@@ -125,6 +134,8 @@ async function loadMarkers(reset: boolean) {
       isTruncated.value = r.isTruncated
       if (r.deleteMarkers.length || !r.isTruncated || guard++ >= emptyPageSkip) break
     }
+    // 加载成功即清：横幅不得永久遮蔽整页（v-if / v-else-if 三分支互斥）。
+    error.value = ''
   } catch (e) {
     if (seq === loadSeq) error.value = toErrorMessage(e)
   } finally {
@@ -221,7 +232,7 @@ async function purge(m: TrashMarker) {
 
     <div v-else-if="error" class="msg err" style="margin-bottom:10px">
       <span style="flex:1">{{ error }}</span>
-      <button class="link" style="flex:none" @click="loadMarkers(true)">{{ t('common.retry') }}</button>
+      <button class="link" style="flex:none" @click="retry">{{ t('common.retry') }}</button>
     </div>
 
     <template v-else-if="bucketSel">

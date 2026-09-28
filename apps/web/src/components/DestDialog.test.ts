@@ -225,6 +225,34 @@ describe('DestDialog', () => {
     expect(w.emitted('submit')).toBeTruthy()
   })
 
+  it('在途任务期间关掉再开：busy 不得被复位（否则并发重复提交）', async () => {
+    let resolveCopy!: (v: { copied: string; bucket: string }) => void
+    const pending = new Promise<{ copied: string; bucket: string }>((resolve) => { resolveCopy = resolve })
+    vi.mocked(s3api.copyObject).mockImplementation(async () => pending)
+    const w = mountDest({ kind: 'file' })
+    await openDialog(w)
+    pathInput().value = 'dst/x'
+    pathInput().dispatchEvent(new Event('input'))
+    await flushPromises()
+    clickBody('common.copy')
+    await flushPromises()
+    expect(bodyBtn('common.copy').disabled, '提交后按钮应禁用').toBe(true)
+
+    // ModalDialog 的 Esc / ✕ / 背景点击三条关闭路径都不看 busy，任务仍在飞
+    await w.setProps({ open: false })
+    await flushPromises()
+    await w.setProps({ open: true })
+    await flushPromises()
+
+    expect(bodyBtn('common.copy').disabled, '在途任务期间 busy 不得被复位').toBe(true)
+    await (w.vm as unknown as { submitDest: () => Promise<void> }).submitDest()
+    expect(vi.mocked(s3api.copyObject), '重新打开后不得并发提交第二个任务').toHaveBeenCalledTimes(1)
+
+    resolveCopy({ copied: 'dst/x', bucket: 'b1' })
+    await flushPromises()
+    expect(bodyBtn('common.copy').disabled, '任务收尾后应恢复可点').toBe(false)
+  })
+
   it('emits error when file copy fails', async () => {
     vi.mocked(s3api.copyObject).mockRejectedValue(new Error('copy-boom'))
     const w = mountDest({ kind: 'file' })
