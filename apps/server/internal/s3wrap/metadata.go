@@ -46,6 +46,17 @@ func ValidateUserMetadata(m map[string]string) error {
 		if !utf8.ValidString(v) {
 			return fmt.Errorf("%w: value for key %q is not valid UTF-8", ErrUserMetadataInvalid, k)
 		}
+		// 值最终会作为 HTTP 头（x-amz-meta-*）发出：控制字符必须在这里拒成 400，
+		// 否则请求走到 Go transport 才被 `invalid header field value` 拒发，
+		// 对客户端表现为 500——恰好违背本文件「提前在 API 边界校验」的自述目标。
+		// 口径对齐 httpguts.ValidHeaderFieldValue：HTAB 与空格（isLWS）放行，
+		// 其余 <0x20 的 CTL 与 0x7F 拒绝；>=0x80 属 obs-text，由上面的 UTF-8 校验把关。
+		for i := 0; i < len(v); i++ {
+			c := v[i]
+			if (c < 0x20 && c != '\t') || c == 0x7F {
+				return fmt.Errorf("%w: value for key %q has control character at byte %d", ErrUserMetadataInvalid, k, i)
+			}
+		}
 		if len(v) > MaxUserMetaValueLen {
 			return fmt.Errorf("%w: value for key %q length %d > %d", ErrUserMetadataInvalid, k, len(v), MaxUserMetaValueLen)
 		}

@@ -55,6 +55,14 @@ func ValidateEndpoint(endpoint string) error {
 		return fmt.Errorf("invalid endpoint URL: %q (missing host)", endpoint)
 	}
 	host := strings.ToLower(u.Hostname())
+	// 非 ASCII 主机名（IDN）必须在边界拒绝：Go 的 net.Resolver / http.Transport 都不
+	// 自带 IDNA 转换，`münchen.de` 会在 LookupIPAddr 处 no such host——而下面对 DNS
+	// 失败是**按设计 fail-open**（留给连接阶段），于是账号建得成、之后每次调用都报
+	// 莫名其妙的网络错误，用户看不出是端点主机名非法。既然连不上，就在建号时明确拒绝。
+	// 不引入 golang.org/x/net/idna：完整映射表不值得为这一处加依赖，改填 punycode 即可。
+	if strings.IndexFunc(host, func(r rune) bool { return r > 127 }) >= 0 {
+		return fmt.Errorf("invalid endpoint URL: %q (non-ASCII host: use punycode xn-- instead)", endpoint)
+	}
 	if isBlockedHostname(host) {
 		return fmt.Errorf("%w: %s", errEndpointBlocked, host)
 	}

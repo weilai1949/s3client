@@ -184,3 +184,27 @@ func TestS3HTTPClientProxyDisabled(t *testing.T) {
 		t.Fatalf("S3 HTTP transport Proxy is set, want nil (HTTP(S)_PROXY must not bypass SSRF dial guard)")
 	}
 }
+
+// TestValidateEndpointRejectsNonASCIIHost 非 ASCII 主机名（IDN）必须在边界拒绝。
+//
+// Go 的 net.Resolver / http.Transport 都不自带 IDNA 转换，`münchen.de` 这类主机名
+// 在 LookupIPAddr 处直接 no such host——而 ValidateEndpoint 对 DNS 失败是**按设计
+// fail-open**（留给连接阶段），于是账号建得成、之后**每次**调用都报莫名其妙的网络
+// 错误，用户看不出是端点主机名非法。既然连不上，就在建号时给明确拒绝。
+// 不引入 golang.org/x/net/idna：完整的 IDNA 映射表不值得为这一处加依赖，
+// 让用户改填 punycode（xn--，ASCII）即可。
+func TestValidateEndpointRejectsNonASCIIHost(t *testing.T) {
+	for _, ep := range []string{
+		"http://münchen.de:9000",
+		"https://例え.テスト",
+		"minio.测试.local:9000",
+	} {
+		if err := ValidateEndpoint(ep); err == nil {
+			t.Fatalf("ValidateEndpoint(%q) = nil, want error（非 ASCII 主机名必然连不上，应在边界拒绝）", ep)
+		}
+	}
+	// punycode 形式是纯 ASCII，仍按正常流程处理（DNS 失败照旧 fail-open）。
+	if err := ValidateEndpoint("http://xn--mnchen-3ya.de:9000"); err != nil {
+		t.Fatalf("punycode endpoint = %v, want nil", err)
+	}
+}

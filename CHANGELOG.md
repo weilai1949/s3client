@@ -6,6 +6,43 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 `s3wrap` 两条：metadata 值控制字符致 400→500 / IDN 端点建得成却永远连不上——#64 2 条先红后绿）
+
+> `KNOWN_ISSUES #64`「待处置」表 `后端 s3wrap` 一行的 2 条，**逐条亲自读码复核**后修复。
+> 证据台账见 [`docs/features.md`](docs/features.md) **§AH**。同轮第 3 条（`store` Nit）**实测后挂起**，见下。
+
+- **`ValidateUserMetadata` 的值只查 UTF-8 与长度，控制字符只有键在查** ⇒ 值含 `CRLF` / CTL 能一路过边界，
+  走到 Go transport 才被 `invalid header field value` 拒发，**边界该给的 400 变成传输期 500**——恰好违背该
+  文件自述的「提前在 API 边界校验，避免落到 S3 端再以 500 形式返回」。
+  **修法**：值侧按 `httpguts.ValidHeaderFieldValue` 的同一口径拒绝 `<0x20`（**HTAB 除外**）与 `0x7F`；
+  `>=0x80` 属 obs-text，仍由既有 UTF-8 校验把关。
+  **已确认不存在头注入**（Go transport 对 `Header.Set` 与直接 map 赋值两条路径都硬拒），所以这是 400/500 的
+  **可用性**问题、不是注入面。
+  **红灯**：`value with CRLF` / `lone LF` / `control char` / `DEL` 四条 → 全绿；同批钉住 `tab` / `space` /
+  UTF-8 文本三个**放行**用例，防误伤正常的多行备注写法。
+- **`ValidateEndpoint` 对非 ASCII 主机名（IDN）按「DNS 失败按设计 fail-open」放行** ⇒ 账号建得成，而 Go 的
+  `net.Resolver` / `http.Transport` **都不自带 IDNA 转换**，`münchen.de` 每次调用都 `no such host`，
+  用户只看到莫名其妙的网络错误、看不出是端点主机名非法。
+  **修法**：在 `isBlockedHostname` 之前加边界拒绝，错误串直接给出出路（`use punycode xn-- instead`）。
+  **不引入 `golang.org/x/net/idna`**——完整 IDNA 映射表不值得为这一处加依赖（仓库依赖纪律：能用标准库就不用
+  第三方）；punycode 形式是纯 ASCII，仍走原流程。
+  **红灯**：`ValidateEndpoint("http://münchen.de:9000") = nil, want error`。
+- **`store.Open` json 分支丢 `storeKey`（Nit）——实测后挂起，非遗漏**：
+  ① 把 `Open` 的 json 分支改走 `newStore` 会让 `store.New` 变成**零生产引用**，被
+  `deadcode_gate_test.go` 的 `TestNoUnusedExportedProdSymbols` **红灯拦住**（已实际跑出该报错）；
+  ② 要解开就得改 `New` 签名，而 `store.New` / 裸 `New` 共 **~100 处调用、24 个测试文件**，其中
+  `crossdriver_test.go` 与 `encrypt_at_rest_test.go` **刻意依赖 `S3C_STORE_KEY` 环境变量**读 key，
+  `+ ""` 机械替换会静默改掉它们的语义；
+  ③ 缺陷**零生产影响**（唯一生产调用方传的 `cfg.StoreKey` 就来自同一环境变量），而代价是一次跨 24 文件的
+  重构——**比例失衡**，留到有真实非 `FromEnv` 调用方时再做。实验已完整回滚，理由记入 §AD 该行与 #64。
+- **门禁复跑（全绿）**：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
+  `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0%
+  statements** 且**零未覆盖块**（正确口径）；前端本轮未改，`pnpm lint` 0 告警 /
+  `pnpm test` **72 文件 1114 例** / `pnpm build` OK。
+- **文档同 commit 同步**：[`docs/features.md`](docs/features.md) 新增 **§AH**、§AD 待处置表移出 `s3wrap` 行
+  （7 → **5**，`store` 行补挂起理由，TOC 加 AH）；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64**
+  改「已闭环 14 条 / 余 5 条」；本条记录。
+
 ### 修复（2026-09-28 `config` 三条：显式 env 文件静默回退改 fail-closed / 关停超时加上界 / 预建数据目录收紧 0700——#64 3 条先红后绿）
 
 > `KNOWN_ISSUES #64`「待处置」表 `后端 config / main` 一行的 3 条，**逐条亲自读码复核**后修复。
