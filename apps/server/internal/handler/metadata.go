@@ -338,6 +338,9 @@ func (h *Handler) deleteObjectVersion(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "metadata operation failed")
 		return
 	}
+	// 永久版本删除不可恢复，与 trash.purge 同级：必须留下 objects.delete 审计
+	// （threat-model.md R 抵赖缓解，此前只有回收站清空有事件）。
+	h.audit(r, auditObjectsDelete, "bucket", bucket, "key", key, "versionId", versionID)
 	h.writeJSON(w, http.StatusOK, map[string]any{"deleted": key, "versionId": versionID})
 }
 

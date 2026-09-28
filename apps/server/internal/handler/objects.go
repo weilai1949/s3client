@@ -216,6 +216,10 @@ func (h *Handler) renameObject(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "copied to new key but failed to delete source")
 		return
 	}
+	// 重命名 = 复制成功后永久删除源 key：记 objects.move（带 key/newKey），
+	// 否则把删除藏进「重命名」即可绕开 objects.delete 的审计覆盖（threat-model.md R）。
+	h.audit(r, auditObjectsMove, "bucket", bucket, "key", req.Key,
+		"targetBucket", targetBucket, "newKey", req.NewKey)
 	h.writeJSON(w, http.StatusOK, map[string]any{"renamed": req.NewKey})
 }
 

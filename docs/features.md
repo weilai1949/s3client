@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -901,7 +901,7 @@ functions 1095 / lines 3503）。
 | 文档活状态块同步 | ✅ | [`code-review-summary.md`](code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
 | 门禁 | ✅ | 只改 `docs/`，复跑 `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** —— 零回归 |
 
-### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，余 15 条转登记待复核
+### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，余 14 条转登记待复核
 
 > 按 `code-review-and-quality` 五轴方法对全仓重新审一轮（三路并行），发现经**逐条亲自读码复核**后只修
 > **有把握且已完成红绿**的 4 条；其余**未复核的不直接采信、也不静默丢弃**——登记为
@@ -917,16 +917,33 @@ functions 1095 / lines 3503）。
 | 4 | `-healthcheck` 对 **IPv6 字面量监听地址**必然失败：`[::1]:8080` 拼成 `http://::1:8080/api/health`，`url.Parse` 报 `invalid port` → 恒返回 1，Docker `HEALTHCHECK` 会把**完全健康**的服务判死并反复重启（`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置） | ✅ | 红：`TestRunHealthcheck/ipv6_loopback_literal` → **`= 1, want 0`**。绿：`net.JoinHostPort(host, port)` 产出 `http://[::1]:8080/api/health`（实测 `url.Parse` 通过）；无 IPv6 的环境自动 `t.Skip`，`no-port-in-here` 的 fail-closed 用例仍绿 |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（新增守卫分支各补 1 个用例，否则 `service` 会跌到 99.8%）/ `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**（前端本轮无改动） |
 
-#### ⬜ 待处置（15 条，已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64；**均未复核，勿直接采信**）
+#### ⬜ 待处置（原 15 条，其中后端 `handler` 的审计缺口已于同日闭环见 §AE，现余 **14** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
 
 | 区域 | 条目 | 首要 / 次要 |
 |---|---|---|
 | 前端 `apps/web/src` | `RecycleBinPanel.vue` `error` 只写不清 ⇒ 一次失败就用横幅取代整页且重试后仍不恢复（`ObjectsPanel` 有 `dismissError`、此处没有）；`BucketsPanel.vue` `error` 同样无清空点且失败不清 `buckets` ⇒ 展示**上一个账号**的桶；`DestDialog.vue` 开启时无条件 `busy=false` 而 `ModalDialog` 的 Esc / ✕ / 背景点击都不看 `busy` ⇒ 飞行中的任务被并发重复提交；`useUploadQueue.ts` `status='signing'` 赋值后立即被 `'uploading'` 覆盖（中间无 `await`）⇒ 模板「签名中…」与 `abortItem` 分支生产不可达，属**被覆盖率掩盖的死状态** | 前 3 条接近 Required、第 4 条为死代码红线 |
 | 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
-| 后端 `handler` | 3 处破坏性操作缺审计事件：同步 `copyMany`（`deleteSource=true` 移动，异步版已按 R3 补了 `auditObjectsMove`）、`renameObject` 删源（把删除藏进「重命名」可绕开 `auditObjectsDelete`）、`deleteObjectVersion` 永久版本删除（回收站 / `trash.purge` 反而有）——`docs/threat-model.md` 的「抵赖」缓解声明覆盖了对象删除语义 | 与 R3 修复口径不一致，Security |
 | 后端 `config` / `main` | 显式 `S3C_ENV_FILE` 路径缺失 / 不可读**静默回退默认值**（与本文件 `config.go:38-40` 自述的 fail-closed 约定冲突，`S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` 等加固项会静默失效）；`S3C_SHUTDOWN_TIMEOUT` 无上界，`int64` 溢出为负时长 ⇒ `Shutdown` 秒回、错误被 `_ =` 丢弃、退出码仍 0（同型问题见 presign `expiresIn`）；`MkdirAll(0700)` 只对**新建**目录生效，Docker volume / systemd 预建的 `0755` 永不收紧，与 `threat-model.md:40` 声明不符 | Optional（第 1 条偏 Required） |
 | 后端 `s3wrap` | `ValidateUserMetadata` 只校验键的可打印性，**值**里的 `CRLF` / 控制字符漏过 ⇒ 走到 Go transport 才报 `invalid header field value`，边界 400 变成传输期 500（恰好违背该文件自述目标；已确认**不存在**头注入，transport 硬拒）；`NormalizeEndpoint` 不做 IDNA 归一 ⇒ 国际化域名端点「校验通过但永远连不上」（DNS 失败按设计 fail-open，账号建得成、每次调用都 `no such host`） | Optional |
 | 后端 `store` | `store.Open` 的 json 分支丢弃入参 `storeKey` 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一调用方恰好同源，无生产影响） | Nit |
+
+### AE. 2026-09-28 破坏性操作审计覆盖补齐（#64 Security，3 条先红后绿）
+
+> 来源：§AD「待处置」表的后端 `handler` 一条，亲自读码复核后确认属实并修复。依据是
+> [`threat-model.md`](threat-model.md) 边界 A 的 **R（抵赖）** 缓解声明——它明写覆盖
+> 「对象删除与前缀删除」，而下面三处会**真实删掉数据**却没有任何 `objects.*` 审计事件，
+> 持有效 token 的调用方可不留痕迹地删数据。
+
+| # | 缺口 | 落的事件 | 红 → 绿 |
+|---|---|---|---|
+| 1 | 同步 `POST /copy-objects` + `deleteSource`（移动 = 复制后删源）；**异步版已按 review R3 补了 `objects.move`，同步版漏了**——同一动作只因走两条路由就可审计性不同 | `objects.move`（`bucket` / `targetBucket` / `total` / `moved` / `failed`） | 红 `同步移动未写 objects.move 审计（源被删却无痕迹，与异步版口径不一致）` |
+| 2 | `POST /rename`：复制成功后 `DeleteObject` 删源，源 key 永久消失、全程无审计——把删除藏进「重命名」即可绕开已有的 `objects.delete` 事件 | `objects.move`（带 `key` / `newKey`） | 红 `重命名未写 objects.move 审计（源 key 被永久删除却无痕迹，可绕开 objects.delete）` |
+| 3 | `DELETE /version`：永久版本删除，数据不可恢复；回收站 `trash.purge` 反而有审计 | `objects.delete`（带 `versionId`） | 红 `永久版本删除未写 objects.delete 审计（数据不可恢复却无痕迹）` |
+| 负向断言 | 纯复制（`deleteSource` 缺省）**仍不得**记 `objects.move`，与异步范式同一口径，避免把只读复制记成移动 | — | `TestCopyManySyncMoveAudits` 内的前后计数比对 |
+| 事件名 | 全部复用 `audit.go` **既有稳定事件名**，**不新增契约名**——事件名是日志检索与告警的依赖 | — | — |
+| 新测试 | [`handler/audit_coverage_test.go`](../apps/server/internal/handler/audit_coverage_test.go)：`TestCopyManySyncMoveAudits` / `TestRenameObjectAudits` / `TestDeleteObjectVersionAudits` | — | 3 红 → 3 绿；既有 `TestCopyManyAsyncMoveAuditsJobStart` / `TestAudit*` / `TestRenameObject` / `TestTrash` 全部保持绿 |
+| 文档 | [`threat-model.md`](threat-model.md) 边界 A 的 R 行补「移动与重命名（同步批量 / 异步批量 / `rename`）与版本永久删除（带 `versionId`）」，闭环指向本节；「最后更新」推到 2026-09-28 | — | — |
+| 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块** / 前端 `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例** |
 
 ---
 

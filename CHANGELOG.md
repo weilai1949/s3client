@@ -6,6 +6,34 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 破坏性操作审计覆盖补齐：同步批量移动 / 重命名删源 / 版本永久删除三处无审计——#64 Security 3 条先红后绿）
+
+> `KNOWN_ISSUES #64`「待处置」表的后端 `handler` 一条，**亲自读码复核后确认属实**。
+> 依据是 [`docs/threat-model.md`](docs/threat-model.md) 边界 A 的 **R（抵赖）** 缓解声明——
+> 它明写覆盖「对象删除与前缀删除」，而这三处会**真实删掉数据**却没有任何 `objects.*` 审计事件，
+> 持有效 token 的调用方可不留痕迹地删数据。证据台账见 [`docs/features.md`](docs/features.md) **§AE**。
+
+- **同步 `POST /copy-objects` + `deleteSource`（移动）无审计**：移动是「复制成功后删源」的组合动作，
+  **异步版已按 review R3 补了 `objects.move`，同步版漏了**——同一动作只因走同步 / 异步两条路由就
+  可审计性不同。补 `objects.move`（`bucket` / `targetBucket` / `total` / `moved` / `failed`）。
+  **红灯**：`TestCopyManySyncMoveAudits` → `同步移动未写 objects.move 审计（源被删却无痕迹，与异步版口径不一致）`。
+- **`POST /rename` 全程无审计**：复制成功后 `DeleteObject` 删源，源 key 永久消失——把删除藏进
+  「重命名」即可绕开已有的 `objects.delete` 事件。补 `objects.move`（带 `key` / `newKey`）。
+  **红灯**：`TestRenameObjectAudits` → `重命名未写 objects.move 审计（源 key 被永久删除却无痕迹，可绕开 objects.delete）`。
+- **`DELETE /version` 永久版本删除无审计**：数据不可恢复，而回收站 `trash.purge` 反而有审计。
+  补 `objects.delete`（带 `versionId`）。
+  **红灯**：`TestDeleteObjectVersionAudits` → `永久版本删除未写 objects.delete 审计（数据不可恢复却无痕迹）`。
+- **三处全部复用 `audit.go` 既有稳定事件名，不新增契约名**——事件名是日志检索与告警的依赖；
+  同时保留**负向断言**：纯复制（`deleteSource` 缺省）仍**不得**记 `objects.move`，避免把只读复制记成移动。
+- **文档同 commit 同步**：[`docs/threat-model.md`](docs/threat-model.md) 边界 A 的 R 行补「移动与重命名
+  （同步批量 / 异步批量 / `rename`）与版本永久删除（带 `versionId`）」、闭环指向 §AE、
+  「最后更新」推到 2026-09-28；[`docs/features.md`](docs/features.md) 新增 **§AE** 并把 §AD 待处置
+  表的该条移出（15 → **14**，TOC 加 AE）；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64**
+  同步为「已闭环 5 条 / 余 14 条」（§二 + §四台账）；本条记录。
+- **门禁复跑（全绿）**：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
+  `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**
+  且**零未覆盖块**；前端本轮无代码改动，`pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**、`pnpm build` OK。
+
 ### 修复（2026-09-28 三路五轴复审：列举循环无界 ×2 / 收满上限误报截断 / `-healthcheck` IPv6 恒失败——4 条先红后绿，余 15 条转登记 #64）
 
 > 对全仓重新跑一轮五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web 三路并行）。

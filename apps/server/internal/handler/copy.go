@@ -95,8 +95,12 @@ func (h *Handler) copyMany(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := service.MoveKeys(r.Context(), client, bucket, targetBucket, pairs, 4, nil)
+	// 移动是「复制成功后删源」的组合动作，源 key 已永久消失：必须与异步版一样留下
+	// objects.move 审计（review R3 的同步对齐，threat-model.md R 抵赖缓解）。
 	// 移动与纯复制共用 copyBatchJSON：响应形状不得随 deleteSource 漂移（review Nit），
 	// truncated 恒写 false（本端点不截断 keys 列表，openapi 契约要求该键存在）。
+	h.audit(r, auditObjectsMove, "bucket", bucket, "targetBucket", targetBucket,
+		"total", len(pairs), "moved", out.OK, "failed", out.Failed)
 	h.writeJSON(w, http.StatusOK, copyBatchJSON(out, len(pairs), false))
 }
 
