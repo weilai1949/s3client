@@ -42,7 +42,7 @@ apps/web/src (Vue 3)
 apps/server/internal/handler    HTTP 层：路由、参数校验、错误映射、DTO 转换
    │
    ▼
-apps/server/internal/service    批量/迁移/异步任务/zip 等业务编排
+apps/server/internal/service    批量/删除/迁移/异步任务/zip 等业务编排
    │
    ▼
 apps/server/internal/s3wrap      AWS SDK v2 封装 + SSRF 防护 + 预签名（防腐层）

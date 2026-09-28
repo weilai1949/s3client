@@ -16,6 +16,17 @@ func TestMaxMultipartPartsIsProtocolLimit(t *testing.T) {
 	}
 }
 
+// TestMultipartStreamCopyPartSizeIs64MB 钉住 640GB 上限的**另一半**（KNOWN_ISSUES #63 的证据）：
+// 单对象流式复制上限 = 分段大小 × 段号上限，段数由上面的测试钉死，分段默认值在此钉死——
+// 两者共同构成 64MB × 10000 = 640GB 的刻意取舍。放大分段会按比例放大分段缓冲
+// （一块即 64MB，受 512MB 容器预算约束，见 stream_copy.go 的 maxIdlePartBufs 注释），
+// 因此改动本默认值必须先重新过内存预算这一关，不能顺手改。
+func TestMultipartStreamCopyPartSizeIs64MB(t *testing.T) {
+	if multipartPartSize != 64<<20 {
+		t.Fatalf("multipartPartSize = %d, want %d (64MB)", multipartPartSize, 64<<20)
+	}
+}
+
 // shrinkParts 把段上限/段大小临时改成小值，用小数据精确覆盖段号边界。
 func shrinkParts(t *testing.T, limit int32) {
 	t.Helper()

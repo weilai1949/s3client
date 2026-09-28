@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -95,7 +94,7 @@ func (h *Handler) copyMany(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusOK, copyBatchJSON(out, len(pairs), false))
 		return
 	}
-	out := copyKeysThenDelete(r.Context(), client, bucket, targetBucket, pairs, 4, nil)
+	out := service.MoveKeys(r.Context(), client, bucket, targetBucket, pairs, 4, nil)
 	// 移动与纯复制共用 copyBatchJSON：响应形状不得随 deleteSource 漂移（review Nit），
 	// truncated 恒写 false（本端点不截断 keys 列表，openapi 契约要求该键存在）。
 	h.writeJSON(w, http.StatusOK, copyBatchJSON(out, len(pairs), false))
@@ -160,7 +159,7 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 				job.Emit(service.ProgressFrom(p))
 			})
 		} else {
-			out = copyKeysThenDelete(ctx, client, bucket, targetBucket, pairs, 4, func(p service.Progress) {
+			out = service.MoveKeys(ctx, client, bucket, targetBucket, pairs, 4, func(p service.Progress) {
 				job.Emit(service.ProgressFrom(p))
 			})
 		}
@@ -171,26 +170,6 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 		job.Finish(jobResultFromBatch(out), status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total})
-}
-
-// copyKeysThenDelete 复制成功后再删源（移动），进度回调与 CopyKeys 同形。
-func copyKeysThenDelete(
-	ctx context.Context, client *s3wrap.Client, srcBucket, dstBucket string,
-	pairs [][2]string, workers int, onProgress func(service.Progress),
-) service.BatchResult {
-	return service.RunBatch(ctx, pairs, workers,
-		func(p [2]string) string { return p[0] },
-		func(ctx context.Context, p [2]string) error {
-			if err := client.CopyObject(ctx, srcBucket, p[0], dstBucket, p[1]); err != nil {
-				return err
-			}
-			if err := client.DeleteObject(ctx, srcBucket, p[0]); err != nil {
-				// sentinel 包装：批量结果用 errors.Is 识别「移动半成功」，不依赖错误文案。
-				return fmt.Errorf("%w: %s: %w", s3wrap.ErrSourceDeleteFailed, p[0], err)
-			}
-			return nil
-		},
-		onProgress)
 }
 
 type copyPrefixReq struct {

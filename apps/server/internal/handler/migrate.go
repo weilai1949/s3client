@@ -16,7 +16,7 @@ func (h *Handler) migrate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sameEP := service.SameEndpoint(src.Endpoint, src.Region, dst.Endpoint, dst.Region)
+	sameEP := service.SameEndpoint(src.Endpoint, src.Region, src.UseSSL, dst.Endpoint, dst.Region, dst.UseSSL)
 	out := service.MigrateKeys(r.Context(), srcClient, dstClient, srcBucket, targetBucket, req.SourceKeys, req.TargetPrefix, sameEP, 4, nil)
 	h.writeJSON(w, http.StatusOK, migrateBatchJSON(out))
 }

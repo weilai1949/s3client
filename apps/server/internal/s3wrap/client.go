@@ -49,6 +49,16 @@ func (c *Client) Region() string {
 	return c.acc.Region
 }
 
+// UseSSL 返回该客户端账号配置的 TLS 开关。与 Endpoint()/Region() 一起作为
+// service.SameEndpoint 的同/异端判定输入：裸端点按它补全 http/https，
+// 与建 client 时 NormalizeEndpoint(endpoint, acc.UseSSL) 用的是同一个值。
+func (c *Client) UseSSL() bool {
+	if c == nil || c.acc == nil {
+		return false
+	}
+	return c.acc.UseSSL
+}
+
 // New 根据账号构建 S3 客户端与预签名客户端。
 func New(acc *model.Account) (*Client, error) {
 	if acc == nil {

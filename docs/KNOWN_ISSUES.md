@@ -14,13 +14,13 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#62；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`roadmap.md`](roadmap.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-09-24
+> 最后更新：2026-09-28
 
 ## 目录
 
@@ -45,10 +45,10 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 60 | 4 个超 1000 行的前端测试文件拆分 | AGENTS.md 单文件约束 | ⬜ | `src/api.test.ts`（1928 行）、`src/components/MigratePanel.test.ts`（1210 行）、`src/composables/useObjectActions.test.ts`（1118 行）、`src/composables/useObjectBrowser.test.ts`（1040 行）均超 AGENTS.md「单文件不超过约 1000 行」约束（Go 侧同款 2 文件已于 2026-09-24 拆分完成，证据见 [`CHANGELOG.md`](../CHANGELOG.md)）。拆分只动文件归属、不改断言；会牵动登记数——[`features.md`](features.md) §Z 等处「66 文件 / 1043 例」为时点实测值，拆分后逐处收口 |
-| 61 | `SameEndpoint` 精确判定未纳入 `useSSL` | code-review-2026-09-24 Nit / `service/migrate.go` `normalizeForCompare` 注释 | ⬜ | 两侧**裸端点**（无 scheme）而账号 `UseSSL` 不同时，会被判为同端而走 `CopyObject`（写到错误 scheme）或被判异端而走流式（慢但正确）。现有归一化是对称的（裸端点恒按 http 互比，无单边错配），且失败方向偏安全；精确判定需把 `useSSL` 纳入 `SameEndpoint` 签名并改 handler/service 全部调用点（跨包契约变更），口径说明与钉死用例见 `service/migrate.go` / `service/gaps_test.go` |
-| 62 | 批量删除编排仍留在 `handler`（同类批量编排在 `service`） | code-review-2026-09-24 Nit（**本轮未完成**） | ⬜ | 批量编排的同类已在 `internal/service`（`RunBatch` / `CopyKeys`），删除族却仍写在 handler：`handler/objects.go` 的 `deleteObjects` / `deletePrefix` / `deletePrefixAsync`（含 `deleteCounts` 计数与前缀递归分片）、`handler/copy.go:177` 的 `copyKeysThenDelete`（先复制后删除）。后果是 `handler → service` 分层口径不一、`objects.go` 持续膨胀、编排逻辑无法脱离 HTTP 层单测。下沉需先把响应形状（`deleteCounts` / `deletePrefixResult`）抽离 `http.ResponseWriter`，再把编排与测试搬到 `service`——**纯重构、不改外部可见行为**，可独立成 PR。审查报告见 [code-review-2026-09-24.md](code-review-2026-09-24.md) 「处置明细」B18 |
-| 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose*.yml` 的 `deploy.resources.limits.memory`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象），默认值由测试钉住；如将来要放宽，先评估内存预算再动 |
+| 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动 |
+
+> 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
+> 已闭环移除，证据见 [`features.md`](features.md) §AB；本表只剩 #63 一项已决策维持现状。
 
 ## 三、分类归零凭证
 
@@ -77,9 +77,9 @@
 | #40 / #42 / #43 / #44 | 从未启用（保留空号） | 补登记时跳号；回收会让历史提交里的 `#N` 指向不同条目 |
 | #41 / #45 / #46 | 已闭环移除 | 对应文档失真 D1 / D4 / D5 / D10，2026-09-22 闭环（[features.md](features.md) §U） |
 | #47–#59 | **已迁出** | 功能候选（非问题），唯一来源改为 [roadmap.md](roadmap.md) §三 3.2 |
-| #60 | **开放** ⬜ | 技术债，见 §二 |
-| #61 | **开放** ⬜ | 技术债（`SameEndpoint` 未纳入 `useSSL`），见 §二 |
-| #62 | **开放** ⬜ | 技术债（批量删除编排未下沉 `service`，2026-09-24 审查 Nit 本轮未完成），见 §二 |
+| #60 | **已闭环移除** | 4 个超 1000 行的前端测试文件拆分，2026-09-28 闭环（[features.md](features.md) §AB） |
+| #61 | **已闭环移除** | `SameEndpoint` 精确判定纳入 `useSSL`（跨包契约变更），2026-09-28 闭环（[features.md](features.md) §AB） |
+| #62 | **已闭环移除** | 批量删除编排下沉 `service`（2026-09-24 审查 Nit 本轮未完成），2026-09-28 闭环（[features.md](features.md) §AB） |
 | #63 | **已决策** ➖ | 已知限制（流式复制单对象 640GB 上限，维持现状），见 §二 |
 
 ---

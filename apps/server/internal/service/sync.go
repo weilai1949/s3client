@@ -100,7 +100,7 @@ func SyncKeys(
 	}
 
 	// 4. 复用复制内核完成复制（目标 key 由同一个 dstKeyFor 决定）。
-	sameEP := SameEndpoint(src.Endpoint(), src.Region(), dst.Endpoint(), dst.Region())
+	sameEP := SameEndpoint(src.Endpoint(), src.Region(), src.UseSSL(), dst.Endpoint(), dst.Region(), dst.UseSSL())
 	out := migrateKeys(ctx, src, dst, srcBucket, dstBucket, toCopy, dstKeyFor, sameEP, workers, onProgress)
 	return SyncResult{
 		Scanned:    len(srcList),

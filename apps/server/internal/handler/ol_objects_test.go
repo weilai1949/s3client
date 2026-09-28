@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 )
@@ -301,69 +300,6 @@ func TestOlPresignModes(t *testing.T) {
 	rr = env.accDoRec("POST", "/api/accounts/"+id+"/presign", `{}`)
 	olExpectStatus(t, rr, http.StatusBadRequest, "no key")
 }
-
-// TestOlRunDeletePrefixTruncate 白盒验证 runDeletePrefix 达到上限即截断（跨页 guard）。
-func TestOlRunDeletePrefixTruncateExact(t *testing.T) {
-	// 100 页 ×1000 key，每页声明 truncated → 第 101 轮触发上限 guard
-	pages := make([]string, 0, 100)
-	for i := 0; i < 100; i++ {
-		pages = append(pages, listBucketXML(olKeys(1000), true, "t"))
-	}
-	srv := olListPagesFake(t, pages)
-	env := accNewEnv(t, srv.URL, "b")
-	client := olClient(t, env)
-	counts, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
-	if err != nil {
-		t.Fatalf("runDeletePrefix: %v", err)
-	}
-	if counts.Deleted != 100_000 || counts.Failed != 0 || !truncated {
-		t.Fatalf("counts=%+v truncated=%v, want deleted 100000 failed 0 true", counts, truncated)
-	}
-}
-
-// TestOlRunDeletePrefixCrossLimit 白盒验证单页跨越上限时裁剪 keys 并截断。
-func TestOlRunDeletePrefixCrossLimit(t *testing.T) {
-	// 99 页 ×1000 + 1 页 ×1500 → 最后一页裁剪到 1000 并截断
-	pages := make([]string, 0, 100)
-	for i := 0; i < 99; i++ {
-		pages = append(pages, listBucketXML(olKeys(1000), true, "t"))
-	}
-	pages = append(pages, listBucketXML(olKeys(1500), false, ""))
-	srv := olListPagesFake(t, pages)
-	env := accNewEnv(t, srv.URL, "b")
-	client := olClient(t, env)
-	counts, truncated, err := runDeletePrefix(t.Context(), client, "b", "p/")
-	if err != nil {
-		t.Fatalf("runDeletePrefix: %v", err)
-	}
-	if counts.Deleted != 100_000 || counts.Failed != 0 || !truncated {
-		t.Fatalf("counts=%+v truncated=%v, want deleted 100000 failed 0 true", counts, truncated)
-	}
-}
-
-// olListPagesFake 假 S3：按调用次序返回预置 list 页（越界 → 错误）；delete 一律成功。
-func olListPagesFake(t *testing.T, pages []string) *httptest.Server {
-	var mu sync.Mutex
-	calls := 0
-	return olFake(t, func(r *http.Request) olResp {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Query().Has("list-type"):
-			mu.Lock()
-			i := calls
-			calls++
-			mu.Unlock()
-			if i < len(pages) {
-				return olXML(http.StatusOK, pages[i])
-			}
-			return olErr(http.StatusForbidden, "AccessDenied")
-		case r.Method == http.MethodPost && r.URL.Query().Has("delete"):
-			return olXML(http.StatusOK, `<?xml version="1.0"?><DeleteResult/>`)
-		}
-		return olResp{}
-	})
-}
-
-// olListPagesFake 假 S3：按调用次序返回预置 list 页（越界 → 错误）；delete 一律成功。
 
 // TestOlDeleteObjectsTooManyKeys 1001 个 key 触发 400；少量走通。
 func TestOlDeleteObjectsTooManyKeys(t *testing.T) {

@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -871,6 +871,21 @@ functions 1095 / lines 3503）。
 | Nit | 后端 18 项 + 前端 17 项（共 35；`withDefaults` 空 no-op 与 MigratePanel 空 if 原排在后端段、实为前端） | ⚠️ **31 ✅ + 3 转登记 + 1 不成立** | 后端已修：`%w` 格式化 nil、RequestTimeout 两表一致、IsEntityTooLarge 冗余匹配、WAL/-shm 0600、DSN `busy_timeout`、KDF 参数上界、`envOrInt` 显式报错、healthcheck 注释、migrate store 故障→500（非 404）、`getBucketInfo` 去 ListBuckets 全量拉取、copyMany 响应形状对齐、sync etag multipart 收敛、`LastError→FirstError`、CSP `connect-src` 单源化、EnumStr 冗余转换。**3 项未按原样修复、转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**：`SameEndpoint useSSL` 硬编码 → **#61**（技术债 ⬜）；**batch 删除编排下沉 `service` → #62（技术债 ⬜，本轮未完成——`objects.go` 删除族与 `copy.go` `copyKeysThenDelete` 仍在 handler，`service` 侧只有 `RunBatch`/`CopyKeys` 无删除编排，注释已在 `objects.go` `deleteObjects` 处指路）**；`stream_copy` 640GB 上限 → **#63**（已决策 ➖，S3 段号上限 × 512MB 容器内存预算的刻意取舍，注释 + 测试钉住默认值）。前端已修：五处导出面死代码清零（`updateToast` / `applyTheme` / `UPLOAD_CONCURRENCY` / `polling` / `normalizeStringArray`，**源码形态门禁先红后绿**）、`requestTab` 收窄 `TabKey`、`regions ?? []` 删除、`getBase`/`setBase` 降级 try/catch、分页 `PAGE_SIZE` 单源、abort 后 Promise settle、0 字节文件放行、`validateDoc` i18n 化、`selectedSize` 增量化、`t` 遮蔽改名、`withDefaults` 空 no-op 删除、MigratePanel 空 if 删除、**7 处可删除行 `v-for` 稳定行键**（含 7 个组件「删除中间行保留原 DOM 节点」测试，改回 `:key="i"` 即 6 红）、**账号回退三段复制提取 `useAccountSelect`**、**RecycleBinPanel / VersionsDialog 虚拟滚动**（复用 `virtualList.ts`）。`App.vue` 双 `JSON.parse` 经复核**不成立**（`App.vue` 全文 0 处 `JSON.parse`），不改（1 项 ℹ️）。**逐项处置明细（35 行）见审查报告「处置明细」表** |
 | 门禁 | 全绿实测 | ✅ | 后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test` **9/9 包**（`go list ./...` 共 9 个，含 R11 新建的 `internal/atomicfile`，**每包 100.0% statements**） / `go build` 干净 / `golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 / `pnpm test` **67 文件 1110 例** / `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` + `typecheck:e2e` exit 0；`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E` **4/4 PASS**；`SERVER_PORT=18090 make e2e-real` **3 passed**（本机 8080 被系统 `haproxy` 占用，改端口重跑） |
 
+### AB. 2026-09-28 KNOWN_ISSUES #60–#63 收口（前端测试拆分 / `SameEndpoint` 纳入 `useSSL` / 删除编排下沉 / 640GB 上限证据补齐）
+
+> 来源：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §二。**一个提交**完成 #60 / #61 / #62 三项闭环 + #63 补证据；
+> 三者已从 §二 移出、在 §四 编号台账登记「已闭环移除」，编号不回收。
+> 纪律：TDD——先写会失败的用例再改实现；#62 为**纯重构**，外部可见行为（HTTP 状态码 / 响应体 / 审计行）逐字不变。
+> 逐条改动与实现细节见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目。
+
+| # | 条目 | 状态 | 实现与验证 |
+|---|------|------|------------|
+| 60 | 4 个超 1000 行的前端测试文件拆分 | ✅ | **4 → 9 文件，断言逐字搬移**（每个拆出文件头部带「本文件范围 + 指向兄弟文件」注释）：`src/api.test.ts` 1986 行 → `api.test.ts` 887 + `api.transfer.test.ts` 677 + `api.gaps.test.ts` 573；`src/components/MigratePanel.test.ts` 1230 → `MigratePanel.test.ts` 871 + `MigratePanel.branches.test.ts` 463；`src/composables/useObjectActions.test.ts` 1164 → `useObjectActions.test.ts` 872 + `useObjectActions.batch.test.ts` 447；`src/composables/useObjectBrowser.test.ts` 1147 → `useObjectBrowser.test.ts` 558 + `useObjectBrowser.branches.test.ts` 641。**最大 887 行 < 1000**。等价性以 `vitest --reporter=json` 双侧全量对比：拆分前后**测试名清单 diff 为空**、**1110 → 1110 例**、覆盖率**四指标 100%（4255 / 2908 / 1124 / 3653）完全不变**（67 文件 → 72 文件） |
+| 61 | `SameEndpoint` 精确判定纳入 `useSSL` | ✅ | `service.SameEndpoint` 改为 6 参签名 `(aEndpoint, aRegion string, aUseSSL bool, bEndpoint, bRegion string, bUseSSL bool)`——裸端点按各自账号 `UseSSL` 补 scheme 后再互比，**显式 scheme 优先于开关**、端点为空时不看开关；新增 `(*s3wrap.Client).UseSSL()`（`s3wrap/client.go`，100% 覆盖）。调用点 3 处同步：`handler/migrate.go`、`handler/migrate_async.go`、`service/sync.go`。用例：`service/zip_test.go` `TestSameEndpoint` 表驱动 **10 → 17 组**（裸端点同/异 TLS、显式 scheme 优先、`useSSL` 对空端点无效等）、`service/gaps_test.go` `TestSameEndpointNormalizeEdges` **7 → 9 断言**（`useSSL` 由固定 `false` 改为可变入参钉死口径） |
+| 62 | 批量删除编排下沉 `service`（§AA 遗留 Nit，本轮未完成） | ✅ | 新增 `internal/service/delete.go`（189 行）承载 `DeleteCounts` / `DeletePrefixResult` / `DeleteKeys` / `RunDeletePrefix` / `DeleteKeysBatched` / `MoveKeys`，与 `batch.go` 的 `RunBatch` / `CopyKeys` 同层；`handler/objects.go` **538 → 432 行**、`handler/copy.go` 删 `copyKeysThenDelete`（净 -21 行），handler 只剩 HTTP 边界（入参校验 → 调 service → 写状态码/响应体 → 审计）。**响应体形状不变**（`{"deleted","failed","lastError"}` 与前缀递归口径），故仍按既有先例在 `writeJSON` 处内联构造 map，`TestOpenAPI_EndpointResponseSchemasMatchHandlers` 全量核对不受影响。新增 `internal/service/delete_test.go`（436 行）逐条搬移原 handler 3 个白盒用例（`TestOlRunDeletePrefix*`），并删掉随之死掉的 `handler.s3UserMessageForCode` 与 `olListPagesFake` |
+| 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | ➖ **维持现状，证据补齐** | 新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住**分段默认值 64MB**——640GB 是「分段 × 段数」两个默认值的乘积，此前只有 `TestMaxMultipartPartsIsProtocolLimit` 钉段数，证据缺一半；复核 `docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务确为 `deploy.resources.limits.memory: 512M`（一块分段缓冲即 64MB）。口径三处一致：`service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #63 → 本行 |
+| 门禁 | 全绿实测 | ✅ | 后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test -race -count=1` **9/9 包、每包 100.0% statements** / `go build` 干净 / `golangci-lint run ./...` **0 issues**；前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **72 文件 1110 例**（与拆分前测试名清单逐条一致）/ `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` OK |
+
 ---
 
 ## 三、质量与覆盖率现状
@@ -904,6 +919,11 @@ functions 1095 / lines 3503）。
 > **4255 / 2908 / 1124 / 3653 四指标 100%**）/ `pnpm build` OK；真实 E2E 两项——
 > `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` **4/4 PASS**、`make e2e-real` **3 passed**
 > （后端 `S3C_TOKEN` 开启的生产同构形态，C1 修复的验收实跑）。
+>
+> 2026-09-28 KNOWN_ISSUES #60–#63 收口（见 §AB）后复测：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
+> 后端 `go test` **9/9 包、每包 100.0% statements**、`golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 /
+> `pnpm typecheck` + `typecheck:e2e` exit 0 / **72 文件 1110 例全绿**（#60 拆分只动文件归属，
+> 测试名清单与拆分前**逐条一致**；覆盖率 **4255 / 2908 / 1124 / 3653 四指标 100% 不变**）/ `pnpm build` OK。
 
 | 门禁 | 结果 |
 |---|---|
@@ -912,9 +932,9 @@ functions 1095 / lines 3503）。
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 67 文件 / **1110** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653） |
-| `vue-tsc --noEmit` / `vite build` | 干净 / OK（360.52 KB，gzip 110.85 kB） |
+| 前端 `pnpm test` | 72 文件 / **1110** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**） |
+| `vue-tsc --noEmit` / `vite build` | 干净 / OK（366.10 kB，gzip 112.50 kB，2026-09-28 实测） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |

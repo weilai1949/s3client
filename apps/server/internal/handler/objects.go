@@ -242,40 +242,7 @@ func capFailKeys(keys []string) []string {
 	return out
 }
 
-// deleteCounts 批量删除的累计结果，同时是 POST …/delete 的 200 响应体。
-//
-// S3 的 DeleteObjects 对逐 key 失败仍返回 200，只在响应体内列 <Error>；把「请求数」当作
-// 「已删除数」会向用户误报（review §B3）。此处统一按「请求数 − 逐 key 失败数」记账。
-type deleteCounts struct {
-	Deleted   int    `json:"deleted"`
-	Failed    int    `json:"failed"`
-	LastError string `json:"lastError,omitempty"`
-}
-
-// observe 记入一批删除结果：requested 为本批提交的 key 数，failures 为服务端逐 key 拒绝的条目。
-func (c *deleteCounts) observe(requested int, failures []s3wrap.DeleteFailure) {
-	c.Deleted += requested - len(failures)
-	c.Failed += len(failures)
-	if c.LastError == "" && len(failures) > 0 {
-		c.LastError = s3UserMessageForCode(failures[0].Code)
-	}
-}
-
-// deletePrefixResult 是 POST …/delete-prefix 的 200 响应体（比 deleteCounts 多一个 truncated）。
-type deletePrefixResult struct {
-	Deleted   int    `json:"deleted"`
-	Failed    int    `json:"failed"`
-	Truncated bool   `json:"truncated"`
-	LastError string `json:"lastError,omitempty"`
-}
-
-// deleteObjects 批量删除。
-//
-// 分层备注：此处的删除族编排（deleteObjects 的分片、deletePrefix 的递归、
-// deletePrefixAsync 的任务体、copy.go 的 copyKeysThenDelete）仍留在 handler，
-// 而同类批量编排已在 service（RunBatch / CopyKeys）——口径不一已登记为
-// KNOWN_ISSUES #62（开放 ⬜，review Nit 本轮未完成；下沉需先把上面两个响应
-// 形状抽离 http.ResponseWriter，属不改外部可见行为的纯重构）。
+// deleteObjects 批量删除：校验 / 审计 / 响应在本层，记账编排在 service.DeleteKeys。
 func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	client, acc, ok := h.accountClient(w, r)
 	if !ok {
@@ -301,18 +268,20 @@ func (h *Handler) deleteObjects(w http.ResponseWriter, r *http.Request) {
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
-	failures, err := client.DeleteObjects(r.Context(), bucket, req.Keys)
+	counts, err := service.DeleteKeys(r.Context(), client, bucket, req.Keys)
 	if err != nil {
 		h.writeInternalErr(w, err, "delete objects failed")
 		return
 	}
-	var counts deleteCounts
-	counts.observe(len(req.Keys), failures)
 	h.audit(r, auditObjectsDelete, "bucket", bucket, "deleted", counts.Deleted, "failed", counts.Failed)
-	h.writeJSON(w, http.StatusOK, counts)
+	resp := map[string]any{"deleted": counts.Deleted, "failed": counts.Failed}
+	if counts.LastError != "" {
+		resp["lastError"] = counts.LastError
+	}
+	h.writeJSON(w, http.StatusOK, resp)
 }
 
-// deletePrefix 递归删除前缀下的全部对象（循环 ListObjectsV2 + 批量 DeleteObjects）。
+// deletePrefix 递归删除前缀下的全部对象（编排在 service.RunDeletePrefix）。
 func (h *Handler) deletePrefix(w http.ResponseWriter, r *http.Request) {
 	client, acc, ok := h.accountClient(w, r)
 	if !ok {
@@ -334,16 +303,18 @@ func (h *Handler) deletePrefix(w http.ResponseWriter, r *http.Request) {
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
-	counts, truncated, err := runDeletePrefix(r.Context(), client, bucket, req.Prefix)
+	res, err := service.RunDeletePrefix(r.Context(), client, bucket, req.Prefix)
 	if err != nil {
 		h.writeInternalErr(w, err, "delete prefix failed")
 		return
 	}
 	h.audit(r, auditDeletePrefix, "bucket", bucket, "prefix", req.Prefix,
-		"deleted", counts.Deleted, "failed", counts.Failed)
-	h.writeJSON(w, http.StatusOK, deletePrefixResult{
-		Deleted: counts.Deleted, Failed: counts.Failed, Truncated: truncated, LastError: counts.LastError,
-	})
+		"deleted", res.Deleted, "failed", res.Failed)
+	resp := map[string]any{"deleted": res.Deleted, "failed": res.Failed, "truncated": res.Truncated}
+	if res.LastError != "" {
+		resp["lastError"] = res.LastError
+	}
+	h.writeJSON(w, http.StatusOK, resp)
 }
 
 // deletePrefixAsync 异步递归删除前缀；进度复用 migrate jobs（migrated=已删除数）。
@@ -384,45 +355,9 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 		"total", job.Total, "truncated", truncated)
 	go func() {
 		defer cancel()
-		var counts deleteCounts
-		var failKeys []string
-		const batch = 1000
-		for i := 0; i < len(keys); i += batch {
-			if ctx.Err() != nil {
-				break
-			}
-			end := i + batch
-			if end > len(keys) {
-				end = len(keys)
-			}
-			chunk := keys[i:end]
-			// chunk ≤ 1000 → 单次 SDK 调用，failures 只可能属于本批。
-			failures, delErr := client.DeleteObjects(ctx, bucket, chunk)
-			if delErr != nil {
-				// 传输层失败：本批 key 的结果未知，全部计入失败。
-				counts.Failed += len(chunk)
-				if counts.LastError == "" {
-					counts.LastError = s3UserMessage(delErr)
-				}
-				for _, k := range chunk {
-					if len(failKeys) < maxFailKeys {
-						failKeys = append(failKeys, k)
-					}
-				}
-			} else {
-				counts.observe(len(chunk), failures)
-				for _, f := range failures {
-					if len(failKeys) < maxFailKeys {
-						failKeys = append(failKeys, f.Key)
-					}
-				}
-			}
-			job.Emit(service.JobProgress{
-				Done: counts.Deleted + counts.Failed, Total: len(keys),
-				Migrated: counts.Deleted, Failed: counts.Failed,
-				Error: counts.LastError, Status: "running",
-			})
-		}
+		counts, failKeys := service.DeleteKeysBatched(ctx, client, bucket, keys, maxFailKeys, func(p service.Progress) {
+			job.Emit(service.ProgressFrom(p))
+		})
 		status := "done"
 		if ctx.Err() != nil {
 			status = "cancelled"
@@ -434,47 +369,6 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
 		"jobId": job.ID, "total": job.Total, "truncated": truncated,
 	})
-}
-
-// runDeletePrefix 循环列举 + 批量删除前缀下的全部对象。
-//
-// 进度以「已处理数」（成功 + 逐 key 失败）为准而不是「已删除数」：桶策略/保留期让删除全部
-// 失败时，只看 deleted 会让循环永不前进（同一页反复列出、反复失败直到 2h 任务超时）。
-func runDeletePrefix(
-	ctx context.Context, client *s3wrap.Client, bucket, prefix string,
-) (counts deleteCounts, truncated bool, err error) {
-	const maxDelete = 100_000
-	token := ""
-	for {
-		if counts.Deleted+counts.Failed >= maxDelete {
-			truncated = true
-			break
-		}
-		page, listErr := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", 1000)
-		if listErr != nil {
-			return counts, truncated, listErr
-		}
-		keys := make([]string, 0, len(page.Objects))
-		for _, o := range page.Objects {
-			keys = append(keys, o.Key)
-		}
-		if len(keys) > 0 {
-			if counts.Deleted+counts.Failed+len(keys) > maxDelete {
-				keys = keys[:maxDelete-counts.Deleted-counts.Failed]
-				truncated = true
-			}
-			failures, delErr := client.DeleteObjects(ctx, bucket, keys)
-			if delErr != nil {
-				return counts, truncated, delErr
-			}
-			counts.observe(len(keys), failures)
-		}
-		if truncated || !page.IsTruncated || page.NextToken == "" {
-			break
-		}
-		token = page.NextToken
-	}
-	return counts, truncated, nil
 }
 
 // presign 生成 v4 签名 URL（get/put/post）。

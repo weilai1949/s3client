@@ -68,8 +68,13 @@ func migrateKeys(
 //   - 端点均显式配置：比较端点（去尾斜杠、补全 scheme、忽略大小写），等则视为同端。
 //   - 端点均为空（使用 S3 默认端点）：仅当 region 相同才视为同端（不同 region 是不同的 S3 服务）。
 //   - 其余情况视为异端。
-func SameEndpoint(aEndpoint, aRegion, bEndpoint, bRegion string) bool {
-	na, nb := normalizeForCompare(aEndpoint), normalizeForCompare(bEndpoint)
+//
+// aUseSSL / bUseSSL 是两个账号的 useSSL 开关，只对**无 scheme 的裸端点**参与补全
+// （显式 scheme 优先），与建 client 时 s3wrap.New → NormalizeEndpoint 的口径逐字一致：
+// 因此「判定同端」等价于「两侧 BaseEndpoint 相同」，不会出现比较说同端、建出的 URL
+// 却连不上的漂移。端点为空时开关不参与（未设 BaseEndpoint → SDK 恒走默认 https 端点）。
+func SameEndpoint(aEndpoint, aRegion string, aUseSSL bool, bEndpoint, bRegion string, bUseSSL bool) bool {
+	na, nb := normalizeForCompare(aEndpoint, aUseSSL), normalizeForCompare(bEndpoint, bUseSSL)
 	if na != "" && nb != "" {
 		return na == nb
 	}
@@ -80,18 +85,10 @@ func SameEndpoint(aEndpoint, aRegion, bEndpoint, bRegion string) bool {
 }
 
 // normalizeForCompare 归一化端点，用于 SameEndpoint 的「是否同一服务端」比较。
-//
-// useSSL 固定传 false 只改变**无 scheme 输入**的补全结果（补 http），对带 scheme
-// 的输入无影响；两侧用同一规则归一化，比较是对称的（裸端点一律按 http 互比，
-// 不会出现「A 按 http、B 按 https」的单边错配）——这正是建 client 之外的比较口径
-// 所需（review Nit「SameEndpoint 硬编码 useSSL=false」的口径说明）。
-//
-// 已知边界：账号真实 UseSSL 不在 SameEndpoint 签名里（model.Account.UseSSL 只在
-// 建 client 时参与 NormalizeEndpoint）。两端点字符串相同/一侧裸写而实际 TLS 配置
-// 不同时，会被判为同端而走 CopyObject（写错服务端）或被判异端而走流式（慢但正确）。
-// 精确判定需把 useSSL 纳入签名——那是 handler 调用点的跨包契约变更，另行处理。
-func normalizeForCompare(endpoint string) string {
-	return s3wrap.NormalizeEndpoint(endpoint, false)
+// useSSL 只改变**无 scheme 输入**的补全结果（补 http 或 https），规则由
+// s3wrap.NormalizeEndpoint 唯一提供（建 client 与比较共用同一实现）。
+func normalizeForCompare(endpoint string, useSSL bool) string {
+	return s3wrap.NormalizeEndpoint(endpoint, useSSL)
 }
 
 // normalizeRegion 归一化 region 用于比较（trim + 忽略大小写）。

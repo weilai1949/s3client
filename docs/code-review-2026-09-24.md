@@ -18,6 +18,13 @@
 > 标记含义:**✅ 已修复** · **⚠️ 未按原样修复——转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)(#61 / #62 开放 ⬜,#63 已决策 ➖)** · **ℹ️ 复核后判定非问题,不改**。
 > 未完成项不静默略过:一律在 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 留条目(本轮 #61 / #62 保持开放,可回溯、可排期)。
 > 下方「门禁基线」与正文 file:line 为**审查时点快照**,按仓内「不追溯篡改」纪律保留原样。
+>
+> **后续状态更新（2026-09-28）**：本报告转登记的 **#61 / #62 已闭环**——`SameEndpoint` 精确判定纳入 `useSSL`
+> （6 参签名 + `(*s3wrap.Client).UseSSL()`）、批量删除编排下沉 `service`（新增 `internal/service/delete.go`，
+> `handler/objects.go` 538 → 432 行）；**#63 证据补齐**（新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住 64MB 分段），
+> 决策仍为 ➖ 维持现状。三项收口见 [`features.md`](features.md) **§AB** 与 [`CHANGELOG.md`](../CHANGELOG.md)
+> `[Unreleased]` 同日条目；[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §二 现只剩 #63。上文「开放 ⬜」等措辞为
+> **2026-09-24 时点快照**，按「不追溯篡改」纪律保留原样。
 
 > 范围:全仓**代码**(apps/server Go 后端 / apps/web Vue3 前端 / apps/desktop Tauri 壳),不含文档评审。
 > 方法:机械化门禁(go vet / golangci-lint / go test -count=1 / eslint / vue-tsc / vitest,全部 0 issues)+ 6 路五轴深度审查(正确性/可读性/架构/安全/性能/死代码),全部发现经源码复核或实测验证。

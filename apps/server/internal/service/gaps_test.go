@@ -379,29 +379,35 @@ func TestMigrateKeysDifferentEndpointStreamsAndAggregates(t *testing.T) {
 }
 
 func TestSameEndpointNormalizeEdges(t *testing.T) {
-	if !SameEndpoint(" http://A.com/ ", "us-east-1", "a.com", "eu-west-1") {
+	if !SameEndpoint(" http://A.com/ ", "us-east-1", false, "a.com", "eu-west-1", false) {
 		t.Fatal("normalize should match scheme/host case/trailing slash (region irrelevant once endpoint set)")
 	}
-	if SameEndpoint("", "us-east-1", "x", "us-east-1") {
+	if SameEndpoint("", "us-east-1", false, "x", "us-east-1", false) {
 		t.Fatal("empty vs explicit endpoint must never be equal")
 	}
-	if SameEndpoint("", "us-east-1", "", "eu-west-1") {
+	if SameEndpoint("", "us-east-1", false, "", "eu-west-1", false) {
 		t.Fatal("both default endpoints with different regions must not be equal")
 	}
-	if !SameEndpoint("", "us-east-1", "", "us-east-1") {
+	if !SameEndpoint("", "us-east-1", false, "", "us-east-1", false) {
 		t.Fatal("both default endpoints in same region must be equal")
 	}
-	if !SameEndpoint("  ", "  ", "  ", "  ") {
+	if !SameEndpoint("  ", "  ", false, "  ", "  ", false) {
 		t.Fatal("both blank endpoint+region should normalize to default and be equal")
 	}
-	// useSSL 固定 false 的钉死用例（review Nit「SameEndpoint 硬编码 useSSL=false」）：
-	// 裸端点一律补 http，因此「显式 https vs 裸」必须判异端（走流式，慢但正确），
-	// 「显式 http vs 裸」判同端（既有行为，不得回退）。
-	if SameEndpoint("https://a.com", "us-east-1", "a.com", "us-east-1") {
-		t.Fatal("https 显式 vs 裸端点（按 http 补全）不得判同端")
+	// useSSL 参与裸端点补全（review Nit「SameEndpoint 硬编码 useSSL=false」已修复）：
+	// 补全规则与建 client 的 BaseEndpoint 完全一致，因此「判定同端」等价于
+	// 「两侧 BaseEndpoint 相同」。
+	if !SameEndpoint("https://a.com", "us-east-1", true, "a.com", "us-east-1", true) {
+		t.Fatal("裸端点 + useSSL 应补全为 https，与显式 https 判同端")
 	}
-	if !SameEndpoint("http://a.com", "us-east-1", "a.com", "us-east-1") {
-		t.Fatal("http 显式 vs 裸端点应归一化为同一端点")
+	if SameEndpoint("a.com", "us-east-1", false, "https://a.com", "us-east-1", false) {
+		t.Fatal("useSSL=false 的裸端点补 http，不得与显式 https 判同端")
+	}
+	if !SameEndpoint("http://a.com", "us-east-1", false, "a.com", "us-east-1", false) {
+		t.Fatal("http 显式 vs 裸端点（按 http 补全）应归一化为同一端点")
+	}
+	if SameEndpoint("a.com", "us-east-1", true, "a.com", "us-east-1", false) {
+		t.Fatal("两侧裸端点但账号 useSSL 不同 → BaseEndpoint 不同，必须判异端")
 	}
 }
 

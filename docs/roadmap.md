@@ -106,7 +106,7 @@
 
 ## 四、质量门禁基线
 
-任一版本发布前必须全绿（当前实测状态，2026-09-24）：
+任一版本发布前必须全绿（当前实测状态，2026-09-28）：
 
 | 门禁 | 命令 | 当前状态 |
 |---|---|---|
@@ -118,7 +118,7 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ 1110 例全绿（67 文件） |
+| 前端测试 | `pnpm test` | ✅ 1110 例全绿（72 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件） |
 | 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4255 / 2908 / 1124 / 3653；含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |

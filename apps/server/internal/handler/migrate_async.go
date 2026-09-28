@@ -25,7 +25,7 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	sameEP := service.SameEndpoint(src.Endpoint, src.Region, dst.Endpoint, dst.Region)
+	sameEP := service.SameEndpoint(src.Endpoint, src.Region, src.UseSSL, dst.Endpoint, dst.Region, dst.UseSSL)
 	go func() {
 		defer cancel()
 		out := service.MigrateKeys(ctx, srcClient, dstClient, srcBucket, targetBucket, req.SourceKeys, req.TargetPrefix, sameEP, 4, func(p service.Progress) {

@@ -88,23 +88,36 @@ func TestSameEndpoint(t *testing.T) {
 	cases := []struct {
 		name               string
 		aEndpoint, aRegion string
+		aUseSSL            bool
 		bEndpoint, bRegion string
+		bUseSSL            bool
 		want               bool
 	}{
-		{"explicit equal, trailing slash", "http://minio:9000", "us-east-1", "http://minio:9000/", "us-east-1", true},
-		{"scheme differs", "https://a.com", "us-east-1", "http://a.com", "us-east-1", false},
-		{"https trailing slash", "https://a.com", "us-east-1", "https://a.com/", "us-east-1", true},
-		{"different hosts", "http://a.com", "us-east-1", "http://b.com", "us-east-1", false},
-		{"empty vs explicit", "", "us-east-1", "http://localhost:9000", "us-east-1", false},
-		{"both blank default", "  ", "  ", "  ", "  ", true},
-		{"both empty same region", "", "us-east-1", "", "us-east-1", true},
-		{"both empty different region", "", "us-east-1", "", "eu-west-1", false},
-		{"both empty region case/trim", "", " eu-west-1 ", "", "EU-WEST-1", true},
-		{"explicit same endpoint ignores region", "http://a.com", "us-east-1", "http://a.com", "eu-west-1", true},
+		{"explicit equal, trailing slash", "http://minio:9000", "us-east-1", false, "http://minio:9000/", "us-east-1", false, true},
+		{"scheme differs", "https://a.com", "us-east-1", false, "http://a.com", "us-east-1", false, false},
+		{"https trailing slash", "https://a.com", "us-east-1", false, "https://a.com/", "us-east-1", false, true},
+		{"different hosts", "http://a.com", "us-east-1", false, "http://b.com", "us-east-1", false, false},
+		{"empty vs explicit", "", "us-east-1", false, "http://localhost:9000", "us-east-1", false, false},
+		{"both blank default", "  ", "  ", false, "  ", "  ", false, true},
+		{"both empty same region", "", "us-east-1", false, "", "us-east-1", false, true},
+		{"both empty different region", "", "us-east-1", false, "", "eu-west-1", false, false},
+		{"both empty region case/trim", "", " eu-west-1 ", false, "", "EU-WEST-1", false, true},
+		{"explicit same endpoint ignores region", "http://a.com", "us-east-1", false, "http://a.com", "eu-west-1", false, true},
+		// useSSL 参与裸端点补全（与建 client 的 BaseEndpoint 同一口径）：
+		{"bare endpoints same TLS", "a.com", "us-east-1", true, "a.com", "us-east-1", true, true},
+		{"bare endpoints differing TLS", "a.com", "us-east-1", true, "a.com", "us-east-1", false, false},
+		{"bare https matches explicit https", "https://a.com", "us-east-1", false, "a.com", "us-east-1", true, true},
+		{"bare http matches explicit http", "http://a.com", "us-east-1", false, "a.com", "us-east-1", false, true},
+		{"bare https vs explicit http", "http://a.com", "us-east-1", false, "a.com", "us-east-1", true, false},
+		// 显式 scheme 优先于账号开关（建 client 时同样如此），故两侧仍同端。
+		{"explicit scheme beats useSSL", "http://a.com", "us-east-1", true, "http://a.com", "us-east-1", false, true},
+		// 端点为空时账号开关不参与（未配 BaseEndpoint → SDK 恒走默认 https 端点）。
+		{"both empty ignores useSSL", "", "us-east-1", true, "", "us-east-1", false, true},
 	}
 	for _, c := range cases {
-		if got := SameEndpoint(c.aEndpoint, c.aRegion, c.bEndpoint, c.bRegion); got != c.want {
-			t.Errorf("%s: SameEndpoint(%q,%q,%q,%q)=%v want %v", c.name, c.aEndpoint, c.aRegion, c.bEndpoint, c.bRegion, got, c.want)
+		if got := SameEndpoint(c.aEndpoint, c.aRegion, c.aUseSSL, c.bEndpoint, c.bRegion, c.bUseSSL); got != c.want {
+			t.Errorf("%s: SameEndpoint(%q,%q,%v,%q,%q,%v)=%v want %v",
+				c.name, c.aEndpoint, c.aRegion, c.aUseSSL, c.bEndpoint, c.bRegion, c.bUseSSL, got, c.want)
 		}
 	}
 }
