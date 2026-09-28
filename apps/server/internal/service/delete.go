@@ -69,6 +69,12 @@ func RunDeletePrefix(
 
 // deletePrefix 是 RunDeletePrefix 的循环内核。
 //
+// 三道守卫与 sync.go 的 listAll / indexDst 同一形态（review §B6）：
+//  1. 页数上限 listMaxPages——空页 + 前进 token 时 maxDelete 的计数永远不增长，
+//     只靠计数守卫会一直空转到客户端断连（同步端点还会占住 withStreamLimit 的流槽位）；
+//  2. token 缺失或不前进——对端异常时立即停，避免同一页被反复删除、反复计数；
+//  3. 循环首行查 ctx——不依赖 SDK 调用间接响应取消。
+//
 // 进度以「已处理数」（成功 + 逐 key 失败）为准而不是「已删除数」：桶策略/保留期让删除全部
 // 失败时，只看 deleted 会让循环永不前进（同一页反复列出、反复失败直到 2h 任务超时）。
 func deletePrefix(
@@ -76,17 +82,16 @@ func deletePrefix(
 ) (counts DeleteCounts, truncated bool, err error) {
 	const maxDelete = 100_000
 	token := ""
-	for {
-		if counts.Deleted+counts.Failed >= maxDelete {
-			truncated = true
-			break
+	for page := 0; page < listMaxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return counts, false, err
 		}
-		page, listErr := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", 1000)
+		p, listErr := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", listMaxKeys)
 		if listErr != nil {
-			return counts, truncated, listErr
+			return counts, false, listErr
 		}
-		keys := make([]string, 0, len(page.Objects))
-		for _, o := range page.Objects {
+		keys := make([]string, 0, len(p.Objects))
+		for _, o := range p.Objects {
 			keys = append(keys, o.Key)
 		}
 		if len(keys) > 0 {
@@ -100,12 +105,20 @@ func deletePrefix(
 			}
 			counts.Observe(len(keys), failures)
 		}
-		if truncated || !page.IsTruncated || page.NextToken == "" {
-			break
+		if truncated {
+			break // 本页有对象被裁掉 ⇒ 没枚举完
 		}
-		token = page.NextToken
+		if !p.IsTruncated {
+			return counts, false, nil
+		}
+		// 对端声称未完：已达总量上限、token 缺失或不前进，都必须停并标记截断——
+		// 否则要么静默截断（review R6），要么循环空转（review §B6）。
+		if counts.Deleted+counts.Failed >= maxDelete || p.NextToken == "" || p.NextToken == token {
+			return counts, true, nil
+		}
+		token = p.NextToken
 	}
-	return counts, truncated, nil
+	return counts, true, nil
 }
 
 // DeleteKeysBatched 按 1000 一批删除已列举出的 keys（异步删除任务体）。

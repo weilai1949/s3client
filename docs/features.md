@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -900,6 +900,33 @@ functions 1095 / lines 3503）。
 | **D5** endpoint 归一化多份实现（行为不一致） | ✅ 已收敛为单一 helper `s3wrap.NormalizeEndpoint`，建 client / 预签名 / SSRF 拨号校验 / 同端判定四处共用 | `go test ./internal/s3wrap/ -run TestNormalizeEndpoint` → `TestNormalizeEndpoint` 与 `TestNormalizeEndpointNeverDoubleScheme` **PASS** |
 | 文档活状态块同步 | ✅ | [`code-review-summary.md`](code-review-summary.md) 头部「状态更新」活块追加 **⑥**：记录 #60–#62 闭环 / #63 补证据维持 ➖、前端 67 → **72 文件**、Go 文件 199 → **201**（74 生产 + 127 `_test.go`，9 包 41410 行）、§7 双源消除；正文「⚠️ 待解决的技术问题」的 CORS 与单文件超限两条已在块内追平，**正文时点值仍不回写** |
 | 门禁 | ✅ | 只改 `docs/`，复跑 `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `go test -race -count=1` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **72 文件 1110 例** —— 零回归 |
+
+### AD. 2026-09-28 三路五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web）——本轮闭环 4 条，余 15 条转登记待复核
+
+> 按 `code-review-and-quality` 五轴方法对全仓重新审一轮（三路并行），发现经**逐条亲自读码复核**后只修
+> **有把握且已完成红绿**的 4 条；其余**未复核的不直接采信、也不静默丢弃**——登记为
+> [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#64**，清单见下方「待处置」表。
+
+#### 已闭环（4 条，全部先红后绿）
+
+| # | 条目 | 状态 | 证据（红 → 绿） |
+|---|---|---|---|
+| 1 | `service.deletePrefix` 列举循环**无界**：退出条件只有「`maxDelete` 计数到顶」与「token 为空」，而**空页 / token 不前进都不推进计数**，同步 `delete-prefix` 会一直空转到客户端断连并占住 `withStreamLimit` 的 32 个流槽位 | ✅ | 红：`TestRunDeletePrefixStopsAtPageCap` → **`未终止：空页 + 前进 token 导致死循环`**、`TestRunDeletePrefixStopsOnNonAdvancingToken` → `deleted = 100000, want 2000`。绿：移植 §B6 三道守卫——`listMaxPages` 页数上限 + `NextToken == ""` / `NextToken == token` 停止并标截断 + 循环首行 `ctx.Err()`；`TruncateExact` / `CrossLimit` / `ProgressesOnAllFailures` 三个 fixture 的 token 改为**逐页前进**（真实对端不会重复同一 token，常量 token 恰是本轮守卫对象），另补 `TestRunDeletePrefixReturnsOnCancelledContext` |
+| 2 | `handler.listPrefixKeys` 同款无界：`copy-prefix`（同步 / 异步）与 `delete-prefix` 异步列举**三处共用**；`copyPrefixAsync` 的列举还跑在 2h 任务超时**之外** | ✅ | 红：`TestOlListPrefixKeysStopsOnNonAdvancingToken` 与 `TestOlListPrefixKeysStopsAtPageCap` → **`listPrefixKeys 未终止：列举循环空转`**（各 5s 超时）。绿：`listPrefixMaxPages` + `ctx.Err()` + token 守卫，结构对齐 `indexDst`；补 `TestOlListPrefixKeysReturnsOnCancelledContext` |
+| 3 | **边界差一**：正好收满上限（`listPrefixKeys` 的 `maxCopy` / 100 000）且对端声明列举完成时仍报 `truncated=true`，与 `docs/api.md`「第 limit+1 个起未参与本次操作」的定义冲突，客户端会去重试一个已完成的操作 | ✅ | 红：`TestOlListPrefixKeysExactlyLimitIsNotTruncated` → **`正好收满 limit 且对端声明列举完成 ⇒ 不是截断`**。绿：改用 `indexDst` 的「先判本页丢弃、再判收满、最后看 `p.IsTruncated`」三段式。`deletePrefix` 本就正确（上限检查在 `!IsTruncated` 之后），未改动 |
+| 4 | `-healthcheck` 对 **IPv6 字面量监听地址**必然失败：`[::1]:8080` 拼成 `http://::1:8080/api/health`，`url.Parse` 报 `invalid port` → 恒返回 1，Docker `HEALTHCHECK` 会把**完全健康**的服务判死并反复重启（`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置） | ✅ | 红：`TestRunHealthcheck/ipv6_loopback_literal` → **`= 1, want 0`**。绿：`net.JoinHostPort(host, port)` 产出 `http://[::1]:8080/api/health`（实测 `url.Parse` 通过）；无 IPv6 的环境自动 `t.Skip`，`no-port-in-here` 的 fail-closed 用例仍绿 |
+| 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（新增守卫分支各补 1 个用例，否则 `service` 会跌到 99.8%）/ `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**（前端本轮无改动） |
+
+#### ⬜ 待处置（15 条，已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64；**均未复核，勿直接采信**）
+
+| 区域 | 条目 | 首要 / 次要 |
+|---|---|---|
+| 前端 `apps/web/src` | `RecycleBinPanel.vue` `error` 只写不清 ⇒ 一次失败就用横幅取代整页且重试后仍不恢复（`ObjectsPanel` 有 `dismissError`、此处没有）；`BucketsPanel.vue` `error` 同样无清空点且失败不清 `buckets` ⇒ 展示**上一个账号**的桶；`DestDialog.vue` 开启时无条件 `busy=false` 而 `ModalDialog` 的 Esc / ✕ / 背景点击都不看 `busy` ⇒ 飞行中的任务被并发重复提交；`useUploadQueue.ts` `status='signing'` 赋值后立即被 `'uploading'` 覆盖（中间无 `await`）⇒ 模板「签名中…」与 `abortItem` 分支生产不可达，属**被覆盖率掩盖的死状态** | 前 3 条接近 Required、第 4 条为死代码红线 |
+| 前端 `apps/web/src` | `VersionsDialog.vue` `load()` 无代次守卫 ⇒ 关闭再开另一个对象时展示前一个的版本；`ObjectList.vue` 「加载更多」追加也触发 `resetWindowScroll()` ⇒ 视口跳回顶部（`RecycleBinPanel` 已有正确范式）；`useObjectBrowser.ts` `load(reset=true)` 首页即清 `loadingAll` ⇒ 「加载全部」跑到一半按钮重新可点；`MigratePanel.vue` 源 / 目标桶列举无 `listGen` 守卫且共用一个 `loadingBuckets` | Optional |
+| 后端 `handler` | 3 处破坏性操作缺审计事件：同步 `copyMany`（`deleteSource=true` 移动，异步版已按 R3 补了 `auditObjectsMove`）、`renameObject` 删源（把删除藏进「重命名」可绕开 `auditObjectsDelete`）、`deleteObjectVersion` 永久版本删除（回收站 / `trash.purge` 反而有）——`docs/threat-model.md` 的「抵赖」缓解声明覆盖了对象删除语义 | 与 R3 修复口径不一致，Security |
+| 后端 `config` / `main` | 显式 `S3C_ENV_FILE` 路径缺失 / 不可读**静默回退默认值**（与本文件 `config.go:38-40` 自述的 fail-closed 约定冲突，`S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` 等加固项会静默失效）；`S3C_SHUTDOWN_TIMEOUT` 无上界，`int64` 溢出为负时长 ⇒ `Shutdown` 秒回、错误被 `_ =` 丢弃、退出码仍 0（同型问题见 presign `expiresIn`）；`MkdirAll(0700)` 只对**新建**目录生效，Docker volume / systemd 预建的 `0755` 永不收紧，与 `threat-model.md:40` 声明不符 | Optional（第 1 条偏 Required） |
+| 后端 `s3wrap` | `ValidateUserMetadata` 只校验键的可打印性，**值**里的 `CRLF` / 控制字符漏过 ⇒ 走到 Go transport 才报 `invalid header field value`，边界 400 变成传输期 500（恰好违背该文件自述目标；已确认**不存在**头注入，transport 硬拒）；`NormalizeEndpoint` 不做 IDNA 归一 ⇒ 国际化域名端点「校验通过但永远连不上」（DNS 失败按设计 fail-open，账号建得成、每次调用都 `no such host`） | Optional |
+| 后端 `store` | `store.Open` 的 json 分支丢弃入参 `storeKey` 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一调用方恰好同源，无生产影响） | Nit |
 
 ---
 

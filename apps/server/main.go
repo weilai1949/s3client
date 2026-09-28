@@ -168,6 +168,7 @@ func parseLevel(s string) slog.Level {
 //
 // 地址取 S3C_ADDR：通配 host（如 ":8080"，服务绑全接口）时探测回退 127.0.0.1——回环上
 // 同一端口必可达，避免把探测打到外部网卡地址。SplitHostPort 失败（地址缺端口，如
+// "no-port-in-here"）时
 // "no-port-in-here"）时 host 与 port 均为空串：host 置 127.0.0.1、port 为空拼出
 // "http://127.0.0.1:/api/health"，按 http 方案默认 80 端口连接，几乎必然失败返回 1。
 // 这是刻意的 fail-closed：同一非法地址下服务端自身也无法监听（missing port），
@@ -178,7 +179,11 @@ func runHealthcheck() int {
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		host = "127.0.0.1"
 	}
-	base := fmt.Sprintf("http://%s:%s%s", host, port, healthPath)
+	// IPv6 字面量必须经 JoinHostPort 加方括号：直接拼 "::1:8080" 会产出
+	// "http://::1:8080/api/health"，url.Parse 报 invalid port → client.Get 失败 → 恒返回 1，
+	// 让健康的容器被 HEALTHCHECK 判死并反复重启（[::1]:port 是 IsLoopbackAddr 认可的合法
+	// 回环监听地址、允许不设 token，属于会真实用到的一类配置）。
+	base := fmt.Sprintf("http://%s%s", net.JoinHostPort(host, port), healthPath)
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(base)
 	if err != nil {

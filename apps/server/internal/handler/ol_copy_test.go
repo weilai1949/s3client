@@ -3,12 +3,17 @@ package handler
 // ol_copy_test.go —— copy.go 校验/失败聚合/异步取消补测（仅新增，不改生产代码）。
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
 )
 
 // TestOlCopyValidation 复制类接口：404 / 非法 JSON / 缺桶。
@@ -245,5 +250,119 @@ func TestOlListPrefixKeysLimit(t *testing.T) {
 	}
 	if !truncated || len(keys) != 2 {
 		t.Fatalf("keys=%v truncated=%v, want 2 keys truncated", keys, truncated)
+	}
+}
+
+// listKeysResult 是 listPrefixKeys 三值返回的可传载体。
+type listKeysResult struct {
+	keys      []string
+	truncated bool
+	err       error
+}
+
+// runListPrefixKeys 在 goroutine 里跑 listPrefixKeys：5 秒不返回即判列举循环空转（红灯），
+// 被测函数拿到的 ctx 由 t.Context() 提供，测试结束会自动取消，残留 goroutine 随之退出。
+func runListPrefixKeys(t *testing.T, ctx context.Context, env *accEnv, client *s3wrap.Client, limit int) listKeysResult {
+	t.Helper()
+	done := make(chan listKeysResult, 1)
+	go func() {
+		keys, truncated, err := env.hnd.listPrefixKeys(ctx, client, "b", "p/", limit)
+		done <- listKeysResult{keys: keys, truncated: truncated, err: err}
+	}()
+	select {
+	case r := <-done:
+		return r
+	case <-time.After(5 * time.Second):
+		t.Fatal("listPrefixKeys 未终止：列举循环空转")
+		return listKeysResult{}
+	}
+}
+
+// TestOlListPrefixKeysStopsOnNonAdvancingToken 对端反复返回同一个 NextContinuationToken
+// 且每页都声明还有下一页时必须终止并标记截断（与 service.deletePrefix 同款守卫，review §B6）。
+// limit 取大值是为了让「靠 maxCopy 计数停住」这条路走不通——空转只能由守卫拦下。
+func TestOlListPrefixKeysStopsOnNonAdvancingToken(t *testing.T) {
+	srv := olFake(t, func(r *http.Request) olResp {
+		if r.URL.Query().Has("list-type") {
+			return olXML(http.StatusOK, listBucketXML([]string{"p/x"}, true, "t"))
+		}
+		return olResp{}
+	})
+	env := accNewEnv(t, srv.URL, "b")
+	got := runListPrefixKeys(t, t.Context(), env, olClient(t, env), 1_000_000)
+	if got.err != nil {
+		t.Fatalf("listPrefixKeys: %v", got.err)
+	}
+	// 首页 token=""→"t" 前进；次页请求带 "t" 而回的仍是 "t" ⇒ 判定不前进即停，共 2 页。
+	if len(got.keys) != 2 {
+		t.Fatalf("keys = %d, want 2（token 不前进后立即停止）", len(got.keys))
+	}
+	if !got.truncated {
+		t.Fatal("token 不前进而停 = 列举不完整，必须标记 truncated")
+	}
+}
+
+// TestOlListPrefixKeysStopsAtPageCap 空页 + 每次都前进的 token：maxCopy 的计数永不增长，
+// 只有页数上限拦得住（否则同步 copy-prefix / delete-prefix 会一直占着 withStreamLimit 的槽位）。
+func TestOlListPrefixKeysStopsAtPageCap(t *testing.T) {
+	var calls atomic.Int64
+	srv := olFake(t, func(r *http.Request) olResp {
+		if r.URL.Query().Has("list-type") {
+			page := calls.Add(1)
+			return olXML(http.StatusOK, listBucketXML(nil, true, fmt.Sprintf("t%d", page)))
+		}
+		return olResp{}
+	})
+	env := accNewEnv(t, srv.URL, "b")
+	got := runListPrefixKeys(t, t.Context(), env, olClient(t, env), 1_000_000)
+	if got.err != nil {
+		t.Fatalf("listPrefixKeys: %v", got.err)
+	}
+	if len(got.keys) != 0 {
+		t.Fatalf("keys = %d, want 0（空页）", len(got.keys))
+	}
+	if !got.truncated {
+		t.Fatal("页数上限耗尽而对端仍称有下一页，必须标记 truncated")
+	}
+}
+
+// TestOlListPrefixKeysExactlyLimitIsNotTruncated 正好收满 limit 且对端声明列举完成
+// ⇒ 全部枚举成功，不是截断。docs/api.md 把 truncated 定义为「第 limit+1 个起未参与本次
+// 操作」，正好收满时根本没有第 limit+1 个，误报会让客户端去重试一个已经完成的操作。
+func TestOlListPrefixKeysExactlyLimitIsNotTruncated(t *testing.T) {
+	srv := olFake(t, func(r *http.Request) olResp {
+		if r.URL.Query().Has("list-type") {
+			return olXML(http.StatusOK, listBucketXML([]string{"p/1", "p/2", "p/3"}, false, ""))
+		}
+		return olResp{}
+	})
+	env := accNewEnv(t, srv.URL, "b")
+	got := runListPrefixKeys(t, t.Context(), env, olClient(t, env), 3)
+	if got.err != nil {
+		t.Fatalf("listPrefixKeys: %v", got.err)
+	}
+	if len(got.keys) != 3 {
+		t.Fatalf("keys = %d, want 3", len(got.keys))
+	}
+	if got.truncated {
+		t.Fatal("正好收满 limit 且对端声明列举完成 ⇒ 不是截断")
+	}
+}
+
+// TestOlListPrefixKeysReturnsOnCancelledContext 循环首行就查 ctx：不依赖 SDK 调用
+// 间接响应取消（守卫是覆盖率的一部分，不许用「反正 SDK 也会报」跳过）。
+func TestOlListPrefixKeysReturnsOnCancelledContext(t *testing.T) {
+	srv := olFake(t, func(r *http.Request) olResp {
+		if r.URL.Query().Has("list-type") {
+			return olXML(http.StatusOK, listBucketXML([]string{"p/1"}, true, "t"))
+		}
+		return olResp{}
+	})
+	env := accNewEnv(t, srv.URL, "b")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	got := runListPrefixKeys(t, ctx, env, olClient(t, env), 100)
+	if !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("listPrefixKeys(cancelled) = %v, want context.Canceled", got.err)
 	}
 }

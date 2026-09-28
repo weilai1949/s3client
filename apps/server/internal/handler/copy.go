@@ -215,31 +215,53 @@ func (h *Handler) parseCopyPrefix(w http.ResponseWriter, r *http.Request) (
 	return
 }
 
+// listPrefixMaxPages 是 listPrefixKeys 的页数硬上限，与 service 的 listMaxPages 同值。
+// 空页 + 每次都前进的 token 时 maxCopy 的计数永不增长，只有页数上限拦得住（否则同步
+// copy-prefix / delete-prefix 会一直占着 withStreamLimit 的流槽位，见 service.deletePrefix）。
+const listPrefixMaxPages = 100
+
+// listPrefixKeys 列举 prefix 下最多 maxCopy 个 key。
+//
+// truncated 表示「有对象未被收录」：或本页装不下、或收满后对端仍称有下一页、或列举因
+// 安全上限（页数上限 / token 缺失或不前进）提前停止——口径与 service 的 listAll /
+// indexDst / deletePrefix 一致（review §B6 与 R6）。
 func (h *Handler) listPrefixKeys(ctx context.Context, client *s3wrap.Client, bucket, prefix string, maxCopy int) ([]string, bool, error) {
 	var keys []string
-	truncated := false
 	token := ""
-	for {
-		page, err := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", 1000)
+	for page := 0; page < listPrefixMaxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+		p, err := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", 1000)
 		if err != nil {
 			return nil, false, err
 		}
-		for _, o := range page.Objects {
-			keys = append(keys, o.Key)
+		dropped := false
+		for _, o := range p.Objects {
 			if len(keys) >= maxCopy {
-				truncated = true
+				dropped = true // 本页还有对象装不进上限：明确截断，不得静默丢弃
 				break
 			}
+			keys = append(keys, o.Key)
 		}
-		if truncated {
-			break
+		if dropped {
+			return keys, true, nil
 		}
-		if !page.IsTruncated || page.NextToken == "" {
-			break
+		if len(keys) >= maxCopy {
+			// 正好收满且本页无丢弃：对端还声称有下一页才算截断（正好等于上限且
+			// 对端声明列举完成 ⇒ 全部收录，不是截断）。
+			return keys, p.IsTruncated, nil
 		}
-		token = page.NextToken
+		if !p.IsTruncated {
+			return keys, false, nil
+		}
+		// 同 service.deletePrefix：token 缺失或不前进必须停并标记截断，否则空转。
+		if p.NextToken == "" || p.NextToken == token {
+			return keys, true, nil
+		}
+		token = p.NextToken
 	}
-	return keys, truncated, nil
+	return keys, true, nil
 }
 
 func copyBatchJSON(out service.BatchResult, total int, truncated bool) map[string]any {

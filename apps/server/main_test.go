@@ -90,6 +90,22 @@ func TestRunHealthcheck(t *testing.T) {
 		t.Fatalf("split okSrv addr: %v", err)
 	}
 
+	// IPv6 回环字面量：[::1]:port 是合法且被 IsLoopbackAddr 认可的回环监听地址
+	// （因此允许不设 token），但旧实现拼出 "http://::1:8080/api/health"——url.Parse 直接
+	// 报 invalid port，健康检查恒为 1，容器 HEALTHCHECK 会把健康服务判死并反复重启。
+	var v6Addr string
+	if ln, err := net.Listen("tcp", "[::1]:0"); err != nil {
+		t.Logf("IPv6 回环不可用，跳过该用例: %v", err)
+	} else {
+		v6Srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		v6Srv.Listener = ln
+		v6Srv.Start()
+		t.Cleanup(v6Srv.Close)
+		v6Addr = ln.Addr().String()
+	}
+
 	cases := []struct {
 		name string
 		addr string
@@ -99,6 +115,13 @@ func TestRunHealthcheck(t *testing.T) {
 		{"non-200", badSrv.Listener.Addr().String(), 1},
 		{"refused", "127.0.0.1:1", 1},
 		{"wildcard host falls back to loopback", ":" + okPort, 0},
+	}
+	if v6Addr != "" {
+		cases = append(cases, struct {
+			name string
+			addr string
+			want int
+		}{"ipv6 loopback literal", v6Addr, 0})
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

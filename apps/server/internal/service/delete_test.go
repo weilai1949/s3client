@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // ---- 可编程假 S3：ListObjectsV2 / DeleteObjects / DeleteObject / CopyObject ----
@@ -236,7 +238,9 @@ func TestRunDeletePrefixEmptyPageFinishes(t *testing.T) {
 func TestRunDeletePrefixTruncateExact(t *testing.T) {
 	pages := make([]string, 0, 100)
 	for i := 0; i < 100; i++ {
-		pages = append(pages, deleteListXML(deleteKeysN(1000), true, "t"))
+		// token 必须逐页前进：真实的对端不会重复同一个 token，而「不前进」正是
+		// deletePrefix 的守卫对象（见 TestRunDeletePrefixStopsOnNonAdvancingToken）。
+		pages = append(pages, deleteListXML(deleteKeysN(1000), true, fmt.Sprintf("t%d", i)))
 	}
 	client := newTestClient(t, newDeleteFake(t, &deleteFake{pages: pages}).URL)
 	res, err := RunDeletePrefix(context.Background(), client, "bkt", "p/")
@@ -248,12 +252,97 @@ func TestRunDeletePrefixTruncateExact(t *testing.T) {
 	}
 }
 
+// TestRunDeletePrefixStopsOnNonAdvancingToken 对端反复返回同一个 NextContinuationToken
+// 且每页都声明「还有下一页」时，循环必须终止并标记截断——review §B6 同款守卫。
+//
+// deletePrefix 此前的退出条件只有「maxDelete 计数到顶」与「token 为空」，而空页 /
+// 不前进的 token 都不会推进计数，循环会一直空转到客户端断连（同步端点还会占住
+// withStreamLimit 的流槽位）。
+func TestRunDeletePrefixStopsOnNonAdvancingToken(t *testing.T) {
+	f := &deleteFake{pages: []string{deleteListXML(deleteKeysN(1000), true, "t")}}
+	client := newTestClient(t, newDeleteFake(t, f).URL)
+	type got struct {
+		deleted   int
+		truncated bool
+		err       error
+	}
+	done := make(chan got, 1)
+	go func() {
+		r, err := RunDeletePrefix(context.Background(), client, "bkt", "p/")
+		done <- got{deleted: r.Deleted, truncated: r.Truncated, err: err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("RunDeletePrefix: %v", r.err)
+		}
+		// 首页 token=""→"t" 前进；次页请求带 "t" 而回的仍是 "t" ⇒ 判定不前进即停，
+		// 共处理 2 页 ×1000。
+		if r.deleted != 2000 {
+			t.Fatalf("deleted = %d, want 2000（token 不前进后立即停止）", r.deleted)
+		}
+		if !r.truncated {
+			t.Fatal("token 不前进而停 = 列举不完整，必须标记 truncated")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunDeletePrefix 未终止：NextContinuationToken 不前进导致死循环")
+	}
+}
+
+// TestRunDeletePrefixStopsAtPageCap token 每次都前进时，页数上限仍是硬边界：
+// 否则对端给「空页 + 前进 token」时计数永不增长，maxDelete 守卫永远不触发。
+func TestRunDeletePrefixStopsAtPageCap(t *testing.T) {
+	// 每页都空、但 token 逐页前进：maxDelete 的计数永不增长，只有页数上限停得住。
+	pages := make([]string, 0, listMaxPages+1)
+	for i := 0; i <= listMaxPages; i++ {
+		pages = append(pages, deleteListXML(nil, true, fmt.Sprintf("t%d", i)))
+	}
+	f := &deleteFake{pages: pages}
+	client := newTestClient(t, newDeleteFake(t, f).URL)
+	type got struct {
+		deleted   int
+		truncated bool
+		err       error
+	}
+	done := make(chan got, 1)
+	go func() {
+		r, err := RunDeletePrefix(context.Background(), client, "bkt", "p/")
+		done <- got{deleted: r.Deleted, truncated: r.Truncated, err: err}
+	}()
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("RunDeletePrefix: %v", r.err)
+		}
+		if r.deleted != 0 {
+			t.Fatalf("deleted = %d, want 0（空页）", r.deleted)
+		}
+		if !r.truncated {
+			t.Fatal("页数上限耗尽而对端仍称有下一页，必须标记 truncated")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunDeletePrefix 未终止：空页 + 前进 token 导致死循环")
+	}
+}
+
+// TestRunDeletePrefixReturnsOnCancelledContext 循环首行就查 ctx：不依赖 SDK 调用
+// 间接响应取消（守卫是 100% 覆盖的一部分，不许用「反正 SDK 也会报」跳过）。
+func TestRunDeletePrefixReturnsOnCancelledContext(t *testing.T) {
+	f := &deleteFake{pages: []string{deleteListXML(deleteKeysN(1), true, "t")}}
+	client := newTestClient(t, newDeleteFake(t, f).URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := RunDeletePrefix(ctx, client, "bkt", "p/"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunDeletePrefix(cancelled) = %v, want context.Canceled", err)
+	}
+}
+
 // TestRunDeletePrefixCrossLimit 单页跨越上限时裁剪 keys 并截断：
 // 99 页 ×1000 + 1 页 ×1500 → 最后一页只取 1000 并截断。
 func TestRunDeletePrefixCrossLimit(t *testing.T) {
 	pages := make([]string, 0, 100)
 	for i := 0; i < 99; i++ {
-		pages = append(pages, deleteListXML(deleteKeysN(1000), true, "t"))
+		pages = append(pages, deleteListXML(deleteKeysN(1000), true, fmt.Sprintf("t%d", i)))
 	}
 	pages = append(pages, deleteListXML(deleteKeysN(1500), false, ""))
 	client := newTestClient(t, newDeleteFake(t, &deleteFake{pages: pages}).URL)
@@ -269,9 +358,14 @@ func TestRunDeletePrefixCrossLimit(t *testing.T) {
 // TestRunDeletePrefixProgressesOnAllFailures 全部删除都失败时循环仍必须前进：
 // 进度只看「已删除数」会让同一页被反复列出并反复失败，直到任务超时（review §B3 连带缺陷）。
 func TestRunDeletePrefixProgressesOnAllFailures(t *testing.T) {
-	onlyPage := deleteListXML(deleteKeysN(1000), true, "t")
+	// 100 页逐页前进的 token，每页都是同一批 1000 个 key 且全部删失败：
+	// 循环必须靠「已处理数」而不是「已删除数」前进，一路跑到 10 万上限。
+	pages := make([]string, 0, 100)
+	for i := 0; i < 100; i++ {
+		pages = append(pages, deleteListXML(deleteKeysN(1000), true, fmt.Sprintf("t%d", i)))
+	}
 	f := &deleteFake{
-		pages:    []string{onlyPage},
+		pages:    pages,
 		failKeys: allFailKeys(deleteKeysN(1000)),
 	}
 	client := newTestClient(t, newDeleteFake(t, f).URL)

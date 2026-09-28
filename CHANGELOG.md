@@ -6,6 +6,47 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 三路五轴复审：列举循环无界 ×2 / 收满上限误报截断 / `-healthcheck` IPv6 恒失败——4 条先红后绿，余 15 条转登记 #64）
+
+> 对全仓重新跑一轮五轴复审（后端 handler+service / 后端 s3wrap+store+config / 前端 web 三路并行）。
+> 发现**逐条亲自读码复核**后，只修已完成红绿的 4 条；其余 **15 条未复核的不直接采信、也不静默丢弃**，
+> 登记为 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#64**，清单与首要 / 次要标注见
+> [`docs/features.md`](docs/features.md) **§AD**「待处置」表。
+
+- **`service.deletePrefix` 列举循环无界（Required）**：退出条件只有「`maxDelete` 计数到顶」与「token 为空」，
+  而**空页 / token 不前进都不推进计数**，同步 `POST /api/accounts/{id}/delete-prefix` 会一直空转到客户端断连，
+  并占住 `withStreamLimit` 的 32 个流槽位（占满后 proxy / zip / copy / delete-prefix / migrate / jobs SSE 全 503）。
+  修复 = 移植 `sync.go` `listAll` / `indexDst` 已有的 §B6 三道守卫：`listMaxPages` 页数上限 +
+  `NextToken == ""` / `NextToken == token` 停止并标截断 + 循环首行 `ctx.Err()`。
+  **红灯**：`TestRunDeletePrefixStopsAtPageCap` 报 **`未终止：空页 + 前进 token 导致死循环`**、
+  `TestRunDeletePrefixStopsOnNonAdvancingToken` 报 `deleted = 100000, want 2000`。
+  连带把 `TestRunDeletePrefixTruncateExact` / `CrossLimit` / `ProgressesOnAllFailures` 三个 fixture 的
+  `NextContinuationToken` 从常量 `"t"` 改成**逐页前进**——真实对端不会重复同一 token，而「不前进」正是本轮守卫对象，
+  常量 token 会让循环在第 2 页就停（三个用例的**断言与意图均未变**）。
+- **`handler.listPrefixKeys` 同款无界（Required）**：`copy-prefix`（同步 / 异步）与 `delete-prefix` 异步列举
+  **三处共用**，而 `copyPrefixAsync` 的列举跑在 2h 任务超时**之外**。修复同上（`listPrefixMaxPages` +
+  `ctx.Err()` + token 守卫），循环结构对齐 `indexDst`。
+  **红灯**：`TestOlListPrefixKeysStopsOnNonAdvancingToken` / `TestOlListPrefixKeysStopsAtPageCap`
+  报 **`listPrefixKeys 未终止：列举循环空转`**（各 5s 超时判死）。
+- **收满上限误报 `truncated=true`（Optional，边界差一）**：`len(keys) >= maxCopy` 即置截断、不看 `p.IsTruncated`，
+  前缀下**正好** 100 000 个对象时会误报，而 `docs/api.md` 把该字段定义为「第 limit+1 个起未参与本次操作」，
+  客户端据此会去重试一个已完成的操作。**红灯**：`TestOlListPrefixKeysExactlyLimitIsNotTruncated`
+  报 `正好收满 limit 且对端声明列举完成 ⇒ 不是截断`。修复 = `indexDst` 的三段式（先判本页丢弃 → 再判收满 → 最后看
+  `p.IsTruncated`）；`deletePrefix` 的同一边界本就正确，未改动。
+- **`-healthcheck` 对 IPv6 字面量必然失败（Required）**：`S3C_ADDR="[::1]:8080"` 拼成
+  `http://::1:8080/api/health`，`url.Parse` 报 `invalid port "::1:8080" after host` → `client.Get` 失败 →
+  **恒返回 1**，Docker `HEALTHCHECK` / systemd watchdog 会把一个完全健康的服务判死并反复重启
+  （`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置，属会真实用到的一类）。
+  **红灯**：`TestRunHealthcheck/ipv6_loopback_literal` 报 `= 1, want 0`。修复 = `net.JoinHostPort(host, port)`
+  产出 `http://[::1]:8080/api/health`（`url.Parse` 实测通过）；无 IPv6 的环境自动跳过用例，
+  `no-port-in-here` 的 fail-closed 语义未变（该用例仍绿）。
+- **门禁复跑（全绿）**：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
+  `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**
+  且**零未覆盖块**——新增的 `ctx.Err()` 守卫分支各补 1 个用例，否则 `internal/service` 会跌到 **99.8%** 门禁线以下；
+  前端本轮无代码改动，`pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**。
+- **文档同 commit 同步**：[`docs/features.md`](docs/features.md) 新增 **§AD**（已闭环 4 条 + 待处置 15 条 + TOC）·
+  [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 新开 **#64**（⬜ 待复核，§二 + §四编号台账）· 本条记录。
+
 ### 修复（2026-09-28 KNOWN_ISSUES #60–#63 收口：前端测试拆分 / `SameEndpoint` 纳入 `useSSL` / 删除编排下沉 `service` / 640GB 上限证据补齐）
 
 > 承接 2026-09-24 全仓审查转登记的 #61 / #62（本段起 **⬜ → ✅**）与既有 #60 / #63；四项**同一个提交**完成。
