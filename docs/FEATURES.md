@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`））
+> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验））
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1357,6 +1357,27 @@ functions 1095 / lines 3503）。
 
 > **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 登记表；
 > 本节为证据台账落点。
+
+---
+
+### AW. 2026-09-29 安全与供应链收口（自动生成的许可证清单 + 依赖覆盖门禁 + 产物核验指南）
+
+> **诊断**：第 7 层「安全与供应链」的自动审计（Trivy / govulncheck / cargo audit / CodeQL / SAST）、
+> SBOM、签名与 provenance 都已就位，唯一硬缺口是**仓库内没有第三方依赖与许可证清单**——
+> 而清单属事实，手写必然漂移。故做成「**脚本生成 + 门禁钉住枚举完整性**」。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | 无依赖 / 许可证清单 | 新增 [`../scripts/gen-third-party-licenses.sh`](../scripts/gen-third-party-licenses.sh) + 生成物 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) | 三处权威来源：Go `go list -m -json all` + 模块内 `LICENSE` 文本机械识别；Rust `cargo metadata` 的 `license` 字段（离线兜底 `Cargo.lock` ∩ registry 源码）；npm `apps/web/package.json`。识别不出**不猜** → `UNKNOWN` + 文件路径；补全用 `go mod download` 且带 **90s 超时**（默认 GOPROXY 不可达时不挂死） |
+| 2 | 生成物会过期 | 新增 [`../apps/server/third_party_licenses_gate_test.go`](../apps/server/third_party_licenses_gate_test.go) | 依赖图 / `Cargo.lock` / `package.json` 里**每个包**都必须出现在清单里（含扫描面自检阈值）；**变异验证**：删掉清单里的 `golang.org/x/sys` 与 `serde` 两行 → 红灯逐条点名，重新生成 → 绿灯 |
+| 3 | 两侧口径各有 bug | 由门禁**首次运行**抓出并修正 | ① 生成器把「`Dir` 为空的未下载模块」当非依赖丢弃 → 漏掉 x/net、x/term、x/text；② 门禁把本地 path crate `s3clinet` 当第三方；③ Cargo.lock 分块正则隔块漏读（429 → 214）——Go RE2 **不支持前瞻断言**，改用 `strings.Split` |
+| 4 | 消费者不知道**怎么验**产物 | [`threat-model.md`](threat-model.md) §5 扩为四小节 | **5.1** 锁定策略（Go / npm / Rust / Actions SHA / 镜像 digest 与各自门禁）· **5.2** 依赖与许可证清单 · **5.3**「消费者如何验证产物」· **5.4** 已知缺口 |
+| 5 | 核验命令必须真实 | 命令**逐字取自工作流注释**，不凭记忆写 | `gh attestation verify oci://…`、`docker buildx imagetools inspect <ref> --format '{{json .Provenance}}'`、`cosign verify <ref>@<digest>`、`sha256sum -c SHA256SUMS.txt`、`cosign verify-blob`（含 `--certificate` / `--signature` / `--certificate-identity-regexp`） |
+| 6 | 合规口径不越界 | 清单顶部声明「机械识别、**不构成法律意见**」；copyleft **关键词**命中单列供人工阅读 | 实测：Go **43** 模块全部宽松（BSD-3-Clause 21 / Apache-2.0 19 / MIT 3）、npm 仅 `vue`、Rust 428 crates 中 `MPL-2.0` 5 个与含 `LGPL-2.1-or-later` 的表达式 2 个；`UNKNOWN` **0** 项 |
+
+> **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、[`AGENTS.md`](../AGENTS.md) 入口表与命名约定、
+> [`llms.txt`](../llms.txt)、[`README.md`](../README.md) 运维与安全段、本页导航 [`README.md`](README.md)、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 同步表 / 登记表 / 命名约定；本节为证据台账落点。
 
 ---
 

@@ -262,6 +262,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [事故复盘模板](docs/POSTMORTEM_TEMPLATE.md) — 复盘格式与字段（取证清单 / 时间线 / 根因 / 行动项 / 文档同步；**空模板，非事故台账**）
 - [配置参考](docs/CONFIGURATION.md) — 全部 `S3C_*` 环境变量（**SSOT**）/ 启动期硬失败 / 客户端设置
 - [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
+- [第三方许可证清单](docs/THIRD_PARTY_LICENSES.md) — **自动生成**的依赖与许可证清单（产物核验命令见威胁模型 §5.3）
 - [性能基线](docs/PERFORMANCE.md) — 热路径基准与解读（含加密写入与 O(n) 写入的取舍）
 
 **贡献与治理**

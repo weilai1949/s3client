@@ -36,6 +36,7 @@
 | 查 / 改某个配置项 | [`CONFIGURATION.md`](CONFIGURATION.md) | 全部 `S3C_*` 环境变量的 **SSOT** + 启动期 fail-closed 清单 + 客户端设置 |
 | 出事后写复盘 / 做 DR 演练 | [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md) | 事故复盘模板（取证 / 时间线 / 根因 / 行动项）+ §7.1 灾难恢复演练字段 |
 | 看性能基线、解释热路径数字 | [`PERFORMANCE.md`](PERFORMANCE.md) | 基准复现命令与三条实测结论（加密写入 / 账号写入 O(n) / 预签名） |
+| 做依赖 / 许可证合规审查 | [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) | **脚本自动生成**的第三方依赖与许可证清单（Go 43 模块 / Rust 428 crates / npm 1 包；含覆盖门禁） |
 
 ### 开发与贡献
 

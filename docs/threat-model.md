@@ -131,6 +131,64 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 - `.trivyignore`：仅策略注释、0 忽略条目（无掩盖性忽略）。
 - dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
 
+### 5.1 锁定策略（构建输入的不可变性）
+
+| 输入 | 锁定方式 | 回归门禁 |
+|---|---|---|
+| Go 依赖 | `apps/server/go.mod` + `go.sum`（含哈希） | `go mod verify` / `govulncheck` |
+| 前端依赖 | `pnpm-lock.yaml` + `packageManager: pnpm@9.15.0` + Node 精确 patch | `TestPackageManagerIsPinnedToCIPnpm` / `TestNodePinnedToPatchVersion` |
+| 桌面依赖 | `Cargo.lock` + `rust-toolchain.toml`（`channel = "1.98.1"`） | `TestRustToolchainIsVersionPinned` / `cargo audit` |
+| GitHub Actions | **全部 pin 到 commit SHA**（豁免 `./` 本地 action 与 `docker://`） | `TestWorkflowActionsAreShaPinned` |
+| 容器镜像（Trivy / RustFS） | 按 **digest** pin，不按可变 tag | `TestTrivyImageIsVersionAndDigestPinned` / `TestRustFSImageIsConsistentlyPinned` |
+| 运行镜像基础版 | alpine 受支持分支（EOL 即红灯） | `TestRuntimeBaseImageIsSupportedAlpine` |
+
+### 5.2 第三方依赖与许可证清单
+
+全量清单见 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)——**由脚本自动生成**
+（`./scripts/gen-third-party-licenses.sh`），不从记忆里手写。实测规模（生成时）：
+
+- **Go 43 个模块**：BSD-3-Clause 21 / Apache-2.0 19 / MIT 3——**全部宽松许可**；
+- **Rust 428 个 crate**：`MIT OR Apache-2.0` 201、`MIT` 99、`Apache-2.0 OR MIT` 32、…，
+  其中 **`MPL-2.0` 5 个**与 **含 `LGPL-2.1-or-later` 的表达式 2 个**属 copyleft 关键词，
+  清单顶部已列为「需人工阅读原文」；
+- **npm 运行时 1 个**（`vue`，MIT）——前端刻意维持生产依赖仅 `vue`（[ADR-004](decisions/0004-minimal-frontend-deps.md)）。
+
+许可证名是对 `LICENSE` 文本 / `license` 字段的**机械识别**，**不构成法律意见**；识别不出的记为
+`UNKNOWN` 并给出文件路径（当前 **0** 项）。覆盖门禁 `TestThirdPartyLicensesAreComplete` 断言
+「依赖图里的每个包都出现在清单里」——新增 / 升级依赖而忘记重新生成会**红灯点名**。
+
+### 5.3 消费者如何验证产物（命令取自 CI/CD 工作流本身）
+
+镜像 `ghcr.io/<owner>/<repo>/server`：
+
+| 验证什么 | 命令 |
+|---|---|
+| 来源证明（绑定 commit / workflow） | `gh attestation verify oci://ghcr.io/<owner>/<repo>/server@<digest> --repo <owner>/<repo>` |
+| BuildKit provenance 与 SPDX SBOM（OCI attestation） | `docker buildx imagetools inspect <ref> --format '{{json .Provenance}}'` |
+| cosign 无密钥签名 | `cosign verify <ref>@<digest>`——keyless 必须同时指定 `--certificate-oidc-issuer https://token.actions.githubusercontent.com` 与 `--certificate-identity-regexp`（形式同下方桌面端示例，workflow 文件名换成 `ci.yml`） |
+| 可下载的 CycloneDX SBOM | CI 产物 `sbom-cyclonedx`（保留 90 天） |
+
+桌面端产物（GitHub Release）：
+
+| 验证什么 | 命令 |
+|---|---|
+| 文件未被篡改 | `sha256sum -c SHA256SUMS.txt` |
+| 来源证明 | `gh attestation verify <安装包路径> --repo <owner>/<repo>` |
+| 校验和清单的 cosign 签名 | `cosign verify-blob --certificate SHA256SUMS.txt.pem --signature SHA256SUMS.txt.sig --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github.com/<owner>/<repo>/.github/workflows/release-desktop.yml@' SHA256SUMS.txt`（`<owner>/<repo>` 换成实际仓库） |
+
+本地复跑审计：`cd apps/server && govulncheck ./...` · `make rust-audit`（cargo audit）· `pnpm audit`（在 `apps/web`）·
+Trivy 镜像扫描命令与 CI 同一镜像 digest（见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)）。
+
+### 5.4 本层已知缺口（不做假承诺）
+
+- **桌面产物未签名 / 未公证**（Windows SmartScreen、macOS Gatekeeper）——外部凭证阻塞，见
+  [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25；cosign 与 provenance **只能**证明「来源与完整性」，
+  **不解决**发布者信誉。
+- **Rust 侧 7 条 unmaintained / unsound 告警**维持 triage（见上），不用 ignore 清单掩盖。
+- **仓库内不存放 SBOM / 证明文件**：它们是 CI 产物与 registry attestation——入库会让「证据」与
+  构建时刻脱钩，核验方式见 §5.3。
+- **许可证清单不含容器基础镜像的 OS 包**：该部分由 Trivy 扫描与镜像 SBOM 覆盖。
+
 ## 6. 已知风险
 
 ### 6.1 已闭环（证据归档）

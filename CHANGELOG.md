@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+### 新增（2026-09-29 安全与供应链收口：自动生成的许可证清单 + 依赖覆盖门禁 + 产物核验指南）
+
+> 背景：10 层文档基线盘点时，第 7 层「安全与供应链」的唯一硬缺口是**仓库内没有任何第三方依赖 /
+> 许可证清单**（只有 CI 侧 SBOM：`sbom-cyclonedx` 产物 + OCI attestation）。清单属事实，
+> 手写必然漂移——故本次**用脚本从权威来源生成**，并加门禁钉住枚举完整性。
+
+- 新增 [`scripts/gen-third-party-licenses.sh`](scripts/gen-third-party-licenses.sh)：从三处权威来源生成清单——
+  Go `go list -m -json all` + 模块内 `LICENSE` 文本机械识别；Rust `cargo metadata` 的 `license` 字段
+  （离线兜底：`Cargo.lock` ∩ 本地 registry 源码）；npm `apps/web/package.json` 的运行时依赖。
+  识别不出**不猜**：记 `UNKNOWN` 并给出文件路径。`go mod download` 补全带 **90s 超时**（默认 GOPROXY 不可达时不会挂死）。
+- 新增 [`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md)（生成物）：许可证汇总 +
+  三段明细（Go 43 模块 / Rust 428 crates / npm 1 包）。实测 **Go 侧全部为宽松许可**
+  （BSD-3-Clause 21 / Apache-2.0 19 / MIT 3）；Rust 侧 `MPL-2.0` 5 个与含 `LGPL-2.1-or-later` 的表达式 2 个
+  已列为「需人工阅读原文」（机械关键词提示，**不是合规结论**）；当前 `UNKNOWN` **0** 项。
+- 新增 [`apps/server/third_party_licenses_gate_test.go`](apps/server/third_party_licenses_gate_test.go)：
+  覆盖门禁——依赖图 / `Cargo.lock` / `package.json` 里的每个包都必须出现在清单里（含扫描面自检阈值）。
+  **变异验证**：删掉清单里的 `golang.org/x/sys` 与 `serde` 两行 → 红灯逐条点名；重新生成 → 绿灯。
+  首版运行即抓出 4 处不一致（3 个未下载模块被生成器丢弃、1 个本地 path crate 被误当第三方），
+  两侧口径均已修正并写进注释。
+- [`docs/threat-model.md`](docs/threat-model.md) §5 扩写为四小节：**5.1** 锁定策略（Go/npm/Rust/Actions SHA/
+  镜像 digest 与各自门禁）· **5.2** 依赖与许可证清单 · **5.3**「**消费者如何验证产物**」——
+  镜像 `gh attestation verify oci://…`、`docker buildx imagetools inspect`、`cosign verify <ref>@<digest>` 与
+  CycloneDX SBOM 产物；桌面端 `sha256sum -c SHA256SUMS.txt`、`gh attestation verify <file>` 与
+  `cosign verify-blob`（参数逐字取自工作流注释）· **5.4** 已知缺口（桌面产物未签名不假承诺、SBOM 不入库的理由、
+  OS 包不在清单范围）。
+- 文档同步：根 [`README.md`](README.md) 运维与安全段、[`llms.txt`](llms.txt)、[`docs/README.md`](docs/README.md)
+  导航、[`AGENTS.md`](AGENTS.md) 入口表与命名约定、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 同步表 +
+  登记表 + 命名约定、[`docs/FEATURES.md`](docs/FEATURES.md) §AW。
+- 门禁实测：`go test . -count=1`（含新门禁与导航覆盖门禁）全绿；链接门禁 0 失效；`golangci-lint` 0 issues。
+
 ### 新增（2026-09-29 元信息 / 导航收口：docs 落地页 + 导航覆盖门禁 + `.gitattributes`）
 
 > 背景：10 层文档基线盘点时，第 2 层「元信息 / 导航」判定为部分达标——台账与 AI 入口齐全，
