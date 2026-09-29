@@ -222,5 +222,29 @@ Human sponsor: @<维护者>
 | 维护者 | [@weilai1949](https://github.com/weilai1949) |
 | 许可证问题 | 见 [LICENSE](../LICENSE)（MIT） |
 
+## 11. AI 治理的机械保证（哪些声明由门禁守住）
+
+> 上文多数条款是**规范性文字**。本节把它们中**可机检**的部分与门禁一一对应；**没有**门禁的部分
+> 也如实列出——只有被断言覆盖的条款才算「不会静默失效」。除注明外，全部由
+> [`apps/server/ai_governance_gate_test.go`](../apps/server/ai_governance_gate_test.go) 校验。
+
+| 声明 / 要求 | 由什么守住 | 覆盖程度 |
+|---|---|---|
+| 根 `AGENTS.md` 会被**整体注入**且受字节预算约束，超长会被截断（见 [DEVELOPMENT.md](DEVELOPMENT.md) §4.1） | `TestRootAgentsMdStaysWithinInjectionBudget`：体积 ≤ 10 KiB，且必须指向规范正文 `DEVELOPMENT.md` | **代码强制** |
+| 每个 `apps/` 子树都有子树 `AGENTS.md`，且**回指**根文件（仓库级规则不分叉） | `TestEveryAppSubtreeHasAgentsMd`：逐个 `apps/*` 断言存在、≤ 4 KiB、含 `../../AGENTS.md` 链接 | **代码强制** |
+| §4「本仓库当前**未提交 MCP 配置**」 | `TestAiPolicyClaimsMatchRepoState`：根目录一旦出现 `.mcp.json` 即红灯，迫使同步本政策 | **代码强制** |
+| 其它 AI 工具入口（如 `.github/copilot-instructions.md`）保持**纯指针**、不复制规则 | 同上：断言 ≤ 2 KiB 且必须指向 `AGENTS.md` | **代码强制** |
+| §5「实质性 AI 生成内容必须披露」 | PR 模板「AI 使用披露」块的**存在性**由门禁断言；**填没填**由人工评审（单人维护，未接自动校验 bot） | 部分（结构强制 / 内容人工） |
+| 机器可读契约、配置 SSOT、文档数字与链接、文档导航覆盖、第三方许可证、死代码 | `TestCommittedOpenAPISpecMatchesRuntime` · `config_doc_gate` · `doc_number_gate` · `doc_link_gate` · `doc_index_gate` · `third_party_licenses_gate` · `deadcode_gate` | **代码强制** |
+| §3 权限矩阵的「需确认 / 禁止」档 | **无机械保证**——靠代理与人读本政策 + PR 评审；本仓库未接入自动审批或权限网关 | ⚠️ 人工 |
+| 「进入发布模式需人类授权」「不自动合并 PR / 不自动删分支或数据」 | **无机械保证**（仓库侧未配置约束 bot 权限的分支保护策略即代码） | ⚠️ 人工 |
+| §6「代理不得读取密钥」 | 仓库侧无强制手段：真实 `S3C_*` / 凭据不在库内，`.gitignore` 只防误提交 | ⚠️ 人工 |
+
+**刻意不引入的 AI 工具文件**（避免「没有消费者的事实源」）：
+
+- **不加 `CLAUDE.md`**：`AGENTS.md` 约定已覆盖该工具链（候选名与加载规则见 [DEVELOPMENT.md](DEVELOPMENT.md) §4.1）；
+- **不加 `llms-full.txt`**：它要求把全部文档复制一份，与「单一事实来源 + 链接门禁」直接冲突；
+- **不提交 `.mcp.json`**：权限口径见 §4，接入时再按需提交并同步本节（有门禁盯着，不会悄悄漂移）。
+
 > 本文件不是法律建议。它是活文档：安全策略、AI 政策或架构发生重大变化时立即更新，
 > 否则至少每季度审查一次。

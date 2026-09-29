@@ -6,6 +6,31 @@
 
 ## [Unreleased]
 
+### 新增（2026-09-29 AI 时代层收口：AI 治理的机械保证 + Copilot 指针入口）
+
+> 背景：第 10 层「AI 时代新增层」此前已有 根/子树 `AGENTS.md`、`llms.txt`、`AI_POLICY.md`、
+> PR 披露块、机器可读契约与门禁族，但这些 AI 治理资产**全靠人工维持**——而它们恰好最容易被静默破坏：
+> 根 `AGENTS.md` 会被工具**整体注入**、超长即被截断（硬约束悄悄失效），新增子树漏写 `AGENTS.md`
+> 则该子树规则对 agent 不可见，政策正文里的**事实声明**会随仓库演进失真。
+
+- 新增 [`apps/server/ai_governance_gate_test.go`](apps/server/ai_governance_gate_test.go)：三条结构不变量——
+  ① 根 `AGENTS.md` ≤ 10 KiB 且必须指向规范正文；② 每个 `apps/*` 子树必须有 ≤ 4 KiB、**回指根文件**的
+  `AGENTS.md`；③ `AI_POLICY.md` 的**事实声明**与实际一致（「未提交 MCP 配置」↔ 根无 `.mcp.json`；
+  PR 模板含「AI 使用披露」块；AI 工具指针文件 ≤ 2 KiB 且必须指向 `AGENTS.md`）。
+  **四条变异全部实测**：把 `AGENTS.md` 灌到 20 KB → 点名超预算；新建 `apps/probe/` 无子树文件 → 点名；
+  改掉 PR 模板披露块措辞 → 点名；把指针文件灌到 7 KB → 点名；还原后全绿。
+- 新增 [`.github/copilot-instructions.md`](.github/copilot-instructions.md)：GitHub Copilot 的**纯指针**入口
+  （指向根 `AGENTS.md` / `DEVELOPMENT.md` / `AI_POLICY.md` / 三个子树 AGENTS），**不复制任何规则**——
+  复制会形成第二事实源，故由门禁把「它只是指针」钉住。
+- [`docs/AI_POLICY.md`](docs/AI_POLICY.md) 新增 **§11「AI 治理的机械保证」**：把可机检的条款与门禁一一对应，
+  并**如实列出没有机械保证的部分**（权限矩阵的「需确认 / 禁止」档、发布模式授权、不自动合并、不得读密钥——
+  均为人工约束）。同节写明**刻意不引入**的 AI 工具文件与理由（不加 `CLAUDE.md`、不加 `llms-full.txt`、
+  不提交 `.mcp.json`）。
+- 文档同步：[`DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4.1 加载机制（+ 指针入口与本节门禁）、§4 位置与命名、
+  「文档登记表」；[`llms.txt`](llms.txt)；[`docs/README.md`](docs/README.md) 文档维护表；
+  [`docs/FEATURES.md`](docs/FEATURES.md) §AX。
+- 门禁实测：`go test . -count=1` 全绿（含新门禁）；链接门禁 0 失效；`golangci-lint` 0 issues。
+
 ### 新增（2026-09-29 安全与供应链收口：自动生成的许可证清单 + 依赖覆盖门禁 + 产物核验指南）
 
 > 背景：10 层文档基线盘点时，第 7 层「安全与供应链」的唯一硬缺口是**仓库内没有任何第三方依赖 /

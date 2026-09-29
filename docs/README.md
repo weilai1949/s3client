@@ -84,3 +84,4 @@
 | 导航覆盖 | `docs/` 下每篇文档必须有导航入口，由 `doc_index_gate_test.go` 校验 |
 | 文档里的数字 | 「N 个 `/api/*` 端点」由 `doc_number_gate_test.go` 钉在 `routes.go` 上；配置项由 `config_doc_gate_test.go` 钉在 `CONFIGURATION.md` 上 |
 | owner / 复审周期 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §4「文档登记表」（当前 owner 为单人维护者；复审周期是**建议值**，未在 CI 强制） |
+| AI 工具入口（根/子树 `AGENTS.md`、Copilot 指针、`llms.txt`） | 体积预算、子树覆盖与回指由 `apps/server/ai_governance_gate_test.go` 断言；政策与门禁的对应关系见 [`AI_POLICY.md`](AI_POLICY.md) §11 |

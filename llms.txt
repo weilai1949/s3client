@@ -29,6 +29,7 @@ make test-all                                                                   
 - [README.md](README.md)：项目入口、功能总览、快速开始、配置摘要
 - [docs/README.md](docs/README.md)：**docs 目录落地页 / 人类导航入口**——按「我要做什么」分组，含机器可读面与文档维护规则；`docs/` 下每篇文档都必须能从这里（或子目录索引）到达，由 `doc_index_gate_test.go` 校验
 - [AGENTS.md](AGENTS.md)：AI 代理硬约束（工具自动注入，保持短小）
+- [.github/copilot-instructions.md](.github/copilot-instructions.md)：GitHub Copilot 的**纯指针**入口（只指向 AGENTS.md / DEVELOPMENT / AI_POLICY，不复制规则；由 `apps/server/ai_governance_gate_test.go` 校验其保持为指针）
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：开发规范正文——测试分层、门禁、验收清单、Red Flags、文档同步门禁
 - [docs/AI_POLICY.md](docs/AI_POLICY.md)：AI 使用与代理治理——代理模式、权限矩阵、MCP 工具权限、AI 披露模板、DoD、多代理协作
 - [docs/architecture.md](docs/architecture.md)：总体架构与模块边界

@@ -230,6 +230,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 根 `README.md` · `AGENTS.md` · `CHANGELOG.md` · `llms.txt` | 3 个月 | 登记时基线（2026-09-29） |
 | [`docs/README.md`](README.md)（docs 导航落地页 = 人类导航 SSOT） | 3 个月，或新增 / 改名文档时同 PR | 登记时基线（2026-09-29） |
 | 子树 `AGENTS.md`：[`apps/server`](../apps/server/AGENTS.md) · [`apps/web`](../apps/web/AGENTS.md) · [`apps/desktop`](../apps/desktop/AGENTS.md) | 6 个月，或子树规则变更时同 PR | 登记时基线（2026-09-29） |
+| [`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（AI 工具**指针**，非规则本体） | 6 个月，或 AI 工具入口调整时同 PR | 登记时基线（2026-09-29） |
 | `docs/DEVELOPMENT.md` · `CONFIGURATION.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/DEPLOYMENT.md` · `OPERATIONS.md` · `POSTMORTEM_TEMPLATE.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/FEATURES.md` · `KNOWN_ISSUES.md` · `ROADMAP.md` | 每个版本发版前 | 登记时基线（2026-09-29） |
@@ -250,7 +251,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 文档命名与存放约定：
 
-- **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
+- **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
   - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
   - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/` 下的全部文件。
@@ -268,6 +269,8 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - **项目根由 `.git` 标记向上查找确定**；根目录与用户级同名文件会去重。
 - **子树 `AGENTS.md` 惰性加载**：`apps/server/`、`apps/web/` 等子目录的 `AGENTS.md` 在工具读到该子树文件时才注入，用于子树专属规则；仓库级规则才放根文件。
 - **内容整体注入且受字节预算约束**：超长会被省略 / 截断，因此根 `AGENTS.md` 保持短小，只留硬约束与指针，可推导的细节留在本文件。
+- **其它 AI 工具入口是「指针」而不是副本**：GitHub Copilot 读 [`.github/copilot-instructions.md`](../.github/copilot-instructions.md)——本仓库提交的是纯指针（指向根 `AGENTS.md` / 本文件 / [`AI_POLICY.md`](AI_POLICY.md)）。**刻意不提交** `CLAUDE.md`（候选名已覆盖该工具链）与 `llms-full.txt`（会把全部文档复制一份，与单一事实源 + 链接门禁冲突），理由与门禁见 [`AI_POLICY.md`](AI_POLICY.md) §11。
+- **本节的这些前提有门禁守着**：根 `AGENTS.md` ≤ 10 KiB 且必须指向本文件、每个 `apps/*` 子树必须有**回指根文件**的 `AGENTS.md`、AI 工具指针文件 ≤ 2 KiB —— 由 `apps/server/ai_governance_gate_test.go` 断言。
 
 
 ## 5. 验收清单（按 review 五轴）
