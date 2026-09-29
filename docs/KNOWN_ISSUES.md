@@ -14,13 +14,13 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#62；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`roadmap.md`](roadmap.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-09-28
+> 最后更新：2026-09-28（当日第二次：#64 闭环，仓内技术债 / 缺陷归零，只剩 §一 #25 外部阻塞与 §二 #63 已决策维持现状）
 
 ## 目录
 
@@ -45,13 +45,14 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 64 | `store.Open` 的 json 分支丢弃入参 `storeKey`（Nit，**实测后挂起**） | 2026-09-28 三路五轴复审（原 19 条中唯一未闭环项） | ⬜ | `store.Open(dataDir, driver, storeKey)` 的 json 分支调 `New(path)` 回头读 `S3C_STORE_KEY`，与 sqlite / encrypted 两分支「显式透传 storeKey」的契约不一致：**非 `FromEnv` 调用方**传了 key 仍会明文落盘且无任何报错（今天唯一生产调用方传的 `cfg.StoreKey` 就来自同一环境变量，**零生产影响**）。**2026-09-28 实测后挂起**，不是漏修：① 把 json 分支改走 `newStore` 会让 `store.New` 变成零生产引用，被 `deadcode_gate_test.go` 的 `TestNoUnusedExportedProdSymbols` **红灯拦住**（已实际跑出该报错）；② 要解开就得改 `New` 签名，而 `store.New` / 裸 `New` 共 **~100 处调用、24 个测试文件**，其中 `crossdriver_test.go` / `encrypt_at_rest_test.go` **刻意依赖 `S3C_STORE_KEY` 环境变量**读 key，`+ ""` 机械替换会静默改掉它们的语义；③ 收益只是消除一个「未来可能踩」的契约不一致，代价却是一次跨 24 文件的重构——**比例失衡，留到有真实非 `FromEnv` 调用方时再做**。实测记录与完整复审台账见 [features.md](features.md) §AD 该行 |
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动 |
 
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
-> 已闭环移除，证据见 [`features.md`](features.md) §AB；同日新开 **#64**，原为三路复审 19 条的处置清单，
-> 其余 18 条已全部闭环（§AE–§AI），**已把闭环流水从本表移除**，现只剩其中 1 条挂起的 Nit。
-> 本表现有 3 项：#64 待处理、#63 已决策维持现状、#25 外部阻塞见 §一。
+> 已闭环移除，证据见 [`features.md`](features.md) §AB；同日新开 **#64**（三路复审 19 条的处置清单），
+> 其余 18 条当天闭环（§AE–§AI）。**#64 于 2026-09-28 晚些时候闭环**：json 分支抽
+> `openJSON(path, storeKey)` 改为「入参非空即用入参、为空才回退 `New`」，
+> 不动 `New` 签名（避开了当时预估的 24 文件重构），证据见 [`features.md`](features.md) §AJ。
+> **本表仓内技术债 / 缺陷现已归零**：#25 外部阻塞见 §一，#63 已决策维持现状。
 
 ## 三、分类归零凭证
 
@@ -84,7 +85,7 @@
 | #61 | **已闭环移除** | `SameEndpoint` 精确判定纳入 `useSSL`（跨包契约变更），2026-09-28 闭环（[features.md](features.md) §AB） |
 | #62 | **已闭环移除** | 批量删除编排下沉 `service`（2026-09-24 审查 Nit 本轮未完成），2026-09-28 闭环（[features.md](features.md) §AB） |
 | #63 | **已决策** ➖ | 已知限制（流式复制单对象 640GB 上限，维持现状），见 §二 |
-| #64 | **开放** ⬜ | 三路复审 19 条中**唯一未闭环项**（`store.Open` json 分支丢 `storeKey`，Nit 实测后挂起），见 §二；已闭环的 18 条台账见 [features.md](features.md) §AD–§AI |
+| #64 | **已闭环移除** | 三路复审 19 条中唯一未闭环项（`store.Open` json 分支丢 `storeKey`）：抽 `openJSON(path, storeKey)` 改为「入参非空即用入参，为空才回退 `New`」，2026-09-28 闭环（[features.md](features.md) §AJ）；当天早些时候闭环的 18 条台账见同文件 §AD–§AI |
 
 ---
 

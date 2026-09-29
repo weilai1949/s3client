@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -917,11 +917,11 @@ functions 1095 / lines 3503）。
 | 4 | `-healthcheck` 对 **IPv6 字面量监听地址**必然失败：`[::1]:8080` 拼成 `http://::1:8080/api/health`，`url.Parse` 报 `invalid port` → 恒返回 1，Docker `HEALTHCHECK` 会把**完全健康**的服务判死并反复重启（`[::1]:port` 是 `IsLoopbackAddr` 认可、允许不设 token 的合法配置） | ✅ | 红：`TestRunHealthcheck/ipv6_loopback_literal` → **`= 1, want 0`**。绿：`net.JoinHostPort(host, port)` 产出 `http://[::1]:8080/api/health`（实测 `url.Parse` 通过）；无 IPv6 的环境自动 `t.Skip`，`no-port-in-here` 的 fail-closed 用例仍绿 |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（新增守卫分支各补 1 个用例，否则 `service` 会跌到 99.8%）/ `pnpm lint` 0 告警、`pnpm test` **72 文件 1110 例**（前端本轮无改动） |
 
-#### ⬜ 待处置（原 15 条，`handler` 审计见 §AE、前端 4 条见 §AF、`config`/`main` 3 条见 §AG、`s3wrap` 2 条见 §AH、前端另 4 条见 §AI，现余 **1** 条；已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64，**均未复核，勿直接采信**）
+#### ⬜ 待处置（原 15 条 —— `handler` 审计见 §AE、前端 4 条见 §AF、`config`/`main` 3 条见 §AG、`s3wrap` 2 条见 §AH、前端另 4 条见 §AI、**后端 `store` 1 条见 §AJ**；**2026-09-28 已全部闭环，本表现余 0 条**）
 
-| 区域 | 条目 | 首要 / 次要 |
+| 区域 | 条目 | 闭环去向 |
 |---|---|---|
-| 后端 `store` | `store.Open` 的 json 分支丢弃入参 `storeKey` 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一生产调用方传的 `cfg.StoreKey` 就来自同一环境变量，**零生产影响**）。**2026-09-28 实测后仍挂起**，不是嫌麻烦：① 改 `Open` 走 `newStore` 会让 `store.New` 变成零生产引用，被 `deadcode_gate_test.go` 的 `TestNoUnusedExportedProdSymbols` **红灯拦住**（已实测）；② 要解开就得改 `New` 签名，而 `store.New` / 裸 `New` 共 **~100 处调用、24 个测试文件**，其中 `crossdriver_test.go` 与 `encrypt_at_rest_test.go` **刻意依赖 `S3C_STORE_KEY` 环境变量**读 key，`+ ""` 机械替换会静默改掉它们的语义；③ 收益是消除一个「未来可能踩」的契约不一致，代价是一次跨 24 文件的重构——**比例失衡，留到有真实非 `FromEnv` 调用方时再做** | Nit（挂起，理由见左） |
+| 后端 `store` | `store.Open` 的 json 分支**丢弃入参 `storeKey`** 改读环境变量 ⇒ 契约与 sqlite / encrypted 分支不一致，非 `FromEnv` 调用方传了 key 仍明文落盘且无报错（今天唯一生产调用方传的 `cfg.StoreKey` 就来自同一环境变量，**零生产影响**）。曾于 2026-09-28 实测后挂起：直接把 json 分支改走 `newStore` 会让 `store.New` 变成零生产引用、被 `TestNoUnusedExportedProdSymbols` 拦红，而解开需跨 24 个测试文件改 `New` 签名 | ✅ **§AJ**：抽 `openJSON(path, storeKey)` —— 入参非空走 `newStore`、**为空才回退 `New`**，既让入参生效又保住 `New` 的生产引用，**不动签名**即完成修复。至此 #64 的 19 条全部闭环，[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64 移除 |
 
 ### AE. 2026-09-28 破坏性操作审计覆盖补齐（#64 Security，3 条先红后绿）
 
@@ -992,6 +992,27 @@ functions 1095 / lines 3503）。
 | 覆盖率补强 | 上述修复新增的 **stale / catch 分支**必须逐条可执行（否则四指标掉到 99.97% / 99.82% 被门禁拦下） | 补 6 条：源列举失败清空、目标列举失败清空、源过期成功不落地、**源过期失败不清空**、**目标过期失败不清空**、**过期版本列举失败不上抛** | 红 → 绿，`pnpm test:coverage` 回到**四指标 100%** |
 | 连带 | `ObjectsPanel.test.ts` 的 `makeBrowser()` 未提供 `listGen` → 运行时刷 `Invalid prop … got Undefined`；helper `opts()` 被 prettier 折成 `findAll(…)\n[i]` 触发 `no-unexpected-multiline` | mock 补 `listGen: ref(0)`；helper 改取中间变量（**该 error 曾让 `pnpm lint` 红灯**） | lint 0 告警 |
 | 门禁 | 全绿实测 | ✅ | `pnpm lint` **0 告警** / `pnpm typecheck` + `pnpm typecheck:e2e` exit 0 / `pnpm test` **72 文件 1126 例**（1120 → 1126）/ `pnpm test:coverage` **四指标 100%（4294 / 2934 / 1130 / 3677）** / `pnpm build` OK；后端未改，`gofmt -l` 干净 / `go vet` 0 / `go test -race` **9/9 包、每包 100.0%** / `golangci-lint` **0 issues**；**真实 E2E 三项实跑（2026-09-28 收口验收）**——`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E` **4/4 PASS**（`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash`，自起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000`）、`SERVER_PORT=18090 make e2e-real` **3 passed**（真实后端 + 真实 RustFS + 真实产物，`S3C_TOKEN` 生产同构；本机 8080 被系统 `haproxy` 占用故改端口；跑完容器与端口已核验自动回收）、`pnpm e2e` mock 版 **15 passed** |
+
+### AJ. 2026-09-28 KNOWN_ISSUES #64 闭环：`store.Open` 的 json 分支不再丢弃入参 `storeKey`
+
+> #64 是三路五轴复审 19 条中**唯一未闭环**的一条，此前登记为「Nit，实测后挂起」，
+> 挂起理由写在 §AD「待处置」表：改 json 分支走 `newStore` 会让 `store.New` 变成零生产引用，
+> 被 `TestNoUnusedExportedProdSymbols` 拦成红灯（已实测）；而解开它需要改 `New` 签名，
+> 代价是跨 24 个测试文件的重构。本次换了个切口——**保留 `New` 这条生产调用路径**——
+> 于是不动签名也修好了。至此 #64 的 19 条（§AD 4 + §AE 3 + §AF 4 + §AG 3 + §AH 2 + §AI 4）**全部闭环**。
+
+| # | 项 | 证据（红 → 绿） |
+|---|---|---|
+| 1 | **缺陷**：`Open(dataDir, driver, storeKey)` 的 json 分支无条件 `return New(path)`，`New` 回头读 `S3C_STORE_KEY` ⇒ **入参被丢弃**，与 sqlite / encrypted 两分支「显式透传 `storeKey`」的契约不一致；非 `FromEnv` 调用方传了 key 仍明文落盘且无报错。今天唯一生产调用方（`main.go:85`）传的 `cfg.StoreKey` 恰来自同一环境变量，**零生产影响**（属契约一致性，非线上缺陷） | — |
+| 2 | **修法**：抽 `openJSON(path, storeKey)` —— 入参非空走 `newStore(path, storeKey, false)`、**为空才回退 `New`**。回退分支让 `New` 仍有一条生产调用路径（`TestNoUnusedExportedProdSymbols` 保持绿），同时也保留了「不传 key、靠环境变量」的既有用法 | 先红：`internal/store/store.go: 导出func "New" 零生产引用`（把 json 分支直接改成 `newStore` 时的实测报错）→ 采用「非空入参走 `newStore`、空入参走 `New`」后 `internal/store/open.go:56` 保留该引用，门禁转绿 |
+| 3 | **决定性红灯**：环境变量清空 + 显式入参 ⇒ 仍须加密。修前 `New` 读到空 env ⇒ 明文落盘且无报错，正是「入参被丢弃」的可观测形态 | `TestOpenJSONStoreKeyBeatsEmptyEnv` 红：`Open(json) 丢弃了入参 storeKey：S3C_STORE_KEY 为空时 secretKey 明文落盘且无报错` → 绿；附 `Get` 读回断言 `sk-secret` 微妙不变 |
+| 4 | **反向守卫**（防「入参优先」被误读成「只用入参」）：入参为空但环境变量非空 ⇒ 仍加密；且用错的 key 重开必须解不开，证明加密用的是环境变量那把 | `TestOpenJSONFallsBackToEnvWhenKeyEmpty` / `TestOpenJSONEnvFallbackStillEncrypted` / `TestOpenJSONEnvFallbackKeyRecovers` 三条同批上，**新用例直接绿**（它们守的是未被改动的既有语义） |
+| 5 | **向后兼容**：两处（入参与环境变量）都为空时仍明文落盘，permissive 读旧明文库的语义不变 | `TestOpenJSONNoKeyAnywhereStaysPlaintext` 新用例直接绿 |
+| 6 | 文件：`open.go`（+`openJSON`、注释写明 StoreKey 契约）/ 新增 `open_storekey_test.go`（4 例，含决定性红灯）/ 新增 `openjson_env_test.go`（2 例，反向守卫） | 测试文件本身也在导出符号门禁扫描范围内，`TestNoUnusedExportedTestSymbols` 绿 |
+| 门禁 | 全绿实测 | ✅ | `gofmt -l .` 干净 / `go vet ./...` **0 告警** / `go build ./...` OK / `golangci-lint run ./...` **0 issues** / `go test -count=1 ./...` **9/9 包** / `internal/store` **100.0% statements、零 `count==0` 块**（`awk 'NR>1 && $NF+0==0'` 为 0）/ `go test -race ./internal/store/` 通过 / `TestNoUnusedExportedProdSymbols` 绿；前端本轮未改 |
+
+> **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64 移除（§二 表格行 + §四 台账 + 头部已闭环编号区间收紧至 `#60–#64`）；
+> [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 记一条「修复」；本节为证据台账落点。
 
 ---
 

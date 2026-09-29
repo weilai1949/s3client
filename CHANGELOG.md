@@ -6,6 +6,31 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-28 KNOWN_ISSUES #64 闭环：`store.Open` 的 json 分支不再丢弃入参 `storeKey`）
+
+> #64 是三路五轴复审 19 条中**唯一未闭环**的一条，此前登记为「Nit，实测后挂起」。
+> 本次按先红后绿闭环，清单开放项归零。证据台账见 [`docs/features.md`](docs/features.md) **§AJ**。
+
+- **缺陷**：`store.Open(dataDir, driver, storeKey)` 的 json 分支无条件
+  `return New(path)`，而 `New` 回头读环境变量 `S3C_STORE_KEY` ⇒ **入参被丢弃**，
+  与 sqlite / encrypted 两个分支「显式透传 `storeKey`」的契约不一致：非 `FromEnv`
+  的调用方传了 key 仍会明文落盘且无任何报错。今天唯一的生产调用方
+  （`main.go:85`）传的 `cfg.StoreKey` 恰恰来自同一个环境变量，故**零生产影响**。
+- **修法**：抽 `openJSON(path, storeKey)` —— **入参非空即用入参**（`newStore(path, storeKey, false)`），
+  **入参为空才回退** `New`（保留环境变量这条既有用法的调用路径）。
+  **不**改 `New` 签名：那要动 ~100 处调用、24 个测试文件，而
+  `crossdriver_test.go` / `encrypt_at_rest_test.go` 刻意依赖环境变量读 key，机械替换会静默改语义。
+- **红灯 → 绿灯**（`internal/store/open_storekey_test.go` + `openjson_env_test.go`）：
+  - `TestOpenJSONStoreKeyBeatsEmptyEnv`：环境变量清空 + 显式入参 ⇒ 仍须加密
+    （修前失败于「入参被丢弃，secretKey 明文落盘且无报错」）；
+  - `TestOpenJSONFallsBackToEnvWhenKeyEmpty` / `TestOpenJSONEnvFallbackKeyRecovers`：
+    反向钉住「入参为空仍回退环境变量」，防止把「入参优先」误读成「只用入参」；
+  - `TestOpenJSONNoKeyAnywhereStaysPlaintext`：两处都为空时仍明文（permissive 向后兼容不变）。
+- **门禁**（全绿实测）：`gofmt -l` 干净 / `go vet ./...` 0 告警 / `go build ./...` OK /
+  `golangci-lint run ./...` **0 issues** / `go test -count=1 ./...` **9/9 包** /
+  `internal/store` **100.0% statements、零 `count==0` 块** /
+  `TestNoUnusedExportedProdSymbols` 绿（`New` 仍有生产引用，不被判死代码）。
+
 ### 变更（2026-09-28 文档归档：`code-review-2026-09-24.md` 与 `code-review-summary.md` 冻结入 `docs/archive/`）
 
 - 按 [`docs/archive/index.md`](docs/archive/index.md) 的 4 步规程 `git mv` 归档两份**时点性审查文档**
