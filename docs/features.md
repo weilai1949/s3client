@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`roadmap.md`](roadmap.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-28（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口）
+> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1013,6 +1013,39 @@ functions 1095 / lines 3503）。
 
 > **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #64 移除（§二 表格行 + §四 台账 + 头部已闭环编号区间收紧至 `#60–#64`）；
 > [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 记一条「修复」；本节为证据台账落点。
+
+### AK. 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（修复 33 文件 / 246 例全红，新增 2 例守卫）
+
+> **背景**：本机跑 `pnpm test` 得到 **33 文件 / 246 例全红**，曾被怀疑是 Node 26 与 vitest
+> 不兼容。实测**否**：同一份代码在 `node:24.21.0-alpine` 与 `node:26.5.0-alpine` 容器里
+> 都是 **72 文件 / 1126 例全绿**。真正的变量是宿主环境变量 **`NODE_ENV=production`**。
+
+| # | 项 | 证据 |
+|---|---|---|
+| 1 | **根因**：Vue 的 node 入口 `vue/index.js` 在运行时按 `process.env.NODE_ENV` 二选一加载 CJS 产物（`production` → `dist/vue.cjs.prod.js`，其余 → `dist/vue.cjs.js`）。宿主带 `NODE_ENV=production` 时 vitest 把 Vue 解析到 **prod 构建**，而 `@vitejs/plugin-vue` 编译 SFC 产出的绑定属于 **dev 构建** ⇒ 进程内两份 Vue 实例、reactive 状态不连通 | 对照实验：`NODE_ENV=production` → 16 failed；`test` / `development` / 未设 → 全绿（同 node_modules、同 pnpm、同 Node） |
+| 2 | **误导性症状**（排查成本的主要来源）：不是「找不到模块」，而是 `[vitest] No "toasts" export is defined on the "./store" mock` —— 而 `src/store.ts:64` 的 `toasts` 导出**确实存在**，只是属于另一份 Vue 实例。连带 `Cannot call text on an empty DOMWrapper` / `w.vm.xxx is not a function` 等 246 例次生失败 | 全量错误分类：根因仅 2 条 `No "x" export is defined`，其余 244 条均为其连带 |
+| 3 | **修法**：在 `apps/web/vite.config.ts` 顶部、`import` 之前执行 `if (process.env.VITEST) { process.env.NODE_ENV = 'test' }`。位置必须在 import 之前——vitest 的 `test.env` 注入时机晚于依赖解析，**实测无效**（试过 `test.env` / `resolve.alias` / `test.define` / `server.deps.inline` 四种写法，只有顶部改写有效） | 见下表「为什么必须是 VITEST 条件」 |
+| 4 | **守卫**：新增 `src/vite_env_guard.test.ts`（2 例）把不变量钉住——删掉那行即变红，且报错文案直接给出根因与修法位置 | **红灯实测**：移除 config 里的改写后，2 例均红（`expected 'production' to be 'test'`）→ 恢复后绿 |
+| 5 | **为什么必须带 `if (process.env.VITEST)` 条件**：无条件改写会让 `vite build` 也读到非 production 值，把 Vue 的 dev/warn 分支打进产物 —— 实测 bundle **366.66 kB → 424.72 kB（+58 kB，gzip 112.71 → 129.45 kB）**。加条件后回到基线 | bundle 实测：无条件钉值 424.72 kB；加 `VITEST` 条件后 **366.66 kB**（与原始 config 逐字节同 hash `index-BH1Mf0FU.js`） |
+| 6 | **纠正一处早前误判**：初稿注释曾写「'development' 在 --coverage 下更慢」；补跑证实那次 `App.corruptStorage.test.ts` 的 5s 超时是**并发跑批时的资源竞争**，与取值无关。最终 config full+coverage 连跑 7 次全绿 | baseline 3/3 绿、修后 unset 3/3 绿、修后 prod 4/4 绿 |
+
+| 门禁 | 全绿实测 | ✅ |
+|---|---|---|
+| 前端 `pnpm test`（宿主 `NODE_ENV=production`） | **73 文件 / 1128 例全绿**（修复前 33 文件 / 246 例全红） | ✅ |
+| 前端 `pnpm test`（宿主 `NODE_ENV` 未设） | **73 文件 / 1128 例全绿** | ✅ |
+| `pnpm test:coverage`（宿主 `NODE_ENV=production`） | 四指标 **100%（4292 / 2934 / 1130 / 3675）** | ✅ |
+| `pnpm test:coverage`（宿主 `NODE_ENV` 未设） | 四指标 **100%（4294 / 2934 / 1130 / 3677）** | ✅ |
+| `pnpm lint` / `pnpm typecheck` / `pnpm typecheck:e2e` | 0 告警 / exit 0 / exit 0 | ✅ |
+| `pnpm build`（宿主 `NODE_ENV=production`） | OK，**366.66 kB / gzip 112.71 kB**，产物 hash 与改动前一致（无体积回归） | ✅ |
+| 后端（本轮未改） | `gofmt -l` 干净 / `go vet ./...` 0 告警 / `go build ./...` OK | ✅ |
+
+> **覆盖率差值的说明**：宿主带 `NODE_ENV` 时统计为 4292/3675、未设时 4294/3677，
+> 差值来自 `ObjectList.vue` 与 `PreviewOverlay.vue` 各一行 Vue dev/prod 分支插桩差异
+> （已逐文件比对确认，**两种环境下四指标均为 100%**，无任何 uncovered 行）。
+
+> **文档同步**：[`roadmap.md`](roadmap.md) §四 门禁基线两行更新（1126 → 1128 例、73 文件；
+> 覆盖率补注两种宿主环境的口径）与 §5.2 新增依赖 **E11**；[`CHANGELOG.md`](../CHANGELOG.md)
+> `[Unreleased]` 记一条「修复」；本节为证据台账落点。
 
 ---
 

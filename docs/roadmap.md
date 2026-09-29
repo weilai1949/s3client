@@ -15,7 +15,7 @@
 > [`features.md`](features.md) §M 与 [`CHANGELOG.md`](../CHANGELOG.md)），**不要按当前编号回读**。
 >
 > 版本命名：稳定里程碑 **v1.0.0** 后日常发版用时间戳（`v1.0.0-YYYYMMDDHHmmss`），预发布用 `v1.0.0-rcN`。
-> 当前版本 **`v1.0.0`**（已打 tag `v1.0.0`）。最后更新：2026-09-28。
+> 当前版本 **`v1.0.0`**（已打 tag `v1.0.0`）。最后更新：2026-09-29。
 
 ## 目录
 
@@ -118,8 +118,8 @@
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ 1126 例全绿（72 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（4294 / 2934 / 1130 / 3677；含 `src/i18n/index.ts`） |
+| 前端测试 | `pnpm test` | ✅ **1128** 例全绿（**73** 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV`，1126 → 1128） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（**宿主 `NODE_ENV` 未设**：4294 / 2934 / 1130 / 3677；**宿主 `NODE_ENV=production`**：4292 / 2934 / 1130 / 3675——差值来自 Vue dev/prod 构建各自少/多插桩的那一行，两种环境下四指标均 100%。含 `src/i18n/index.ts`） |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
 | E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ 全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200） |
 | E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物；**`S3C_TOKEN` 开启的生产同构形态**，2026-09-24 审查 C1 验收实跑） |
@@ -206,6 +206,7 @@
 | E8 | 目标 S3 服务的 CORS / ETag 行为（阿里 / 腾讯 / RustFS / MinIO） | 外部服务 | 浏览器直传与分段上传 | ⚠️ 因厂商而异 | 直传或分段组装失败 | README 兼容性矩阵明示所需 CORS / `ExposeHeader: ETag`；缺 ETag 即报错并清理分段 |
 | E9 | pnpm `9.15.0` / Node `24.21.0` / Rust `1.98.1` / Playwright chromium | 构建 | 前端 / 桌面构建与 E2E | ✅ 由 `packageManager`（web + desktop）+ 锁文件 + `rust-toolchain.toml` + CI 精确 patch 版本固定 | 构建 / E2E 结果漂移 | `--frozen-lockfile`；CI 与本地同命令；`repo_infra_gate_test.go` 断言 Node/pnpm/Rust 均为精确 pin |
 | E10 | 加密存储文件格式 S3C2 / S3C3 向后兼容承诺 | 内部契约 | `store` 加解密与既有账号库 | ✅ S3C3 头部随文件携带 Argon2id 参数 | 直接改 KDF 参数会让既有库不可解密 | 只增版本、不改既有语义；升级路径已有实跑证据（[features.md](features.md)） |
+| E11 | **宿主 `NODE_ENV`（尤其 `production`）** | 环境 | 前端 vitest 单测 | ✅ 由 `apps/web/vite.config.ts` 顶部在 `VITEST` 下改写为 `test` 隔离，并由 `src/vite_env_guard.test.ts` 钉住 | Vue 被解析到 prod 构建 ⇒ 进程内两份 Vue 实例、`vi.mock` 打不进组件，**33 文件 / 246 例全红**，症状却是「导出存在却报 `No "x" export is defined`」这类误导信息 | 隔离必须带 `if (process.env.VITEST)` 条件——否则 `vite build` 也读到非 production 值，把 Vue 的 dev/warn 分支打进产物（实测 bundle 366.66 kB → 424.72 kB）。复发即由 `vite_env_guard.test.ts` 红灯拦下 |
 
 **复审规则**：状态随每次五维度评估（[archive/assessment.md](archive/assessment.md)）与里程碑收口同步更新；登记项（🟡）必须写清「缺口」，➖ 由 ADR 兜底并只登记在索引；风险收敛为自动化门禁后移入上方「已收敛」索引（**编号不重排**），闭环证据按 §六 第 1 条归档 `features.md`。新增外部服务 / 凭证 / 分发通道必须在同一 PR 补 E 表一行。
 

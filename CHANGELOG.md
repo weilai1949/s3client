@@ -6,6 +6,34 @@
 
 ## [Unreleased]
 
+### 修复（2026-09-29 前端测试与宿主 `NODE_ENV` 解耦：修复 33 文件 / 246 例全红）
+
+> 本机 `pnpm test` 长期报 **33 文件 / 246 例全红**，此前一度怀疑是 Node 26 与 vitest
+> 不兼容——实测**否**：同一份代码在 `node:24.21.0-alpine` 与 `node:26.5.0-alpine` 容器里
+> 均为 **72 文件 / 1126 例全绿**。真凶是宿主环境变量 **`NODE_ENV=production`**。
+> 证据台账见 [`docs/features.md`](docs/features.md) **§AK**。
+
+- **根因**：Vue 的 node 入口 `vue/index.js` 在运行时按 `process.env.NODE_ENV` 二选一加载
+  CJS 产物（`production` → `dist/vue.cjs.prod.js`，其余 → `dist/vue.cjs.js`）。宿主带着
+  `NODE_ENV=production` 时，vitest 把 Vue 解析到 **prod 构建**，而 `@vitejs/plugin-vue`
+  编译 SFC 产出的绑定属于 **dev 构建** ⇒ 进程内两份 Vue 实例、reactive 状态不连通。
+- **症状极具误导性**（排查成本的主要来源）：不是「找不到模块」，而是
+  `[vitest] No "toasts" export is defined on the "./store" mock` —— 而 `src/store.ts`
+  的 `toasts` 导出**确实存在**。连带 `Cannot call text on an empty DOMWrapper` /
+  `w.vm.xxx is not a function` 等 **246 例**次生失败，根因却只有 2 条。
+- **修法**：在 `apps/web/vite.config.ts` 顶部、`import` 之前执行
+  `if (process.env.VITEST) { process.env.NODE_ENV = 'test' }`。
+  位置必须在 import 之前——`test.env` / `resolve.alias` / `test.define` /
+  `server.deps.inline` 四种写法均已实测无效。
+  **条件 `process.env.VITEST` 不可省**：无条件改写会让 `vite build` 也读到非 production
+  值，把 Vue 的 dev/warn 分支打进产物（实测 bundle 366.66 kB → **424.72 kB**，+58 kB）。
+- **守卫**：新增 `src/vite_env_guard.test.ts`（2 例）钉住不变量——删掉那行立刻变红，
+  报错文案直接给出根因与修法位置（红灯已实测）。
+- **门禁**（全绿实测）：`pnpm test` **73 文件 / 1128 例**（宿主带 `NODE_ENV=production`
+  与未设两种环境均全绿）/ `pnpm test:coverage` 四指标 **100%** / `pnpm lint` 0 告警 /
+  `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm build` OK 且产物
+  **366.66 kB（gzip 112.71 kB）**、hash 与改动前一致（无体积回归）。
+
 ### 修复（2026-09-28 KNOWN_ISSUES #64 闭环：`store.Open` 的 json 分支不再丢弃入参 `storeKey`）
 
 > #64 是三路五轴复审 19 条中**唯一未闭环**的一条，此前登记为「Nit，实测后挂起」。
