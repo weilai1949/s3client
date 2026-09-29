@@ -156,10 +156,14 @@ body {
 ::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-thumb-h); }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* ===== 无障碍焦点 ===== */
+/* ===== 无障碍焦点 =====
+   `textarea` 必须在此列表里：下面的表单基础规则写了 `outline: none`（第 340 行附近），
+   若不覆盖，`BucketPolicyVisualEditor.vue` 的 <textarea> 拿不到与其它控件一致的 2px 轮廓，
+   键盘用户看不出焦点在哪（KNOWN_ISSUES #67③，由 `src/a11y_gate.test.ts` 钉住）。 */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--primary);
@@ -585,4 +589,20 @@ table.tbl .actions { display: flex; gap: 6px; justify-content: flex-end; }
   nav.tabs .nav-group + .nav-group { margin-top: 0; padding-top: 0; border-top: 0; }
   main.content { padding: 14px; }
   header.top { padding: 0 14px; }
+}
+
+/* ===== 减少动效（prefers-reduced-motion） =====
+   前庭敏感用户可在系统里声明「减少动效」。此前全仓搜不到该媒体查询，界面的
+   rise / toast-in / skel 关键帧与 modal-fade / pop-in 过渡一律照常播放，用户无法关掉
+   （KNOWN_ISSUES #67②，由 `src/a11y_gate.test.ts` 钉住）。
+   放在文件末尾以覆盖前面所有规则；`!important` 是必要的——动效分散在组件级选择器与
+   内联过渡上，靠提高优先级逐条覆盖既易漏又难维护。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

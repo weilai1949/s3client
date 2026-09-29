@@ -12,14 +12,23 @@ GCL_EXTRA ?=
 E2E_REAL_ARGS ?=
 
 # 本地跑 GitLab 流水线（docker executor，无需 GitLab 实例）
+#
+# ⚠️ `env -u GCL_JOBS -u GCL_EXTRA -u GCL` 不是保险，而是**必需**：
+# gitlab-ci-local 用 yargs 的 `.env('GCL')` 做前缀映射，**任何 `GCL_*` 环境变量都会被当成
+# 同名 CLI 选项**（`GCL_JOBS=web` → `--jobs web` → 报 `Unknown argument: jobs`；
+# `GCL_FOO=bar` → `Unknown argument: foo`，2026-09-29 实测确认）。而 GNU make 会把**命令行
+# 传入**的变量导出进 recipe 环境，于是 `make gcl GCL_JOBS=web` 必然失败——此前 Makefile /
+# README / docs/DEVELOPMENT.md / .gitlab-ci.yml 共 6 处都宣传了这条跑不通的命令。
+# 摘掉这些环境变量后，`$(GCL_JOBS)` 仍由 make 展开成位置参数，行为不变。
+# 由 `repo_infra_gate_test.go` 的 `TestMakefileGclStripsEnvPrefixVars` 守住，防回退。
 gcl-list:
 	$(GCL) --list $(GCL_EXTRA)
 
 gcl:
-	$(GCL) $(GCL_JOBS) $(GCL_EXTRA)
+	env -u GCL_JOBS -u GCL_EXTRA -u GCL $(GCL) $(GCL_JOBS) $(GCL_EXTRA)
 
 gcl-docker:
-	$(GCL) docker $(GCL_EXTRA)
+	env -u GCL_JOBS -u GCL_EXTRA -u GCL $(GCL) docker $(GCL_EXTRA)
 
 # Go 后端（构建并运行）
 # 不在每次启动时跑 `go mod tidy`，避免依赖被无意识升级导致开发与 CI 漂移；
@@ -98,7 +107,7 @@ govulncheck:
 
 # 提交前门禁聚合：本地一条命令跑完与 CI 等价的静态检查 + 单测 + 覆盖率。
 # 注意：CI 额外有 Trivy 镜像扫描、RustFS E2E、Playwright E2E 与真实联调 E2E（make e2e-real），
-# 本目标不含（见 docs/development.md）。
+# 本目标不含（见 docs/DEVELOPMENT.md）。
 check: vet lint test-cover web-test-cover web-typecheck-e2e
 
 # 真实联调浏览器冒烟（KNOWN_ISSUES #37）：docker 自动起一份真实 RustFS + 真实构建产物 +

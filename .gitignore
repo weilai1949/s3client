@@ -21,6 +21,13 @@ coverage
 coverage.out
 coverage.txt
 
+# ---- GitLab SAST 产物 ----
+# `make gcl GCL_JOBS=semgrep-sast` 会把分析器产出的报告拷回工作目录根（gcl 的 artifacts 行为）。
+# 它是**跑出来的**证据文件，不是源码，故不入库；triage 结论记在 docs/threat-model.md §7。
+gl-sast-report.json
+gl-dependency-scanning-report.json
+gl-secret-detection-report.json
+
 # ---- 环境变量 ----
 .env
 .env.*

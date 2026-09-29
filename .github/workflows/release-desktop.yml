@@ -19,6 +19,14 @@ concurrency:
 
 permissions:
   contents: write
+  # 供应链证明（P0）：Sigstore 走 OIDC 短期令牌，无需长期签名密钥；
+  # attestations: write 把证明写入仓库 attestations API，消费者用
+  # `gh attestation verify <file> --repo <owner>/<repo>` 核验。
+  # 这是「代码签名证书未到位」（roadmap E6）之外的**独立**一层完整性保证：
+  # 它证明「产物由本仓库的哪个 commit / 哪个 workflow 构建」，但不解决
+  # SmartScreen / Gatekeeper 的**发布者信誉**问题——两者不可互相替代。
+  id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -88,7 +96,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.10.0
           cache: pnpm
           cache-dependency-path: |
             apps/web/pnpm-lock.yaml
@@ -159,6 +167,86 @@ jobs:
           cp SHA256SUMS.txt "$asset"
           gh release upload "$RELEASE_TAG" "$asset" --clobber
 
+      - name: Attest bundle provenance
+        # 对**本平台**的安装包做 GitHub 产物证明。SHA256SUMS 只能证明「文件没被改动」，
+        # 前提是你能先拿到可信的清单；产物证明把「这个文件 ← 这个 commit ← 这个 workflow」
+        # 这条链条也钉住，两者互补。
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+
+  sbom-desktop:
+    # P0 供应链（roadmap §三 #12 的剩余项之一）：桌面安装包此前**没有 SBOM**——只有容器镜像有。
+    # 安装包实际装载两类依赖，本 job 一并覆盖，产出**单个** CycloneDX 文件：
+    #   1. Tauri 的 Rust 二进制 ← `apps/desktop/src-tauri/Cargo.lock`（实测 429 个 crate，全部编译进二进制）
+    #   2. 内嵌的 Web 资源 ← `apps/web/pnpm-lock.yaml`（实测 24 个**运行期**包；
+    #      Trivy 的 pnpm 解析器只取运行期图、自动排除 devDependencies——这正是「随包分发」的口径）
+    # 两份锁文件放进同一目录做一次扫描即得合并组件清单（Trivy 按文件名识别 lockfile 类型），
+    # 因此**不需要**三平台各跑一遍：锁文件与平台无关。
+    #
+    # 复用镜像 SBOM 已 pin 的 Trivy（tag + digest 双 pin）——**不引入第二套 SBOM 工具**：
+    # 多一套工具就多一条供应链，且会与 Trivy 的漏洞库读数分叉（沿用 ci.yml 的既定理由）。
+    name: Desktop SBOM (CycloneDX)
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Resolve tag
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - name: Generate desktop SBOM (CycloneDX)
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
+        run: |
+          set -euo pipefail
+          mkdir -p "$TRIVY_CACHE_DIR" sbomroot
+          cp apps/desktop/src-tauri/Cargo.lock sbomroot/Cargo.lock
+          cp apps/web/pnpm-lock.yaml sbomroot/pnpm-lock.yaml
+          docker run --rm \
+            -v "$TRIVY_CACHE_DIR:/root/.cache/trivy" \
+            -v "${{ github.workspace }}:/out" \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 fs \
+            --format cyclonedx \
+            --output /out/sbom-desktop.cdx.json \
+            --no-progress \
+            --pkg-types os,library \
+            --scanners vuln \
+            /out/sbomroot
+          # 自检（防空跑）：格式或解析口径变化时不得静默产出空 SBOM 还照样发布。
+          # 期望量级：Cargo 429 + pnpm 24 个组件，门槛取 100 留足余量又不至于放过空文件。
+          count=$(jq '[.components[]?] | length' sbom-desktop.cdx.json)
+          echo "SBOM components: $count"
+          [ "$count" -ge 100 ] || { echo "SBOM 组件数异常（$count < 100）：解析口径或格式需同步" >&2; exit 1; }
+
+      - name: Attest SBOM
+        # 与安装包同一层证明：把 SBOM 文件也绑定到「哪个 commit / 哪个 workflow 产出」。
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: sbom-desktop.cdx.json
+
+      - name: Upload SBOM to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" sbom-desktop.cdx.json --clobber
+
   aggregate-checksums:
     # R3：等三平台全部上传完，把各自的 SHA256SUMS-<bundle>.txt 合并为唯一的 SHA256SUMS.txt，
     # 使校验清单覆盖**全部**平台产物（此前并行 clobber 只会留下一个平台）。
@@ -201,3 +289,35 @@ jobs:
           for b in nsis deb dmg; do
             gh release delete-asset "$RELEASE_TAG" "SHA256SUMS-$b.txt" --yes || true
           done
+
+      # cosign 无密钥签名（P0 供应链，roadmap §三 #12 的 cosign 部分）。
+      #
+      # 为什么签**清单**而不是逐个安装包：SHA256SUMS.txt 已覆盖三平台全部产物，
+      # 对它签一次即传递性地覆盖所有安装包，Release 资产只多两个文件（`.sig` / `.pem`），
+      # 而逐包签会在每个平台上各产出一对签名文件、资产数随平台数膨胀。
+      #
+      # keyless：身份取自本 job 的 GitHub OIDC 令牌，证书与签名进 Sigstore 透明日志（Rekor），
+      # 无长期私钥。核验（把 <owner>/<repo> 换成本仓库）：
+      #   cosign verify-blob \
+      #     --certificate SHA256SUMS.txt.pem --signature SHA256SUMS.txt.sig \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     --certificate-identity-regexp '^https://github.com/<owner>/<repo>/.github/workflows/release-desktop.yml@' \
+      #     SHA256SUMS.txt
+      # ⚠️ 与 `actions/attest-build-provenance` 一样，它证明「产物由本仓库的哪个 commit / workflow
+      # 构建」，**不解决** SmartScreen / Gatekeeper 的发布者信誉（仍需 E6 的代码签名证书）。
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign checksum manifest (cosign keyless)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd sums
+          cosign sign-blob --yes \
+            --output-signature SHA256SUMS.txt.sig \
+            --output-certificate SHA256SUMS.txt.pem \
+            SHA256SUMS.txt
+          gh release upload "$RELEASE_TAG" \
+            SHA256SUMS.txt.sig SHA256SUMS.txt.pem --clobber

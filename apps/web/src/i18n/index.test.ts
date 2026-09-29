@@ -103,13 +103,30 @@ describe('i18n', () => {
     setLocale('zh-CN')
   })
 
-  // 覆盖率门禁去水分（已闭环：features.md §M）：i18n 纳入统计后，这些分支必须有行为断言，
+  // 覆盖率门禁去水分（已闭环：FEATURES.md §M）：i18n 纳入统计后，这些分支必须有行为断言，
   // 而非靠排除目录「注水」。
   it('locale() 反映 setLocale 的当前语言', () => {
     setLocale('en-US')
     expect(locale()).toBe('en-US')
     setLocale('zh-CN')
     expect(locale()).toBe('zh-CN')
+  })
+
+  // KNOWN_ISSUES #67①：`index.html` 硬编码 lang="zh-CN"，此前切到英文后文档语言标记不变，
+  // 屏幕阅读器会按中文读音念英文内容、浏览器翻译提示也会误判。这里钉住「随语言同步」。
+  it('setLocale 同步 <html lang>（#67①）', () => {
+    setLocale('en-US')
+    expect(document.documentElement.lang).toBe('en-US')
+    setLocale('zh-CN')
+    expect(document.documentElement.lang).toBe('zh-CN')
+  })
+
+  it('cycleLocale 同样同步 <html lang>', () => {
+    setLocale('zh-CN')
+    expect(cycleLocale()).toBe('en-US')
+    expect(document.documentElement.lang).toBe('en-US')
+    cycleLocale()
+    expect(document.documentElement.lang).toBe('zh-CN')
   })
 
   it('cycleLocale 在 zh-CN → en-US → zh-CN 之间循环', () => {

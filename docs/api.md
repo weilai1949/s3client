@@ -1,6 +1,6 @@
 # REST API 参考
 
-后端默认监听 `127.0.0.1:8080`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`。
+后端默认监听 `127.0.0.1:8080`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
 
 > **`/api/metrics` 有意不受 `S3C_TOKEN` 保护**：即使配置了 token，只要设置 `S3C_EXPOSE_METRICS=1`，`GET /api/metrics` 无需 `Authorization` 头即返回 200（`withAuth` 只豁免 `/api/health` 与 `/api/metrics`，见 `middleware.go`）。这是为了让内网 Prometheus 直接 scrape 而无需分发 token；代价是该端点一旦暴露即**匿名可读**（含版本、存储可达性、S3 上游调用统计等运行信息）。因此**不要**把开启 metrics 的实例直接暴露到公网，应仅在内网 / 反向代理鉴权之后放行。
 所有响应带 `X-Request-ID`（客户端可传入，否则服务端生成）；访问日志字段 `req` 与之对应。
@@ -681,6 +681,7 @@ GET /api/openapi.json
 OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
 前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
+鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 10 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
 
 ## 静态资源
 

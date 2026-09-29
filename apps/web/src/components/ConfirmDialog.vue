@@ -13,7 +13,7 @@ function onKey(e: KeyboardEvent) {
     settleConfirm(false)
   } else if (e.key === 'Enter') {
     // useKeydownStack 的 dispatch 只调用栈顶 handler，本函数被调用时必为栈顶；
-    // 原 `&& isTopKeydown(onKey)` 守卫恒为 true，属不可达分支，已移除。
+    // 原「仅在栈顶时才响应」的守卫因此恒为 true，属不可达分支，已随其导出一并移除。
     e.preventDefault()
     settleConfirm(true)
   }

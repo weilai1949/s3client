@@ -29,7 +29,7 @@ func TestValidateEndpointGaps(t *testing.T) {
 		{"volcano imds ip literal", "http://100.96.0.2", "endpoint host is blocked"},
 		{"metadata.goog hostname", "http://metadata.goog", "endpoint host is blocked"},
 		// 用户手填的 endpoint 常带首尾空白：此前 trim 后仅用于判空，解析仍用未 trim 的
-		// 原串，导致合法地址被判为 "invalid endpoint URL"（features.md §K，KNOWN_ISSUES #10）。
+		// 原串，导致合法地址被判为 "invalid endpoint URL"（FEATURES.md §K，KNOWN_ISSUES #10）。
 		{"leading and trailing space", " http://127.0.0.1:9000 ", ""},
 		{"uppercase scheme with spaces", " HTTP://127.0.0.1:9000/ ", ""},
 		// 回归护栏：归一化后必须仍然拦到危险主机。空白原本就是 fail-closed（解析失败），

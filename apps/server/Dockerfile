@@ -7,8 +7,8 @@ ARG NPM_REGISTRY=https://registry.npmjs.org
 ARG VERSION=v1.0.0
 
 ###### Web 前端构建 ######
-# Alpine + Node 24 LTS（固定到 patch：大版本 tag 会随上游重建，同一 commit 产出的层会漂移）。
-FROM node:24.21.0-alpine AS web
+# Alpine + Node 26（Current；2026-10 转入 LTS）（固定到 patch：大版本 tag 会随上游重建，同一 commit 产出的层会漂移）。
+FROM node:26.10.0-alpine AS web
 ARG NPM_REGISTRY
 WORKDIR /web
 # 先还原依赖再拷贝源码，充分利用层缓存；锁文件一并拷贝保证可复现。

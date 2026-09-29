@@ -64,8 +64,8 @@ apps/server/internal/model        领域模型（Account / AccountView）
 |---|---|---|
 | 错误映射 | `s3wrap/errors.go` | S3 错误 → 稳定 HTTP 状态 + 短英文用户消息（sentinel + `errors.Is`） |
 | SSRF 防护 | `s3wrap/ssrf.go` | 创建时 + 拨号期双重校验（禁 IMDS/链路本地、禁重定向、禁代理）；`S3C_SSRF_DENY_PRIVATE=1` 可连私网/回环一并拒绝 |
-| 预签名 | `s3wrap/presign.go` | v4 签名 URL，过期钳制 [1h, 24h] |
-| 原子写 | `store/atomic.go` | 临时文件 + rename + 0600；写失败回滚内存 |
+| 预签名 | `s3wrap/presign.go` | v4 签名 URL；`expiresIn` ≤0 取默认 **1h**、>24h 钳到 **24h**（S3 协议上限 7 天，控制台收紧），**无 1h 下限** |
+| 原子写 | `internal/atomicfile/atomicfile.go`（调用点 `store/filestore.go`、`service/job_persist.go`） | 临时文件 + rename + 0600；写失败回滚内存 |
 | 单写者锁 | `store/lock.go` | `flock` 锁 `DataDir`（`.s3clinet.lock`），第二实例启动即失败；非 unix 为 no-op |
 | 任务清单落盘 | `service/job_persist.go` | 同上原子写策略，但自包含于 `service` 包：`service→store` 会形成分层倒置 |
 | 流式限并发 | `handler/stream.go` | 全局 32 并发 + 滚动空闲写超时 5min |
@@ -79,7 +79,7 @@ apps/web/src/
   api/               API 客户端（按职责拆分的模块目录，见下）
     storage.ts         浏览器凭据 / 多服务器 profile 存储（依赖图最底层）
     http.ts            传输层：base + Bearer + JSON + 错误归一
-    endpoints.ts       领域端点封装（s3api，~70 个方法）
+    endpoints.ts       领域端点封装（s3api 对象，59 个方法；与后端 70 个 `/api/*` 端点不是同一量纲）
     jobs.ts            异步任务 SSE 订阅 + EOF 后状态回读兜底
     download.ts        ZIP 流式落盘（File System Access API + blob 兜底）
     upload.ts          预签名直传（XHR，提供上传进度）
@@ -117,7 +117,7 @@ apps/web/src/
 
 ## 6. 配置体系
 
-所有配置通过环境变量注入（`S3C_*`），支持 `.env`（查找顺序：`S3C_ENV_FILE` → CWD → 可执行文件同目录；真实环境变量优先；**显式 `S3C_ENV_FILE` 不可读时拒绝启动**，不静默回退默认值）。完整矩阵见 [README.md](../README.md#配置服务端)。
+所有配置通过环境变量注入（`S3C_*`），支持 `.env`（查找顺序：`S3C_ENV_FILE` → CWD → 可执行文件同目录；真实环境变量优先；**显式 `S3C_ENV_FILE` 不可读时拒绝启动**，不静默回退默认值）。完整矩阵见 [`CONFIGURATION.md`](CONFIGURATION.md)（**SSOT**）。
 
 ## 7. 关键取舍（详见 ADR）
 

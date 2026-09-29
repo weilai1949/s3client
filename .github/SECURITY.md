@@ -2,20 +2,21 @@
 
 ## 支持的版本
 
-当前版本 `v1.0.0`；稳定里程碑之后日常发版用时间戳版 `v1.0.0-YYYYMMDDHHmmss`（命名约定见 [README.md](../README.md)）。仅维护最新版本，安全修复随下一个版本发布。
+当前版本以 [`Makefile`](../Makefile) 的 `VERSION` 与 `GET /api/health` 的 `version` 字段为准（由 [`scripts/release-version.sh`](../scripts/release-version.sh) 同步，**本文件刻意不 pin 具体版本号**以免发版后漂移）；稳定里程碑之后日常发版用时间戳版 `v1.0.0-YYYYMMDDHHmmss`（命名约定见 [README.md](../README.md)）。仅维护最新版本，安全修复随下一个版本发布。
 
 | 版本 | 支持状态 |
 |---|---|
-| `v1.0.0` 及时间戳版 `v1.0.0-*`（最新） | ✅ 支持 |
-| `v1.0.0-rc*`（预发布） | ❌ 已被 `v1.0.0` 取代，请升级 |
+| 最新发布（纯 semver 里程碑，或时间戳版如 `v1.0.0-YYYYMMDDHHmmss`） | ✅ 支持 |
+| 预发布（`-rc*` / `-alpha*` / `-beta*`） | ❌ 已被对应正式版取代，请升级 |
 | `0.x`（历史） | ❌ 不再支持，请升级 |
 
 ## 报告漏洞
 
 **请不要公开披露漏洞**（不要开 public issue）。请通过以下任一渠道私下报告：
 
-- **GitHub 私有漏洞报告**：仓库页面 → `Security` → `Report a vulnerability`
-- **邮件**：维护者邮箱（见 [CONTRIBUTING.md](CONTRIBUTING.md)）
+- **GitHub 私有漏洞报告**（**推荐，唯一保证可达的渠道**）：仓库页面 → `Security` → `Report a vulnerability`
+
+> 本仓库**未公开安全邮箱**：此前这里指向「[CONTRIBUTING.md](CONTRIBUTING.md) 中列出的维护者邮箱」，但该文件从未列出过邮箱（死链，已于 2026-09-29 移除）。维护者联系方式与其它支持渠道见 [CONTRIBUTING.md §联系与支持](CONTRIBUTING.md#联系与支持)。
 
 请在你的报告中包含：
 

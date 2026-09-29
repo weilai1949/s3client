@@ -12,6 +12,8 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	})
 	r.AddServer(openapi.Server{URL: "/", Description: "同源（前端 Vite 代理或后端 SPA fallback）"})
 
+	registerTags(r)
+
 	registerAccounts(r)
 	registerBuckets(r)
 	registerBucketSettings(r)
@@ -22,6 +24,31 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	registerTrash(r)
 	registerMigrate(r)
 	registerSystem(r)
+}
+
+// ---- Tags ----
+
+// apiTags 是契约的顶层分组，取值必须与各 operation 的 Op.Tags 一致，说明对应
+// docs/api.md 的章节（不发明新分类）。顺序即规范中的声明顺序。
+var apiTags = []openapi.Tag{
+	{Name: "accounts", Description: "账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）"},
+	{Name: "buckets", Description: "桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）"},
+	{Name: "bucket-settings", Description: "桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）"},
+	{Name: "objects", Description: "对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）"},
+	{Name: "object-meta", Description: "对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）"},
+	{Name: "multipart", Description: "分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）"},
+	{Name: "versions", Description: "对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）"},
+	{Name: "trash", Description: "回收站：列出删除标记与彻底清除（docs/api.md「回收站」）"},
+	{Name: "migrate", Description: "跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）"},
+	{Name: "system", Description: "系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）"},
+}
+
+// registerTags 声明顶层 tags（每个 tag 都必须被 operation 引用，无孤儿声明；
+// 该不变式由 openapi_auth_test.go 机械校验）。
+func registerTags(r *openapi.Registry) {
+	for _, tag := range apiTags {
+		r.AddTag(tag)
+	}
 }
 
 // ---- Accounts ----

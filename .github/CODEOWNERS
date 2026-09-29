@@ -1,0 +1,35 @@
+# CODEOWNERS —— 默认审查者
+#
+# 文件名由 GitHub 固定（必须逐字为 `CODEOWNERS`，无扩展名；GitHub 按字面名在
+# `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，取第一个命中的）。
+# 该名字属「外部工具约定固定」，是 docs/ 命名规则里的大写类之一——见 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) §4 命名约定。
+#
+# 生效前提：仓库分支保护里开启「Require review from Code Owners」，否则本文件只是提示。
+# 语法见 https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# 默认：全部文件
+*                       @weilai1949
+
+# 安全敏感面——改动必须人类专家复核（见 docs/AI_POLICY.md §3 权限矩阵）
+/.github/SECURITY.md    @weilai1949
+/docs/threat-model.md   @weilai1949
+/apps/server/internal/store/    @weilai1949
+/apps/server/internal/s3wrap/   @weilai1949
+/apps/server/internal/handler/middleware.go     @weilai1949
+
+# 供应链与流水线——改一侧必须同步另一侧（见 docs/DEVELOPMENT.md §3「CI 双平台一致性」）
+/.github/workflows/     @weilai1949
+/.gitlab-ci.yml         @weilai1949
+/apps/server/Dockerfile @weilai1949
+
+# Agent 治理与仓库级硬约束
+/AGENTS.md              @weilai1949
+/llms.txt               @weilai1949
+/docs/AI_POLICY.md      @weilai1949
+/.github/GOVERNANCE.md  @weilai1949
+/.github/SUPPORT.md     @weilai1949
+
+# 机器可读契约与运维手册——改 handler 后契约文件必须重新生成，改告警/备份流程须复核
+# （见 docs/DEVELOPMENT.md §4：`openapi.json` 由 golden 门禁守住）
+/docs/api/openapi.json  @weilai1949
+/docs/OPERATIONS.md     @weilai1949

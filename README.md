@@ -8,6 +8,16 @@ S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提�
 - 后端默认绑定 `127.0.0.1`（更安全），并开启 CORS 白名单与可选 Bearer 鉴权。
 - 前端直传：浏览器拿到 v4 签名 URL 后**直接**上传到 S3，不经过本服务。
 
+## 界面
+
+| 全新安装（账号管理空态） | 服务器设置 |
+|---|---|
+| ![账号管理](docs/images/accounts-panel.png) | ![服务器设置](docs/images/server-panel.png) |
+
+> 截图为**真实构建产物**在浏览器中的渲染，由 [`apps/web/e2e/screenshots.spec.ts`](apps/web/e2e/screenshots.spec.ts)
+> 生成——该 spec 同时是冒烟用例（断言界面渲染成功且**不含**「无法连接后端」这类环境噪声）。
+> 重新生成：`cd apps/web && pnpm build && pnpm exec playwright test screenshots.spec.ts`。
+
 ## 功能
 
 - 配置账号：增删改查、连通性测试（`HeadBucket`）、列出桶（`ListBuckets`）。服务商按「兼容 / 国内 / 国外」分组：MinIO 等 S3 兼容；国内（阿里 OSS、腾讯 COS、华为 OBS、火山 TOS、百度 BOS、京东云、七牛）；国外（AWS、Cloudflare R2、Wasabi、Backblaze B2、DigitalOcean Spaces、Linode/Akamai、Scaleway、Hetzner）。
@@ -63,7 +73,7 @@ docker-compose.yml   一键起 server + RustFS
 ## 环境要求
 
 - Go 1.26+
-- Node 24+ / pnpm 9+（CI 与镜像构建均使用 24；本地 20+ 仍兼容）
+- Node 26 / pnpm 9+（CI 与镜像构建均 pin 精确 `26.10.0`；本地 20+ 亦兼容）
 - Rust + `@tauri-apps/cli`（仅桌面端）
 - Linux 桌面端构建需 `libwebkit2gtk-4.1-dev`、`libgtk-3-dev`、`libayatana-appindicator3-dev`、`librsvg2-dev` 等
 
@@ -72,25 +82,17 @@ docker-compose.yml   一键起 server + RustFS
 所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
 `.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源，且路径不存在 / 不可读时**拒绝启动**，不静默回退默认值）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
+**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 18 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
+
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `S3C_ENV_FILE` | 空 | 显式指定 `.env` 路径（绝对路径可与进程 CWD 解耦，适合 systemd/容器）；设置后不再回退到其它候选，且**路径不存在 / 不可读时拒绝启动**（防止写在里面的 `S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` 等加固项或 `S3C_DATA_DIR` 静默失效） |
-| `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080` |
-| `S3C_DATA_DIR` | `./data` | 数据目录（`accounts.json` / `accounts.db` / `accounts.json.enc`，以及单写者锁文件 `.s3clinet.lock`） |
-| `S3C_STATIC_DIR` | `../web/dist` | Web 静态资源目录（相对进程工作目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist`） |
-| `S3C_REGION` | `us-east-1` | 账号缺省 region |
-| `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换（以最短者判定长度） |
-| `S3C_CORS_ORIGINS` | 空 | CORS 白名单；留空=仅同源 + localhost/127.0.0.1/tauri |
-| `S3C_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
-| `S3C_SHUTDOWN_TIMEOUT` | `30` | 收到 SIGTERM 后等待活跃连接结束的最长时间（秒）；取值 **1–3600**，超上界拒绝启动（秒数过大时 `time.Duration` 会溢出为负时长，让优雅关停被静默跳过） |
+| `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080`（此时**必须**设 `S3C_TOKEN`） |
+| `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3clinet.lock`） |
+| `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换 |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
-| `S3C_STORE_KEY` | 空 | 落盘加密口令；非空时至少 16 字符（`openssl rand -hex 32`）。`encrypted` 模式必填；`json`/`sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id+盐派生，文件格式 `S3C3`（参数随文件头保存，兼容读旧 `S3C2`）。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式设置 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
-| `S3C_ALLOW_PLAINTEXT_STORE` | 空 | 仅本地联调：`1`/`true`/`yes`/`on` 时允许 `json`/`sqlite` 在无 `S3C_STORE_KEY` 下运行，`secretKey` **明文落盘**并在启动日志打出 WARN。**不要在生产设置** |
-| `S3C_EXPOSE_METRICS` | 空 | `1`/`true`/`yes`/`on` 时暴露 `GET /api/metrics`（Prometheus 文本）；默认 404，避免公网被 scrape。**该端点不受 `S3C_TOKEN` 保护**：开启后匿名可读，应仅在内网 / 反代鉴权后放行 |
-| `S3C_TRUSTED_PROXIES` | 空 | 可信反向代理 IP（逗号分隔）；仅这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速 |
-| `S3C_SSRF_DENY_PRIVATE` | 空 | 设为 `1` 时连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](docs/decisions/0003-ssrf-private-allow.md) |
+| `S3C_STORE_KEY` | 空 | 落盘加密口令（至少 16 字符）；`encrypted` 模式必填，`json`/`sqlite` 设置后启用加密。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
 
-**安全默认值**：回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN`、或 `json`/`sqlite` 未设 `S3C_STORE_KEY` 时进程**拒绝启动**（后者需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行，仅限本地联调）。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
+**安全默认值**：回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标与契约端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN`、或 `json`/`sqlite` 未设 `S3C_STORE_KEY` 时进程**拒绝启动**（后者需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行，仅限本地联调）。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
 
 ## 快速开始
 
@@ -233,7 +235,7 @@ make gcl GCL_JOBS=web  # 跑单个 job（web / server / rustfs-e2e / e2e-real �
 make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 ```
 
-两侧对照表与执行器差异（含 Trivy DB 镜像变量）见 [`docs/development.md`](docs/development.md) §3「CI 双平台一致性」。
+两侧对照表与执行器差异（含 Trivy DB 镜像变量）见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §3「CI 双平台一致性」。
 
 ## 用到的 S3 SDK for Go v2 接口
 
@@ -241,21 +243,47 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 
 ## 文档
 
-- [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
+**用法（产品是什么 / 怎么用）**
+
+- [用户手册](docs/user-guide.md) — 首次配置 / 上传下载 / 对象与桶操作 / 版本与回收站 / 快捷键 / FAQ / 排障
 - [REST API 参考](docs/api.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [OpenAPI 规范文件](docs/api/openapi.json) — 机器可读契约（**不跑服务也能读**；Swagger UI / 代码生成 / AI 代理可直接消费）
 - [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
-- [功能大全（Features）](docs/features.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
+- [兼容性与弃用政策](docs/compatibility.md) — 版本命名 / 支持窗口 / API 演进承诺 / 存储格式兼容 / 弃用规则
+- [术语表](docs/glossary.md) — S3 领域术语 + 本项目自造词
+
+**运维与安全**
+
+- [部署指南](docs/DEPLOYMENT.md) — Docker Compose / Nginx / TLS / 升级 / 回滚
+- [运维手册](docs/OPERATIONS.md) — 可观测性 / SLO 与告警 / Runbook / 备份恢复 / 灾难恢复 / 事故响应
+- [事故复盘模板](docs/POSTMORTEM_TEMPLATE.md) — 复盘格式与字段（取证清单 / 时间线 / 根因 / 行动项 / 文档同步；**空模板，非事故台账**）
+- [配置参考](docs/CONFIGURATION.md) — 全部 `S3C_*` 环境变量（**SSOT**）/ 启动期硬失败 / 客户端设置
+- [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
+- [性能基线](docs/PERFORMANCE.md) — 热路径基准与解读（含加密写入与 O(n) 写入的取舍）
+
+**贡献与治理**
+
+- [开发指南（TDD 优先）](docs/DEVELOPMENT.md) — 测试规范 / 门禁 / 验收清单 / Red Flags / 技术债
+- [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
+- [AI 使用与代理治理](docs/AI_POLICY.md) — 代理模式 / 权限矩阵 / MCP 工具权限 / AI 披露模板 / DoD
+- [国际化与本地化](docs/i18n.md) — 语言现状 / 新增一门语言的步骤 / 文案覆盖率门禁
+- [可访问性](docs/accessibility.md) — ARIA / 键盘可达性 / 主题 / 已知限制（**未做正式 WCAG 审计**）
+- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
 - [已知问题（Known Issues）](docs/KNOWN_ISSUES.md) — 缺陷 / 外部阻塞 / 技术债（唯一来源）
+- [路线图（Roadmap）](docs/ROADMAP.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
+- [贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md) · [支持渠道](.github/SUPPORT.md) · [治理](.github/GOVERNANCE.md)
+- [AI 代理入口](AGENTS.md) — Agent 工具自动加载的仓库级硬约束（详细规范见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)）
+- [LLM 导航索引](llms.txt) — 给 LLM / 编码代理的仓库地图（只列入口，非规范正文）
+
+**归档（时点性快照，冻结不改写）**
+
 - [综合评估报告](docs/archive/assessment.md) — 2026-09-16 五维度评估（代码质量 / 漏洞 / 死代码 / 降级 / 自我迭代）
 - [分支整体状态审查](docs/archive/review-2026-09-19.md) — 2026-09-19 时点性审查：七维度实跑复核 + P0/P1/P2 优先级
-- [路线图（Roadmap）](docs/roadmap.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
-- [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
-- [部署指南](docs/deployment.md) — Docker Compose / Nginx / TLS / 运维
-- [开发指南（TDD 优先）](docs/development.md) — 测试规范 / 验收清单 / 技术债
-- [文档归档](docs/archive/index.md) — 时点性评估 / 审查快照的冻结存放处（归档后不改写历史结论）
-- [贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md)
-- [AI 代理入口](AGENTS.md) — Agent 工具自动加载的仓库级硬约束（详细规范见 [docs/development.md](docs/development.md)）
-- 配置见上文矩阵。
+- [全仓代码审查（2026-09-24）](docs/archive/code-review-2026-09-24.md) — 六路五轴：2 Critical + 20 Required 全部修复
+- [代码审查总结](docs/archive/code-review-summary.md) — 总体评分 / 质量指标 / 改进建议（数字为**审查时点值**）
+- [文档归档索引](docs/archive/index.md) — 全部归档件清单
+
+配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
 ## 安全说明
 
@@ -264,7 +292,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - 默认回环绑定、CORS 白名单、可选 Bearer 鉴权；S3C_TOKEN 短口令（< 16 字符）拒绝启动。
 - `/api/metrics` 默认 404，scrape 需显式 `S3C_EXPOSE_METRICS=1`。
 - 前端 Bearer Token 默认存 sessionStorage（关标签即清）；勾选「跨会话保留」才写 localStorage。
-- 生产部署请参考 [docs/deployment.md](docs/deployment.md) 与 [docs/threat-model.md](docs/threat-model.md)。
+- 生产部署请参考 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 与 [docs/threat-model.md](docs/threat-model.md)。
 
 ## License
 

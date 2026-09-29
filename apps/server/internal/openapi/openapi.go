@@ -86,6 +86,13 @@ func (r Response) MarshalJSON() ([]byte, error) {
 	return json.Marshal(renderResponse(r))
 }
 
+// Tag 是顶层 tags 的一个分组声明（name 必须与 Op.Tags 的取值一致）。
+// Description 供人类与代码生成器识别分组语义，通常指向 docs/api.md 的对应章节。
+type Tag struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 // Op 单个操作的元数据。
 type Op struct {
 	Tags        []string
@@ -93,9 +100,12 @@ type Op struct {
 	Description string
 	OperationID string
 	Deprecated  bool
-	Params      []Param
-	Request     *Request
-	Responses   map[string]Response
+	// NoAuth 显式声明该 operation **无需鉴权**，渲染为 `security: []`（覆盖文档级默认）。
+	// 只有真实豁免鉴权的端点才可置 true（见 handler 的 withAuth 豁免名单）。
+	NoAuth    bool
+	Params    []Param
+	Request   *Request
+	Responses map[string]Response
 }
 
 // Registry 维护所有 path -> method -> Op 的映射。
@@ -104,6 +114,7 @@ type Registry struct {
 	paths map[string]map[string]Op
 	info  Info
 	srvs  []Server
+	tags  []Tag
 	// spec 是 MarshalJSON 的结果缓存（nil = 未缓存/已失效）。
 	//
 	// 背景（docs/archive/review-2026-09-19.md §6.2 P3）：注册表在启动时构建完成后不再变化，但
@@ -134,6 +145,14 @@ func (r *Registry) AddServer(s Server) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.srvs = append(r.srvs, s)
+	r.spec = nil
+}
+
+// AddTag 声明一个顶层 tag（分组 + 说明）；声明顺序即输出顺序。
+func (r *Registry) AddTag(tag Tag) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tags = append(r.tags, tag)
 	r.spec = nil
 }
 
@@ -207,9 +226,10 @@ func (r *Registry) buildSpec() ([]byte, error) {
 	}
 
 	doc := map[string]any{
-		"openapi": "3.0.3",
-		"info":    r.info,
-		"paths":   paths,
+		"openapi":  "3.0.3",
+		"info":     r.info,
+		"security": defaultSecurityRequirement(),
+		"paths":    paths,
 		"components": map[string]any{
 			"schemas":         sharedSchemas(),
 			"securitySchemes": defaultSecurity(),
@@ -219,6 +239,9 @@ func (r *Registry) buildSpec() ([]byte, error) {
 	}
 	if len(r.srvs) > 0 {
 		doc["servers"] = r.srvs
+	}
+	if len(r.tags) > 0 {
+		doc["tags"] = r.tags
 	}
 	return json.Marshal(doc)
 }
@@ -239,6 +262,10 @@ func renderOp(op Op) map[string]any {
 	}
 	if op.Deprecated {
 		out["deprecated"] = true
+	}
+	// 显式豁免：必须渲染空数组，覆盖文档级默认（缺字段会被读成「继承 bearerAuth」）。
+	if op.NoAuth {
+		out["security"] = []any{}
 	}
 	if len(op.Params) > 0 {
 		out["parameters"] = renderParams(op.Params)
@@ -394,6 +421,13 @@ func defaultSecurity() map[string]any {
 			"scheme": "bearer",
 		},
 	}
+}
+
+// defaultSecurityRequirement 是文档级默认安全要求：全部 /api/* 默认需 Bearer token。
+// 真实豁免鉴权的端点由 Op.NoAuth 逐 operation 覆盖为 `security: []`
+// （真值来源是 handler 的 withAuth）。
+func defaultSecurityRequirement() []map[string][]string {
+	return []map[string][]string{{"bearerAuth": {}}}
 }
 
 // sharedSchemas / sharedParams / sharedResponses 输出 components 下可复用的片段，

@@ -59,7 +59,7 @@ export default defineConfig({
         'src/main.ts',
         'src/env.d.ts',
         'src/**/*.test.ts',
-        // i18n 曾整体排除（字典庞大、纯数据）。覆盖率去水分（见 docs/features.md §M）：
+        // i18n 曾整体排除（字典庞大、纯数据）。覆盖率去水分（见 docs/FEATURES.md §M）：
         // 字典数据由 coverage.test.ts 的键完整性门禁覆盖，故仅排除纯数据模块；
         // index.ts（读/写/回退/循环逻辑）纳入统计。
         'src/i18n/messages/**',

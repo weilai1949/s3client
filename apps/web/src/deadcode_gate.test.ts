@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import ts from 'typescript'
 import * as apiModule from './api'
 import { api, s3api } from './api'
 
@@ -26,9 +27,11 @@ import { api, s3api } from './api'
  * 盲区（有意接受，写清以免被误读为"该类风险已收敛"）：
  *   1. 不覆盖类型导出（`type X`）——类型仅存在于编译期，`vue-tsc` 已覆盖；
  *   2. 动态成员访问（`s3api[name]`）无法静态识别——当前全仓无此写法；
- *   3. B 半边按裸词计数：同名标识符跨文件抵消、注释/字符串中的同名整词会被算作
- *      引用（只会漏报、不会误报，与后端 Gate 1 的同名抵消同向）；`as` 重命名导入
- *      与 default 导出会破坏该计数，已用前置断言拦死——出现即红灯，先改写再进门禁。
+ *   3. B 半边按**引用标识符**计数（TS AST，`.vue` 的 `<template>` 原样按裸词计数）：
+ *      同名标识符跨文件抵消仍然存在（与后端 Gate 1 同向，只会漏报）；而**注释与字符串
+ *      字面量里的同名整词不再算作引用**——2026-09-29 收口 KNOWN_ISSUES #65，口径与后端
+ *      `deadcode_gate_test.go` 的 AST 判定对齐，并用合成源码的口径用例钉住。
+ *      `as` 重命名导入与 default 导出会破坏该计数，已用前置断言拦死——出现即红灯，先改写再进门禁。
  */
 
 // 用 Vite 的 import.meta.glob 读取源码文本：不引入 node:fs / @types/node（前端依赖最小化），
@@ -211,12 +214,91 @@ function isApiPath(path: string): boolean {
 /** 入口模块：由 index.html 直接加载，没有源内 importer。 */
 const ENTRY_MODULE_RE = /^\.\/(?:src\/)?main\.ts$/
 
-/** 抹掉 import 语句与导出声明后的正文：导出名在剩余文本里出现才算被引用。 */
-function usageBody(text: string): string {
-  return text
-    .replace(IMPORT_RE, '')
-    .replace(/\bexport\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+[A-Za-z_$][\w$]*/g, '\u0000')
-    .replace(/\bexport\s+\{[^}]*\}/g, '\u0000')
+/** 节点是否带 `export` 修饰符。 */
+function hasExportModifier(node: ts.Node): boolean {
+  const mods = (node as { modifiers?: ts.NodeArray<ts.ModifierLike> }).modifiers
+  return mods !== undefined && mods.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+}
+
+/** 该标识符是否是「被导出的声明」自身的名字（自己不能证明自己被引用）。 */
+function isExportedDeclarationName(id: ts.Identifier): boolean {
+  const p: ts.Node | undefined = id.parent
+  if (!p) return false
+  if (ts.isVariableDeclaration(p)) {
+    // `export const X` 的 export 修饰符挂在 VariableStatement 上，不在声明本身。
+    const stmt: ts.Node | undefined = p.parent?.parent
+    return stmt !== undefined && ts.isVariableStatement(stmt) && hasExportModifier(stmt) && p.name === id
+  }
+  if (
+    ts.isFunctionDeclaration(p) ||
+    ts.isClassDeclaration(p) ||
+    ts.isEnumDeclaration(p) ||
+    ts.isModuleDeclaration(p)
+  ) {
+    return hasExportModifier(p) && p.name === id
+  }
+  return false
+}
+
+/**
+ * 从 TS 源码里收集「算作引用」的标识符名。
+ *
+ * 用 TypeScript **AST** 而非正则——正则会被注释与字符串字面量里的同名整词骗过
+ * （KNOWN_ISSUES #65 的漏报路径），而与后端 `deadcode_gate_test.go` 的 AST 口径对齐。
+ *
+ * 排除项（都不是「生产引用」）：
+ *   - `import` 语句：说明符是字符串，绑定名是本地别名；
+ *   - `export { X }` / `export * from`：导出声明本身；
+ *   - 被导出声明**自身的名字**：否则每个导出都会自证被引用。
+ *
+ * 保留项（沿用旧的裸词口径，避免把真实引用误杀）：类型位置的标识符、属性名、
+ * 对象字面量的键、模板字面量 `${…}` 插值内的表达式。注释与字符串字面量天然不在 AST 中。
+ */
+function collectIdentifiers(code: string): string[] {
+  const sf = ts.createSourceFile('gate.ts', code, ts.ScriptTarget.Latest, /* setParentNodes */ true)
+  const names: string[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node)) return
+    if (ts.isExportDeclaration(node)) return
+    if (ts.isIdentifier(node)) {
+      if (!isExportedDeclarationName(node)) names.push(node.text)
+      return
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return names
+}
+
+/** SFC 的 `<script>`（含 `setup`）与 `<template>` 块。 */
+const SFC_SCRIPT_RE = /<script\b[^>]*>([\s\S]*?)<\/script>/gi
+const SFC_TEMPLATE_RE = /<template\b[^>]*>([\s\S]*?)<\/template>/i
+/**
+ * 匹配 SFC 模板里的 HTML 注释。
+ *
+ * 用 `new RegExp` 而非正则字面量 **不是为了风格**：字面量形式 `/<!--…/` 会被 Semgrep
+ * （GitLab SAST 的分析器）判成语法错误——JS 的 Annex B 把 `<!--` 当行注释起始，它的解析器
+ * 于是在这里报 `` `/` was unexpected `` 并**整份跳过该文件**（2026-09-29 实跑
+ * `make gcl GCL_JOBS=semgrep-sast` 时发现）。换成构造式后该文件回到扫描范围内，行为完全等价。
+ */
+const HTML_COMMENT_RE = new RegExp('<!--[\\s\\S]*?-->', 'g')
+
+/**
+ * 抹掉「不算引用」的文本，返回**只由真实引用构成**的正文，供裸词计数。
+ *
+ * 为什么 `.vue` 不能整文件丢给 TS 解析：SFC 原始文本不是合法 TS。用扫描器（`createScanner`）
+ * 也不行——它对含 `${…}` 插值的模板字面量会**吞掉其后整段文件**（实测 `i18n/index.ts` 的
+ * `` s.replaceAll(`{${k}}`, …) `` 之后 393 字节被当成一个模板 token，`setLocale` 随之消失，
+ * 直接误报 18 个真实导出为死代码）。故：**只**把 `<script>` 块交给 AST，`<template>` 原样保留
+ * （模板里的组件名 / 表达式是真实引用），`<style>` 丢弃。
+ */
+function usageBody(path: string, text: string): string {
+  if (!path.endsWith('.vue')) return collectIdentifiers(text).join(' ')
+  const idents: string[] = []
+  for (const m of text.matchAll(SFC_SCRIPT_RE)) idents.push(...collectIdentifiers(m[1]))
+  const tpl = SFC_TEMPLATE_RE.exec(text)
+  const template = (tpl ? tpl[1] : '').replace(HTML_COMMENT_RE, ' ')
+  return `${template} ${idents.join(' ')}`
 }
 
 /** 抽取运行期导出名：function / const / class / 列表导出（type 与 default 不在此列）。 */
@@ -249,11 +331,20 @@ function resolveSpec(importer: string, spec: string): string[] {
   return [base, `${base}.ts`, `${base}.vue`, `${base}/index.ts`, `${base}/index.vue`]
 }
 
-it('非 API 运行期导出必须被生产代码引用（零引用即死代码）', () => {
-  const bodies = files.map(([path, text]) => [path, usageBody(text)] as const)
+/**
+ * 在给定源码集合上求「零生产引用的非 API 运行期导出」。
+ *
+ * 抽成**纯函数**以便用合成源码做口径测试（与后端 `deadcode_gate_test.go` 的
+ * 「每条判定都配一个用合成源码写的口径测试」同做法）——不依赖「仓库里正好有个反例」
+ * 来证明门禁有效。
+ */
+function findUnreferencedRuntimeExports(
+  sources: ReadonlyArray<readonly [string, string]>,
+): { red: string[]; scanned: number } {
+  const bodies = sources.map(([path, text]) => [path, usageBody(path, text)] as const)
   const red: string[] = []
   let scanned = 0
-  for (const [path, text] of files) {
+  for (const [path, text] of sources) {
     if (isApiPath(path)) continue
     for (const name of runtimeExportNames(text)) {
       scanned++
@@ -262,14 +353,52 @@ it('非 API 运行期导出必须被生产代码引用（零引用即死代码�
       red.push(`${path} → ${name}`)
     }
   }
+  return { red: red.sort(), scanned }
+}
+
+it('非 API 运行期导出必须被生产代码引用（零引用即死代码）', () => {
+  const { red, scanned } = findUnreferencedRuntimeExports(files)
   // 防空跑：解析口径失效时不得静默变绿（真实基数 79 文件 / 108 导出）。
   expect(files.length).toBeGreaterThanOrEqual(70)
   expect(scanned, '未抽取到任何非 API 运行期导出（解析口径失效）').toBeGreaterThanOrEqual(90)
   expect(
-    red.sort(),
+    red,
     `以下运行期导出在生产代码中零引用（仅测试引用 = 死代码）：\n  ${red.join('\n  ')}\n` +
       '请删除该导出，并同步改写只引用它的测试。',
   ).toEqual([])
+})
+
+/**
+ * 口径测试：**注释与字符串字面量里的同名整词不算引用**（KNOWN_ISSUES #65）。
+ *
+ * 背景：`usageBody()` 此前只用正则剥掉 import 与导出声明，随后按**裸词**计数，于是
+ * 「导出零调用，但别处有一句提到它的**注释**」即被判为已引用。真实事故：
+ * `useKeydownStack.ts` 的 `isTopKeydown` 唯一调用点早已删除，仅因 `ConfirmDialog.vue`
+ * 留了一句说明注释，门禁 8 例全绿。**只会漏报**，但漏报的正是本门禁要拦的东西。
+ *
+ * 本用例用**合成源码**断言，不依赖仓库里正好存在这样一个反例。
+ */
+it('口径：注释与字符串里的同名整词不算引用', () => {
+  const synthetic: Array<[string, string]> = [
+    // 名字只出现在注释里 → 必须判死
+    ['./src/only-comment.ts', 'export function ghost() {\n  return 1\n}\n// 说明：ghost 已经没有调用方了\n'],
+    // 名字只出现在字符串字面量里 → 必须判死
+    ['./src/only-string.ts', 'export function quoted() {\n  return 2\n}\nconst note = \'quoted\'\n'],
+    // 名字出现在模板字面量的**字面量文本**里 → 必须判死
+    ['./src/only-template.ts', 'export function templated() {\n  return 3\n}\nconst msg = `templated`\n'],
+    // 真实调用（含模板字面量插值）→ 不得误判
+    ['./src/real-use.ts', 'export function live() {\n  return 4\n}\nconsole.log(live())\n'],
+    ['./src/real-interp.ts', 'export function interp() {\n  return 5\n}\nconst m = `v=${interp()}`\n'],
+  ]
+  const { red } = findUnreferencedRuntimeExports(synthetic)
+  expect(red).toEqual([
+    './src/only-comment.ts → ghost',
+    './src/only-string.ts → quoted',
+    './src/only-template.ts → templated',
+  ])
+  // 反向守卫：真实引用（普通调用 / 模板插值）不得被误杀
+  expect(red).not.toContain('./src/real-use.ts → live')
+  expect(red).not.toContain('./src/real-interp.ts → interp')
 })
 
 /**

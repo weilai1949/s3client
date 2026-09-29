@@ -6,16 +6,16 @@
 > 评估结论已回写至 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)（时名 `todolist.md`）作为后续迭代的待办来源。
 >
 > **后续处置（不改写本报告的历史结论）**：2026-09-17 完成 P0/P1/P2 与路线图 v1.0.0–v1.1.0 收口
-> （证据见 [`features.md`](../features.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
-> （证据见 [`features.md`](../features.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
+> （证据见 [`FEATURES.md`](../FEATURES.md) §H–§M）；2026-09-19 完成风险登记集中处置 R1/R2/R4/R6/R7/R8
+> （证据见 [`FEATURES.md`](../FEATURES.md) §O），其中 R1 的字段级门禁又发现并修复了 mkdir / copy-objects /
 > `DELETE /version` 三处 OpenAPI 注册表失真。
-> 此后的处置进展（含后续审查发现的闭环）逐节归档于 [`features.md`](../features.md) §N 起与
+> 此后的处置进展（含后续审查发现的闭环）逐节归档于 [`FEATURES.md`](../FEATURES.md) §N 起与
 > [`CHANGELOG.md`](../../CHANGELOG.md)。本报告正文中的 file:line、版本号与测试数字均为**审计时点值**，
 > 代码演进后请以符号检索核对（快照纪律同 [`docs/archive/`](index.md) 约定）。
 >
 > **归档冻结（2026-09-24）**：全仓引用收敛完成后，本报告已 `git mv` 至 [`docs/archive/`](index.md)
 > 并在归档清单登记——归档 = 冻结，**不回写、不改写历史结论**（下方「后续处置」状态行系归档前追加，
-> 属附加状态、非正文回写）。当前事实来源：[`features.md`](../features.md) · [`CHANGELOG.md`](../../CHANGELOG.md)。
+> 属附加状态、非正文回写）。当前事实来源：[`FEATURES.md`](../FEATURES.md) · [`CHANGELOG.md`](../../CHANGELOG.md)。
 
 ---
 
@@ -188,7 +188,7 @@ s3clinet 是一个工程质量**显著高于平均水平**的项目：所有声�
 
 ### 5.1 做得好的部分（已验证，行业标杆）
 
-- **评估→修复→再评估闭环**：`docs/features.md` 有完整 58 项评估台账（C 段）、v1.0.0-rc1 评估 21 项（D 段）、Optional/Nit 长尾（E 段）——每次评估结果都归档并回写。
+- **评估→修复→再评估闭环**：`docs/FEATURES.md` 有完整 58 项评估台账（C 段）、v1.0.0-rc1 评估 21 项（D 段）、Optional/Nit 长尾（E 段）——每次评估结果都归档并回写。
 - **单一待办来源**：`docs/todolist.md` 汇总散落待办，本报告发现将回写至此。
 - **CI 门禁完备**：gofmt/vet/golangci-lint/race/覆盖率（评估时后端 90%、前端 100%；2026-09-17 起后端门禁亦提升至 100%）/Docker 构建/Trivy/E2E×2/桌面 cargo check，actions 全部 pin SHA（除 H3）。
 - **版本发布流程**：`scripts/release-version.sh` 同步 8 处版本号；CHANGELOG 逐版本记录（Keep a Changelog 规范）。

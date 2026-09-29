@@ -85,7 +85,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.10.0
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
@@ -233,6 +233,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # 供应链证明（P0）：Sigstore 签名走 OIDC 短期令牌，不引入长期密钥；
+      # attestations: write 用于把证明写入仓库的 attestations API
+      # （`gh attestation verify` 可离线核验）。
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -247,6 +252,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -259,8 +265,74 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/server:${{ github.sha }}
             ghcr.io/${{ github.repository }}/server:ci
+          # 供应链证据（P0）：由 BuildKit 原生产出并作为 OCI attestation manifest 推到 registry。
+          #   - provenance: mode=max 记录完整构建来源（源仓库/commit/Dockerfile/构建参数）
+          #   - sbom: true 产出镜像的 SPDX SBOM attestation
+          # 核验：docker buildx imagetools inspect <ref> --format '{{json .Provenance}}'
+          # 它们与下方「Trivy CycloneDX 文件 + GitHub 产物证明」互补：前者随镜像走，
+          # 后者可下载 / 可在 Release 附带，且被 OpenSSF Scorecard 识别。
+          provenance: mode=max
+          sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 可下载的 SBOM 文件（CycloneDX）。复用 docker job 里已 pin 的 Trivy（tag + digest 双 pin），
+      # **不引入第二套 SBOM 工具**——多一套工具就多一条供应链，且会与 Trivy 的漏洞库读数分叉。
+      # 按 digest（而非 tag）扫，保证扫的就是刚推上去的那一份，tag 被并发覆盖也不会扫错。
+      - name: Generate SBOM (CycloneDX)
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
+        run: |
+          set -euo pipefail
+          mkdir -p "$TRIVY_CACHE_DIR"
+          docker run --rm \
+            -v "$TRIVY_CACHE_DIR:/root/.cache/trivy" \
+            -v "${{ github.workspace }}:/out" \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
+            --format cyclonedx \
+            --output /out/sbom.cdx.json \
+            --no-progress \
+            --scanners vuln \
+            "ghcr.io/${{ github.repository }}/server@${{ steps.build.outputs.digest }}"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          retention-days: 90
+
+      # GitHub 原生产物证明：把镜像 digest 绑定到「由哪个 commit / 哪个 workflow 构建」，
+      # 消费者用 `gh attestation verify oci://<ref> --repo <owner>/<repo>` 即可核验。
+      # 与 BuildKit provenance 的区别：这条落在 GitHub attestations API（可 gh 核验），
+      # BuildKit 那条随镜像进 registry——两者互补，不重复。
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/server
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      # cosign 无密钥签名（P0 供应链，roadmap §三 #12 的 cosign 部分）。
+      #
+      # 为什么在已有「BuildKit provenance + GitHub 产物证明」之上还要签一次：
+      # 那两条覆盖的是**来源可验证**，但核验方式绑定在各自工具上（`docker buildx imagetools`、
+      # `gh attestation`）。cosign 是策略引擎（Kyverno / Ratify / Gatekeeper）与镜像准入的
+      # **事实标准**核验路径——补它才能让「部署前校验镜像签名」在不依赖 GitHub CLI 的环境里成立。
+      #
+      # 为什么是 **keyless**（不引长期密钥）：签名身份取自本 job 的 GitHub OIDC 令牌，
+      # 证书与签名写入 Sigstore 透明日志（Rekor），无长期私钥可泄露、无轮换负担。
+      # ⚠️ 但它**不引入新的信任锚**——身份仍绑定本仓库的 workflow；真正的发布者信誉问题
+      # （SmartScreen / Gatekeeper）仍需代码签名证书，属外部凭证阻塞（roadmap E6）。
+      # 若将来要「维护者自有密钥签发」，那是**另一件事**：需先做密钥托管与轮换方案。
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # 按 **digest** 签而非 tag：tag 可变，签 tag 等于把签名绑到一个会漂移的名字上；
+      # digest 才是不可变的内容寻址，下游 `cosign verify <ref>@<digest>` 才不会验到别的镜像。
+      - name: Sign image (cosign keyless)
+        run: |
+          set -euo pipefail
+          cosign sign --yes \
+            "ghcr.io/${{ github.repository }}/server@${{ steps.build.outputs.digest }}"
 
   desktop:
     name: Desktop（cargo check）
@@ -302,7 +374,7 @@ jobs:
           version: 9.15.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.21.0
+          node-version: 26.10.0
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
       - name: System deps

@@ -3,10 +3,10 @@
 > 本文件是 s3clinet 的**单一事实来源**：产品能力总览 + 全部已完成修复 / 优化记录。
 > 已把散落在各评估文档与 [`CHANGELOG.md`](../CHANGELOG.md) 中的「已实现 / 已修复 / 已完善」功能统一汇总于此；CHANGELOG 仍保留逐字发布历史。
 >
-> - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`roadmap.md`](roadmap.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
-> - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`development.md`](development.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
+> - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
+> - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦）
+> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags））
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 development.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -525,7 +525,7 @@
 
 ### M. 2026-09-17 路线图 v1.0.0 / v1.0.x / v1.1.0 收口（#1–#8、#10、#11）
 
-> 来源：[`roadmap.md`](roadmap.md) 三～五章。除 #12（桌面端签名）外的开放条目全部落地。
+> 来源：[`ROADMAP.md`](ROADMAP.md) 三～五章。除 #12（桌面端签名）外的开放条目全部落地。
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
@@ -546,14 +546,14 @@
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
-| 1 | 落盘明文启动告警 | ✅ | `config.Config.StorePlaintextWarning()`：`json` / `sqlite` 驱动且 `S3C_STORE_KEY` 为空时返回可执行文案（含驱动名、`DataDir`、`encrypted` 建议与最短长度），其余配置（含未知驱动）返回空串；`runServer` 在 `Validate` 之后以 `logger.Warn` 输出。先写失败测试（`TestStorePlaintextWarning` 六例表驱动）再实现；`TestMainServerWarnsPlaintextStore` 用 fork 子进程跑完整 `main()`，断言 `sqlite` + 空 key 启动日志确实出现「明文落盘」，加密配置不告警。对应风险 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3（启动告警守卫）。**2026-09-20 强化**：该告警仅在显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行时才会出现——默认改为硬失败，见 §T |
-| 2 | 旧 `roadmap #N` 引用清零 | ✅ | 2026-09-17 收口后，代码注释里仍留 **27 处**（25 个文件）指向已归档编号的 `roadmap #N`（`docker-compose.yml`、`config.go`、`store/*`、`handler/*`、`s3wrap/*`、`apps/web/src/*`）。按语义改写：带 `ASSESSMENT` 编号的只保留该编号；纯 roadmap 编号的改为「已闭环：features.md §M」；`docker-compose.yml` 的密钥加密说明改指 `features.md` §M + `roadmap.md` §5.1「已收敛」索引 R3。全仓 `grep -rn "roadmap #[0-9]"`（除 `CHANGELOG.md` 的历史记录）为零，编号引用规则见 [roadmap.md](roadmap.md) §六 第 6 条 |
+| 1 | 落盘明文启动告警 | ✅ | `config.Config.StorePlaintextWarning()`：`json` / `sqlite` 驱动且 `S3C_STORE_KEY` 为空时返回可执行文案（含驱动名、`DataDir`、`encrypted` 建议与最短长度），其余配置（含未知驱动）返回空串；`runServer` 在 `Validate` 之后以 `logger.Warn` 输出。先写失败测试（`TestStorePlaintextWarning` 六例表驱动）再实现；`TestMainServerWarnsPlaintextStore` 用 fork 子进程跑完整 `main()`，断言 `sqlite` + 空 key 启动日志确实出现「明文落盘」，加密配置不告警。对应风险 [ROADMAP.md](ROADMAP.md) §5.1「已收敛」索引 R3（启动告警守卫）。**2026-09-20 强化**：该告警仅在显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行时才会出现——默认改为硬失败，见 §T |
+| 2 | 旧 `roadmap #N` 引用清零 | ✅ | 2026-09-17 收口后，代码注释里仍留 **27 处**（25 个文件）指向已归档编号的 `roadmap #N`（`docker-compose.yml`、`config.go`、`store/*`、`handler/*`、`s3wrap/*`、`apps/web/src/*`）。按语义改写：带 `ASSESSMENT` 编号的只保留该编号；纯 roadmap 编号的改为「已闭环：FEATURES.md §M」；`docker-compose.yml` 的密钥加密说明改指 `FEATURES.md` §M + `ROADMAP.md` §5.1「已收敛」索引 R3。全仓 `grep -rn "roadmap #[0-9]"`（除 `CHANGELOG.md` 的历史记录）为零，编号引用规则见 [ROADMAP.md](ROADMAP.md) §六 第 6 条 |
 
 ---
 
 ### O. 2026-09-19 风险登记集中处置（R1 / R2 / R4 / R6 / R7 / R8）
 
-> 来源：[`roadmap.md`](roadmap.md) §5.1 风险登记（R5 桌面签名经决策暂不处理）。每条都补了
+> 来源：[`ROADMAP.md`](ROADMAP.md) §5.1 风险登记（R5 桌面签名经决策暂不处理）。每条都补了
 > 可复现的门禁或测试，收敛后移入该节末尾的「已收敛」索引（R8 维持 ➖ + 可选加固）。
 
 | # | 条目 | 状态 | 实现与验证 |
@@ -564,7 +564,7 @@
 | 4 | R6 RustSec 审计入 CI | ✅ | `cargo audit`（pin `cargo-audit 0.22.2`）加入 GitHub `ci.yml` 与 GitLab `desktop` job，新增本地 `make rust-audit`。实跑结果：**0 个漏洞**，7 条 unmaintained / unsound 告警（`proc-macro-error`、5 个 `unic-*`、`glib 0.18.5`）逐条 triage——均为上游未发修复版本的传递依赖，默认退出码策略是「漏洞红灯、告警可见」，不用 ignore 清单掩盖 |
 | 5 | R8 可选 SSRF 加固 | ✅ | 新增 `S3C_SSRF_DENY_PRIVATE`（默认关闭，保持 [ADR-003](decisions/0003-ssrf-private-allow.md) 自托管放行）：置位后 `isBlockedIP` 连 RFC1918 / ULA / 回环 / 未指定地址一并拒绝，创建期与拨号期双重校验同时生效。测试：`TestDenyPrivateNetworksOptIn`（默认放行 vs 开启后 6 类地址全拒、公网仍放行）、`TestDenyPrivateNetworksDialGuard`（拨号期）、`TestFromEnvSSRFDenyPrivate`。ADR-003 增加 Update 段记录该开关 |
 | 6 | R7 分段上传 ETag 失败路径可见 | ✅ | 新增 `upload.test.ts` 用例：分段 PUT 返回 2xx 但缺 `ETag` → 报「未读取到 ETag」并在组装前 `multipartAbort`（不留半成品）。README 补多厂商 CORS 兼容性矩阵（RustFS 有真对端 E2E，MinIO / AWS S3 / 阿里 OSS / 腾讯 COS 标注手动），明确 `ExposeHeader: ETag` 是分段组装硬前提 |
-| 7 | R8 存储硬失败可观测 | ✅ | `/api/metrics` 新增 `s3c_store_up` gauge（store 掉线为 0），与既有 `/api/health` 503、`TestHealthStoreUnavailable` 一起构成 ADR-002 的可告警面；`TestMetricsStoreUpAndSSRFPolicy` 覆盖 1/0 两态。[deployment.md](deployment.md) §6.1 补 503 处置顺序与告警建议、§6.3 与 [api.md](api.md) 指标清单同步 |
+| 7 | R8 存储硬失败可观测 | ✅ | `/api/metrics` 新增 `s3c_store_up` gauge（store 掉线为 0），与既有 `/api/health` 503、`TestHealthStoreUnavailable` 一起构成 ADR-002 的可告警面；`TestMetricsStoreUpAndSSRFPolicy` 覆盖 1/0 两态。[DEPLOYMENT.md](DEPLOYMENT.md) §6.1 补 503 处置顺序与告警建议、§6.3 与 [api.md](api.md) 指标清单同步 |
 | 8 | R8 SSRF 生效策略可见 | ✅ | 启动日志新增 `ssrfDenyPrivate` 字段；`/api/metrics` 新增 `s3c_ssrf_deny_private` gauge（读新增的 `s3wrap.DenyPrivateNetworks()`），运维可核对 `S3C_SSRF_DENY_PRIVATE` 是否生效；`TestMetricsStoreUpAndSSRFPolicy` 覆盖 1/0 两态 |
 
 ---
@@ -611,7 +611,7 @@
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
 | 1 | B3 `DeleteObjects` 吞掉 200 响应体内的逐 key 失败 | ✅ | `s3wrap.DeleteObjects` 改返回 `[]DeleteFailure{Key,Code,Message}`（`err` 仅表示传输/协议失败，两者可同时非空）；`POST …/delete` 回 `{deleted,failed,lastError}`、`delete-prefix`（同步/异步）与回收站 `PurgeObject` 一律按「请求数 − 逐 key 失败数」记账，新增 sentinel `ErrPartialDelete`。连带修 `runDeletePrefix` 的进度口径（只看 `deleted` 会在「全部删除失败」时空转到 2h 超时）。测试：s3wrap 3 例 + handler 4 例（含 100 页全失败仍终止） |
-| 2 | B4 ZIP 打包 `break` → 永久 goroutine + 连接泄漏 | ✅ | `service/zip.go` 的 `break` → `continue`：无缓冲 `results` 必须继续消费，否则其余 worker 永久阻塞在发送上、已取回 body 不关闭（用户取消下载即触发）。测试 `TestWriteObjectsZipCopyErrorDoesNotLeak` 断言所有取回 body 最终关闭且全部失败 key 上报（旧实现泄漏 3 个 body）。`features.md` 早先「P-3 zip goroutine 泄漏 ✅」至此才成立 |
+| 2 | B4 ZIP 打包 `break` → 永久 goroutine + 连接泄漏 | ✅ | `service/zip.go` 的 `break` → `continue`：无缓冲 `results` 必须继续消费，否则其余 worker 永久阻塞在发送上、已取回 body 不关闭（用户取消下载即触发）。测试 `TestWriteObjectsZipCopyErrorDoesNotLeak` 断言所有取回 body 最终关闭且全部失败 key 上报（旧实现泄漏 3 个 body）。`FEATURES.md` 早先「P-3 zip goroutine 泄漏 ✅」至此才成立 |
 | 3 | B5 增量同步吞掉列举错误 | ✅ | `listAll`/`indexDst` 返回 `error`，`SyncKeys` 签名改为 `(SyncResult, error)`；`cancelOrErr` 区分「客户端取消（返回部分结果、不报错）」与「真实列举错误（上抛）」；handler 走 `writeInternalErr`（源端 AccessDenied → 403，不再回 `200 {scanned:0}`）。测试：端点级 1 例 + service 2 例 |
 | 4 | B6 `indexDst` 无页数上限、循环内不查 ctx | ✅ | `listAll`/`indexDst` 共用硬上限（100 页 × 1000 key × 10 万总量）+ 每轮 ctx 检查 + 「NextToken 未前进即停」。测试 4 例（含 5s 超时护栏：旧实现会挂死） |
 | 5 | B7 `Job.Emit` 锁外投递 vs `Finish` 关闭 channel | ✅ | 改为锁内非阻塞投递（`select`+`default`），落盘 I/O 移到锁外。测试用「节流落盘钩子」把 Emit 卡在「快照之后、投递之前」再 `Finish`：旧实现**确定性 panic（send on closed channel → 进程退出）**，新实现通过；另加 20×50 并发压测 |
@@ -660,7 +660,7 @@
 | 8 | S1 运行镜像 alpine EOL | ✅ | `apps/server/Dockerfile` 运行镜像 `alpine:3.20`（2026-04-01 EOL）→ `alpine:3.24`（支持至 2028-06-01） |
 | 9 | S2 `.env.example` 占位 token | ✅ | 根 `.env.example` 的 `S3C_TOKEN` 由 `change-me-use-openssl-rand-hex-32`（33 字符，是**有效口令**）改为置空，对齐 `apps/server/.env.example` |
 | 10 | 配置类门禁（防复发） | ✅ | 新增 `apps/server/repo_infra_gate_test.go`：`.env.example` token 不得 ≥ `MinTokenLength`、运行镜像不得是 EOL alpine、发布 workflow 必须做 tag↔清单比对与平台内唯一 checksum、两套 CI 的 Trivy 必须缓存+重试。四项均为「YAML/配置正确但断言缺席」的盲区 |
-| 11 | §7.3 文档失真 D2 / D3 / D6 / D8 / D9（同批修正） | ✅ | D2：`openapi_handler.go` 鉴权注释改为与实测一致（401/404）；D3：`release-version.sh` 正则放宽到通用 semver（接受纯 `v1.0.0`/`v1.1.0`）、同步文件补到 12 处、`Cargo.lock` 只改本包；D6：`api.md` 的 presign `expiresIn` 改为「默认 1h、上限 24h」；D8：现行能力描述「3 路并发」→ **2 路**；D9：`development.md` 存放约定改为「除根目录约定文件与 `.github/` 外统一放 `docs/`」 |
+| 11 | §7.3 文档失真 D2 / D3 / D6 / D8 / D9（同批修正） | ✅ | D2：`openapi_handler.go` 鉴权注释改为与实测一致（401/404）；D3：`release-version.sh` 正则放宽到通用 semver（接受纯 `v1.0.0`/`v1.1.0`）、同步文件补到 12 处、`Cargo.lock` 只改本包；D6：`api.md` 的 presign `expiresIn` 改为「默认 1h、上限 24h」；D8：现行能力描述「3 路并发」→ **2 路**；D9：`DEVELOPMENT.md` 存放约定改为「除根目录约定文件与 `.github/` 外统一放 `docs/`」 |
 | 12 | SSOT：`docs/KNOWN_ISSUES.md`（时名 `todolist.md`）补登记开放项 | ✅ | 此前写着「无待办」而审查仍有大量开放发现，违反「唯一待办来源」约定；现按 #26–#46 补登记 P2 全部条目（契约残留 / 安全 / 发布链 / 可观测性 / 文档失真），编号稳定不重排 |
 
 **门禁实跑**：`gofmt -l` 干净 / `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** /
@@ -682,7 +682,7 @@
 | 2 | #27 类型 / required / 枚举语义门禁 | ✅ | 新增 `openapi_semantics_test.go`。**枚举**：每个 `EnumStr` 站点须在 `enumContracts` 登记，真实值从 `switch` case / `map[string]bool` / 跨包 `service` 常量抽取后双向比对 → 抓到 `PUT object-acl` 漏 `authenticated-read`/`aws-exec-read`。**required**：注册表 required 必须是 handler 真实解码且非「空值→默认」的字段 → 修正 `presign.method`、`copy-object.newBucket`、`copy-prefix.targetBucket` 三处错误 required。残留（`bucketOr` 默认桶模式）写入文件头 |
 | 3 | #28 响应门禁残留范围 | ✅ | `openapi_response_contract_test.go` 新增**端点级响应门禁**：对声明具体 `properties` 的 2xx 响应，抽取 handler `writeJSON` 表达式的键（字面量 map / 命名 struct tag / 变量 / 同包 helper 递归）双向比对；4 个注册表文件约 30 个 `Obj()` 响应升级为 `BuildObj` 纳入门禁；修正 3 个异步端点 `200`→`202`。残留（其他注册表自由体、运行时动态键 map）写入文件头 |
 | 4 | #29 / #31 明文落盘安全默认 | ✅ | `Config.Validate` 对 `json`/`sqlite` + 空 `S3C_STORE_KEY` 返回新 sentinel `ErrPlaintextStoreNotAllowed` **硬失败**，除非 `S3C_ALLOW_PLAINTEXT_STORE=1`（opt-in 时保留 WARN）；报错给出两条出路且不泄露密钥。base compose 改 `${S3C_STORE_KEY:?}` 强制非空；`.env.example`（根 + server）补说明；`e2e.yml` 补 dummy key（`docker compose up` 会插值整个文件）。测试 `TestValidatePlaintextStoreRejected` / `TestMainServerRejectsPlaintextStoreWithoutOptIn` / `TestMainServerAllowsPlaintextStoreWithOptIn` / `TestFromEnvAllowPlaintextStore` |
-| 5 | #30 metrics 免鉴权文档声明 | ✅ | 行为不变（有意内网 scrape），在 `README.md` / `docs/api.md` / `docs/deployment.md` §6.3 / `docs/threat-model.md` §2 显式声明「即使配了 `S3C_TOKEN` 也不受保护、匿名可读、勿直接暴露公网」；`TestMetricsEndpointUnauthenticatedEvenWithToken` 钉住行为（metrics 无 token 200 / accounts 无 token 401） |
+| 5 | #30 metrics 免鉴权文档声明 | ✅ | 行为不变（有意内网 scrape），在 `README.md` / `docs/api.md` / `docs/DEPLOYMENT.md` §6.3 / `docs/threat-model.md` §2 显式声明「即使配了 `S3C_TOKEN` 也不受保护、匿名可读、勿直接暴露公网」；`TestMetricsEndpointUnauthenticatedEvenWithToken` 钉住行为（metrics 无 token 200 / accounts 无 token 401） |
 | 6 | #32 Trivy 升级 + digest pin | ✅ | `aquasec/trivy:0.58.1` → `0.74.0@sha256:62b1e65e…1969`（两套 CI；digest 经 `docker pull` + ghcr.io + public.ecr.aws 三源核对）；`--vuln-type` → `--pkg-types os,library`（0.74.0 `--help` + `pkg/flag/package_flags.go` 核实）。门禁 `TestTrivyImageIsVersionAndDigestPinned`（两套 CI 版本一致 + 必须带 digest + 禁用 `--vuln-type`） |
 | 7 | #33 工具链 pin | ✅ | **关键发现**：原 `dtolnay/rust-toolchain` SHA `6bed0761…` 是 `stable` **浮动分支 tip**（commit 即 `toolchain: stable`），并非版本 pin——改为版本分支 SHA `ce678459… # 1.98.1`；新增 `rust-toolchain.toml`（`channel = "1.98.1"`）；GitLab `rust:1.98.1-bookworm`。Node `24` → 精确 `24.21.0`（workflow / alpine / bookworm / NodeSource）。desktop `packageManager: pnpm@9.15.0`（实测不破坏 lockfile）。门禁 `TestRustToolchainIsVersionPinned` / `TestNodePinnedToPatchVersion` / `TestPackageManagerIsPinnedToCIPnpm` |
 | 8 | #34 `.dockerignore` 补齐 | ✅ | 补 `apps/web/coverage`、`.pnpm-store`、`test-results`、`playwright-report`、`.run/`、`.cargo/`、`.trivy-cache/`、`.gitlab-ci-local/`、`coverage.out`/`.txt`、`*.tsbuildinfo`、`*.log` 等；`apps/server/*.log` → `**/*.log`。门禁 `TestDockerignoreExcludesBuildArtifacts`（11 条必需模式，注释行不计入） |
@@ -705,7 +705,7 @@
 |---|------|------|------------|
 | 1 | D1 Prometheus 直方图语义违规 | ✅ | 根因：`s3wrap` 记的是**每桶增量**，`handler/metrics.go` 直接当**累积**值按 `_bucket{le=…}` 输出 → `le` 非单调、`+Inf`≠`_count`（实测 `le="0.01"`=3 / `le="+Inf"`=0 / `_count`=3），`histogram_quantile()` 全错。现 `MetricsSnapshot` 快照时累积为真累积值；并把 `calls` 由 `atomic.Int64` 移入同一把锁（消除「`+Inf`=0 而 `_count`=3」的读写不一致窗口）。测试：`TestS3MetricsHistogramIsCumulativeAcrossBuckets`（3 个耗时逐桶断言累积值）、`TestS3MetricsHistogramConcurrentContract`（8×50 并发）、`TestMetricsHistogramSatisfiesPrometheusContract`（端点级解析 `le` 单调性与 `+Inf == _count`）。**变异验证**：把 `cumulative += c` 还原为 `cumulative = c` → 三条全部红灯，且复现报告中 `+Inf`=0 / `_count`=3 的原始症状 |
 | 2 | P3 `/api/openapi.json` 无缓存 | ✅ | `Registry` 增加 `spec` 缓存：`Operation` / `Param` / `Respond` / `SetInfo` / `AddServer` 全部置空（语义与「每次重算」等价）；`MarshalJSON` 双检加锁只算一次并返回**副本**（调用方改写不污染缓存）。测试：`TestRegistry_MarshalJSONCached`（含副本隔离）、`TestRegistry_MarshalJSONCacheInvalidated`（四类注册动作逐一验证）、`TestRegistry_MarshalJSONConcurrent`。既有 `TestOpenAPI_ContractMarshalDeterministic`（8×8 并发字节一致）继续通过 |
-| 3 | D4 `failKeys ≤ 200` 承诺不成立 | ✅ | 根因：承诺写在 `features.md` / `api.md`，但服务端只有异步 `delete-prefix` 在 handler 内裁剪；`copy-objects`（同步/异步）、`migrate`（同步/异步）、`migrate/sync` 全部原样回传 → 10k 全失败约 10 MB 并落盘 `jobs.json`。现上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，**所有**回传 `failedKeys` 的端点统一裁剪；异步路径经新增 `jobResultFromBatch` 在 `Job.Finish`（落盘）**之前**裁剪；`failed` 计数不受裁剪影响。测试：`TestOlCopyManyFailKeysAll`（201 失败 → 列表 200、计数 201）、`TestOlMigrateSyncFailKeysCapped`、`TestOlMigrateAsyncFailKeysCappedBeforePersist`（**直接读 `jobs.json`** 断言裁剪发生在持久化前）。同时修正 `service/batch.go` 与 `copy.go` 中两处互相矛盾的注释 |
+| 3 | D4 `failKeys ≤ 200` 承诺不成立 | ✅ | 根因：承诺写在 `FEATURES.md` / `api.md`，但服务端只有异步 `delete-prefix` 在 handler 内裁剪；`copy-objects`（同步/异步）、`migrate`（同步/异步）、`migrate/sync` 全部原样回传 → 10k 全失败约 10 MB 并落盘 `jobs.json`。现上限提为 handler 层共享常量 `maxFailKeys = 200` + `capFailKeys`，**所有**回传 `failedKeys` 的端点统一裁剪；异步路径经新增 `jobResultFromBatch` 在 `Job.Finish`（落盘）**之前**裁剪；`failed` 计数不受裁剪影响。测试：`TestOlCopyManyFailKeysAll`（201 失败 → 列表 200、计数 201）、`TestOlMigrateSyncFailKeysCapped`、`TestOlMigrateAsyncFailKeysCappedBeforePersist`（**直接读 `jobs.json`** 断言裁剪发生在持久化前）。同时修正 `service/batch.go` 与 `copy.go` 中两处互相矛盾的注释 |
 | 4 | D5 `git tag v1.0.0` 不存在 | ✅ | `scripts/release-version.sh v1.0.0` 同步 15 处版本串（Makefile / Dockerfile / compose×2 / web+desktop `package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`（只改本包）/ `main.go` / README / docs），并打 `v1.0.0` tag。历史性提及（CHANGELOG 已发布区、roadmap 里程碑行、本审查报告）按「不追溯篡改」纪律保留 |
 | 5 | D10 CHANGELOG 段内过期计数 | ✅ | `[Unreleased]` 内两处「当时实测值」（覆盖率 3883/2769/1059/3339、前端 63 文件 / 983 测试）已失真。按本文件「不追溯篡改已发布区」的纪律**保留原值并加注**当时时点与新值（4074/2844/1095/3503、66 文件 / 1039——后者是 §W 追加用例前的值，§W 后为 1042），不改写历史数字 |
 | 6 | R7 本地 `make` ≠ CI | ✅ | 新增 `lint`（golangci-lint）/ `govulncheck` / `check`（聚合静态检查 + 双侧覆盖率）目标；全部 `pnpm install` → `--frozen-lockfile`；`test-all: test-cover web-test-cover`（此前无覆盖率门禁）；`.PHONY` 补全全部已定义目标。门禁 `TestMakefileMirrorsCIGates`（含「所有已定义目标必须在 .PHONY」的机械检查；**变异验证**：还原裸 `pnpm install` → 红灯） |
@@ -769,12 +769,12 @@ functions 1095 / lines 3503）。
 |---|------|------|------------|
 | 1 | 端点级响应门禁：**顶层**自由体 `openapi.Obj()` 全量收敛 | ✅ | 把 accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system 十个注册表的**顶层**自由体响应全部升级为 `openapi.BuildObj` 具体 `properties`（嵌套形状抽为共享构造器：`corsRuleSchema` / `tagRowSchema` / `lifecycleRuleSchema` / `versionEntrySchema` / `deleteMarkerSchema` / `jobProgressSchema` / `jobResultSchema` / `jobRecordSchema`）。端点级门禁覆盖面 **15 → 61** 个成功响应，**顶层**自由体从 ~45 个降到 **1 个**（`/api/openapi.json`：响应体即规范本身，由 `Registry.HTTPHandler()` 直接写，非 `writeJSON`，机械抽取无意义）。自检从 `checked ≥ 15` 收紧为 `checked ≥ 60` 且 `untyped ≤ 1`——**回退成顶层自由体会直接红灯**。注意：`metadata` / `fields` 等**嵌套**自由体仍只比对到顶层键 |
 | 2 | query 参数门禁：读取口径扩展 | ✅ | 抽取器从只认 `Get()` 扩到四种字面量口径：`Get` / `Has` / `Values` / `Query()["x"]`，并覆盖 `q := r.URL.Query()` 绑定后的同名形式。新增**非字面量键检测**（`q.Get(name)` / `q[k]`）——命中即红灯要求改字面量，杜绝「动态键读取静默逃逸」。新增口径测试 `TestQueryReadExtractorCoversAllForms`（8 种形态逐一断言，含「无读取不得抽出参数」的反向断言） |
-| 3 | md 叙述性数字门禁（矩阵唯一标「否」的行） | ✅ | 新增 `apps/server/doc_number_gate_test.go`：以 `routes.go` 的 `mux.HandleFunc` 注册数为**唯一真值**，校验 README / `api.md` / `roadmap.md` / `features.md` 里「N 个 `/api/*` 端点」的 N。要求每条声明**至少命中一次**（文案漂移导致正则失配即红灯，防门禁静默失效）。变异验证：把 `features.md` 改回 69 → 红灯 |
+| 3 | md 叙述性数字门禁（矩阵唯一标「否」的行） | ✅ | 新增 `apps/server/doc_number_gate_test.go`：以 `routes.go` 的 `mux.HandleFunc` 注册数为**唯一真值**，校验 README / `api.md` / `ROADMAP.md` / `FEATURES.md` 里「N 个 `/api/*` 端点」的 N。要求每条声明**至少命中一次**（文案漂移导致正则失配即红灯，防门禁静默失效）。变异验证：把 `FEATURES.md` 改回 69 → 红灯 |
 | 4 | `_test.go` 导出符号死代码门禁 | ✅ | `golangci-lint unused` 对**导出**符号因「可能被包外引用」而豁免，但 `_test.go` 不参与库构建、永远无包外引用——实测给 `_test.go` 加无人调用的导出函数/类型，`golangci-lint run` 报 **0 issues**。新增 `TestNoUnusedExportedTestSymbols`：扫描全部 `_test.go` 的导出包级符号，无引用即红灯；`export_test.go`（约定的测试接缝）整体豁免。检测逻辑抽为纯函数 `findUnusedExportedTestSymbols`，由 `TestFindUnusedExportedTestSymbols` 用**合成源码**做口径测试（死符号必报、被引用/非导出/Test 入口/接缝文件不得误伤）——不依赖「仓库里正好有个死符号」来证明门禁有效 |
 | 5 | **真实漂移（升级中抓到）**：`s3wrap.CorsRule` 缺 `json` tag | ✅ | 该结构体经 handler **直接序列化**进 `GET /bucket/cors` 响应，却无 tag → Go 输出 PascalCase（`AllowedMethods` / `MaxAgeSeconds`），而前端 `types.ts` 与 `docs/api.md` 都是 camelCase。Go 的 `json.Unmarshal` 大小写不敏感，**服务端既有测试一直全绿**；但 JavaScript 严格区分大小写，浏览器读 `x.allowedMethods` 恒为 `undefined` → CORS 规则的方法/来源被静默归一化成空数组。已补全 6 个 camelCase tag；新增 `TestCorsRuleJSONFieldNames`（双向：必须有 camelCase、不得再有 PascalCase）与 `TestCorsRuleJSONRoundTrip`（前端发来的 camelCase 能解析）。**变异验证**：去掉 tag → 两条红灯并列出实际 PascalCase 键 |
 | 6 | **真实漂移**：`POST /api/migrate/async` 误声明 200 | ✅ | handler 写 `StatusAccepted`（202），`docs/api.md` 也写 `202`，只有注册表写 200。已改 202 并由端点级门禁钉住 |
 | 7 | **真实漂移**：`docs/api.md` 称 openapi.json「不进鉴权层」 | ✅ | 与实现相反：`withAuth` 只豁免 `health` / `metrics`，openapi.json 配了 token 时无凭证返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 否则 404（既有 `TestOpenAPI_GateAndAuth` 早已钉住该行为，仅文档失真）。已改为「经过鉴权层」并写明两个前置条件 |
-| 8 | **真实漂移**：`docs/features.md` 称 69 个端点 | ✅ | 实际为 70（`routes.go` 70 条 `mux.HandleFunc`，README / `api.md` / `roadmap.md` 与 `apiRouteCount` 常量均为 70）。已改为 70，并纳入条目 3 的数字门禁 |
+| 8 | **真实漂移**：`docs/FEATURES.md` 称 69 个端点 | ✅ | 实际为 70（`routes.go` 70 条 `mux.HandleFunc`，README / `api.md` / `ROADMAP.md` 与 `apiRouteCount` 常量均为 70）。已改为 70，并纳入条目 3 的数字门禁 |
 | 9 | 文档请求体缺失：`PUT /api/accounts/{id}` | ✅ | 该端点请求体在 `docs/api.md` 只有散文描述（「字段同创建」），导致 `TestAPIDocDocumentsRequestBodyFields` 无法机械比对字段集而红灯。已补显式 JSON 示例（并注明 `secretKey` 可省略、必填为 `name`/`endpoint`/`accessKey`），与注册表的 required 声明一致 |
 
 **门禁实跑**：后端 `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues** / `go build ./...` OK /
@@ -798,7 +798,7 @@ functions 1095 / lines 3503）。
 | 1 | `openapi_inputsource_test.go` | 用裸字符串匹配 `readJSON(` 判断「handler 是否解码请求体」→ **注释与字符串字面量都能骗过它**。实测 `// 这里提到 readJSON(` 与 `s := "readJSON("` 均被判定为「解码了」 | 改为 **AST 判定**（`parseBodyCalls` 解析语法树，只认真实调用表达式）。新增 `TestDecodesBodyIgnoresCommentsAndStrings` 用合成源码钉住口径（注释/字面量不算、真调用与委托算）。**变异验证**：删掉 `createAccount` 的真实 `readJSON` 调用、只在注释留 `readJSON(` → 旧实现假绿、新实现红灯 |
 | 2 | `api_doc_test.go` `TestAPIDocMatchesRoutes` | 解析正则只认行首，缩进行在两个方向上都被漏。实测「文档里有**陈旧**路由、且写成缩进」时双向 diff **静默通过**（fail-open）——陈旧条目会永久留在文档里 | 新增 `TestAPIDocRoutesAreFlushLeft`：路由声明行必须顶格，缩进即红灯（含扫描下限自检）。**变异验证**：插入缩进的 `DELETE /api/nonexistent-stale` → 新门禁红灯，旧双向 diff 无反应 |
 | 3 | `deadcode_gate_test.go` | 旧实现是整行正则 `^_ = ident` / `^var _ = expr`。实测 `x := 1; _ = x`、`if true { _ = x }`、`_ = x.Field`、`_ = s[0]` **全部逃逸**（fail-open） | 改为 **AST 判定**（`findSilencingDeadCode`）：按语句而非按行，判据是「左侧是否全为 `_`」。`_, ok := m[k]`（comma-ok 惯用法）与 `_, _ = w.Write(b)`（显式丢弃返回值）放行；`var _ Iface = (*T)(nil)`（编译期接口断言）放行。新增 `TestFindSilencingDeadCodeCoverage` 断言「AST 命中数严格大于旧正则」（实测 9 vs 5），防止退回旧口径。**变异验证**：四种逃逸形状现全部被拦 |
-| 4 | `golangci-lint` 配置 | **未启用 `nolintlint`**：在函数上方加一行无理由的 `//nolint:all`，`golangci-lint run` 仍报 **0 issues**——`//nolint` 是 golangci 自身的指令，默认不受任何 linter 审查；而 `AGENTS.md` / `development.md` 明令禁止用它消音 | `.golangci.yml` 启用 `nolintlint`（`require-explanation: true` + `require-specific: true` + `allow-unused: false`）。既有唯一一处 `//nolint:staticcheck // SA1019: ...` 已合规。**变异验证**：植入 `//nolint:all` → 红灯（"should mention specific linter"） |
+| 4 | `golangci-lint` 配置 | **未启用 `nolintlint`**：在函数上方加一行无理由的 `//nolint:all`，`golangci-lint run` 仍报 **0 issues**——`//nolint` 是 golangci 自身的指令，默认不受任何 linter 审查；而 `AGENTS.md` / `DEVELOPMENT.md` 明令禁止用它消音 | `.golangci.yml` 启用 `nolintlint`（`require-explanation: true` + `require-specific: true` + `allow-unused: false`）。既有唯一一处 `//nolint:staticcheck // SA1019: ...` 已合规。**变异验证**：植入 `//nolint:all` → 红灯（"should mention specific linter"） |
 | 5 | path 参数（新发现的缺口） | `TestOpenAPI_ContractPathParamsDeclared` 只校验注册表**内部**自洽（模板 `{x}` ⇔ 声明 `in:path`），**没有任何一条**比对 handler 是否真的 `r.PathValue("x")` 读取它——注册表与 handler 同时改名才一致，只改一边无人拦 | 新增 `openapi_path_params_test.go`：注册表 `in:path` 参数名集 ⇔ handler 沿调用闭包 `PathValue` 读取集，**双向**比对（70 个端点 / 60 个带 path 参数），含非字面量键检测与口径测试。**变异验证**：把 `getAccount` 的 `PathValue("id")` 改成 `PathValue("accountId")` → 同时报「漏声明」与「幻影参数」 |
 
 **门禁实跑**：后端 `go vet ./...` 0 告警 / `golangci-lint run ./...` **0 issues**（含新启用的 `nolintlint`）/
@@ -845,7 +845,7 @@ functions 1095 / lines 3503）。
 | 1 | 后端生产导出符号零引用门禁（Gate 1） | ✅ | `apps/server/deadcode_gate_test.go` 扩展：AST 扫描全仓 Go 文件，导出包级符号与导出方法一旦**零生产引用**（仅测试引用同样算死）即红灯并报出文件与处置指引。口径：按「归一化包 clause + 符号名」分组（`foo_test` 与 `foo` 同作用域）、方法裸名归并；豁免 `//nolint` 消音符号、门禁自身反射用例（`reflectiveMethodNames` 7 项，配合成用例兜底）、const 表成员（枚举契约）。**变异验证**：注入 `MutantDeadExportedFunc` → 精确红灯（184 文件扫描、定位 `internal/service/job.go`、给出处置指引）→ 撤回 → 复绿且 grep 残留 0 |
 | 2 | 前端非 API 模块导出门禁（Gate 2，关闭文件头盲区 #2） | ✅ | `apps/web/src/deadcode_gate.test.ts` 新增 B 半边：非 `src/api` 模块的每个运行期导出必须被生产代码引用（剥掉 import 与导出声明后裸词计数，仅测试引用 = 死）；每个生产源模块必须被生产代码 import——`.vue` 组件要求**默认导入**（`import type` 不算在用）、`export { … } from` 再导出边计入 import 图（`api/index.ts → ./upload` 实例）、`main.ts` 入口豁免（`index.html` 引用）；`default` 导出与 `as` 重命名导入用**前置断言**拦死（出现即红灯，先改写再进门禁）；自检下限 79 文件 / ≥90 导出 / ≥37 组件防空跑。**变异验证**：注入 `mutantDeadExport` + `MutantOrphan.vue` → 两半同时红灯并指名 → 撤回 → 7/7 复绿 |
 | 3 | 门禁红灯清出的死代码清零 | ✅ | 后端 5 个生产死导出删除：`openapi.OpBuilder` 链式配置器（`OpBuilder` / `Param` / `Respond`——端点已全部改为 `r.Operation(...)` 内联 `Op{}` 直注册，链只剩测试引用）与 `service.RegistryOption` / `WithMaxJobs` 选项接缝（原 `SetMaxJobsForTest` 的再包装，零生产调用），`Registry.Operation` 改无返回值、`NewJobRegistry*` 去掉空转选项参数；测试接缝统一为 `FillJobSlotsForTest(t, h)`（`export_test.go`，生产文件零 `*ForTest` 钩子）。前端 2 个真死导出删除：`i18nKeyCount`（`i18n/index.ts`）、`shouldUseMultipart`（`upload.ts`，`uploadObject` 已内联同义判断）；引用方测试同步改写（中英键数一致由 `coverage.test.ts` 集合级比对承担、阈值分支由 `uploadObject` 用例覆盖） |
-| 4 | 文档同步（与代码同 commit） | ✅ | `roadmap` §三 #3 行移除（编号不重排，#3 留空号并在 3.2 注中说明）、§四 基线日期与前端数字实测更新；`development.md` §3 门禁落点补两半口径与前端落点；`architecture.md` §3 提法扩为两半；`CHANGELOG` `[Unreleased]` 同日条目；本节即证据台账 |
+| 4 | 文档同步（与代码同 commit） | ✅ | `roadmap` §三 #3 行移除（编号不重排，#3 留空号并在 3.2 注中说明）、§四 基线日期与前端数字实测更新；`DEVELOPMENT.md` §3 门禁落点补两半口径与前端落点；`architecture.md` §3 提法扩为两半；`CHANGELOG` `[Unreleased]` 同日条目；本节即证据台账 |
 
 > **仍未机械覆盖**：门禁文件头保留 3 条盲区——类型导出（`vue-tsc` 承担）、`s3api[name]` 动态成员（全仓无此写法）、
 > 裸词计数的同名抵消与注释 / 字符串命中（只漏报、不误报，与后端 Gate 1 同向）。`as` 重命名导入与 `default`
@@ -886,9 +886,9 @@ functions 1095 / lines 3503）。
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | ➖ **维持现状，证据补齐** | 新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住**分段默认值 64MB**——640GB 是「分段 × 段数」两个默认值的乘积，此前只有 `TestMaxMultipartPartsIsProtocolLimit` 钉段数，证据缺一半；复核 `docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务确为 `deploy.resources.limits.memory: 512M`（一块分段缓冲即 64MB）。口径三处一致：`service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #63 → 本行 |
 | 门禁 | 全绿实测 | ✅ | 后端 `gofmt -l` 干净 / `go vet` 0 告警 / `go test -race -count=1` **9/9 包、每包 100.0% statements** / `go build` 干净 / `golangci-lint run ./...` **0 issues**；前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **72 文件 1110 例**（与拆分前测试名清单逐条一致）/ `pnpm test:coverage` **四指标 100%（4255 / 2908 / 1124 / 3653）** / `pnpm build` OK |
 
-### AC. 2026-09-28 `development.md` §7 历史技术债收口（H1 / S7 / D5 三条均已闭环）
+### AC. 2026-09-28 `DEVELOPMENT.md` §7 历史技术债收口（H1 / S7 / D5 三条均已闭环）
 
-> 来源：[`development.md`](development.md) §7 原题为「已知技术债（来自 2026-09-16 综合评估）」，
+> 来源：[`DEVELOPMENT.md`](DEVELOPMENT.md) §7 原题为「已知技术债（来自 2026-09-16 综合评估）」，
 > 与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)「问题唯一来源」的约定构成**双源**；逐条复核后三条**实际均已闭环**，
 > 只是文档没跟上。本节**不新增问题登记**——§7 改写为「闭环状态 + 现行守卫 + 开发规则」，
 > 原登记出处仍指 [`archive/assessment.md`](archive/assessment.md)（H1 / S7 / D5）。以下为本轮实跑验证。
@@ -966,7 +966,7 @@ functions 1095 / lines 3503）。
 | 1 | 显式 `S3C_ENV_FILE` 路径缺失 / 不可读时 `loadDotEnv()` 直接 `continue` → **静默回退默认值**，与 `config.go` 自述的口径（「静默回退默认值会让运维误以为配置已生效 → 改为拒绝启动」）矛盾。写在该文件里的 `S3C_TOKEN` / `S3C_SSRF_DENY_PRIVATE` / `S3C_TRUSTED_PROXIES` / `S3C_CSP_CONNECT_SRC` 静默失效；`S3C_DATA_DIR` 更会静默丢失 → 启动后账号列表「凭空清空」（原数据没坏，极易引发重复建号） | `loadDotEnvFile` 返回 error、`loadDotEnv` 返回 error；**显式路径**下 `Stat` 失败或 `ReadFile` 失败一律返回新哨兵 `ErrInvalidEnvFile`，经既有 `Config.envErr` → `Validate` 首查上抛使启动失败。**未显式指定时行为不变**（缺 `.env` 是零配置可启动的常态） | 红 `Validate() = <nil>, want ErrInvalidEnvFile`（两条：路径不存在、路径存在但读不到——后者用**目录**触发 EISDIR，不依赖 `chmod 000`，容器里 root 会绕过权限位） |
 | 2 | `S3C_SHUTDOWN_TIMEOUT` 只校验 `>=1`、**无上界**：`main.go` 用 `time.Duration(n) * time.Second` 换算，`n > MaxInt64/1e9`（≈92.2 亿）会**溢出成负时长** → `context.WithTimeout` 立即过期 → `srv.Shutdown` 秒回、错误被 `_ =` 丢弃、**退出码仍 0**，日志只有 `shutting down…` / `shutdown complete`，在途大文件流式传输被硬切断却无从察觉（代码注释「ctx 超时在生产不可达」也随之失真） | `Validate` 加上界 `maxShutdownTimeoutSec = 3600`，超界复用 `ErrInvalidEnvValue` 拒绝启动（与既有数值校验同一条错误链） | 红 `Validate(shutdown=9999999999) = <nil>, want ErrInvalidEnvValue` |
 | 3 | `os.MkdirAll(dir, 0o700)` 的 mode **只在新建时生效**：Docker volume / systemd `StateDirectory` 预建的 `0755` 此后永远保持（umask 只减不补），与 `threat-model.md` 边界 A「数据目录 0700 + 文件 0600」的声明不符；文件侧早有 `chmodSQLitePerms` 主动收紧到 `0600` 的先例，目录侧没有 | 新增 `ensureDataDirPerm`（`store.Open` 与 `store.AcquireDataDirLock` 建目录后各调一次），**尽力而为**、Chmod 失败一律忽略（对齐 `chmodSQLitePerms` 的「只读挂载 / 非本进程属主不影响开库拿锁」口径） | 红 `Open 后 data dir perm = 0755, want 0700` 与 `AcquireDataDirLock 后 … = 0755, want 0700` |
-| 文档 | [`README.md`](../README.md) `S3C_ENV_FILE` / `S3C_SHUTDOWN_TIMEOUT` 两行与 `.env` 查找顺序说明补 fail-closed 与取值上界；[`architecture.md`](architecture.md) 环境变量段、[`deployment.md`](deployment.md) SIGTERM 段同步；[`threat-model.md`](threat-model.md) 边界 A 的 Info disclosure 行注明「启动时主动 chmod 收紧」；`apps/server/.env.example` 两处注释同步 | — | — |
+| 文档 | [`README.md`](../README.md) `S3C_ENV_FILE` / `S3C_SHUTDOWN_TIMEOUT` 两行与 `.env` 查找顺序说明补 fail-closed 与取值上界；[`architecture.md`](architecture.md) 环境变量段、[`DEPLOYMENT.md`](DEPLOYMENT.md) SIGTERM 段同步；[`threat-model.md`](threat-model.md) 边界 A 的 Info disclosure 行注明「启动时主动 chmod 收紧」；`apps/server/.env.example` 两处注释同步 | — | — |
 | 门禁 | 全绿实测 | ✅ | `gofmt -l` 干净 / `go vet` 0 / `go build` 干净 / `golangci-lint run ./...` **0 issues** / `go test -race -count=1 -coverprofile` **9/9 包、每包 100.0% statements**、**零未覆盖块**（`awk 'NR>1 && $NF+0==0'`——**必须用默认空白分隔**；用 `-F,` 会取到 `line.col` 字段而永远数出 0）/ 前端本轮未改，`pnpm test` **72 文件 1114 例** |
 
 ### AH. 2026-09-28 `s3wrap` 两条（#64）：metadata 值控制字符 400→500 / IDN 端点「建得成却永远连不上」——2 条先红后绿
@@ -1043,9 +1043,299 @@ functions 1095 / lines 3503）。
 > 差值来自 `ObjectList.vue` 与 `PreviewOverlay.vue` 各一行 Vue dev/prod 分支插桩差异
 > （已逐文件比对确认，**两种环境下四指标均为 100%**，无任何 uncovered 行）。
 
-> **文档同步**：[`roadmap.md`](roadmap.md) §四 门禁基线两行更新（1126 → 1128 例、73 文件；
+> **文档同步**：[`ROADMAP.md`](ROADMAP.md) §四 门禁基线两行更新（1126 → 1128 例、73 文件；
 > 覆盖率补注两种宿主环境的口径）与 §5.2 新增依赖 **E11**；[`CHANGELOG.md`](../CHANGELOG.md)
 > `[Unreleased]` 记一条「修复」；本节为证据台账落点。
+
+---
+
+### AL. 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT（新增 4 个文件 / 改 8 处引用）
+
+> **背景**：拿到一份通用 `AGENTS.md` 模板（22 节）作为「文档规范」清点本仓库文档面。
+> 结论分两类：**该补的补**（代理权限边界 / AI 披露 / 配置 SSOT / LLM 导航 / 默认审查者），
+> **不该建的明确不建**（提示词 / 模型卡 / 数据集卡 / 评估基准 / 护栏——本仓库无 AI 功能、
+> 无自训练模型、无数据集，建了就是无人维护的空壳）。后者的判断与理由写在
+> [`AI_POLICY.md`](AI_POLICY.md) §0，并写明「何时才需要」。
+
+| # | 项 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | **代理权限边界缺失** | 新增 [`docs/AI_POLICY.md`](AI_POLICY.md)：五档代理模式（**默认补丁模式**，禁止自行进入发布模式）、权限矩阵（允许 / 需确认 / 禁止三档）、MCP 工具权限口径、AI 披露模板、DoD、多代理协作、故障排查、升级渠道 | 与 [`AGENTS.md`](../AGENTS.md) 硬约束逐条对齐（TDD / 文档同步 / 分层 / SecretKey / 死代码）；`AGENTS.md` 只加两行指针，**保持短小**（该文件受注入字节预算约束） |
+| 2 | **配置项无 SSOT，且旧矩阵漏登** | 新增 [`docs/CONFIGURATION.md`](CONFIGURATION.md)：18 个 `S3C_*` 全量矩阵（真值取自 `config.FromEnv` / `Validate`）、`.env` 查找顺序、**fail-closed 清单 8 条**、客户端存储键 | 清点时抓到 README 旧矩阵**漏登 3 项**：`S3C_LOG_JSON`、`S3C_EXPOSE_OPENAPI`、`S3C_CSP_CONNECT_SRC`（三者都只在 `.env.example` / 代码里存在）。README 改为「最常用 5 项 + 指向 SSOT」，消除双源 |
+| 3 | **无 LLM 导航索引** | 新增仓根 [`llms.txt`](../llms.txt)（硬约束 / 门禁命令 / 文档索引 / 禁区 / 需确认清单） | llms.txt 约定固定查 `/llms.txt`，故根目录约定文件 **3 → 4**；[`AGENTS.md`](../AGENTS.md) 与 [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 命名约定**两处同 PR 同步**（防白名单分叉） |
+| 4 | **无默认审查者** | 新增 [`.github/CODEOWNERS`](../.github/CODEOWNERS)：默认 owner + 安全敏感面（`store` / `s3wrap` / `middleware` / `SECURITY.md` / `threat-model.md`）+ 供应链（两套 CI / Dockerfile）+ 治理文件分区 | 文件名为 GitHub 按字面固定（小写不生效），属命名白名单 **①**，已同 PR 登记进 `AGENTS.md` 与 `DEVELOPMENT.md` §4 两处 |
+| 5 | **PR 模板缺 AI 披露与回滚** | `.github/PULL_REQUEST_TEMPLATE.md` 补「AI 使用披露」段（可直接粘贴的模板）与「风险与回滚」段，验收清单加「文档同步」一项 | 对齐 [`AI_POLICY.md`](AI_POLICY.md) §5 与模板 §17「PR 必须包含」 |
+| 6 | **两处死引用（顺带发现）** | [`SECURITY.md`](../.github/SECURITY.md) 的「**邮件**：维护者邮箱（见 CONTRIBUTING.md）」与 [`CODE_OF_CONDUCT.md`](../.github/CODE_OF_CONDUCT.md) §执行的「CONTRIBUTING.md 中列出的渠道」**都指向不存在的内容**——`CONTRIBUTING.md` 从未列过邮箱或任何沟通渠道 | `CONTRIBUTING.md` 新增「联系与支持」段，列**真实存在**的渠道（Issue 模板 / GitHub 私有漏洞报告 / `@weilai1949`），并显式声明**本仓库不公开安全邮箱**；SECURITY.md 改为唯一保证可达的私有报告渠道 |
+| 7 | **工具链：Node 24 → 26** | `24.21.0` → `26.10.0`，覆盖 4 个 GitHub workflow + `.gitlab-ci.yml`（镜像 / NodeSource ×2）+ `apps/server/Dockerfile` + README / CONTRIBUTING 环境要求 + roadmap E9 | **三源核对**：nodejs.org `dist/index.json` / `docker run node:26-alpine` → `v26.10.0` / NodeSource nodistro `Packages` → `26.10.0-1nodesource1`。⚠️ Node 26 当前 `"lts": false`（**Current 非 LTS**，2026-10 转 LTS），Dockerfile 注释已如实标注。门禁 `TestNodePinnedToPatchVersion` 继续守住精确 patch |
+| 8 | **补门禁而不只补文档** | 新增 [`config_doc_gate_test.go`](../apps/server/config_doc_gate_test.go)：断言配置 SSOT 收录 `internal/config` 读取的**每一个** `S3C_*` 变量 | 本次抓到「README 旧矩阵漏登 3 项」正是这类漂移，人工比对必漏。**变异验证**：把 `docs/CONFIGURATION.md` 的 `S3C_CSP_CONNECT_SRC` 改名 → 红灯并点名该变量；还原 → 绿灯。起草时另加的「`S3C_*` 只能由 config 包读取」**实测被证伪后删除**——`internal/store/store.go` 的 `New` 直读 `S3C_STORE_KEY` 是 `openJSON` 入参为空时的**有意回退**（`Open` 注释写明的 StoreKey 契约，#64 那轮修复的产物），不为它发明仓库并不存在的规则，改在门禁文件头如实记录该残留 |
+
+> **有意不建**（模板 §16 要求，但本仓库结构性不适用）：`prompts/`、`docs/ai/prompts.md`、
+> `docs/ai/evaluation.md`、`docs/ai/model-card.md`、`docs/ai/dataset-card.md`、
+> `docs/ai/guardrails.md`。模板自身写的是「**如果**仓库包含 AI 功能，必须管理」——本仓库是
+> S3 客户端，不含任何 AI 功能。判断与「何时才需要」见 [`AI_POLICY.md`](AI_POLICY.md) §0 的对照表。
+
+> **文档同步**：[`AGENTS.md`](../AGENTS.md)（两根指针 + 根目录 4 约定 + 白名单加 `CODEOWNERS`）、
+> [`README.md`](../README.md)（文档列表 + 配置段改指向 SSOT + Node 要求）、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §4（命名规则 + 文档同步表 3 行）、
+> [`ROADMAP.md`](ROADMAP.md) E9、[`CONTRIBUTING.md`](../.github/CONTRIBUTING.md)（环境要求 + 联系与支持）、
+> [`SECURITY.md`](../.github/SECURITY.md)、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 两条；
+> 本节为证据台账落点。**历史台账不追溯篡改**：`FEATURES.md` §E / §T / §AK 中记载「Node 统一到
+> `24.21.0`」（以及 §AK 的 `node:24.21.0` vs `node:26.5.0` 对照实验）的条目记录的是**当时状态**，
+> 保持原样；`ROADMAP.md` 的 E9 是**现状表**，故已同步为 `26.10.0`。
+
+---
+
+### AM. 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」（`docs/` 下 6 个元文档恢复大写，引用同步 607 处）
+
+> **起因**：`docs/` 下 21 个文件里**只有 `KNOWN_ISSUES.md` 一个大写名**，而它是 2026-09-24 作为
+> 「白名单例外」单独登记的——等于**同一类文档被拆成两套规则**，读者无法从名字判断该不该大写。
+> 本轮把它收敛成一条**可判定**的标准：描述「**仓库自身如何运作**」的元文档用大写；描述
+> 「**产品是什么 / 怎么用**」的内容文档用小写 kebab-case。
+
+| # | 项 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | **6 个元文档恢复大写** | `configuration.md→CONFIGURATION.md`、`deployment.md→DEPLOYMENT.md`、`ai-policy.md→AI_POLICY.md`、`development.md→DEVELOPMENT.md`、`features.md→FEATURES.md`、`roadmap.md→ROADMAP.md` | 全部走**两步** `git mv`／`mv`（纯大小写改名在 macOS / Windows 上单步会静默失败——2026-09-17 那条历史记录自己就写明了这一点）。未跟踪的新文件（`configuration.md` / `ai-policy.md`）用 `mv`，`git mv` 对未跟踪文件会 `fatal: not under version control` |
+| 2 | **内容文档维持小写** | `api.md`、`architecture.md`、`errors.md`、`threat-model.md` + `archive/`、`decisions/` 全部文件 | 与通用模板一致：模板自身把 `docs/architecture.md`、`docs/api/openapi.yaml` 写作小写，而把 `CONFIGURATION.md` / `DEPLOYMENT.md` / `AI_POLICY.md` 写作大写 |
+| 3 | **引用同步 607 处 / 44 个文件** | 脚本化替换 + 逐条核对 | **可执行路径是重点**：`scripts/release-version.sh` 4 处 sed 目标（漏改则发版脚本版本号静默不更新）、`doc_number_gate_test.go` 的 `file:` 字段（该门禁自带「命中 0 次即红灯」，漏改会直接失败而非静默失明）、`config_doc_gate_test.go` 的 SSOT 路径、以及 `internal/{config,handler,s3wrap,store}` 与 `apps/web/src` 的注释 |
+| 4 | **历史条目不改写（唯一的豁免）** | `CHANGELOG.md` 的 **2026-09-17「5 个文档名小写化，命名规范收口」** 那条**整行冻结**；**2026-09-24「文档命名规则登记例外」** 那条只更新其中的 `docs/development.md` 实时路径，括号内旧名列表保持原样 | 若一并替换，那条小写化记录会变成「`FEATURES.md` → `FEATURES.md`」这类自相矛盾的文本。改完全仓复检：**残留小写名有且仅有这两处**。**按标题检索、不写行号**——行号会随新增条目腐烂（本仓库已有同类教训） |
+| 5 | **归档件只修链接** | `docs/archive/` 冻结快照中指向被改名文档的**链接目标**同步更新，正文结论一字未动 | 归档纪律是「不移除、不回写、不改写历史结论」，但**链接不悬空**同样成立；沿用 2026-09-24 `todolist.md → KNOWN_ISSUES.md` 时的同一处置 |
+| 6 | **规则本体两处同 PR 重写** | `AGENTS.md` 与 `DEVELOPMENT.md` §4 命名约定：由「白名单 + 不得新增大写名」改为「按性质二分」，写入**三代规则沿革**与防回退提示；原「目录」条明确为只约束**目录名** | 两处必须同改（防分叉）是本仓库既有硬约束；命名规则本体属第 4 类「文档命名 / 存放位置 / 归档」同步项 |
+
+> **沿革（三代规则，历史条目均不改写）**：① 2026-09-17 把当时的「台账类大写」全部**小写化**
+> （理由：无任何工具按文件名匹配）；② 2026-09-24 单独登记 `KNOWN_ISSUES.md` 为**白名单例外**；
+> ③ **2026-09-29（本节）改为「元文档大写 / 内容文档小写」二分**——即元文档恢复大写、
+> 内容文档维持小写。三轮取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)。
+
+> **文档同步**：[`AGENTS.md`](../AGENTS.md) + [`DEVELOPMENT.md`](DEVELOPMENT.md) §4（命名规则两处）、
+> [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、以及上表第 3 项列出的全部引用点；
+> 本节为证据台账落点。
+
+---
+
+### AN. 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线）
+
+> **诊断**：以 10 层基线（社区健康 / 元信息 / 开发协作 / 架构决策 / 接口契约 / 运维可靠 /
+> 安全供应链 / 用户文档 / AI 时代新增层）逐层盘点，结论是——**对贡献者与 agent 已很完善，
+> 但对运维者（1.5/9）与终端用户（2/7）几乎没有专门文档，供应链证据（SBOM / 签名 / SAST）也缺**。
+> 逐项补齐的取舍与证据如下。所有「建议值」类内容（SLO 目标、RTO/RPO、告警阈值）在文档内
+> **均显式标注为未强制**，不冒充既成事实。
+
+| # | 层 | 缺口 | 处置 | 证据 |
+|---|---|---|---|---|
+| 1 | 供应链 | **无 SAST**（JS/TS 侧完全没有） | 新增 `codeql.yml`：`go` + `javascript-typescript`，`security-and-quality`；独立 workflow 以隔离 `security-events: write` 权限 | 新增 SHA 经 GitHub API **三重核验**：`refs/tags` → 若 `type=tag` 解引用到 commit → `GET /commits/<sha>` 200（annotated tag 的 tag-object SHA 用在这里就是**幽灵 SHA**，本仓库记录过该失效模式） |
+| 2 | 供应链 | **无 SBOM** | BuildKit `sbom: true`（OCI attestation）+ 用**已 pin 的 Trivy** 产出可下载 CycloneDX 文件；不引入第二套 SBOM 工具 | 按 **digest** 扫而非 tag，避免 tag 并发覆盖导致「扫的不是推的那份」 |
+| 3 | 供应链 | **产物无证明** | `actions/attest-build-provenance`：镜像（`subject-name`+`subject-digest`，`push-to-registry`）与三平台桌面产物（`subject-path`）各一份 | 与 SHA256SUMS 互补：后者证明「文件没被改」，前者钉住「文件 ← commit ← workflow」；**均不解决** SmartScreen/Gatekeeper 发布者信誉（仍 roadmap E6） |
+| 4 | 供应链 | 「Actions 全 pin SHA」**只有文字约定** | 新增门禁 `TestWorkflowActionsAreShaPinned`（豁免 `./` 本地 action 与 `docker://`） | 变异验证：把 `codeql-action/init@<sha>` 改成 `@v3` → 红灯点名；还原 → 绿灯。当前 **6 workflow / 46 引用** |
+| 5 | 接口契约 | 契约只在**运行时**可得（默认 404），外部工具 / AI 代理必须先跑服务 | 提交 `docs/api/openapi.json`（4 579 行）+ golden 门禁 | `TestCommittedOpenAPISpecMatchesRuntime`（比对前 `json.Compact` 归一化——buildSpec 走 `map[string]any`+`json.Marshal`，key 有序确定，故归一化后逐字节可比）+ `TestCommittedOpenAPISpecIsDiscoverable`（位置 / 可解析 / version 对齐 `main.go`）。**变异验证**：改 title → 红灯并打印再生成命令。用 JSON 非 YAML：`internal/openapi` 明确不引额外依赖，且 JSON ⊂ YAML 1.2 |
+| 6 | 运维 | **无 Runbook / SLO / 备份恢复 / DR / 事故响应**（最大缺口 1.5/9） | 新增 `OPERATIONS.md`（722 行 / 11 节），含 16 个指标逐条、Runbook R-1..R-10（症状 / 判据 / 处置 / 升级）、备份恢复、DR、容量 | 指标名逐字取自 `handler/metrics.go` + `s3wrap/metrics.go`。**顺带查明两条易误判的事实**：① `json`/`encrypted` 驱动的 `Ping()` 恒 `nil`，故 `/api/health` 503 与 `s3c_store_up 0` **只对 sqlite 真实有效**；② 仓库**无密钥轮换 / 导出工具**且 `AccountView` 不回传 `secretKey` ⇒ **换 `S3C_STORE_KEY` = 重新录入全部账号**。另显式列出「本版本没有的观测面」 |
+| 7 | 用户文档 | **无用户手册 / FAQ / 排障**（2/7） | 新增 `user-guide.md`（654 行）；README「功能」是 bullet、`FEATURES.md` 是**台账**（做了什么）而非**指南**（怎么用），不可互替。另补 **README 界面截图**（`docs/images/`） | 16 条快捷键逐条抄自源码；308 条中文引文与 `i18n/messages/*.ts` 逐条比对全命中。截图由 `apps/web/e2e/screenshots.spec.ts` 从**真实构建产物**生成，spec 本身先断言「渲染成功且无『无法连接后端』噪声」再截图——**首版正因缺这道断言，把带 503 红条的图当成了配图**（已修正为只桩 `/api/health` + `/api/accounts`）。**未能核实即不写**：`POST /api/migrate/sync` 前端全仓无调用 → 明确标注「仅 API、界面无入口」 |
+| 8 | 治理 | 无 `SUPPORT.md` / `GOVERNANCE.md` / 兼容与弃用政策 | 新增三者 | **如实写明「当前没有」**：无 SLA / 商业支持 / 支持邮箱 / **安全邮箱**；治理为**单人维护**，无委员会 / 选举 / 投票 / 时间表；`/api/*` 无版本前缀、无 Accept 协商、无 LTS 线；弃用政策**尚无一例弃用且不预先承诺时间窗**（「预先不做做不到的数字」） |
+| 9 | 工程 | 全仓 `func Benchmark` **为 0** | 三个 `bench_test.go` + `PERFORMANCE.md` | 三条实测结论：① 加密写入 **~30 ms / 瞬时 64 MiB**（Argon2id t=2,m=64MiB,p=4，**有意设计**；并发写须计入内存预算）；② 账号写入 **O(n)**（`persistLocked` 重写整文件：`-benchtime=200x` 335 µs vs `-benchtime=1s` 11.2 ms，两个数量级）；③ `PresignPut` **33 µs / 362 allocs**（点击路径无感，**不可**放进按对象循环） |
+| 10 | 工程 | 无术语表 / i18n 指南 / 无障碍说明 | 新增 `glossary.md`（64 条，逐个 grep 复核 0 编造）、`i18n.md`、`accessibility.md` | i18n 步骤与真实文件结构逐一对应；无障碍**零合规断言**——全文 6 处「WCAG/合规」均为否定句，并列出 12 条「未做」（未审计 / 无 axe/pa11y / 无屏幕阅读器实测 / `prefers-reduced-motion` 未处理 / `<html lang>` 不随语言更新 / `textarea` 不在统一焦点样式内等） |
+| 11 | 硬约束 | **死代码 `isTopKeydown`**（生产零调用，靠注释与测试「续命」） | 删除导出 + 仅测它的用例；测试改为**派发真实 keydown 观测行为**（同时消除白盒断言：此前用 `isTopKeydown()` 直接读内部栈，证明不了「真的有且只有栈顶收到事件」） | 门禁**漏报口径未修**（`usageBody()` 剥掉声明后按裸词计数，注释里的同名词即算引用）→ 登记 **KNOWN_ISSUES #65** |
+| 12 | 写文档时实测发现、**只记录未修** | 4 处真实问题（非文档问题） | 全部登记进 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §二，**不留在文档正文里当口头待办** | **#66** GitLab 侧缺 SAST；**#67** 前端可访问性三处（`<html lang>` 不随语言更新 / 未处理 `prefers-reduced-motion` / `textarea` 缺统一焦点轮廓）；**#68** nginx `log_format main` 缺 `$http_x_request_id`，跨层日志关联断裂 |
+| 13 | CI 一致性 | 新增 GitHub-only workflow 会让双平台漂移 | `DEVELOPMENT.md` §3 对照表补 `codeql.yml` 行 + 触发事件表更新 + 写明**未镜像的理由与代价** | 沿用 `release-desktop.yml` / `publish` 的「未镜像必须显式登记」先例；GitLab 侧缺口进 KNOWN_ISSUES（#66）而非装作不存在 |
+
+> **文档同步**：[`README.md`](../README.md) 文档段按「用法 / 运维与安全 / 贡献与治理 / 归档」重组、
+> [`AGENTS.md`](../AGENTS.md) 文档入口表 +5 行、[`DEVELOPMENT.md`](DEVELOPMENT.md) §3（门禁落点 + CI 对照表 + 触发表）
+> 与 §4（文档同步表 +5 行、命名规则清单更新）、[`llms.txt`](../llms.txt) 索引、
+> [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md)（发版同步文件数 17 → **20**、指向 SUPPORT/GOVERNANCE）、
+> [`CODEOWNERS`](../.github/CODEOWNERS) +7 条敏感面、[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #65–#68、
+> [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、`scripts/release-version.sh`（+3 个 sed 目标）、
+> [`README.md`](../README.md) 新增「界面」段（截图由 `e2e/screenshots.spec.ts` 生成）；
+> 本节为证据台账落点。
+
+---
+
+### AO. 2026-09-29 收口 KNOWN_ISSUES #65：前端死代码门禁改用 **TS AST** 判定引用（注释 / 字符串不再算引用）
+
+> **背景**：#65 是 §AN 写文档时实测发现的**门禁漏报口径**——`usageBody()` 用正则剥掉 import 与
+> 导出声明后按**裸词**计数，于是「导出零调用，但别处有一句提到它的**注释**」即被判为已引用。
+> 真实事故：`useKeydownStack.ts` 的 `isTopKeydown` 唯一调用点早已删除，仅因 `ConfirmDialog.vue`
+> 留了一句说明注释，门禁 8 例全绿。#65 当时写明「**未在本轮修的原因**：TS 无等价 AST 依赖，
+> 正则剥离注释 / 字符串有误伤风险」——本轮核实该前提**不成立**：`typescript@5.9.3` 已是
+> `apps/web` 的**直接 devDependency**，AST 路线可行。
+
+| # | 步骤 | 做法 | 证据 |
+|---|---|---|---|
+| 1 | **先红** | 先把计数逻辑抽成**纯函数** `findUnreferencedRuntimeExports(sources)`，再补一条**合成源码**口径用例（名字只出现在注释 / 字符串 / 模板字面量文本里 → 必须判死；真实调用与 `${…}` 插值 → 不得误杀） | 未修前该用例 **FAIL**：`expected [] to deeply equal [ …(3) ]`——门禁确实把三种「只被提及、未被引用」的情形全判成「有引用」。与后端 `deadcode_gate_test.go`「每条判定都配一个用合成源码写的口径测试」同做法，不依赖仓库里正好有反例 |
+| 2 | **一次失败的尝试（已废弃，记录以免重蹈）** | 先用 `ts.createScanner` 做**词法**剥离：按 token 类型把注释与字符串替换为空格。直觉上最稳（词法不需要语法正确，看似对 `.vue` 也安全） | **实测被证伪**：`i18n/index.ts` 的 `` s.replaceAll(`{${k}}`, String(v)) `` 之后，扫描器把**其后 393 字节**（到文件尾）当成一个模板 token 吞掉——`createScanner` 的裸 `scan()` 循环不会在模板替换后 `reScanTemplateToken`，含 `${…}` 插值的模板字面量因此吃掉后续整段代码。后果是**一次误报 18 个真实导出为死代码**（`setLocale` / `useHealthPoll` / `parsePolicy` …），这正是 #65 警告过的「误伤」 |
+| 3 | **回到 AST，并按文件类型分派** | `.ts`：`createSourceFile` + 遍历 AST 收集标识符；`.vue`：**只**把 `<script>` 块交给 AST，`<template>` 原样保留（模板里的组件名 / 表达式是真实引用）、`<style>` 丢弃、HTML 注释剥掉 | 排除三类非引用：`import` 语句（说明符是字符串、绑定名是本地别名）、`export { X }` / `export * from`（导出声明本身）、**被导出声明自身的名字**（否则每个导出自证被引用）。保留类型位置标识符 / 属性名 / 对象键 / `${…}` 插值——沿用旧口径以免误杀 |
+| 4 | **变异验证** | 往 `theme.ts` 注入一个「只被注释提到」的导出 `mutationProbeDead` | 门禁**红灯并点名** `./theme.ts → mutationProbeDead`；删除后绿灯。证明新口径确实拦得住旧口径漏掉的那一类 |
+| 5 | **口径与残留写明** | 文件头「盲区 3」由「注释/字符串里的同名整词会被算作引用」改为已收口，并注明 `.vue` 模板仍按裸词计数、**同名标识符跨文件抵消仍然存在**（与后端 Gate 1 同向，只会漏报） | 残留不隐藏：跨文件同名抵消是裸词口径的结构性特征，不是本次引入 |
+
+> **未做（有意）**：`.vue` 的 `<template>` 未走 AST（Vue 模板不是 TS 语法，需引入 Vue 编译器才能
+> 精确判定）。模板里的裸词计数会保留「模板文本提到某名字即算引用」的宽松度——**只会漏报**，
+> 与 §3 之前的口径一致，且模板中出现的名字绝大多数确实是真实引用。
+
+> **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #65 闭环并从 §二 移除、§四 台账改「已闭环」、
+> 摘要段改写；[`ROADMAP.md`](ROADMAP.md) §四 前端例数 1126 → **1127** 与覆盖率复测值；
+> 本节与 §三 复测段为证据台账落点；[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条。
+
+---
+
+### AP. 2026-09-29 收口 KNOWN_ISSUES #67 / #68：可访问性三处 + nginx 跨层日志关联
+
+> **背景**：两条都是上一批写文档时**实测发现**的真实缺陷（不是文档问题），当时「只记录未修」。
+> 本轮一并闭环，四项改动各自配一道回归门禁——**没有一条是靠「改完看一眼」结束的**。
+
+| # | 缺陷 | 修法 | 回归门禁 |
+|---|---|---|---|
+| 1 | **#67①** `<html lang>` 不随界面语言更新：`index.html` 硬编码 `lang="zh-CN"`，全仓无任何运行时赋值，切到英文后屏幕阅读器仍按中文发音、浏览器翻译提示误判 | `i18n/index.ts` 新增 `applyDocumentLang(loc)`，**模块初始化时同步一次**（让持久化的语言在渲染前就生效），`setLocale()` 内再同步 | `i18n/index.test.ts` 新增 **2 条行为用例**（`setLocale` 与 `cycleLocale` 两条路径都断言 `document.documentElement.lang`）——先红后绿实测 |
+| 2 | **#67②** 未处理 `prefers-reduced-motion`：全仓 0 命中，`rise` / `toast-in` / `skel` 关键帧与 `modal-fade` / `pop-in` 过渡在前庭敏感用户声明「减少动效」后**照常播放** | `styles.css` **末尾**加 `@media (prefers-reduced-motion: reduce)`，对 `*` / `*::before` / `*::after` 关闭 `animation` 与 `transition`（`!important` 必要：动效分散在组件级选择器与内联过渡上，逐条提优先级既易漏又难维护） | 新增 `src/a11y_gate.test.ts`（3 例）：断言媒体查询存在**且确实关闭两者** |
+| 3 | **#67③** `textarea` 不在统一焦点样式内：`:focus-visible` 列表缺 `textarea`，而表单基础规则写了 `outline: none` ⇒ `BucketPolicyVisualEditor.vue` 的 3 个 `<textarea>` 拿不到与其它控件一致的 2px 轮廓 | 选择器列表纳入 `textarea:focus-visible` | 同一个 `a11y_gate.test.ts`：解析 `:focus-visible` 规则块，断言选择器含 `textarea` 且声明含 `outline: 2px` |
+| 4 | **#68** nginx `log_format main` 不含请求 ID ⇒「用户报错 → 查 nginx 日志 → 定位后端 `req`」在反向代理层断开 | `deploy/nginx/{nginx,nginx.docker}.conf` 补 **两个**字段：`rid=$http_x_request_id`（客户端请求值）与 `req=$upstream_http_x_request_id`（**后端回显值**，与后端访问日志 `req` 同源） | `repo_infra_gate_test.go` 新增 `TestNginxAccessLogCarriesRequestID`；变异验证：删掉字段 → 红灯点名两份配置，还原 → 绿灯 |
+
+> **#68 为什么记两个变量（这是本轮唯一的判断点）**：只记 `$http_x_request_id` 会在
+> **客户端没传**时记成空——而那正是最常见的情形（浏览器不会自己加这个头）；只记
+> `$upstream_http_x_request_id` 则会在客户端传了 ID 时丢掉用户手里那个原始值（用户从报错提示
+> 抄下来的通常是它）。二者互补，缺一即该场景下链路断裂。
+
+> **连带的既有 workaround 清理**：#67② 修好后，`apps/web/e2e/screenshots.spec.ts` 里那个
+> **`waitForTimeout(500)` 硬等**失去了存在理由——它当时的注释白纸黑字写着「本应用**未处理**
+> `prefers-reduced-motion`，故 `emulateMedia` 压不掉它」，而它本身就是个 flaky 来源
+> （机器慢就截到按钮半透明、文字重叠）。现改为 `test.use({ reducedMotion: 'reduce' })` 并删掉
+> 该等待：截图拿到的是稳定终态，用例耗时降到 **881 ms**（实测 `2 passed / 3.0s`）。
+> 这同时让该 spec 顺带在**真实浏览器**里验证了媒体查询确实生效——vitest 的 happy-dom 不做
+> 级联，`a11y_gate.test.ts` 只能验源码形态，两者互补。
+
+> **顺带更正一处 HEAD 就存在的现状失真**：`ROADMAP.md` §四 的「E2E（mock 版）」行，其
+> **当前状态**列填的是「全 action SHA 经 GitHub API 核验（5 个 SHA 实测 200）」——那是
+> action pin 校验的结论，`TestWorkflowActionsAreShaPinned` 的职责，**与 E2E 通过数无关**。
+> 该行现改为实跑的 **17 passed / 0 skipped**（不是 15：§AN 新增的 `screenshots.spec.ts` 2 例
+> 未同步进任何一处通过数）。同时修正 `FEATURES.md` §三 的同一数字。
+
+> **写测试时实测到的两处工具行为（记录以免重蹈）**：
+> ① **`?raw` 读不到 CSS**——vitest 默认 `css: false` 会把 CSS 模块替换为空模块；
+> `import.meta.glob('./*.css', { query: '?raw' })` 能匹配到 `./styles.css` 这个**键**，但**取值长度为 0**，
+> 静态 `import css from './styles.css?raw'` 同样得到空串。故 `a11y_gate.test.ts` 改用 `node:fs`
+> （打开 `css: true` 会改变**全部**用例的 CSS 处理方式，代价不成比例）。
+> ② **vitest 下 `import.meta.url` 是 `http://` 形式**，`fileURLToPath` 直接抛
+> 「URL must be of scheme file」（`e2e/screenshots.spec.ts` 能用是因为那是 Playwright 的真 Node ESM）。
+> 两处都由「门禁前置成立」这条防空跑断言先拦住，**没有静默变绿**。
+
+> **文档同步**：[`accessibility.md`](accessibility.md)（§2.4 焦点可见性改写、§4 第 5/6/12 条改标注为
+> 已修复并保留原编号、§5.3 / §5.4 勾除已完成项）、[`OPERATIONS.md`](OPERATIONS.md) §3 日志关联段重写、
+> [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #67 / #68 闭环（§二 移除 + §四 台账 + 摘要段）、
+> [`ROADMAP.md`](ROADMAP.md) §四 门禁基线复测值、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条。
+
+---
+
+### AQ. 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则落地 + 账号库 Schema + #66 闭环
+
+> **来源**：逐层盘点后按指令收口五类剩余工作——P0 供应链、P1 运维、P1 契约、
+> 「只登记不实施」、以及「未闭环但可处理」。**五项各配一道机械门禁，且全部做过变异验证。**
+
+| # | 桶 | 事项 | 处置 | 门禁与证据 |
+|---|---|---|---|---|
+| 1 | **P0 供应链** | 桌面安装包**没有 SBOM**（此前只有容器镜像有）——「这个安装包装了哪些第三方依赖」无从查起 | `release-desktop.yml` 新增 `sbom-desktop` job：把 `Cargo.lock` + `pnpm-lock.yaml` 放进同一目录，用**已 pin 的 Trivy**（tag + digest）一次扫出合并 CycloneDX，产出 `sbom-desktop.cdx.json`，做**组件数自检**后 `attest-build-provenance` 并上传 Release。锁文件与平台无关，故**单 job** 即可、不必三平台各跑 | `TestReleaseWorkflowProducesDesktopSBOM`。**本地 docker 实测**：Cargo.lock → **429** 个 crate、pnpm-lock → **24** 个运行期包（Trivy 的 pnpm 解析器只取运行期图、自动排除 devDependencies——正是「随包分发」的口径）。变异：删组件数自检 → 红灯；删上传命令 → 红灯 |
+| 2 | **P0 供应链** | **cosign 未接入**，签名核验被绑在 `gh` / `docker buildx` 上，策略引擎（Kyverno / Ratify）与镜像准入无法验 | 镜像在 `publish` job 内按 **digest** 无密钥签名（keyless：OIDC 短期令牌 + Rekor 透明日志，无长期私钥）；桌面侧对 `SHA256SUMS.txt` 做 `cosign sign-blob`——**签清单而非逐个安装包**，一次签名传递性覆盖三平台全部产物，Release 只多 `.sig` / `.pem` 两个文件 | `TestCosignSigningIsWiredAndConsistentlyPinned`。安装器 SHA **三步核验**（`refs/tags` → 解引用 annotated tag → `GET /commits/<sha>` 200）：`v4.1.2` → `6f9f1778…`。变异：两处 pin 不同 SHA → 红灯；镜像改成按 tag 签 → 红灯 |
+| 3 | **P1 运维** | OPERATIONS.md §4 有 SLO 与告警**表格**，但自述「仓库未提供告警规则文件」——落地要靠运维手抄表达式，而**抄错一个字母 Prometheus 不报错，告警只是永不触发** | 新增 [`deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)：3 条 recording rule（把 §4.1 的 SLI 固化，告警与仪表盘共用同一表达式）+ 9 条 alerting rule（与 §4.2 逐行对应），挂进 `rule_files` 即用 | `TestPrometheusRulesReferenceRealMetrics`：① 规则引用的每个 `s3c_*` 必须存在于**发射点**（正则要求引号紧邻指标名，故只在注释里出现的名字不算）；② 每个 `code` 取值必须在 `s3wrap` 白名单内（白名单外的码会被折叠成 `other`，表达式即永不命中）。变异：指标名打错一个字母 → 红灯点名；`SlowDown` 写成 `Slowdown` → 红灯。该文件与 OPERATIONS §4 **必须同改**，已写进两处 |
+| 4 | **P1 契约** | 账号库 `accounts.json` 的格式只有散文描述，**无机器可读 Schema**——外部工具无法校验 / 生成 | 新增 [`docs/api/accounts.schema.json`](api/accounts.schema.json)（JSON Schema 2020-12）：`Array<Account>`、12 个字段**全 required**（`model.Account` 无 `omitempty`，写出的文件里字段恒存在）、`id` 标 `uuid`、时间标 `date-time`；描述里写明「加密后是 S3C3 二进制信封，本 schema 不适用」与「明文驱动的 `secretKey` 即明文」 | `TestAccountStoreSchemaMatchesModel`：真值取自**反射** `reflect.TypeOf(model.Account{})`（不是再抄一份字段表），断言**字段集双向相等** + 每字段 JSON 类型 + required 覆盖全字段。变异三个方向全中：删字段 / 改类型 / 加多余字段 |
+| 5 | **未闭环** | **#66**（GitLab 侧缺 SAST）登记为开放，理由是「另一套工具链 + 无法在 `make gcl` 本地验证」 | **实测推翻该理由**，且**闭环依据是「真跑通」而非「能列出来」**：`.gitlab-ci.yml` 加 `include: template: Jobs/SAST.gitlab-ci.yml`（**Free 档即可用**）+ 把 `test` 补进自定义 `stages`（模板的 job 是 `stage: test`，不补会直接配置报错）；`DEVELOPMENT.md` §3 补对照表 / 触发事件表 | **实跑证据**：`make gcl GCL_JOBS=semgrep-sast` → `finished in 23 s` → `exported artifacts` → **`PASS` / `EXIT=0`** + `gl-sast-report.json`。⚠️ **更正一处错误结论**：本条此前写「实现早已落地、只是台账没关」——**不成立**，`include:` 是本轮 18:02 才加的（本轮开始时该文件既无 `include:` 也无 `test` stage）；`make gcl-list` 只证明「模板能解析、job 排得进流水线」，**不**证明镜像拉得下来、job 跑得起来、报告产得出来——**实跑立刻暴露了配置缺陷**：默认 `SAST_EXCLUDED_PATHS`（`spec, test, tests, tmp`）是**目录名**式的，与本仓库命名约定不匹配，首跑 66 项里 50 项在测试代码、6 项在**生成的** `apps/web/coverage/` 第三方 JS；补齐后 **66 → 10 项**，全部落在生产源码，逐条 triage 记入 [`threat-model.md`](threat-model.md) §7 |
+| 6 | **门禁转绿** | `make check` 稳定失败：`App.corruptStorage` 首个用例在「覆盖率插桩 + 全量并发」下击穿 5s 默认超时（`pnpm test` 与单跑该文件均绿，属**假红**） | 先判定「慢 vs 卡死」：同一次全量跑加 `--testTimeout=20000` → **74 文件 / 1132 例全绿**、该文件总耗时 **2612ms**，故是资源竞争。只给**该文件**放宽到 `{ timeout: 20_000 }`（4× 余量），**不动全局 `testTimeout`** | 断言一行未改（顶栏存在 + 侧栏有导航按钮 + Server 入口可达）。理由写在用例上方注释里：该文件每个用例都 `vi.resetModules()` 后重新 import 整张 App 模块图，是全仓最重的单测文件 |
+
+> **一处自我修正（与「不留尾巴」直接相关）**：第 1 项的门禁**首版是弱门禁**——它只断言
+> `gh release upload` 字符串存在，而该 workflow 里另有两处同名字符串（publish 的
+> `SHA256SUMS-<bundle>.txt`、aggregate 的 `SHA256SUMS.txt`），于是**把 SBOM 上传整段删掉仍全绿**
+> （变异验证时实测暴露）。已收紧为断言**带 SBOM 文件名的那条完整命令**并复验通过。
+> 这正是「门禁必须变异验证」的价值：不做变异，这条门禁会一直以「已覆盖」的姿态存在。
+
+> **文档同步**：[`ROADMAP.md`](ROADMAP.md) §三 #12 由 ⏳ 改 **✅**（并写明 keyless 签名不解决
+> 发布者信誉、那仍属 E6）；[`OPERATIONS.md`](OPERATIONS.md) §4 指向规则文件并删掉「未提供规则文件」
+> 的旧表述；[`DEVELOPMENT.md`](DEVELOPMENT.md) §3（门禁落点 +5、CI 对照表 `semgrep-sast` 行、
+> 触发事件表、删掉已作废的「未镜像理由」段）；[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #66 闭环并移除；
+> [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条。
+
+---
+
+### AR. 2026-09-29 补齐运维事故复盘模板（10 层文档基线第 6 层缺口收口）
+
+> **诊断**：10 层文档覆盖矩阵盘点（§AN）时，第 6 层「运维可靠」唯一未收口的缺口是**事故复盘模板**——
+> [`OPERATIONS.md`](OPERATIONS.md) §9.3 只定义了「如何记录」的六步，没有可复制的记录骨架；
+> 全仓检索 `复盘` / `postmortem` 命中 **0**。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | 无复盘模板 | 新增 [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md)：11 节空模板 | 元信息（P0–P3 定级对齐 §9.1）/ 影响面（含 `interrupted` 半成品）/ 带 `X-Request-ID` 的时间线 / **取证清单**（逐条对齐 §9.3 与 §3.3 的检索命令）/ 根因（触发因素 vs 根因）/ 检测与响应评估（对照 §4.1、§7.1 建议值并显式标注未强制）/ 恢复验证（逐条对齐 §6.4 六步）/ 行动项（强制 owner + 截止 + 跟踪位置）/ §4 文档同步表 / §11「刻意不定义的事」 |
+| 2 | 存档路径未定 | **不新造目录**：填写完成的复盘 `git mv` 进 `docs/archive/`，命名 `incident-YYYYMMDD-<短名>.md`，并在 [`archive/index.md`](archive/index.md) 登记一行 | 复用既有归档纪律（§4「归档」条 + `archive/index.md`「什么该归档」新增该类），避免为一次性需求新增目录与命名规则 |
+| 3 | 边界易越界 | 明确「安全漏洞报告走 SECURITY.md 私有渠道，不进公开复盘」「值班轮换 / SLA / 对外披露由部署方自定」 | 对齐 §9.2、§9.4 既有口径；**不为模板发明**仓库里没有的规则——「不用于绩效追责」「5 个工作日」等一律标注（**建议**） |
+| 4 | 模板不得冒充台账 | 头部如实写明**尚无已填写的复盘实例** | 沿用本仓惯例：没有的东西不假装有（同 [`accessibility.md`](accessibility.md) 的自陈「未做」、[`../.github/SUPPORT.md`](../.github/SUPPORT.md) 的「不提供什么」） |
+
+> **文档同步**：命名约定两处（[`AGENTS.md`](../AGENTS.md) + [`DEVELOPMENT.md`](DEVELOPMENT.md) §4）、
+> [`OPERATIONS.md`](OPERATIONS.md) §9.3 与 §11、[`README.md`](../README.md) 文档段、[`llms.txt`](../llms.txt)、
+> [`archive/index.md`](archive/index.md)、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；
+> 本节为证据台账落点。
+
+---
+
+### AS. 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效）
+
+> **诊断**：10 层文档基线盘点时逐条**回读源码复核**（不是只读文档），发现一批会直接误导读者的失真；
+> 其中 1 处（Dependabot 路径）是**已入库、现网生效**的功能性缺陷——依赖更新静默失效。
+
+| # | 位置 | 失真 | 核实依据 | 处置 |
+|---|---|---|---|---|
+| 1 | `.github/dependabot.yml` | 目录写成 `/server`、`/web`、`/desktop/src-tauri` | 三者均不存在，实际为 `apps/server`、`apps/web`、`apps/desktop/src-tauri` | 改为 `apps/...` + 防回归注释 |
+| 2 | `.github/SUPPORT.md` | 「本仓库当前没有独立的用户手册 / FAQ」 | [`user-guide.md`](user-guide.md) 存在（654 行，含 §12 FAQ / §13 排障），且被 README / `llms.txt` / [`DEVELOPMENT.md`](DEVELOPMENT.md) 引用 | 改为指向用户手册 |
+| 3 | `.github/SECURITY.md` | 硬编码「当前版本 `v1.0.0`」 | `scripts/release-version.sh` 的同步目标里**没有该文件** → 发版必然漂移 | 改为指向 `Makefile` `VERSION` / `/api/health`（SSOT），支持窗口表不 pin 版本 |
+| 4 | [`architecture.md`](architecture.md) | 引用 `store/atomic.go` | 该文件不存在；实为 `internal/atomicfile/atomicfile.go`，调用点 `store/filestore.go:197`、`service/job_persist.go:128` | 修正路径与调用点 |
+| 5 | [`architecture.md`](architecture.md) | 预签名「过期钳制 [1h, 24h]」 | `handler/objects.go` 仅 ≤0 默认 1h、>24h 钳 24h，**无 1h 下限**；[`threat-model.md`](threat-model.md) §1 自述「无 1h 下限」 | 按实现改写 |
+| 6 | [`architecture.md`](architecture.md) | `endpoints.ts`「~70 个方法」 | 实测 `s3api` 顶层方法 **59** 个；70 是后端 `mux.HandleFunc` 数（量纲不同） | 改为 59 并写明量纲差异 |
+| 7 | [`architecture.md`](architecture.md) | 配置指针指向 `README.md#配置服务端` | README 已声明 [`CONFIGURATION.md`](CONFIGURATION.md) 为 SSOT | 改指 SSOT |
+| 8 | `api/accounts.schema.json` | 「11 个字段恒存在」 | `required` 实为 **12** 个（python 解析核对） | 改为 12 |
+| 9 | [`errors.md`](errors.md) | 「`apps/web/src/errors.ts`（若存在）」 | 文件确实存在 | 去掉陈旧对冲 |
+| 10 | [`../README.md`](../README.md) | 归档清单只有 3 项 | `docs/archive/` 实有 4 份归档；缺 `code-review-2026-09-24`、`code-review-summary` | 补齐 2 项 |
+| 11 | [`threat-model.md`](threat-model.md) | 页首「最后更新 2026-09-28」 | 同文 §7 已记 2026-09-29 引入 SAST | 更新为 09-29 |
+
+> **只登记未修**：CHANGELOG 与 git tag 断裂（3 个时间戳 tag 无版本段、`[1.0.0]` 段日期与 tag 不一致）——
+> 补段等于**重建历史发布记录**，需人类确认口径，故登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#69**，本轮**不擅自回写历史**。
+> 判据：本仓对「历史结论」的纪律是**不回写**（见 [`archive/index.md`](archive/index.md)）。
+
+> **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、
+> [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #69（§二 / §四 / 页首口径 / 归零口径四处）、本节为证据台账落点。
+
+---
+
+### AT. 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明）
+
+> **诊断**：§AS 修的是「文档说错了」，本节补的是「**没人机械保证文档不会说错**」。此前链接悬空 /
+> 文档无 owner / ADR 索引与真实文件不一致 / 子树无规则文件 / 无隐私声明 / DR 演练无记录格式，
+> 全靠人工纪律——本次把它们变成**文件 + 门禁**。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | 相对链接与页内锚点**无机械校验**（重命名文档后死链只在 GitHub 上可见） | 新增 [`doc_link_gate_test.go`](../apps/server/doc_link_gate_test.go) | 扫描面自检阈值（链接 ≥1000 / 锚点 ≥50，命中不足即红灯，防「全绿但失明」）；**变异验证**：改 `POSTMORTEM_TEMPLATE.md` 的链接 → 红灯点名 `文件:行号`；改 `archive/review-2026-09-19.md` 的锚点（等长替换保行号）→ 锚点红灯；两次以 sha256 校验还原。现测 **1231 条相对链接 + 73 条带锚点链接，0 失效**；盲区（外链可达性 / 大小写冲突 / 引用式链接 / slug 无 NFKC）写在文件头 |
+| 2 | 文档**无 owner / 复审周期** | [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 新增文档登记表 | 11 类文档 × owner（单人维护 `@weilai1949`）× 复审周期**建议值**；「最后复审」一律填「登记时基线（2026-09-29）」，**不追溯编造**历史日期 |
+| 3 | ADR **无模板**；索引与真实文件不一致 | 新增 [`decisions/0000-template.md`](decisions/0000-template.md)；重写 [`decisions/index.md`](decisions/index.md) 索引表 | 声明真实格式（英文 H2 + 中文正文）；补**日期列**与「最新更新」列；登记 ADR-003 / ADR-004 篇内的 `## Update（2026-09-19）`（原索引**漏登 0004**） |
+| 4 | 子树**无 `AGENTS.md`**（根文件自称子树规则应放子树） | 新增 `apps/server`、`apps/web`、`apps/desktop` 三份子树 `AGENTS.md` | 只写子树专属硬约束（Go 分层 / 门禁入口与覆盖率口径；Web 零运行时依赖 + 覆盖率排除项；Desktop 无 IPC + toolchain pin），仓库级规则仍只在根文件——**不复制、防分叉** |
+| 5 | **无隐私 / 遥测声明** | [`user-guide.md`](user-guide.md) 新增「十四、数据与隐私」 | 实测：全仓生产代码检索 sentry / posthog / analytics / telemetry 等**零命中**，web 生产依赖仅 `vue`；凭据存放（`secretKey` 仅服务端、响应脱敏 `secretSet`；`S3C_TOKEN` 默认 `sessionStorage`）；日志不含密钥 |
+| 6 | DR 演练**无记录格式** | [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md) 新增 §7.1 | 复用同一模板（**不新增文件**）：场景 / 触发方式 / 实测 RTO·RPO 对照 §7.1 **建议值** / 未覆盖路径 / 密钥可用性；全文标注「建议值、未强制、不是 SLA」 |
+| 7 | `.env.example` 漏登 3 个可选项 | `apps/server/.env.example` 补 `S3C_EXPOSE_METRICS` / `S3C_EXPOSE_OPENAPI` / `S3C_CSP_CONNECT_SRC` | [`CONFIGURATION.md`](CONFIGURATION.md) 写明两份 `.env.example` 的**分工口径**（根 = compose 透传项；server = 服务端全量可选项），消除「同名两份、内容各半」的双源；根文件保持只列 compose 透传项 |
+| 8 | §AS 的 Dependabot 修复**无回归门禁** | 新增 [`dependabot_gate_test.go`](../apps/server/dependabot_gate_test.go) | 断言每条规则的 directory 存在且含对应清单（gomod→`go.mod` / npm→`package.json` / cargo→`Cargo.toml`），未登记的 ecosystem 红灯；**变异验证**：把 `/apps/server` 改回 `/server` → 红灯点名 |
+
+> **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 文档登记表
+> （新增文件已登记）；本节为证据台账落点。
+
+---
+
+### AU. 2026-09-29 接口契约表达鉴权（文档级 `security` + 逐端点豁免 + `tags` 分组）
+
+> **诊断**：`api/openapi.json` 早已定义 `components.securitySchemes.bearerAuth`，但**全局 `security` 为空、
+> 0/70 个 operation 声明 `security`、`tags` 为空**——代码生成器与 AI 代理从机器可读契约里读不出
+> 「哪些端点要 Bearer」，而 [`api.md`](api.md) 明确要求。属「契约存在但**鉴权意图不可判定**」。
+
+| # | 处置 | 证据 |
+|---|---|---|
+| 1 | `internal/openapi`：新增 `Tag` 与 `Registry.AddTag`；`buildSpec` 输出文档级 `security: [{bearerAuth: []}]`；`Op` 新增 `NoAuth` → 渲染为逐 operation 的 `security: []`（覆盖文档级默认） | 改动集中在 `internal/openapi/openapi.go`、`handler/openapi_register{,_system}.go` |
+| 2 | 声明 **10 个 tag**（accounts / buckets / bucket-settings / objects / object-meta / multipart / versions / trash / migrate / system），与 [`api.md`](api.md) 章节对应 | 断言「无孤儿声明、无未声明引用」 |
+| 3 | `/api/health`、`/api/metrics` 标 `NoAuth`；`/api/openapi.json` **不豁免** | 真值来源 `handler/middleware.go` 的 `withAuth` 豁免名单，不照抄文档 |
+| 4 | 新增 `handler/openapi_auth_test.go`（**先红后绿**） | 红灯原文：文档级 security 缺失 / 豁免端点未显式 `security: []` / 顶层 tags 为空；实现后 3 例全绿，并跑通 `TestCommittedOpenAPISpecMatchesRuntime` 等既有契约门禁 |
+| 5 | 重新生成 [`api/openapi.json`](api/openapi.json) | python3 解析核对：**68 op 继承文档级 security + 2 op 显式豁免 = 70/70 可判定**；`tags` 10 组、70/70 op 至少归 1 组 |
+
+> ⚠️ **需人类复核**：按 [`AI_POLICY.md`](AI_POLICY.md) §3，修改公共 API 契约（`openapi_register_*.go`）属「**需确认**」，
+> 本轮只准备改动与证据，**未推送、未合并**。
+
+> **文档同步**：[`api.md`](api.md)、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
 
 ---
 
@@ -1085,6 +1375,21 @@ functions 1095 / lines 3503）。
 > 后端 `go test` **9/9 包、每包 100.0% statements**、`golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 /
 > `pnpm typecheck` + `typecheck:e2e` exit 0 / **72 文件 1110 例全绿**（#60 拆分只动文件归属，
 > 测试名清单与拆分前**逐条一致**；覆盖率 **4255 / 2908 / 1124 / 3653 四指标 100% 不变**）/ `pnpm build` OK。
+>
+> **2026-09-29 §AN / §AO / §AP 复测**（roadmap §四 门禁基线同步为此轮实跑值）：
+> `gofmt -l` 干净 / `go vet` **0 告警** / 后端 `go test` **9/9 包通过** / `golangci-lint` **0 issues**；
+> 前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / **74 文件 1132 例全绿** /
+> `pnpm test:coverage` **四指标 100%（宿主 `NODE_ENV` 未设 4296 / 2932 / 1130 / 3679；
+> `NODE_ENV=production` 4294 / 2932 / 1130 / 3677）** / `pnpm build` OK（**366.72 kB，gzip 112.72 kB**；
+> CSS 31.84 kB——§AP 的 `prefers-reduced-motion` 块与注释带来的 +0.16 kB，属预期）。
+>
+> ⚠️ **例数轨迹 1128 → 1126 → 1127 → 1132，没有一次是「丢测试」**：§AN 删除了死代码
+> `isTopKeydown`（生产零调用，靠注释与测试「续命」）及**仅**测它的白盒用例，把断言改为
+> **派发真实 `keydown` 观测行为**——旧断言读内部栈状态，只能证明「栈里有谁」，证明不了
+> 「真的有且只有栈顶收到事件」；§AO 为死代码门禁补 1 条**合成源码口径用例**；§AP 为
+> #67 / #68 补 5 条（`a11y_gate.test.ts` 3 条源码形态 + `i18n` 2 条行为）。故一降三升之间，
+> **行为覆盖面是净增的**，覆盖率四指标始终 100%。`App.test.ts` / `i18n/index.test.ts` 中
+> 只改注释里文档路径（`features.md` → `FEATURES.md`）的部分不涉及例数。
 
 | 门禁 | 结果 |
 |---|---|
@@ -1093,13 +1398,13 @@ functions 1095 / lines 3503）。
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | 72 文件 / **1126** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**） |
-| `vue-tsc --noEmit` / `vite build` | 干净 / OK（366.10 kB，gzip 112.50 kB，2026-09-28 实测） |
+| 前端 `pnpm test` | **74 文件 / 1132** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**；2026-09-29 §AK 新增 `vite_env_guard.test.ts` 2 例 → **1128**；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例并改写为行为断言 → 1126**；**同日 §AO 补死代码门禁的口径用例 → 1127**；**同日 §AP 收口 #67 / #68 新增 `a11y_gate.test.ts` 3 例 + `i18n` 2 例 → 1132、文件数 74**——中间的一降三升**不是丢测试**，说明见下方 §AN / §AO / §AP 复测段） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**；**2026-09-29 §AN 复测 4293 / 2932 / 1129 / 3676**） |
+| `vue-tsc --noEmit` / `vite build` | 干净 / OK（366.72 kB，gzip 112.72 kB；CSS 31.84 kB，2026-09-29 §AP 实测） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |
-| E2E（Playwright，`/api` mock） | 15 passed / 0 skipped |
+| E2E（Playwright，`/api` mock） | **17 passed / 0 skipped**（含 `screenshots.spec.ts` 2 例，2026-09-29 实测） |
 | E2E（真实 RustFS，`S3CLINET_E2E=1`） | 按需运行，默认不阻塞 CI |
 | E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（KNOWN_ISSUES #37；不 mock `/api`，含浏览器直传） |
 | Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5） |

@@ -2,7 +2,7 @@
 
 > 本文档描述 s3clinet 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
-> 最后更新：2026-09-28。
+> 最后更新：2026-09-29。
 
 ## 1. 威胁模型（STRIDE × 边界）
 
@@ -14,7 +14,7 @@
 |---|---|---|
 | **S**poofing 仿冒 | Bearer 常量时间比较（sha256+subtle）、scheme 大小写不敏感（RFC 7235）、多 token 轮换、最短 16 字符 | ✅ 已缓解 |
 | **T**ampering 篡改 | Content-Type 非空时必须为 `application/json`（缺省放行，仍受 JSON 解码器约束）+ `DisallowUnknownFields` + 16MB body cap（超限回 413）；配合 CORS 使跨域变更必预检 | ✅ 已缓解 |
-| **R**epudiation 抵赖 | 安全审计日志（`handler/audit.go`）：401（malformed/bad_token）/ 账号 CRUD / 桶策略设置与清除 / 对象删除与前缀删除 / **移动与重命名**（同步批量 `copy-objects` + `deleteSource`、异步批量、`rename` 复制后删源）/ **版本永久删除**（`DELETE /version`，带 `versionId`）/ 回收站清空 / 限速命中，带固定事件名与操作者 IP；另有通用 access log | ✅ 已缓解（原 todo #17 闭环见 [features.md](features.md) §M；2026-09-28 补齐三处破坏性操作覆盖见 §AE） |
+| **R**epudiation 抵赖 | 安全审计日志（`handler/audit.go`）：401（malformed/bad_token）/ 账号 CRUD / 桶策略设置与清除 / 对象删除与前缀删除 / **移动与重命名**（同步批量 `copy-objects` + `deleteSource`、异步批量、`rename` 复制后删源）/ **版本永久删除**（`DELETE /version`，带 `versionId`）/ 回收站清空 / 限速命中，带固定事件名与操作者 IP；另有通用 access log | ✅ 已缓解（原 todo #17 闭环见 [FEATURES.md](FEATURES.md) §M；2026-09-28 补齐三处破坏性操作覆盖见 §AE） |
 | **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey | ✅ 已缓解 |
 | **D**oS 拒绝服务 | IP 令牌桶 120/min、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503 | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
 | **E**levation 提权 | 单 token 模型无角色；token 轮换支持 | ✅ 已缓解 |
@@ -46,13 +46,13 @@
 | 驱动 | 落盘 | 说明 |
 |---|---|---|
 | `json` | 明文 JSON 或 S3C3 加密 | 配 `S3C_STORE_KEY` 时 AES-256-GCM + Argon2id（参数随文件版本）；permissive 兼容读旧明文与旧 S3C2 |
-| `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（已闭环，证据见 [features.md](features.md) §M；残留风险见 [roadmap.md](roadmap.md) §5.1「已收敛」索引 R3） |
+| `sqlite` | secret_key 列明文或 S3C3 加密 | 配 `S3C_STORE_KEY` 时该列以 AES-256-GCM 密文落盘；历史明文行仍可读、写回即加密（已闭环，证据见 [FEATURES.md](FEATURES.md) §M；残留风险见 [ROADMAP.md](ROADMAP.md) §5.1「已收敛」索引 R3） |
 | `encrypted` | S3C3 加密（严格） | ✅ 生产推荐；文件盐建时随机并复用；可读旧 S3C2 库 |
 
 所有驱动：原子写（临时文件 + rename）+ 0600 权限 + 写失败回滚内存。**未配置 `S3C_STORE_KEY` 的
-`json` / `sqlite` 驱动会拒绝启动**（安全默认；#29/#31 已闭环，证据见 [features.md](features.md) §T），除非显式设置
+`json` / `sqlite` 驱动会拒绝启动**（安全默认；#29/#31 已闭环，证据见 [FEATURES.md](FEATURES.md) §T），除非显式设置
 `S3C_ALLOW_PLAINTEXT_STORE=1`——此时允许运行并打出「secretKey 将明文落盘」WARN
-（[roadmap.md](roadmap.md) §5.1「已收敛」索引 R3），仅限本地联调；生产必须用 `encrypted` 或
+（[ROADMAP.md](ROADMAP.md) §5.1「已收敛」索引 R3），仅限本地联调；生产必须用 `encrypted` 或
 `sqlite` + key。base `docker-compose.yml` 亦以 `${S3C_STORE_KEY:?…}` 强制非空。
 加密文件格式：S3C3 头部内嵌 Argon2id 参数（time/memory/threads），因此可在不破坏既有库的前提下调参；
 S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 16 字符。
@@ -104,7 +104,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 
 - **Token 存储**：默认 `sessionStorage`（关标签即清）；「跨会话保留」显式开启才写 `localStorage`。
   多服务器 `s3c.servers` 只存 `{id,name,base}` **不落 token**；每服务器 token 按 `s3c.token.<serverId>`
-  独立存储、策略同上（原 todo #15「token 明文进 localStorage」已闭环，见 [features.md](features.md) §H）。
+  独立存储、策略同上（原 todo #15「token 明文进 localStorage」已闭环，见 [FEATURES.md](FEATURES.md) §H）。
 - **XSS**：全库 0 处 `v-html`；对象名/错误消息全部经 Vue 插值转义。
 - **预览管线**：服务端三模式代理（`download` 强制附件 / `inline` 类型白名单 / `text` 强制纯文本）+ `sandbox`。
 
@@ -135,14 +135,14 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 
 ### 6.1 已闭环（证据归档）
 
-> 逐项证据见 [features.md](features.md) 与 [CHANGELOG.md](../CHANGELOG.md)；原始发现见
+> 逐项证据见 [FEATURES.md](FEATURES.md) 与 [CHANGELOG.md](../CHANGELOG.md)；原始发现见
 > [archive/assessment.md](archive/assessment.md) §二。当前待办见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 技术债）与
-> [`roadmap.md`](roadmap.md) §三 3.2（安全方向候选 #12 / #13）——
+> [`ROADMAP.md`](ROADMAP.md) §三 3.2（安全方向候选 #12 / #13）——
 > 安全 / 供应链类现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已于 2026-09-23 复审维持现状并移出待办台账（见 §6.2）。
 
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
 - ~~SQLite 明文密钥~~ ✅ 已修：设 `S3C_STORE_KEY` 时 secret_key 列加密；`S3C_STORE_KEY` 最短 16 字符
-- ~~安全审计日志缺失~~ ✅ 已闭环：`handler/audit.go`（原 KNOWN_ISSUES #17，见 [features.md](features.md) §M）
+- ~~安全审计日志缺失~~ ✅ 已闭环：`handler/audit.go`（原 KNOWN_ISSUES #17，见 [FEATURES.md](FEATURES.md) §M）
 - ~~XFF 伪造绕过限速~~ ✅ 已闭环：`S3C_TRUSTED_PROXIES` 可信代理白名单（默认不信任 XFF）；JobRegistry 上限 256 个未终结任务，超限 503
 - ~~TLS 前置无 HSTS~~ ✅ 已在 TLS 示例配置加 HSTS + Permissions-Policy
 
@@ -152,3 +152,45 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 - `/api/metrics` 开启后免鉴权（内网 scrape 用途，见 §2；勿直接暴露公网）。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。
+
+---
+
+## 7. SAST 发现项 triage（GitLab `semgrep-sast`）
+
+> GitLab 侧 SAST 自 2026-09-29 起由 `include: template: Jobs/SAST.gitlab-ci.yml` 引入
+> （对应 GitHub 侧 `codeql.yml`）。**它是报告型而非阈值门禁**——`semgrep-sast` 继承模板
+> `.sast-analyzer` 的 `allow_failure: true`，发现项本身不会让流水线变红。
+> 因此**本节就是它的「处置账」**：不写下来，那份 `gl-sast-report.json` 就只是跑一次没人看的产物。
+
+实跑命令（本地，无需 GitLab 实例）：
+
+```bash
+make gcl GCL_JOBS=semgrep-sast     # 产物 gl-sast-report.json（已在 .gitignore）
+```
+
+**扫描面**：默认的 `$DEFAULT_SAST_EXCLUDED_PATHS`（`spec, test, tests, tmp`）是**目录名**式的，
+与本仓库命名约定不匹配，故 `.gitlab-ci.yml` 的 `semgrep-sast` job 显式追加
+`**/*_test.go` / `**/*.test.ts` / `apps/web/e2e{, -real}` / `apps/web/coverage`。
+效果：**66 项 → 10 项**（4 High + 6 Medium）——被排除的 56 项里 50 项在测试代码、
+6 项在**生成的** Istanbul HTML 报告资产（第三方 `prettify.js` / `sorter.js`）中，
+二者都不是本仓库的生产代码（与覆盖率 instrumentation 排除 `*.test.ts` 同一口径）。
+
+**当前 10 项全部判定为「误报 / 设计使然」**，逐条如下（改动相关代码时请连带复核）：
+
+| # | 严重度 | 位置 | 规则 | 判定与依据 |
+|---|---|---|---|---|
+| 1 | High | `internal/store/sqlite.go`（`PRAGMA user_version`） | SQL Injection | **误报**：`fmt.Sprintf` 的插值是**编译期常量** `sqliteUserVersion`（int 常量），无任何用户输入进入该语句；`PRAGMA` 也不接受参数绑定，故不是「该用占位符却拼接」 |
+| 2–4 | High | `api/http.ts` ×2、`api/jobs.ts` ×1 | SSRF | **设计使然**：`fetch(getBase() + path)` 的 `getBase()` 是**用户自己配置的后端地址**——「多后端」就是这个产品的功能。请求由**用户自己的浏览器**发往**用户自己指定的服务器**，不构成服务端 SSRF；服务端侧的出站校验另见「边界 D」与 `s3wrap/ssrf.go` |
+| 5–7 | Medium | `handler/trash.go`、`handler/metadata.go`、`handler/objects.go` | Integer overflow | **误报**：三处都是 `int32(n)`，而 **紧邻上一行**就是范围守卫 `n > 0 && n <= 1000`，不可能溢出。该规则不做区间追踪，看不到前置 guard |
+| 8 | Medium | `internal/store/open.go`（`ensureDataDirPerm`） | Incorrect permission assignment | **误报（且方向相反）**：`os.Chmod(dir, 0o700)` 是**主动加固**——`os.MkdirAll` 的 mode 只在新建时生效，预建目录（Docker volume / systemd StateDirectory）常为 0755，故此处收紧到属主独占 |
+| 9 | Medium | `internal/store/lock_unix.go` | Path Traversal | **误报**：拼接的是**常量**文件名 `.s3clinet.lock`，目录来自 `S3C_DATA_DIR`（运维配置，非用户输入） |
+| 10 | Medium | `api/storage.ts`（`newId`） | Weak PRNG | **可接受**：主路径是 `crypto.randomUUID()`（CSPRNG），`Math.random()` 仅在**前者不可用**时兜底；且该 id 是本地服务器条目的标识，**不是密钥**（token 另存 `s3c.token.<id>`，且匿名可写的 localStorage 早已是失陷前提） |
+
+**为什么不做规则级抑制**：`.gitlab/sast-ruleset.toml` 与 `SAST_RULESET_GIT_REFERENCE` 属
+**Ultimate 专属**，本项目按 Free 档设计，故没有「集中的 ignore 文件」可用（Trivy 的
+`.trivyignore` 那种做法在这里不可移植）；在代码里逐行加 `// nosemgrep: <rule-id>` 虽全档可用，
+但会把工具专有注释写进生产代码，收益不抵。**折中即本节**：把判定记在案，让下一个人不必重做，
+同时保持「新增发现项 = 需要重新 triage」的可见性。
+
+> ⚠️ **本节随扫描面变化而失效**：一旦新代码引入新的 High/Medium，或上游规则集更新，
+> 上表就不再完整。判断方法：重跑上面的命令，比对 `gl-sast-report.json` 与本表的条数。

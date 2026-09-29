@@ -61,7 +61,14 @@ async function mountAppWithCorruptServers(raw: string) {
 
 describe('App 存储被写坏（P0-2）', () => {
   for (const raw of ['[null]', '[1]', '[{"base":{}}]', '["x"]', '[{}]']) {
-    it(`s3c.servers = ${raw} 时正常渲染（不白屏）`, async () => {
+    // 显式 timeout：本文件的每个用例都 `vi.resetModules()` 后**重新 import 整张 App 模块图**
+    // （这正是它能复现「渲染期读坏存储」的原因），是全仓最重的单测文件。
+    // 默认 5s 在「覆盖率插桩（istanbul）+ 全量并行」下会被击穿：2026-09-29 实测该文件单独跑
+    // 1.4s、加覆盖率全量跑 2.6s，但**首个用例**（承担首次动态 import 成本）并发时超过 5s → 假红。
+    // 放宽到 20s 是留 4× 余量；这是**资源竞争**而非死循环——先验证过：同一次全量跑加
+    // `--testTimeout=20000` 即全绿（74 文件 / 1132 例）。
+    // 不要用增大全局 testTimeout 来掩盖：其它文件不需要这么长的窗口。
+    it(`s3c.servers = ${raw} 时正常渲染（不白屏）`, { timeout: 20_000 }, async () => {
       const wrapper = await mountAppWithCorruptServers(raw)
       // 顶栏存在 = 渲染未被中断（白屏时连 header 都挂不上）。
       expect(wrapper.find('header').exists()).toBe(true)

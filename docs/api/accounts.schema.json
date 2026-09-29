@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/weilai1949/s3clinet/blob/develop/docs/api/accounts.schema.json",
+  "title": "s3clinet account store (accounts.json)",
+  "description": "s3clinet 账号库 `accounts.json` 的**明文**形态：一个 Account 对象数组（2 空格缩进）。真值来源 `apps/server/internal/model/account.go`；由 `apps/server/repo_infra_gate_test.go` 的 `TestAccountStoreSchemaMatchesModel` 双向校验字段集与类型，改模型必须同改本文件。⚠️ 安全：`S3C_STORE_DRIVER=json` 且未设 `S3C_STORE_KEY` 时 `secretKey` 以**明文**落盘（服务端默认拒绝启动，除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`，仅限本地联调）；设置 `S3C_STORE_KEY` 后整个文件为 S3C3 加密信封（**不是** JSON，本 schema 不适用），字节布局见 docs/compatibility.md §4。",
+  "type": "array",
+  "items": { "$ref": "#/$defs/account" },
+  "$defs": {
+    "account": {
+      "type": "object",
+      "description": "一条 S3 兼容对象存储账号。字段全部**无 omitempty**，因此 s3clinet 写出的文件里 12 个字段恒存在（缺失即视为文件被外部改动）。",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "endpoint",
+        "publicEndpoint",
+        "region",
+        "accessKey",
+        "secretKey",
+        "bucket",
+        "pathStyle",
+        "useSSL",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "账号唯一标识。创建时若为空由存储层用 UUIDv4 生成（store/filestore.go）；不可为空是**文件不变式**，但 API 允许客户端不传。"
+        },
+        "name": {
+          "type": "string",
+          "description": "展示名。创建 / 更新时必填（handler 校验 `name is required`）。"
+        },
+        "endpoint": {
+          "type": "string",
+          "description": "服务端访问地址，例如 http://minio:9000。创建 / 更新时必填。"
+        },
+        "publicEndpoint": {
+          "type": "string",
+          "description": "浏览器直传 / 下载用的公网地址，例如 http://127.0.0.1:9000；留空表示与 endpoint 相同。预签名 URL 以它为准，因此必须**浏览器可达**（容器内服务名不可达是已知坑，见 README）。"
+        },
+        "region": {
+          "type": "string",
+          "description": "区域，例如 us-east-1；为空时回退 S3C_REGION 的默认值。"
+        },
+        "accessKey": {
+          "type": "string",
+          "description": "S3 Access Key ID。创建 / 更新时必填。"
+        },
+        "secretKey": {
+          "type": "string",
+          "description": "S3 Secret Access Key。创建 / 更新时必填；**对外 API 从不回传**（响应为 AccountView，仅给 secretSet: boolean）。⚠️ 本字段即为敏感数据：明文驱动下它以明文存在于本文件。"
+        },
+        "bucket": {
+          "type": "string",
+          "description": "默认桶；可留空。"
+        },
+        "pathStyle": {
+          "type": "boolean",
+          "description": "是否强制 path-style 寻址（MinIO / RustFS 等自托管实现通常需要 true）。"
+        },
+        "useSSL": {
+          "type": "boolean",
+          "description": "是否启用 TLS。端点归一化与同端判定都会读取它（见 docs/decisions/0003-ssrf-private-allow.md 相关口径）。"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "创建时间（RFC 3339，Go time.Time 的 JSON 形态）。"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "最后更新时间（RFC 3339）。"
+        }
+      }
+    }
+  }
+}

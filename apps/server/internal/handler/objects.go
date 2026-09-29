@@ -231,7 +231,7 @@ const maxDeleteKeys = 1000
 // maxFailKeys 是 API 层返回 / 落盘的失败 key 上限：避免 10 万个 key 全失败时把响应
 // （同步路径）与 jobs.json（异步路径）撑到约 10 MB。
 //
-// 这是对外的**承诺**（docs/features.md、docs/api.md）：所有回传 failedKeys 的端点都必须
+// 这是对外的**承诺**（docs/FEATURES.md、docs/api.md）：所有回传 failedKeys 的端点都必须
 // 经 capFailKeys 裁剪。此前只有 delete-prefix 异步路径裁剪，copy/migrate/sync 全部原样
 // 回传——承诺与实现不符（docs/archive/review-2026-09-19.md §7.3 D4）。
 const maxFailKeys = 200

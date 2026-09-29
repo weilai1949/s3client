@@ -21,7 +21,7 @@ var (
 	// metricStreamInterrupted 统计流式传输在写出完成前中断的次数（上游读失败、
 	// 写超时、客户端断开）。此前这类失败被 io.Copy 的返回值吞掉，无从观测（#20）。
 	metricStreamInterrupted atomic.Int64
-	// ZIP 打包可见性（已闭环：features.md §M）：部分失败次数、失败 key 累计、整体失败次数。
+	// ZIP 打包可见性（已闭环：FEATURES.md §M）：部分失败次数、失败 key 累计、整体失败次数。
 	metricZipPartialFailures atomic.Int64
 	metricZipFailedKeys      atomic.Int64
 	metricZipFailed          atomic.Int64

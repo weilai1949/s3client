@@ -1,0 +1,4628 @@
+{
+  "components": {
+    "parameters": {
+      "AccountID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "账号 UUID",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Bucket": {
+        "name": "bucket",
+        "in": "query",
+        "description": "桶名；账号有默认桶时可省略",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ContinuationToken": {
+        "name": "continuationToken",
+        "in": "query",
+        "description": "分页游标",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "MaxKeys": {
+        "name": "maxKeys",
+        "in": "query",
+        "description": "单页对象数（1-1000）",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Prefix": {
+        "name": "prefix",
+        "in": "query",
+        "description": "前缀（目录路径）",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object"
+            }
+          }
+        },
+        "description": "请求参数错误"
+      },
+      "InternalError": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "服务端内部错误"
+      },
+      "NotFound": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "资源不存在"
+      },
+      "TooManyRequests": {
+        "description": "请求频率超限"
+      },
+      "Unauthorized": {
+        "description": "未鉴权或鉴权失败"
+      }
+    },
+    "schemas": {
+      "Account": {
+        "type": "object",
+        "properties": {
+          "accessKey": {
+            "type": "string"
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pathStyle": {
+            "type": "boolean"
+          },
+          "publicEndpoint": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "secretSet": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "useSSL": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accessKey",
+          "endpoint",
+          "id",
+          "name"
+        ]
+      },
+      "Bucket": {
+        "type": "object",
+        "properties": {
+          "creationDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "creationDate",
+          "name"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "ListObjectsResp": {
+        "type": "object",
+        "properties": {
+          "commonPrefixes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isTruncated": {
+            "type": "boolean"
+          },
+          "nextToken": {
+            "type": "string"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObjectItem"
+            }
+          }
+        },
+        "required": [
+          "commonPrefixes",
+          "isTruncated",
+          "objects"
+        ]
+      },
+      "ObjectItem": {
+        "type": "object",
+        "properties": {
+          "etag": {
+            "type": "string"
+          },
+          "isDir": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "lastModified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "storageClass": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "isDir",
+          "key",
+          "lastModified",
+          "size"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "s3clinet API",
+    "version": "v1.0.0",
+    "description": "s3clinet 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约，所有响应均 JSON（除 /api/health 等纯状态端点）。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/accounts": {
+      "get": {
+        "operationId": "listAccounts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Account"
+                      }
+                    }
+                  },
+                  "required": [
+                    "accounts"
+                  ]
+                }
+              }
+            },
+            "description": "账号列表（AccountView，不含 secretKey）"
+          }
+        },
+        "summary": "列出全部账号",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "operationId": "createAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accessKey": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "pathStyle": {
+                    "type": "boolean"
+                  },
+                  "publicEndpoint": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "secretKey": {
+                    "type": "string"
+                  },
+                  "useSSL": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "accessKey",
+                  "endpoint",
+                  "name",
+                  "secretKey"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            },
+            "description": "已创建（AccountView，secretSet 表示是否已设置密钥）"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "summary": "新建账号",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/preview-buckets": {
+      "post": {
+        "operationId": "previewBuckets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accessKey": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "pathStyle": {
+                    "type": "boolean"
+                  },
+                  "publicEndpoint": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "secretKey": {
+                    "type": "string"
+                  },
+                  "useSSL": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "accessKey",
+                  "endpoint",
+                  "secretKey"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Bucket"
+                      }
+                    }
+                  },
+                  "required": [
+                    "buckets"
+                  ]
+                }
+              }
+            },
+            "description": "桶列表"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "summary": "用表单凭证预览桶（不落库）",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{id}": {
+      "delete": {
+        "operationId": "deleteAccount",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "删除账号",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "get": {
+        "operationId": "getAccount",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            },
+            "description": "账号（AccountView）"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "获取账号详情",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "put": {
+        "operationId": "updateAccount",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accessKey": {
+                    "type": "string"
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "pathStyle": {
+                    "type": "boolean"
+                  },
+                  "publicEndpoint": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  },
+                  "secretKey": {
+                    "type": "string"
+                  },
+                  "useSSL": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "accessKey",
+                  "endpoint",
+                  "name"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            },
+            "description": "更新后（AccountView）"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "更新账号",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket": {
+      "delete": {
+        "operationId": "deleteBucket",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "桶非空"
+          }
+        },
+        "summary": "删除空桶",
+        "tags": [
+          "buckets"
+        ]
+      },
+      "post": {
+        "operationId": "createBucket",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "acl": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "private",
+                      "public-read",
+                      "public-read-write"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "acl": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "summary": "创建桶",
+        "tags": [
+          "buckets"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket-info": {
+      "get": {
+        "operationId": "getBucketInfo",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "versioning": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "桶属性（区域 / 创建时间 / 版本控制）",
+        "tags": [
+          "buckets"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket-versioning": {
+      "put": {
+        "operationId": "putBucketVersioning",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "Enabled",
+                      "Suspended"
+                    ]
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "status"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "versioning": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        },
+        "summary": "开关桶版本控制（Enabled / Suspended）",
+        "tags": [
+          "buckets"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket/cors": {
+      "delete": {
+        "operationId": "deleteBucketCors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "删除 CORS",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "get": {
+        "operationId": "getBucketCors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "allowedHeaders": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "allowedMethods": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "allowedOrigins": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "exposeHeaders": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "maxAgeSeconds": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "allowedMethods",
+                          "allowedOrigins"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回空数组"
+          }
+        },
+        "summary": "桶 CORS 规则列表",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putBucketCors",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "allowedHeaders": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedMethods": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "allowedOrigins": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "exposeHeaders": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "maxAgeSeconds": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "allowedMethods",
+                        "allowedOrigins"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "rules"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "rules 非空时 updated；空数组触发删除时 deleted"
+          }
+        },
+        "summary": "配置 CORS（rules 空数组=删除）",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket/encryption": {
+      "delete": {
+        "operationId": "deleteBucketEncryption",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "删除 SSE 配置",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "get": {
+        "operationId": "getBucketEncryption",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "algorithm": {
+                      "type": "string"
+                    },
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "bucketKeyEnabled": {
+                      "type": "boolean"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "kmsKeyId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置时 configured=false"
+          }
+        },
+        "summary": "桶服务端加密（SSE）",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putBucketEncryption",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "algorithm": {
+                    "type": "string",
+                    "enum": [
+                      "AES256",
+                      "aws:kms",
+                      "aws:kms:dsse"
+                    ]
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "bucketKeyEnabled": {
+                    "type": "boolean"
+                  },
+                  "kmsKeyId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "algorithm",
+                  "bucket"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "algorithm": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "algorithm 非法"
+          }
+        },
+        "summary": "配置 SSE",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket/policy": {
+      "delete": {
+        "operationId": "deleteBucketPolicy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "删除桶策略",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "get": {
+        "operationId": "getBucketPolicy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "policy": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回 configured=false"
+          }
+        },
+        "summary": "桶策略（JSON 字符串）",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putBucketPolicy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "policy": {
+                    "type": "string",
+                    "format": "policy JSON 字符串；空字符串=删除"
+                  }
+                },
+                "required": [
+                  "bucket"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "policy 非空时 configured；空字符串触发删除时 deleted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "policy 不是合法 JSON"
+          }
+        },
+        "summary": "配置桶策略（policy=空=删除）",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket/tags": {
+      "delete": {
+        "operationId": "deleteBucketTags",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "删除桶标签",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "get": {
+        "operationId": "getBucketTags",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回空数组"
+          }
+        },
+        "summary": "桶标签",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putBucketTags",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "tags"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    },
+                    "updated": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "tags 非空时 updated；空数组触发删除时 deleted"
+          }
+        },
+        "summary": "配置桶标签（空数组=删除）",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
+    "/api/accounts/{id}/bucket/website": {
+      "delete": {
+        "operationId": "deleteBucketWebsite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "删除静态网站托管",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "get": {
+        "operationId": "getBucketWebsite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "errorDocument": {
+                      "type": "string"
+                    },
+                    "indexDocument": {
+                      "type": "string"
+                    },
+                    "redirectAllRequestsTo": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回 configured=false"
+          }
+        },
+        "summary": "桶静态网站托管配置",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putBucketWebsite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "errorDocument": {
+                    "type": "string"
+                  },
+                  "indexDocument": {
+                    "type": "string"
+                  },
+                  "redirectAllRequestsTo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "indexDocument/redirectAllRequestsTo 至少一个"
+          }
+        },
+        "summary": "配置静态网站托管",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
+    "/api/accounts/{id}/buckets": {
+      "get": {
+        "operationId": "listBuckets",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Bucket"
+                      }
+                    }
+                  },
+                  "required": [
+                    "buckets"
+                  ]
+                }
+              }
+            },
+            "description": "桶列表"
+          }
+        },
+        "summary": "列出账号下全部桶",
+        "tags": [
+          "buckets"
+        ]
+      }
+    },
+    "/api/accounts/{id}/copy-object": {
+      "post": {
+        "operationId": "copyObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "newBucket": {
+                    "type": "string",
+                    "format": "可选；省略=同桶"
+                  },
+                  "newKey": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "newKey"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "copied": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "单文件复制（不删源）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/copy-objects": {
+      "post": {
+        "operationId": "copyObjects",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "deleteSource": {
+                    "type": "boolean",
+                    "description": "true=移动"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "keys"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "copied": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "failedKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 copied/failed/total；lastError/failedKeys/truncated 视情况出现"
+          }
+        },
+        "summary": "批量复制（同步）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/copy-objects/async": {
+      "post": {
+        "operationId": "copyObjectsAsync",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "deleteSource": {
+                    "type": "boolean",
+                    "description": "true=移动"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "keys"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "jobId"
+          }
+        },
+        "summary": "批量复制（异步，SSE 进度）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/copy-prefix": {
+      "post": {
+        "operationId": "copyPrefix",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string",
+                    "format": "可选；省略=同桶"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "prefix",
+                  "targetPrefix"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "copied": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "failedKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 copied/failed/lastError"
+          }
+        },
+        "summary": "递归复制前缀（同步流式）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/copy-prefix/async": {
+      "post": {
+        "operationId": "copyPrefixAsync",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string",
+                    "format": "可选；省略=同桶"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "prefix",
+                  "targetPrefix"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "jobId"
+          }
+        },
+        "summary": "递归复制前缀（异步）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/delete": {
+      "post": {
+        "operationId": "deleteObjects",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "keys"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "lastError": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 deleted/failed/lastError；S3 逐 key 失败仍返回 200，deleted 只计成功数"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "key 数\u003e1000"
+          }
+        },
+        "summary": "批量删除（≤1000 keys）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/delete-marker/restore": {
+      "post": {
+        "operationId": "restoreDeleteMarker",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "versionId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "restored": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "撤销删除标记（一键还原已删除对象）",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/api/accounts/{id}/delete-prefix": {
+      "post": {
+        "operationId": "deletePrefix",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "prefix"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 deleted/failed/truncated/lastError"
+          }
+        },
+        "summary": "递归删除前缀（同步流式）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/delete-prefix/async": {
+      "post": {
+        "operationId": "deletePrefixAsync",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "prefix"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "jobId"
+          }
+        },
+        "summary": "递归删除前缀（异步）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/download-zip": {
+      "post": {
+        "operationId": "downloadZip",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "keys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "keys"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "application/zip 流"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "keys 为空 / \u003e1000"
+          }
+        },
+        "summary": "流式 ZIP 打包下载（≤1000 个）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/head": {
+      "get": {
+        "operationId": "headObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "可选；指定读取某历史版本的元数据",
+            "in": "query",
+            "name": "versionId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "etag": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "lastModified": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "metadata": {
+                      "type": "object"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "storageClass": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "对象元数据",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/lifecycle": {
+      "get": {
+        "operationId": "getLifecycle",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "days": {
+                            "type": "integer"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "days",
+                          "id",
+                          "prefix"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回空数组"
+          }
+        },
+        "summary": "生命周期规则（桶级）",
+        "tags": [
+          "objects"
+        ]
+      },
+      "put": {
+        "operationId": "putLifecycle",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "days": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "days",
+                        "id",
+                        "prefix"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bucket"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "写入生命周期规则（空规则=删除）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/mkdir": {
+      "post": {
+        "operationId": "mkdirObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "created": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "新建空文件夹（PUT 空对象）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/multipart/abort": {
+      "post": {
+        "operationId": "multipartAbort",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "uploadId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "uploadId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "aborted": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "中止分段上传",
+        "tags": [
+          "multipart"
+        ]
+      }
+    },
+    "/api/accounts/{id}/multipart/complete": {
+      "post": {
+        "operationId": "multipartComplete",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "etag": {
+                          "type": "string"
+                        },
+                        "partNumber": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "etag",
+                        "partNumber"
+                      ]
+                    }
+                  },
+                  "uploadId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "parts",
+                  "uploadId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "completed": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "完成分段上传",
+        "tags": [
+          "multipart"
+        ]
+      }
+    },
+    "/api/accounts/{id}/multipart/init": {
+      "post": {
+        "operationId": "multipartInit",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "uploadId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 uploadId"
+          }
+        },
+        "summary": "初始化分段上传",
+        "tags": [
+          "multipart"
+        ]
+      }
+    },
+    "/api/accounts/{id}/multipart/part": {
+      "post": {
+        "operationId": "multipartPart",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "expiresIn": {
+                    "type": "integer"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "partNumber": {
+                    "type": "integer"
+                  },
+                  "uploadId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "partNumber",
+                  "uploadId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiresIn": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "partNumber": {
+                      "type": "integer"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 url/expiresIn"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "partNumber 非法"
+          }
+        },
+        "summary": "预签名单段 PUT URL",
+        "tags": [
+          "multipart"
+        ]
+      }
+    },
+    "/api/accounts/{id}/object-acl": {
+      "get": {
+        "operationId": "getObjectAcl",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "grantee": {
+                            "type": "string"
+                          },
+                          "permission": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "owner": {
+                      "type": "string"
+                    },
+                    "public": {
+                      "type": "boolean"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "对象 ACL",
+        "tags": [
+          "object-meta"
+        ]
+      },
+      "put": {
+        "operationId": "putObjectAcl",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "acl": {
+                    "type": "string",
+                    "enum": [
+                      "private",
+                      "public-read",
+                      "public-read-write",
+                      "authenticated-read",
+                      "aws-exec-read"
+                    ]
+                  },
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "acl",
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "acl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "设置对象 ACL",
+        "tags": [
+          "object-meta"
+        ]
+      }
+    },
+    "/api/accounts/{id}/object-tags": {
+      "get": {
+        "operationId": "getObjectTags",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未配置返回空数组"
+          }
+        },
+        "summary": "对象标签",
+        "tags": [
+          "object-meta"
+        ]
+      },
+      "put": {
+        "operationId": "putObjectTags",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "value"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "tags"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "设置对象标签（空数组=清空）",
+        "tags": [
+          "object-meta"
+        ]
+      }
+    },
+    "/api/accounts/{id}/objects": {
+      "get": {
+        "operationId": "listObjects",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "$ref": "#/components/parameters/Prefix"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "delimiter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/MaxKeys"
+          },
+          {
+            "$ref": "#/components/parameters/ContinuationToken"
+          },
+          {
+            "description": "按 key 字典序从该 key 之后开始列举（ListObjectsV2 start-after）；与 continuationToken 互斥使用",
+            "in": "query",
+            "name": "startAfter",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListObjectsResp"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "列对象（含公共前缀 / 分页）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/presign": {
+      "post": {
+        "operationId": "presign",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "expiresIn": {
+                    "type": "integer"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "get",
+                      "put",
+                      "post"
+                    ]
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "integer"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "description": "仅 method=post：multipart 表单字段"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "get/put 含 url/expiresIn；post 额外含 fields"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "method/expiresIn 非法"
+          }
+        },
+        "summary": "生成预签名 URL",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/proxy": {
+      "get": {
+        "operationId": "proxyObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "mode",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "download",
+                "inline",
+                "text"
+              ]
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "versionId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "仅 mode=text 生效：预览读取上限（默认 1 MiB，上限 2 MiB；超限响应头 X-Preview-Truncated: 1）",
+            "in": "query",
+            "name": "maxBytes",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "二进制流 / text/plain"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "对象代理下载 / 预览（流式）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/rename": {
+      "post": {
+        "operationId": "renameObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "newBucket": {
+                    "type": "string",
+                    "format": "可选；省略=同桶"
+                  },
+                  "newKey": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "newKey"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "renamed": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "重命名 / 移动（copy+delete，可跨桶）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/set-headers": {
+      "post": {
+        "operationId": "setHeaders",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "contentType": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "updated": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "metadata 校验失败"
+          }
+        },
+        "summary": "编辑 HTTP 头 / 元数据（CopyObject+REPLACE）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/storage-class": {
+      "post": {
+        "operationId": "changeStorageClass",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "storageClass": {
+                    "type": "string"
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "storageClass"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "changed": {
+                      "type": "string"
+                    },
+                    "storageClass": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "存储类型非法"
+          }
+        },
+        "summary": "切换对象存储类型",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
+    "/api/accounts/{id}/test": {
+      "post": {
+        "operationId": "testAccount",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "检测结果（始终 200，字段 ok 表状态）"
+          }
+        },
+        "summary": "连通性检测（200+ok 表示通；ok=false 含 error）",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/accounts/{id}/trash": {
+      "get": {
+        "operationId": "listTrash",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "$ref": "#/components/parameters/Prefix"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "keyMarker",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "versionIdMarker",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/MaxKeys"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleteMarkers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "isLatest": {
+                            "type": "boolean"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "lastModified": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "versionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "isLatest",
+                          "key",
+                          "lastModified",
+                          "versionId"
+                        ]
+                      }
+                    },
+                    "isTruncated": {
+                      "type": "boolean"
+                    },
+                    "nextKeyMarker": {
+                      "type": "string"
+                    },
+                    "nextVersionIdMarker": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "列出桶内全部删除标记（分页游标）",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
+    "/api/accounts/{id}/trash/purge": {
+      "post": {
+        "operationId": "purgeTrashObject",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer"
+                    },
+                    "purged": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "彻底清除某 key 的全部版本+标记",
+        "tags": [
+          "trash"
+        ]
+      }
+    },
+    "/api/accounts/{id}/version": {
+      "delete": {
+        "operationId": "deleteObjectVersion",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "versionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "缺 key/versionId"
+          }
+        },
+        "summary": "删除指定版本",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/api/accounts/{id}/version/restore": {
+      "post": {
+        "operationId": "restoreObjectVersion",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "versionId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "restored": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "把历史版本恢复为当前（复制回 key）",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/api/accounts/{id}/versions": {
+      "get": {
+        "operationId": "listObjectVersions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "bucket",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "prefix",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "keyMarker",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "versionIdMarker",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "maxKeys",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleteMarkers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "isLatest": {
+                            "type": "boolean"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "lastModified": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "versionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "isLatest",
+                          "key",
+                          "lastModified",
+                          "versionId"
+                        ]
+                      }
+                    },
+                    "isTruncated": {
+                      "type": "boolean"
+                    },
+                    "nextKeyMarker": {
+                      "type": "string"
+                    },
+                    "nextVersionIdMarker": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "etag": {
+                            "type": "string"
+                          },
+                          "isLatest": {
+                            "type": "boolean"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "lastModified": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "storageClass": {
+                            "type": "string"
+                          },
+                          "versionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "etag",
+                          "isLatest",
+                          "key",
+                          "lastModified",
+                          "size",
+                          "storageClass",
+                          "versionId"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 versions/deleteMarkers/isTruncated"
+          }
+        },
+        "summary": "对象版本列表（含删除标记）",
+        "tags": [
+          "versions"
+        ]
+      }
+    },
+    "/api/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "store": {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "time": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "store",
+                    "time",
+                    "version"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "store": {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "ok": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ]
+                    },
+                    "time": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "store",
+                    "time",
+                    "version"
+                  ]
+                }
+              }
+            },
+            "description": "store 不可用"
+          }
+        },
+        "security": [],
+        "summary": "健康检查（含 store 状态与版本）",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "operationId": "metrics",
+        "responses": {
+          "200": {
+            "description": "text/plain; version=0.0.4"
+          },
+          "404": {
+            "description": "默认关闭"
+          }
+        },
+        "security": [],
+        "summary": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/migrate": {
+      "post": {
+        "operationId": "migrate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceAccountId": {
+                    "type": "string"
+                  },
+                  "sourceBucket": {
+                    "type": "string"
+                  },
+                  "sourceKeys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "targetAccountId": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "failedKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "migrated": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 migrated/failed/failedKeys/lastError"
+          }
+        },
+        "summary": "同步迁移（流式）",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/async": {
+      "post": {
+        "operationId": "migrateAsync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceAccountId": {
+                    "type": "string"
+                  },
+                  "sourceBucket": {
+                    "type": "string"
+                  },
+                  "sourceKeys": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "targetAccountId": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 jobId/total"
+          }
+        },
+        "summary": "异步迁移（SSE 进度）",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/jobs": {
+      "get": {
+        "operationId": "migrateJobs",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "created": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "finishedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "progress": {
+                            "type": "object",
+                            "properties": {
+                              "done": {
+                                "type": "integer"
+                              },
+                              "error": {
+                                "type": "string"
+                              },
+                              "failed": {
+                                "type": "integer"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "migrated": {
+                                "type": "integer"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "total": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "result": {
+                            "type": "object",
+                            "properties": {
+                              "failed": {
+                                "type": "integer"
+                              },
+                              "failedKeys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "lastError": {
+                                "type": "string"
+                              },
+                              "migrated": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "done",
+                              "cancelled",
+                              "interrupted"
+                            ]
+                          },
+                          "total": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "created",
+                          "id",
+                          "progress",
+                          "result",
+                          "status",
+                          "total"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 jobs[]：id/created/total/status/progress/result；status 为 running|done|cancelled|interrupted"
+          }
+        },
+        "summary": "异步任务清单（含重启后中断的任务）",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/jobs/{id}": {
+      "get": {
+        "operationId": "migrateJobStatus",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "done": {
+                      "type": "boolean"
+                    },
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "object",
+                      "properties": {
+                        "done": {
+                          "type": "integer"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "failed": {
+                          "type": "integer"
+                        },
+                        "key": {
+                          "type": "string"
+                        },
+                        "migrated": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "total": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "failed": {
+                          "type": "integer"
+                        },
+                        "failedKeys": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "lastError": {
+                          "type": "string"
+                        },
+                        "migrated": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "查询迁移任务状态",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/jobs/{id}/cancel": {
+      "post": {
+        "operationId": "migrateJobCancel",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cancelled": {
+                      "type": "boolean"
+                    },
+                    "done": {
+                      "type": "boolean"
+                    },
+                    "jobId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "已取消含 cancelled；已完成含 done"
+          }
+        },
+        "summary": "取消迁移任务",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/jobs/{id}/events": {
+      "get": {
+        "operationId": "migrateJobEvents",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "text/event-stream"
+          }
+        },
+        "summary": "迁移任务 SSE 进度事件",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/sync": {
+      "post": {
+        "operationId": "migrateSync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "etag",
+                      "size_mtime",
+                      "always"
+                    ]
+                  },
+                  "sourceAccountId": {
+                    "type": "string"
+                  },
+                  "sourceBucket": {
+                    "type": "string"
+                  },
+                  "sourcePrefix": {
+                    "type": "string"
+                  },
+                  "targetAccountId": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "copied": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "failedKeys": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "lastError": {
+                      "type": "string"
+                    },
+                    "scanned": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "含 scanned/skipped/copied/failed/failedKeys/lastError/truncated"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "mode 非法 / 账号缺配置"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "账号不存在"
+          }
+        },
+        "summary": "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "operationId": "openapi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "application/json"
+          }
+        },
+        "summary": "OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1）",
+        "tags": [
+          "system"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "同源（前端 Vite 代理或后端 SPA fallback）"
+    }
+  ],
+  "tags": [
+    {
+      "name": "accounts",
+      "description": "账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）"
+    },
+    {
+      "name": "buckets",
+      "description": "桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）"
+    },
+    {
+      "name": "bucket-settings",
+      "description": "桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）"
+    },
+    {
+      "name": "objects",
+      "description": "对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）"
+    },
+    {
+      "name": "object-meta",
+      "description": "对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）"
+    },
+    {
+      "name": "multipart",
+      "description": "分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）"
+    },
+    {
+      "name": "versions",
+      "description": "对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）"
+    },
+    {
+      "name": "trash",
+      "description": "回收站：列出删除标记与彻底清除（docs/api.md「回收站」）"
+    },
+    {
+      "name": "migrate",
+      "description": "跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）"
+    },
+    {
+      "name": "system",
+      "description": "系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）"
+    }
+  ]
+}

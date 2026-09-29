@@ -32,4 +32,4 @@ s3clinet 的账号存储（json / sqlite / encrypted）是配置的单一事实�
 
 - 存储故障可被健康检查与容器编排（HEALTHCHECK / 重启策略）立即发现。
 - 运维需保证 `/data` 卷（或存储文件路径）持久化与权限正确。
-- 部署文档明确此语义（[docs/deployment.md](../deployment.md) §6.1）。
+- 部署文档明确此语义（[docs/DEPLOYMENT.md](../DEPLOYMENT.md) §6.1）。

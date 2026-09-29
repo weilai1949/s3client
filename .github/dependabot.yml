@@ -1,17 +1,19 @@
 version: 2
 updates:
+  # 路径相对仓库根；Go / npm / Rust 清单都在 apps/ 下——曾误写为 /server、/web、
+  # /desktop/src-tauri（三个目录都不存在），结果依赖更新**静默失效**。
   - package-ecosystem: gomod
-    directory: /server
+    directory: /apps/server
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
   - package-ecosystem: npm
-    directory: /web
+    directory: /apps/web
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
   - package-ecosystem: cargo
-    directory: /desktop/src-tauri
+    directory: /apps/desktop/src-tauri
     schedule:
       interval: monthly
     open-pull-requests-limit: 3

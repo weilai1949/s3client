@@ -21,7 +21,21 @@ function readLocale(): Locale {
   return 'zh-CN'
 }
 
+/**
+ * 把界面语言同步到 `<html lang>`。
+ *
+ * 为什么必须做：`index.html` 只能硬编码一个初始 `lang="zh-CN"`，而用户可能持久化过 `en-US`。
+ * 此前没有任何运行时赋值，于是切到英文后文档语言标记仍是 `zh-CN`——屏幕阅读器会按中文读音
+ * 念英文内容，浏览器的翻译提示也会误判（KNOWN_ISSUES #67①，由 `i18n/index.test.ts` 钉住）。
+ */
+function applyDocumentLang(loc: Locale): void {
+  document.documentElement.lang = loc
+}
+
 const state = reactive({ locale: readLocale() })
+
+// 首屏即同步：让持久化的语言在渲染前就反映到 <html lang>，而不是等用户手动切一次。
+applyDocumentLang(state.locale)
 
 /** 按命名空间拆分的消息模块（见 messages/ 目录），在此汇总为运行时字典。 */
 function mergeBundles(...bundles: MessageBundle[]): Record<Locale, Record<string, string>> {
@@ -59,6 +73,7 @@ export function locale(): Locale {
 
 export function setLocale(loc: Locale) {
   state.locale = loc
+  applyDocumentLang(loc)
   try {
     localStorage.setItem(LS_LOCALE, loc)
   } catch {

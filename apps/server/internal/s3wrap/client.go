@@ -192,7 +192,7 @@ func newHTTPClient() *ssrfAwareClient {
 // 此函数是端点归一化的唯一实现：`service.SameEndpoint` 与建 client 的 BaseEndpoint
 // 必须用同一套规则，否则会出现「比较判定为同一端点、建出的 URL 却连不上」。
 // 旧实现只做大小写敏感的前缀判断，把 "HTTP://Host" 当成裸主机，产出损坏的
-// "http://HTTP://Host"（features.md §K，KNOWN_ISSUES #10）。
+// "http://HTTP://Host"（FEATURES.md §K，KNOWN_ISSUES #10）。
 func NormalizeEndpoint(endpoint string, useSSL bool) string {
 	ep := strings.TrimSpace(endpoint)
 	if ep == "" {

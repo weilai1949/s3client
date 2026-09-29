@@ -22,7 +22,7 @@ func TestValidate(t *testing.T) {
 		{"multi token shortest applies", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + ",short"}, ErrShortToken},
 		{"multi token all long ok", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + "," + strings.Repeat("b", MinTokenLength+5)}, nil},
 		{"empty token piece ignored in shortest", Config{Addr: "127.0.0.1:8080", Token: "," + strings.Repeat("a", MinTokenLength)}, nil},
-		// S3C_STORE_KEY 最短长度校验（已闭环：features.md §M）：短口令会被 Argon2 暴力破解。
+		// S3C_STORE_KEY 最短长度校验（已闭环：FEATURES.md §M）：短口令会被 Argon2 暴力破解。
 		{"short store key rejected", Config{Addr: "127.0.0.1:8080", StoreKey: "short"}, ErrShortStoreKey},
 		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
 		// 安全默认：未显式选择驱动（空串）不触发明文落盘校验，由 json/sqlite 用例单独覆盖。

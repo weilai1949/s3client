@@ -15,11 +15,11 @@
 > ⑤ **2026-09-24 全仓代码审查已处置完毕**：[`code-review-2026-09-24.md`](code-review-2026-09-24.md) 的
 >    2 Critical + 20 Required **全部修复**；Nit 35 项中 **31 项修复**、**3 项转登记**
 >    [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)（#61 / **#62 本轮未完成** / #63）、1 项复核后判定不成立
->    （台账见 [`features.md`](../features.md) §AA，逐项见该报告「处置明细」表），复测
+>    （台账见 [`FEATURES.md`](../FEATURES.md) §AA，逐项见该报告「处置明细」表），复测
 >    **9/9 包全绿 + 每包 100.0% statements + 前端 67 文件 1110 例 + 四指标 100%（4255 / 2908 / 1124 / 3653）**，
 >    真实 E2E 两项实跑——`S3CLINET_E2E=1` s3wrap **4/4 PASS**、`make e2e-real` **3 passed**
 >    （`S3C_TOKEN` 开启的生产同构形态）。
-> ⑥ **2026-09-28 KNOWN_ISSUES 收口 + `development.md` §7 双源消除**（⑤ 之后）：**#60–#62 全部闭环移除**——
+> ⑥ **2026-09-28 KNOWN_ISSUES 收口 + `DEVELOPMENT.md` §7 双源消除**（⑤ 之后）：**#60–#62 全部闭环移除**——
 >    #60 前端 4 个超 1000 行测试文件拆为 9 个（`api.test.ts` 1986 → 887 / 677 / 573、`MigratePanel.test.ts`
 >    1230 → 871 + 463、`useObjectActions.test.ts` 1164 → 872 + 447、`useObjectBrowser.test.ts` 1147 → 558 + 641，
 >    最大 887 行，1110 例与测试名清单不变，前端 **67 → 72 文件**）；#61 `SameEndpoint` 纳入 `useSSL`
@@ -27,9 +27,9 @@
 >    （`handler/objects.go` 538 → 432 行，顺带清出死代码 `copyKeysThenDelete` / `s3UserMessageForCode` /
 >    `olListPagesFake`）；#63 补齐证据（新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住 64MB 分段）后
 >    维持 ➖ 已决策。[`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) §二 现只剩 **#63**、§四 编号台账 #60–#62 标
->    「已闭环移除」。同批把 `development.md` §7「已知技术债」三条（**H1** OpenAPI 注册表 / **S7** SSE 终态分叉 /
+>    「已闭环移除」。同批把 `DEVELOPMENT.md` §7「已知技术债」三条（**H1** OpenAPI 注册表 / **S7** SSE 终态分叉 /
 >    **D5** endpoint 归一化）逐条复核后改写为「闭环状态 + 现行守卫 + 开发规则」，**消除与
->    [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 的双源**（台账见 [`features.md`](../features.md) §AC）。由此，
+>    [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 的双源**（台账见 [`FEATURES.md`](../FEATURES.md) §AC）。由此，
 >    下方「⚠️ 待解决的技术问题」原第 2 条（**CORS**：`corsAllowedOrigin` 显式白名单 + `isTrustedDefaultOrigin`
 >    已放行 tauri 自定义协议 + `S3C_CORS_ORIGINS` + CSRF 双防）与原第 3 条（**单文件超限**：Go 侧由 ② 拆完、
 >    前端侧 4 个超 1000 行测试文件亦已拆完）**已闭环，2026-09-28 直接从该清单移除**——那是一张**在办事项**
@@ -53,7 +53,7 @@
 | **代码质量** | 9 | ✅ 优秀 | go vet 0 问题（`handler` 包因在途外部改动暂时报 import cycle，见下「注意事项」）；架构遵循既定分层 |
 | **TDD实施** | 10 | ✅ 完美 | 先测后写，行为驱动，红绿蓝流程严格 |
 | **架构设计** | 10 | ✅ 优秀 | 正确遵循 `handler → service → s3wrap`、`handler/store → model` 分层 |
-| **测试覆盖** | 10 | ✅ 全面 | 三类测试 + 前端构建检查（`development.md` §2），真实 RustFS/浏览器 E2E 齐全 |
+| **测试覆盖** | 10 | ✅ 全面 | 三类测试 + 前端构建检查（`DEVELOPMENT.md` §2），真实 RustFS/浏览器 E2E 齐全 |
 | **文档同步** | 9 | ✅ 优秀 | TDD文档完善，但桌面分发文档不足 |
 | **CI/CD流程** | 10 | ✅ 成熟 | 两套CI（GitHub+GitLab）门禁一致；`publish`/`release-desktop` 为 GitHub 侧有意单边 |
 | **安全合规** | 9 | ✅ 良好 | 边界校验，敏感字段保护，外部数据不可信 |
@@ -151,7 +151,7 @@ config      环境变量解析与校验
 
 ### **3. 架构一致性**
 - **两套CI门禁一致**：GitHub Actions + GitLab CI 的 `server`/`web`/`docker`/`desktop`/`desktop-build`
-  与三个 E2E job 逐一对齐（对照表见 [`development.md`](../development.md) §CI 双平台一致性）
+  与三个 E2E job 逐一对齐（对照表见 [`DEVELOPMENT.md`](../DEVELOPMENT.md) §CI 双平台一致性）
 - **门禁统一**：同一套检查规则同时应用于两个平台
 - **镜像版本固定**：Trivy镜像使用tag + digest双重锁定（`TestTrivyImageIsVersionAndDigestPinned`）
 - **有意不对称（非漂移）**：`publish`（推 GHCR）与 `release-desktop.yml`（发 GitHub Release）
@@ -163,7 +163,7 @@ config      环境变量解析与校验
 - **外部数据不可信**：所有外部集成严格隔离
 
 ### **5. 测试全面性**
-- **三类测试 + 构建检查**（[`development.md`](../development.md) §2 原文口径）：
+- **三类测试 + 构建检查**（[`DEVELOPMENT.md`](../DEVELOPMENT.md) §2 原文口径）：
   单元/行为测试、真实对端 E2E、真实联调浏览器 E2E，外加前端类型 + 构建
 - **门禁测试**：定制化的AST级门禁测试防止规避
 - **真实环境验证**：包含真实RustFS + 真实浏览器的不mock测试
@@ -183,7 +183,7 @@ config      环境变量解析与校验
 > 已于 2026-09-28 闭环并移出——前者由 `corsAllowedOrigin` 显式白名单 +
 > `isTrustedDefaultOrigin` 放行 tauri 自定义协议 + `S3C_CORS_ORIGINS` + CSRF 双防覆盖；
 > 后者 Go 侧 `openapi_contract_test.go` / `objects_test.go` 与前端 4 个超 1000 行测试文件
-> 均已拆分（见顶部状态更新 ② 与 [`features.md`](../features.md) §AB）。
+> 均已拆分（见顶部状态更新 ② 与 [`FEATURES.md`](../FEATURES.md) §AB）。
 
 ## 📈 改进建议
 
@@ -198,10 +198,10 @@ config      环境变量解析与校验
 2. **监控增强**：~~添加指标~~ **指标已齐**（`/api/metrics` 暴露 54 项 `s3c_*`：
    HTTP 计数/uptime/goroutine/GC/build_info/store_up/ssrf_deny/stream_interrupted/zip 系列，
    默认 404 需 `S3C_EXPOSE_METRICS=1`）；**分布式追踪是仓内已立项的开放项**：
-   [`roadmap.md`](../roadmap.md) §三 #11（2026-09-24 前登记为 `todolist.md` #54）——
+   [`ROADMAP.md`](../ROADMAP.md) §三 #11（2026-09-24 前登记为 `todolist.md` #54）——
    在既有 Prometheus 指标 + `X-Request-ID` + `S3C_LOG_JSON` 基座上接 OTLP 导出
    （开关式、默认关、可零依赖降级），把请求 ID 升级为跨 presign / proxy / migrate 的 trace
-   并配 SLO 仪表盘。**本报告不重复立项，进度只看 [`roadmap.md`](../roadmap.md) §三 #11**
+   并配 SLO 仪表盘。**本报告不重复立项，进度只看 [`ROADMAP.md`](../ROADMAP.md) §三 #11**
 3. **安全审计**：~~定期进行安全漏洞扫描~~ **已自动化**：双 CI 每次 push 跑
    govulncheck（调用链可达性门禁）+ Trivy（CRITICAL/HIGH 镜像门禁 + 缓存重试）
    + cargo audit（RustSec），非人工定期扫描
@@ -273,27 +273,27 @@ config      环境变量解析与校验
 
 ### **🚀 未来展望**
 
-> **本节此前写的「Kubernetes + 容器化 / AI辅助运维 / 插件架构」在 [`roadmap.md`](../roadmap.md)
+> **本节此前写的「Kubernetes + 容器化 / AI辅助运维 / 插件架构」在 [`ROADMAP.md`](../ROADMAP.md)
 > 里没有任何对应条目**，属报告自行发挥，已替换为 roadmap 真实的
 > **§3.2 趋势展望候选池**（`#47`–`#59`，⬜ 全部未排期、非发布承诺）：
 
-1. **AI 代理接入**：MCP Server 把对象存储能力开放给 AI 代理（[`roadmap.md`](../roadmap.md) §三 #4，由 OpenAPI 契约派生工具面）
-2. **规模化评估**：多副本 / HA 能力评估（[`roadmap.md`](../roadmap.md) §三 #15，需先出 ADR 推翻 `flock` 单副本 R4）
+1. **AI 代理接入**：MCP Server 把对象存储能力开放给 AI 代理（[`ROADMAP.md`](../ROADMAP.md) §三 #4，由 OpenAPI 契约派生工具面）
+2. **规模化评估**：多副本 / HA 能力评估（[`ROADMAP.md`](../ROADMAP.md) §三 #15，需先出 ADR 推翻 `flock` 单副本 R4）
 3. **其余候选**：S3 新协议特性 / 计划任务备份 / FinOps 看板 / 断点续传 / 双向同步 + PWA /
    OpenAPI 代码生成 / OpenTelemetry / SBOM+SLSA / Token 作用域 / fuzz 门禁 / 多平台体验
-   —— 见 [`roadmap.md`](../roadmap.md) §三 3.2，**进度一律以该表为准，本报告不另立项**
+   —— 见 [`ROADMAP.md`](../ROADMAP.md) §三 3.2，**进度一律以该表为准，本报告不另立项**
 
 ## 📋 行动计划
 
 > **本节此前的时间线（「本周内 / 下两周 / 1个月内 / 季度级」）没有来源**——仓内无排期记录，
 > 且其中「短期：性能优化、监控增强」与上文结论矛盾（无已识别瓶颈、指标已齐）。
 > 现改为**只指向两个唯一来源**——[`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)（问题：缺陷 / 阻塞 / 技术债）
-> 与 [`roadmap.md`](../roadmap.md) §三（方向：功能候选 / 版本级规划）：
+> 与 [`ROADMAP.md`](../ROADMAP.md) §三（方向：功能候选 / 版本级规划）：
 
 | **类别** | **内容** | **跟踪点** |
 |----------|----------|------------|
 | ⛔ 外部阻塞 | 桌面端签名与公证（唯一阻塞项，非代码工作） | [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #25 |
-| ⬜ 未排期候选 | AI/规模化/协议/可观测性等 13 项 | [`roadmap.md`](../roadmap.md) §三 3.2（#4–#16） |
+| ⬜ 未排期候选 | AI/规模化/协议/可观测性等 13 项 | [`ROADMAP.md`](../ROADMAP.md) §三 3.2（#4–#16） |
 | ✅ 本轮已收口 | 编辑器约定（`.editorconfig`）、报告内事实性错误与编造指标 | 本报告 |
 
 ---

@@ -5,7 +5,7 @@
 > (`SameEndpoint useSSL` → [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **#61**;batch 删除编排下沉 → **#62**,
 > **本轮未完成**)、**1 项 ⚠️ 转登记已决策 ➖**(stream_copy 640GB 上限 → **#63**)、**1 项 ℹ️ 复核后判定不成立**
 > (App.vue 双 `JSON.parse`)。逐条状态见正文各级标题的 ✅ / ⚠️ / ℹ️ 标记与本报告
-> 「Nit」节末尾的**处置明细**表;证据台账见 [`features.md`](../features.md) **§AA**,
+> 「Nit」节末尾的**处置明细**表;证据台账见 [`FEATURES.md`](../FEATURES.md) **§AA**,
 > 逐项改动见 [`CHANGELOG.md`](../../CHANGELOG.md) `[Unreleased]` 同日条目。
 >
 > 复测(全绿):后端 `gofmt` 干净 / `go vet` 0 告警 / `go test` **9/9 包**(`go list ./...` 9 个包,**每包 100.0% statements**,
@@ -22,7 +22,7 @@
 > **后续状态更新（2026-09-28）**：本报告转登记的 **#61 / #62 已闭环**——`SameEndpoint` 精确判定纳入 `useSSL`
 > （6 参签名 + `(*s3wrap.Client).UseSSL()`）、批量删除编排下沉 `service`（新增 `internal/service/delete.go`，
 > `handler/objects.go` 538 → 432 行）；**#63 证据补齐**（新增 `TestMultipartStreamCopyPartSizeIs64MB` 钉住 64MB 分段），
-> 决策仍为 ➖ 维持现状。三项收口见 [`features.md`](../features.md) **§AB** 与 [`CHANGELOG.md`](../../CHANGELOG.md)
+> 决策仍为 ➖ 维持现状。三项收口见 [`FEATURES.md`](../FEATURES.md) **§AB** 与 [`CHANGELOG.md`](../../CHANGELOG.md)
 > `[Unreleased]` 同日条目；[`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) §二 现只剩 #63。上文「开放 ⬜」等措辞为
 > **2026-09-24 时点快照**，按「不追溯篡改」纪律保留原样。
 

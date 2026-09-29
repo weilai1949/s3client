@@ -49,7 +49,7 @@ func apiRouteCountFromSource(t *testing.T) int {
 
 // docNumberClaims 是全部受门禁保护的「叙述性数字」声明。
 //
-// 注意：这里**不**收录 features.md §B/§C 等历史台账里的数字——那些记录的是当时状态，
+// 注意：这里**不**收录 FEATURES.md §B/§C 等历史台账里的数字——那些记录的是当时状态，
 // 按「不追溯篡改」纪律应保持原样。
 var docNumberClaims = []docNumberClaim{
 	{
@@ -63,12 +63,12 @@ var docNumberClaims = []docNumberClaim{
 		got:  apiRouteCountFromSource,
 	},
 	{
-		file: "docs/roadmap.md",
+		file: "docs/ROADMAP.md",
 		re:   regexp.MustCompile("(\\d+) 个 `/api/\\*` 端点、OpenAPI"),
 		got:  apiRouteCountFromSource,
 	},
 	{
-		file: "docs/features.md",
+		file: "docs/FEATURES.md",
 		re:   regexp.MustCompile(`\| REST 端点 \| \*\*(\d+)\*\* 个`),
 		got:  apiRouteCountFromSource,
 	},

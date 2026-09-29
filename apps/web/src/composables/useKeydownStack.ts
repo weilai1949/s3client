@@ -34,11 +34,6 @@ export function pushKeydown(handler: KeydownHandler): () => void {
   }
 }
 
-/** Whether this handler is currently the topmost (for Enter etc.). */
-export function isTopKeydown(handler: KeydownHandler): boolean {
-  return stack.length > 0 && stack[stack.length - 1] === handler
-}
-
 /**
  * Register a window keydown handler in a LIFO stack so only the topmost
  * dialog receives Escape/Enter. Push while active (or on mount), pop on deactivate/unmount.

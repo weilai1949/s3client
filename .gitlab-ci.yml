@@ -8,7 +8,7 @@
 #   .github/workflows/release-desktop.yml  → 不在本文件镜像（见下方「未镜像项」）
 #
 # 改动任一侧门禁时必须同步另一侧，否则两套 CI 会漂移。对应关系与理由见
-# docs/development.md §3「CI 双平台一致性」。
+# docs/DEVELOPMENT.md §3「CI 双平台一致性」。
 #
 # 本地执行（gitlab-ci-local，pin 版本见 Makefile 的 GCL）：
 #   make gcl-list                                    # 列出将要运行的 job
@@ -29,9 +29,41 @@
 #     且需要 Windows/macOS runner 与 GITHUB_TOKEN；GitLab 侧若要做等价物，应改用
 #     GitLab Release + `generic` 包，属独立发版设计而非「CI 一致性」，故不在本文件。
 #     （其中 ci.yml 的 desktop-build 虽仅手动触发，仍照搬为 when: manual，见下方该 job。）
+#
+# 已镜像的「非 job 对 job」项：
+#   - codeql.yml（GitHub 原生 SAST）↔ 本文件的 `semgrep-sast`（GitLab 原生 SAST）。
+#     两者语言覆盖一致（Go + JS/TS 均走 Semgrep 规则集），且**都是报告型**而非阈值门禁，
+#     find 结果的处置见 docs/DEVELOPMENT.md §3。GitLab 侧由下方 include 引入。
+
+# GitLab 原生 SAST（开源分析器，**Free 档即可用**；只有 Advanced SAST / MR 内联标注等
+# 属 Ultimate）。这是 2026-09-29 收口 KNOWN_ISSUES #66 的改动——此前 GitLab 侧完全没有 SAST。
+#
+# 用法与硬要求（官方文档 https://docs.gitlab.com/user/application_security/sast/）：
+#   - 必须 `include` 模板；**且因为本文件自定义了 `stages`，必须把 `test` 列进去**，
+#     否则模板里那些 `stage: test` 的 job 会因「stage 不存在」直接配置报错。
+#   - Go 与 TypeScript/JavaScript 都由 semgrep 分析器覆盖，故实际只会新增 `semgrep-sast`
+#     一个 job（其余分析器由各自的 `exists:` 规则决定，本仓库没有对应语言文件）。
+#   - `semgrep-sast` 继承模板的 `.sast-analyzer`，即 **`allow_failure: true`**：分析器自身
+#     崩溃不会拖垮流水线（发现项本身也从不置非零退出码）。这一点与 GitHub 侧 CodeQL 同构，
+#     都是「报告」而非「阈值门禁」——真正的阈值门禁仍是两套 CI 各自的 Trivy。
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+
+# 缩小扫描面到**我们自己的生产代码**。默认值 `$DEFAULT_SAST_EXCLUDED_PATHS`
+# （= `spec, test, tests, tmp`）是**目录名**式的，与本仓库的测试命名约定不匹配，实测漏掉：
+#   - Go：`*_test.go`（不在 test/ 目录里）→ 50 项发现里有相当一部分来自测试；
+#   - 前端：`*.test.ts` / `apps/web/e2e{, -real}/`（Playwright）；
+#   - `apps/web/coverage/`：**生成的** Istanbul HTML 报告（含第三方 `prettify.js` /
+#     `sorter.js`），根本不是本仓库源码——它被扫出 6 项 Medium 纯属噪声。
+# Semgrep 分析器把该变量当**前置过滤器**（gitignore 式 glob），故排除后这些文件不再进入扫描。
+# 依据：测试与构建产物不是生产代码——与覆盖率 instrumentation 排除 `*.test.ts` 同一口径。
+semgrep-sast:
+  variables:
+    SAST_EXCLUDED_PATHS: "$DEFAULT_SAST_EXCLUDED_PATHS, **/*_test.go, **/*.test.ts, apps/web/e2e, apps/web/e2e-real, apps/web/coverage"
 
 stages:
   - ci
+  - test
   - e2e
 
 workflow:
@@ -88,7 +120,7 @@ variables:
 # 前端各 job 的公共底座：镜像、缓存、before_script（安装依赖）。
 # 对应 GitHub ci.yml 的 pnpm/action-setup@v4 + actions/setup-node@v4（node 24 + pnpm 缓存）。
 .web-base:
-  image: node:24.21.0-bookworm
+  image: node:26.10.0-bookworm
   cache:
     key:
       files:
@@ -365,11 +397,11 @@ desktop-build:
   before_script:
     - apt-get update
     - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf curl
-    # Node 24 + pnpm 9.15.0（对应 actions/setup-node@v4 + pnpm/action-setup@v4）
-    # setup_24.x 只负责加 apt 仓库（该路径本身没有精确版本），安装必须显式 pin patch，
+    # Node 26 + pnpm 9.15.0（对应 actions/setup-node@v4 + pnpm/action-setup@v4）
+    # setup_26.x 只负责加 apt 仓库（该路径本身没有精确版本），安装必须显式 pin patch，
     # 否则同一 commit 在不同日期会装出不同 Node。版本来自 NodeSource nodistro 仓库。
-    - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-    - apt-get install -y nodejs=24.21.0-1nodesource1
+    - curl -fsSL https://deb.nodesource.com/setup_26.x | bash -
+    - apt-get install -y nodejs=26.10.0-1nodesource1
     - corepack enable
     - corepack prepare pnpm@9.15.0 --activate
   script:
@@ -456,7 +488,7 @@ playwright-e2e:
     - pnpm build
     # 对应 GitHub 的 `pnpm exec playwright install chromium --with-deps`。
     # 拆成两步是因为 GitLab 的 script 里不方便传 --with-deps（它等价于先跑 install-deps）；
-    # node:24.21.0-bookworm 基于 Debian，apt 源已配置，install-deps 会装齐 chromium 的系统库。
+    # node:26.10.0-bookworm 基于 Debian，apt 源已配置，install-deps 会装齐 chromium 的系统库。
     - pnpm exec playwright install-deps chromium
     - pnpm exec playwright install chromium
     # Start vite preview + 轮询就绪。
@@ -547,9 +579,9 @@ e2e-real:
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends git ca-certificates curl
-    # Node 24 + pnpm 9.15.0（与 .web-base / GitHub 侧一致，精确 patch pin）
-    - curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-    - apt-get install -y nodejs=24.21.0-1nodesource1
+    # Node 26 + pnpm 9.15.0（与 .web-base / GitHub 侧一致，精确 patch pin）
+    - curl -fsSL https://deb.nodesource.com/setup_26.x | bash -
+    - apt-get install -y nodejs=26.10.0-1nodesource1
     - corepack enable
     - corepack prepare pnpm@9.15.0 --activate
     - pnpm config set store-dir "$PNPM_STORE_DIR"

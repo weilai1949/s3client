@@ -67,11 +67,29 @@ fi
 sed -i "s|s3clinet/server:$OLD_DISPLAY_RE|s3clinet/server:$DISPLAY|g" README.md
 sed -i "s/当前版本 \`$OLD_DISPLAY_RE\`/当前版本 \`$DISPLAY\`/" README.md
 
-# docs：健康检查示例、部署文档、路线图当前版本、features 页脚
+# docs：健康检查示例（api.md）、部署文档、路线图当前版本、FEATURES 页脚
+# 注意：目标文件名一律用大写元文档名（CONFIGURATION/DEPLOYMENT/DEVELOPMENT/AI_POLICY/
+# KNOWN_ISSUES/FEATURES/ROADMAP）；改名务必同步本段，否则 sed 找不到文件会让 `set -e` 中断发版。
+# 刻意**不**同步 .github/SECURITY.md：它只描述「支持窗口与版本方案」、不 pin 具体版本号
+#（原硬编码 `当前版本 v1.0.0`，发版后会漂移；2026-09-29 改为指向 Makefile VERSION / /api/health 的 SSOT）。
 sed -i "s/\"version\":\"$OLD_DISPLAY_RE\"/\"version\":\"$DISPLAY\"/" docs/api.md
-sed -i "s/\"version\":\"$OLD_DISPLAY_RE\"/\"version\":\"$DISPLAY\"/" docs/deployment.md
-sed -i "s/当前版本 \*\*\`$OLD_DISPLAY_RE\`\*\*/当前版本 **\`$DISPLAY\`**/" docs/roadmap.md
-sed -i "s/最后更新：[0-9-]*（\`$OLD_DISPLAY_RE\` 之后的 Unreleased 区间/最后更新：$(date +%Y-%m-%d)（\`$DISPLAY\` 之后的 Unreleased 区间/" docs/features.md
+sed -i "s/\"version\":\"$OLD_DISPLAY_RE\"/\"version\":\"$DISPLAY\"/" docs/DEPLOYMENT.md
+sed -i "s/当前版本 \*\*\`$OLD_DISPLAY_RE\`\*\*/当前版本 **\`$DISPLAY\`**/" docs/ROADMAP.md
+sed -i "s/最后更新：[0-9-]*（\`$OLD_DISPLAY_RE\` 之后的 Unreleased 区间/最后更新：$(date +%Y-%m-%d)（\`$DISPLAY\` 之后的 Unreleased 区间/" docs/FEATURES.md
+
+# 提交版 OpenAPI 规范：info.version 必须与 apps/server/main.go 的 `var version` 一致，
+# 否则 internal/handler 的 TestCommittedOpenAPISpecIsDiscoverable 会红灯。
+# 只匹配 `"version": "v…"`（带值），不碰 schema 里作为**属性名**出现的 `"version": {`。
+sed -i "s/\"version\": \"$OLD_DISPLAY_RE\"/\"version\": \"$DISPLAY\"/" docs/api/openapi.json
+
+# 运维手册里 /api/health 的响应示例（与 api.md / DEPLOYMENT.md 同一 JSON 形态）。
+sed -i "s/\"version\":\"$OLD_DISPLAY_RE\"/\"version\":\"$DISPLAY\"/" docs/OPERATIONS.md
+
+# 兼容性政策里**声明性**的「当前版本」标注。
+# 注意：本文件其余 `v1.0.0-YYYYMMDDHHmmss` / `v1.0.0-rcN` 是**版本方案示例**，
+# 不随发版变化，故只匹配带「（当前版本）」后缀的那一处，避免 $OLD_DISPLAY_RE
+# 的贪婪匹配把格式占位符一起改写（`v[0-9][0-9a-zA-Z.+-]*` 会吃掉 `-YYYYMMDDHHmmss`）。
+sed -i "s/\`$OLD_DISPLAY_RE\`（当前版本）/\`$DISPLAY\`（当前版本）/" docs/compatibility.md
 
 # GitHub issue 模板的版本占位
 sed -i "s/- 版本：\`$OLD_DISPLAY_RE\`/- 版本：\`$DISPLAY\`/" .github/ISSUE_TEMPLATE/bug_report.md

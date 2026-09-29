@@ -37,7 +37,7 @@ func ValidateEndpoint(endpoint string) error {
 		return nil
 	}
 	// 归一化后再解析：用户手填的 endpoint 可能带首尾空白或大小写 scheme，
-	// 直接用原串 url.Parse 会把合法地址误判为非法（features.md §K，KNOWN_ISSUES #10）。
+	// 直接用原串 url.Parse 会把合法地址误判为非法（FEATURES.md §K，KNOWN_ISSUES #10）。
 	raw := NormalizeEndpoint(endpoint, false)
 	if raw == "" {
 		// 非空输入却归一化为空（如 "http://"、"/"）：退化地址必须 fail-closed，

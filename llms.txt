@@ -1,0 +1,80 @@
+# S3 Client (s3clinet)
+
+> S3 兼容对象存储客户端工具，使用 AWS Signature V4 签名。提供 Web 端与 Tauri 2 桌面端
+> （B/S 架构，无 Tauri IPC，前后端全走 HTTP）。后端 Go（AWS SDK for Go v2），前端 Vue 3 + Vite + TS。
+
+本文件供 LLM / 编码代理快速导航仓库。**仓库级硬约束见 [AGENTS.md](AGENTS.md)**（工具会自动加载它），
+本文件只是索引，不替代任何规范正文。
+
+## 不可违反的硬约束
+
+1. **TDD 优先**：先写会失败的测试，再写实现；断言外部可见行为，不测私有函数。
+2. **改完代码必须同步文档**：文档与代码属同一个 commit / PR。对照表见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) §4。
+3. **分层不外泄**：`store → model → s3wrap → handler`；AWS SDK 类型不进 handler / 前端；单文件 ≤ 约 1000 行。
+4. **安全**：`SecretKey` 不落 localStorage、不写日志；禁 `v-html`；外部数据一律视为不可信。
+5. **死代码零容忍**：无未引用符号 / 不可达分支 / 未使用变量（枚举值除外）；门禁必须 0 issues。
+
+## 必验门禁
+
+```bash
+cd apps/server && go vet ./... && go test ./... && go build ./...
+cd apps/web && pnpm lint && pnpm typecheck && pnpm test && pnpm build
+cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v   # 签名/直传/分段/复制/标签/版本
+make e2e-real                                                                   # 真实后端+真实 RustFS+真实浏览器
+make test-all                                                                   # 后端 + 前端单测
+```
+
+## 核心文档
+
+- [README.md](README.md)：项目入口、功能总览、快速开始、配置摘要
+- [AGENTS.md](AGENTS.md)：AI 代理硬约束（工具自动注入，保持短小）
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：开发规范正文——测试分层、门禁、验收清单、Red Flags、文档同步门禁
+- [docs/AI_POLICY.md](docs/AI_POLICY.md)：AI 使用与代理治理——代理模式、权限矩阵、MCP 工具权限、AI 披露模板、DoD、多代理协作
+- [docs/architecture.md](docs/architecture.md)：总体架构与模块边界
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md)：配置参考（全部 `S3C_*` 环境变量 SSOT、启动期硬失败、客户端设置）
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：部署形态、Docker Compose、Nginx、升级与回滚
+- [docs/OPERATIONS.md](docs/OPERATIONS.md)：运维手册——可观测性、SLO 与告警、Runbook、备份恢复、灾难恢复、事故响应
+- [docs/POSTMORTEM_TEMPLATE.md](docs/POSTMORTEM_TEMPLATE.md)：事故复盘模板——§9.3 取证 / 时间线 / 根因 / 行动项 / 文档同步（**空模板**，填写后归档进 `docs/archive/`）
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md)：性能基线与热路径解读（加密写入 30ms/64MiB、账号写入 O(n)、预签名 33µs）
+- [docs/api.md](docs/api.md)：REST API 参考（与 OpenAPI 注册表一致）
+- [docs/api/openapi.json](docs/api/openapi.json)：**机器可读 API 契约**——不跑服务即可读取，适合代码生成 / 契约 diff / 工具消费
+- [docs/api/accounts.schema.json](docs/api/accounts.schema.json)：**机器可读账号库格式**（JSON Schema 2020-12）——校验 / 生成 `accounts.json`，由反射门禁与 `model.Account` 双向对齐
+- [docs/errors.md](docs/errors.md)：S3 错误 → HTTP 状态映射
+- [docs/user-guide.md](docs/user-guide.md)：用户手册——界面操作、快捷键、FAQ、排障
+- [docs/compatibility.md](docs/compatibility.md)：版本命名、支持窗口、API 演进与弃用政策、存储格式兼容
+- [docs/glossary.md](docs/glossary.md)：术语表（S3 领域词 + 本项目自造词）
+- [docs/i18n.md](docs/i18n.md)：国际化——新增一门语言的步骤、文案 key 与覆盖率门禁
+- [docs/accessibility.md](docs/accessibility.md)：可访问性现状与已知限制（**未做正式 WCAG 审计**）
+- [docs/FEATURES.md](docs/FEATURES.md)：已实现 / 已修复能力台账（单一事实来源）
+- [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)：缺陷 / 外部阻塞 / 技术债（唯一来源）
+- [docs/ROADMAP.md](docs/ROADMAP.md)：版本规划与里程碑
+- [docs/threat-model.md](docs/threat-model.md)：威胁模型与安全边界
+- [docs/decisions/index.md](docs/decisions/index.md)：架构决策记录（ADR）
+- [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)：分支 / 提交 / 发布流程
+- [.github/SUPPORT.md](.github/SUPPORT.md)：支持渠道与「不提供什么」
+- [.github/GOVERNANCE.md](.github/GOVERNANCE.md)：治理现状、角色权限、决策与发布权
+- [.github/SECURITY.md](.github/SECURITY.md)：安全策略与漏洞报告渠道
+- [CHANGELOG.md](CHANGELOG.md)：逐字发布历史
+
+## 目录
+
+```text
+apps/server/   Go 后端（AWS SDK for Go v2）+ 静态托管
+apps/web/      Vue 3 + Vite + TS 前端
+apps/desktop/  Tauri 2 桌面壳（无 IPC）
+docs/          文档（元文档大写：CONFIGURATION / DEPLOYMENT / DEVELOPMENT / AI_POLICY /
+               KNOWN_ISSUES / FEATURES / ROADMAP；内容文档小写：api / architecture /
+               errors / threat-model；另有 archive/ 与 decisions/）
+deploy/        nginx 反代配置 + prometheus/s3clinet.rules.yml（告警规则，对应 OPERATIONS §4）
+scripts/       开发、发版、E2E 脚本
+```
+
+## 禁区（不得直接修改）
+
+`node_modules/`、`apps/web/dist/`、构建产物、`*.lock`（除依赖变更）、真实 `.env`、
+密钥与证书、生产环境配置、`data/` 下的真实账号库。
+
+## 需人类确认
+
+删除文件、修改公共 API 契约、修改存储格式 / 迁移、升级主要依赖、修改 CI/CD、
+修改安全 / 鉴权 / 加密代码、发布版本、访问或部署生产环境。

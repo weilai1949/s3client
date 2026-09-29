@@ -19,12 +19,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/config"
+	"github.com/weilai1949/s3clinet/apps/server/internal/model"
 )
 
 // repoRoot 返回仓库根目录（apps/server -> apps -> 仓库根）。
@@ -136,6 +140,7 @@ const stableRustToolchainSHA = "6bed0761d98439e5a578e2877258200ad565ba87"
 func TestTrivyImageIsVersionAndDigestPinned(t *testing.T) {
 	files := []string{
 		filepath.Join(".github", "workflows", "ci.yml"),
+		filepath.Join(".github", "workflows", "release-desktop.yml"),
 		".gitlab-ci.yml",
 	}
 	var refs []string
@@ -227,6 +232,7 @@ func TestNodePinnedToPatchVersion(t *testing.T) {
 		filepath.Join(".github", "workflows", "release-desktop.yml"),
 		filepath.Join(".github", "workflows", "e2e-playwright.yml"),
 		filepath.Join(".github", "workflows", "e2e-real.yml"),
+		filepath.Join(".github", "workflows", "codeql.yml"),
 	} {
 		text := readRepoFile(t, rel)
 		matches := nodeVersionRe.FindAllStringSubmatch(text, -1)
@@ -697,5 +703,405 @@ func TestLocalRealE2ETargetExists(t *testing.T) {
 	}
 	if !strings.Contains(mk, "scripts/e2e-real.sh") {
 		t.Error("Makefile 的 e2e-real 必须调用 scripts/e2e-real.sh（#37）")
+	}
+}
+
+// workflowUsesRe 匹配 workflow 里的 `uses: <ref>`（去掉行尾注释与首尾空白）。
+var workflowUsesRe = regexp.MustCompile(`(?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*([^ \t#]+)`)
+
+// shaPinRe 匹配 40 位十六进制 commit SHA（GitHub Actions 的 pin 形态）。
+var shaPinRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// TestWorkflowActionsAreShaPinned：所有 GitHub Actions 引用必须 pin 到**完整 commit SHA**。
+//
+// 背景（roadmap E5）：本仓库的供应链纪律一直是「Actions 全部 pin SHA」，但此前**只有文字约定**，
+// 没有任何机械门禁——新增一个 `uses: foo@v1` 可以静默通过全部测试，而这正是 tag 可被上游
+// 重新指向（供应链投毒）的入口。本门禁把该纪律变成红灯。
+//
+// 口径与残留：
+//   - 只扫 `.github/workflows/`（GitLab CI 用容器镜像 tag+digest，由
+//     TestTrivyImageIsVersionAndDigestPinned / TestRustFSImageIsConsistentlyPinned 分管）。
+//   - 豁免本地 action（`./...`）与 docker action（`docker://...`，其不可变性由 digest 保证，
+//     本仓库未使用；一旦使用应改为 `docker://img@sha256:...`，届时在此补规则）。
+//   - **只断言形态是 40 位十六进制**，不校验该 SHA 在上游是否真实存在——后者需要网络，
+//     不适合放进单测（核验流程见 docs/DEVELOPMENT.md：经 GitHub API 三重核验）。
+func TestWorkflowActionsAreShaPinned(t *testing.T) {
+	dir := filepath.Join(repoRoot(t), ".github", "workflows")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取 %s: %v", dir, err)
+	}
+	scanned, refs := 0, 0
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yml") && !strings.HasSuffix(e.Name(), ".yaml")) {
+			continue
+		}
+		scanned++
+		text := readRepoFile(t, filepath.Join(".github", "workflows", e.Name()))
+		for _, m := range workflowUsesRe.FindAllStringSubmatch(text, -1) {
+			ref := m[1]
+			if strings.HasPrefix(ref, "./") || strings.HasPrefix(ref, "docker://") {
+				continue // 本地 action / 容器 action
+			}
+			refs++
+			// `owner/repo@<ref>`：取 @ 之后的形态判定。
+			at := strings.LastIndex(ref, "@")
+			if at < 0 {
+				t.Errorf("%s 的 `uses: %s` 未 pin 版本（必须形如 owner/repo@<40位commit SHA>）", e.Name(), ref)
+				continue
+			}
+			pin := ref[at+1:]
+			if !shaPinRe.MatchString(pin) {
+				t.Errorf("%s 的 `uses: %s` 未 pin 到完整 commit SHA（pin=%q）——"+
+					"tag 可被上游重新指向，是供应链投毒入口；请经 GitHub API 解引用到 commit 后写全 40 位",
+					e.Name(), ref, pin)
+			}
+		}
+	}
+	// 扫描面自检：文件数或引用数归零说明解析口径失效（如 workflow 改用 `uses` 的其它写法），
+	// 此时门禁会「全绿但失明」，必须红灯。
+	if scanned == 0 {
+		t.Fatal("未扫到任何 workflow 文件（解析口径需同步）")
+	}
+	if refs == 0 {
+		t.Fatal("未从 workflow 抽到任何 action 引用（解析口径需同步）")
+	}
+	t.Logf("扫描 %d 个 workflow，%d 个 action 引用均为完整 commit SHA", scanned, refs)
+}
+
+// nginxLogFormatRe 匹配 `log_format main '…' ;`（跨行，非贪婪到分号）。
+var nginxLogFormatRe = regexp.MustCompile(`(?s)log_format\s+main\s+(.*?);`)
+
+// TestNginxAccessLogCarriesRequestID（KNOWN_ISSUES #68）：nginx 的 `log_format main` 必须带上
+// 请求 ID，否则「用户报错 → 查 nginx 日志 → 定位后端 `req`」这条链路在反向代理层断开——
+// 后端为每个请求生成 / 透传 `X-Request-ID` 并在访问日志里记为 `req`，但 nginx 侧此前只记
+// `$http_x_forwarded_for`，跨层无法关联。
+//
+// **两个变量都要有，缺一不可**：
+//   - `$upstream_http_x_request_id`：后端在**每个响应**上回显的 ID（客户端没传时由后端生成，
+//     见 middleware.go），与后端访问日志的 `req` 同源——这是真正用于对齐的值；
+//   - `$http_x_request_id`：客户端**请求**里带的值（用户从报错提示里抄下来的通常是它）。
+//
+// 只记前者会丢掉「客户端自己传了 ID」时的原始值；只记后者会在客户端没传时记成空——
+// 而那正是最常见的情形（浏览器不会自己加这个头）。两种写法都在本门禁的红灯范围内。
+//
+// 断言范围与残留：只检查 `nginx.conf` 与 `nginx.docker.conf` 两份**被挂载进容器**的配置；
+// `conf.d/*.conf` 是 server 块（不含 log_format），故不在扫描面内。
+func TestNginxAccessLogCarriesRequestID(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join("deploy", "nginx", "nginx.conf"),
+		filepath.Join("deploy", "nginx", "nginx.docker.conf"),
+	} {
+		text := readRepoFile(t, rel)
+		m := nginxLogFormatRe.FindStringSubmatch(text)
+		if m == nil {
+			t.Errorf("%s 未找到 `log_format main`（解析口径需同步）", rel)
+			continue
+		}
+		for _, v := range []string{"$http_x_request_id", "$upstream_http_x_request_id"} {
+			if !strings.Contains(m[1], v) {
+				t.Errorf("%s 的 `log_format main` 缺 %s——跨层日志无法关联（KNOWN_ISSUES #68）",
+					rel, v)
+			}
+		}
+	}
+}
+
+// TestReleaseWorkflowProducesDesktopSBOM（P0 供应链，roadmap §三 #12 剩余项）：桌面发布必须产出
+// 并上传安装包的 SBOM。
+//
+// 背景：容器镜像自 §AN 起已有 CycloneDX SBOM + provenance + 产物证明；而**桌面安装包只有
+// provenance 与 SHA256SUMS，没有 SBOM**——「这个安装包里到底装了哪些第三方依赖」无从查起。
+//
+// 安装包实际装载两类依赖，本门禁要求两份锁文件都进扫描目录：
+//   - `apps/desktop/src-tauri/Cargo.lock`：Tauri 的 Rust 二进制（实测 429 个 crate）；
+//   - `apps/web/pnpm-lock.yaml`：内嵌的 Web 运行期依赖（实测 24 个，devDependencies 不随包分发）。
+//
+// 断言范围与残留：只做**源码形态**断言（存在生成 / 自检 / 上传三段），不解析 YAML——
+// 与 repo_infra_gate_test.go 其它用例同口径；「SBOM 内容是否正确」由 CI 里的组件数自检兜住。
+func TestReleaseWorkflowProducesDesktopSBOM(t *testing.T) {
+	text := readRepoFile(t, filepath.Join(".github", "workflows", "release-desktop.yml"))
+
+	for _, want := range []struct {
+		needle string
+		why    string
+	}{
+		{"sbomroot/Cargo.lock", "未把 Tauri 的 Cargo.lock 纳入 SBOM 扫描目录（Rust 依赖缺失）"},
+		{"sbomroot/pnpm-lock.yaml", "未把 Web 的 pnpm-lock.yaml 纳入 SBOM 扫描目录（内嵌前端依赖缺失）"},
+		{"--format cyclonedx", "SBOM 未用 CycloneDX 格式（与镜像 SBOM 口径不一致）"},
+		{"sbom-desktop.cdx.json", "未产出约定的 SBOM 文件名"},
+		{"jq '[.components[]?] | length'", "缺「组件数」自检：格式或解析口径变化时会静默产出空 SBOM"},
+		// 必须是**带 SBOM 文件名的那条**上传命令：本文件里另有两处 `gh release upload`
+		// （publish 的 SHA256SUMS-<bundle>.txt、aggregate 的 SHA256SUMS.txt），
+		// 只匹配 `gh release upload` 会在「SBOM 上传被删掉」时照样全绿——实测如此。
+		{`gh release upload "$RELEASE_TAG" sbom-desktop.cdx.json`, "SBOM 未上传到 Release（生成了但用户拿不到）"},
+	} {
+		if !strings.Contains(text, want.needle) {
+			t.Errorf("release-desktop.yml 缺 %q——%s", want.needle, want.why)
+		}
+	}
+}
+
+// emittedMetricRe 匹配 Prometheus 文本里的**发射点**：Go 字符串字面量紧跟在 `"` 之后的
+// 指标名。HELP / TYPE 行写成 `"# HELP s3c_x …"`，引号后是 `#` 而非 `s3c_`，故不会误收——
+// 这正好把「实际输出的序列名」与「只在注释里提到的名字」区分开。
+var emittedMetricRe = regexp.MustCompile(`"s3c_[a-z0-9_]+`)
+
+// promCodeValueRe 匹配规则文件里 `code="X"` 与 `code=~"X|Y"` 的取值。
+var promCodeValueRe = regexp.MustCompile(`code\s*=~?\s*"([^"]+)"`)
+
+// TestPrometheusRulesReferenceRealMetrics（P1 运维）：`deploy/prometheus/s3clinet.rules.yml`
+// 引用的指标名与 `code` 取值必须与实现一致。
+//
+// 为什么需要它：告警表达式里的名字是**契约**。写错一个字母 Prometheus **不会报错**，只会让该
+// 告警**永远不触发**——对「存储掉线」这类硬失败项，代价是业务 5xx 先于告警被发现。同理，
+// `code` 标签的取值来自 `s3wrap` 的错误码**白名单**，白名单外的码会被折叠成 `other`，
+// 于是 `code=~"…"` 永不命中；而白名单是会变的（本仓库就为「标签基数无界」改过它）。
+//
+// 断言范围与残留：
+//   - 只校验两类**可机械提取**的契约——`s3c_*` 指标名、`code` 取值；
+//   - 阈值 / `for:` 时长 / 表达式语义是否合理仍属人工审查，本门禁不表态；
+//   - 指标集取自 `internal/handler/metrics.go` 与 `main.go` 的**发射点**（引号紧邻 `s3c_`），
+//     不含只在注释里出现的名字——注释里提到而实际不发射，属于该被拦下的情况。
+func TestPrometheusRulesReferenceRealMetrics(t *testing.T) {
+	const rulesRel = "deploy/prometheus/s3clinet.rules.yml"
+	rules := readRepoFile(t, rulesRel)
+
+	// ① 实际发射的指标名集合。
+	emitted := map[string]bool{}
+	for _, rel := range []string{
+		filepath.Join("apps", "server", "internal", "handler", "metrics.go"),
+		filepath.Join("apps", "server", "main.go"),
+	} {
+		for _, m := range emittedMetricRe.FindAllString(readRepoFile(t, rel), -1) {
+			emitted[strings.TrimPrefix(m, `"`)] = true
+		}
+	}
+	if len(emitted) < 10 {
+		t.Fatalf("只从发射点抽到 %d 个指标（解析口径需同步）", len(emitted))
+	}
+
+	// ② 规则文件里引用的指标名必须都在集合内。
+	referenced := map[string]bool{}
+	for _, m := range emittedMetricRe.FindAllString(rules, -1) {
+		referenced[strings.TrimPrefix(m, `"`)] = true
+	}
+	// 规则文件是 YAML，指标名不带引号前缀，故再用词法提取一遍（`s3c_` 后跟字母数字下划线）。
+	for _, m := range regexp.MustCompile(`\bs3c_[a-z0-9_]+`).FindAllString(rules, -1) {
+		referenced[m] = true
+	}
+	var missing []string
+	for name := range referenced {
+		if !emitted[name] {
+			missing = append(missing, name)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		t.Errorf("%s 引用了未发射的指标（Prometheus 不报错，告警只是永不触发）：%v\n"+
+			"实际发射的指标：%v", rulesRel, missing, sortedKeys(emitted))
+	}
+
+	// ③ `code` 标签取值必须在 s3wrap 白名单内，或属 errorClass 的非 API 分类。
+	allowed := map[string]bool{"other": true, "canceled": true, "timeout": true, "transport": true}
+	sw := readRepoFile(t, filepath.Join("apps", "server", "internal", "s3wrap", "metrics.go"))
+	block := regexp.MustCompile(`(?s)var metricErrorCodes = map\[string\]struct\{\}\{(.*?)\n\}`).FindStringSubmatch(sw)
+	if block == nil {
+		t.Fatal("未能在 s3wrap/metrics.go 定位 metricErrorCodes 白名单（解析口径需同步）")
+	}
+	for _, m := range regexp.MustCompile(`"([A-Za-z0-9]+)":`).FindAllStringSubmatch(block[1], -1) {
+		allowed[m[1]] = true
+	}
+	if len(allowed) < 10 {
+		t.Fatalf("白名单只解析出 %d 项（解析口径需同步）", len(allowed))
+	}
+	var badCodes []string
+	for _, m := range promCodeValueRe.FindAllStringSubmatch(rules, -1) {
+		for _, code := range strings.Split(m[1], "|") {
+			code = strings.TrimSpace(code)
+			if code != "" && !allowed[code] {
+				badCodes = append(badCodes, code)
+			}
+		}
+	}
+	if len(badCodes) > 0 {
+		sort.Strings(badCodes)
+		t.Errorf("%s 的 `code` 取值不在白名单内（会被折叠成 other，表达式永不命中）：%v",
+			rulesRel, badCodes)
+	}
+}
+
+// sortedKeys 返回 map 的键（升序），用于稳定的报错输出。
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// cosignInstallerRe 匹配 `sigstore/cosign-installer@<40 位 commit SHA>`。
+var cosignInstallerRe = regexp.MustCompile(`sigstore/cosign-installer@([0-9a-f]{40})`)
+
+// TestCosignSigningIsWiredAndConsistentlyPinned（P0 供应链，roadmap §三 #12 的 cosign 部分）：
+// 镜像与桌面产物都必须有 cosign 无密钥签名，且安装器在两套 workflow 里 pin 到**同一个** commit SHA。
+//
+// 为什么需要它：
+//   - 「签了没签」在流水线里看不出来——签名步骤被删掉，CI 照样全绿，只是下游再也验不出签名；
+//   - 两处 pin 不同 SHA 会引入两条供应链（同一工具两个来源），是典型的漂移形态。
+//
+// 断言范围与残留：只做**源码形态**断言（安装器 pin 一致 + 按 digest 签）；
+// 「签名是否真的成功 / 能否被 cosign verify 验过」属 CI 运行时行为，本门禁不表态。
+func TestCosignSigningIsWiredAndConsistentlyPinned(t *testing.T) {
+	ciRel := filepath.Join(".github", "workflows", "ci.yml")
+	relRel := filepath.Join(".github", "workflows", "release-desktop.yml")
+
+	ci := readRepoFile(t, ciRel)
+	rel := readRepoFile(t, relRel)
+
+	var shas []string
+	for _, f := range []struct{ rel, text string }{{ciRel, ci}, {relRel, rel}} {
+		m := cosignInstallerRe.FindAllStringSubmatch(f.text, -1)
+		if len(m) == 0 {
+			t.Errorf("%s 未使用 sigstore/cosign-installer（该处产物没有 cosign 签名）", f.rel)
+			continue
+		}
+		for _, one := range m {
+			shas = append(shas, one[1])
+		}
+	}
+	for _, sha := range shas[1:] {
+		if sha != shas[0] {
+			t.Errorf("cosign-installer 在两套 workflow 里 pin 了不同 commit SHA（%s vs %s）——"+
+				"同一工具两个来源即两条供应链", shas[0], sha)
+		}
+	}
+
+	// 必须按 digest 签：tag 可变，签 tag 等于把签名绑到会漂移的名字上。
+	if !strings.Contains(ci, `server@${{ steps.build.outputs.digest }}`) {
+		t.Errorf("%s 的 cosign sign 未按 digest 签名（签 tag 会随 tag 漂移而验证到别的镜像）", ciRel)
+	}
+	// 桌面侧签的是清单：SHA256SUMS.txt 覆盖三平台全部产物，签一次即传递性覆盖。
+	if !strings.Contains(rel, "cosign sign-blob --yes") || !strings.Contains(rel, "SHA256SUMS.txt.sig") {
+		t.Errorf("%s 未对 SHA256SUMS.txt 做 cosign sign-blob（桌面产物缺可核验签名）", relRel)
+	}
+}
+
+// TestAccountStoreSchemaMatchesModel（P1 契约）：提交版账号库 JSON Schema 必须与
+// `model.Account` 的 json 标签**双向**一致。
+//
+// 为什么需要：Schema 的价值在于「不跑服务也能校验 / 生成数据文件」；一旦它与模型漂移，就从契约
+// 退化成**误导性文档**——外部工具会按错的字段集解析，而且不会有人立刻发现。
+// 真值取自**反射**（`reflect.TypeOf(model.Account{})`），不是再抄一份源码字段表。
+//
+// 断言范围与残留：
+//   - 校验**字段集双向相等** + 每个字段的 JSON Schema 类型；
+//   - `required` 断言为「全部字段」——`model.Account` 无 `omitempty`，写出的文件里字段恒存在；
+//   - `format` / `description` 等注解性内容不校验（自然语言，属人工审查）；
+//   - 只覆盖**明文**形态；S3C3 加密信封是二进制，其字节布局由 compatibility.md §4 的表格承载。
+func TestAccountStoreSchemaMatchesModel(t *testing.T) {
+	// 真值：Go 模型 → {json 名: JSON Schema 类型}
+	want := map[string]string{}
+	typ := reflect.TypeOf(model.Account{})
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		name := strings.Split(f.Tag.Get("json"), ",")[0]
+		if name == "" || name == "-" {
+			continue
+		}
+		switch {
+		case f.Type == reflect.TypeOf(time.Time{}), f.Type.Kind() == reflect.String:
+			want[name] = "string"
+		case f.Type.Kind() == reflect.Bool:
+			want[name] = "boolean"
+		default:
+			t.Fatalf("model.Account 字段 %s 的类型 %s 未在门禁里映射（口径需同步）", f.Name, f.Type)
+		}
+	}
+	if len(want) < 8 {
+		t.Fatalf("只从 model.Account 反射出 %d 个字段（解析口径需同步）", len(want))
+	}
+
+	rel := filepath.Join("docs", "api", "accounts.schema.json")
+	var doc struct {
+		Defs struct {
+			Account struct {
+				Properties map[string]struct {
+					Type string `json:"type"`
+				} `json:"properties"`
+				Required []string `json:"required"`
+			} `json:"account"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal([]byte(readRepoFile(t, rel)), &doc); err != nil {
+		t.Fatalf("解析 %s: %v", rel, err)
+	}
+	got := map[string]string{}
+	for name, prop := range doc.Defs.Account.Properties {
+		got[name] = prop.Type
+	}
+	if len(got) == 0 {
+		t.Fatalf("%s 未解析出任何 properties（路径或结构口径需同步）", rel)
+	}
+
+	for name, w := range want {
+		g, ok := got[name]
+		if !ok {
+			t.Errorf("%s 缺字段 %q（model.Account 有）", rel, name)
+			continue
+		}
+		if g != w {
+			t.Errorf("%s 字段 %q 类型不一致：schema=%q，model=%q", rel, name, g, w)
+		}
+	}
+	for name := range got {
+		if _, ok := want[name]; !ok {
+			t.Errorf("%s 多出字段 %q（model.Account 没有）", rel, name)
+		}
+	}
+
+	req := map[string]bool{}
+	for _, r := range doc.Defs.Account.Required {
+		req[r] = true
+	}
+	for name := range want {
+		if !req[name] {
+			t.Errorf("%s 的 required 缺 %q——model.Account 无 omitempty，写出的文件里该字段恒存在",
+				rel, name)
+		}
+	}
+}
+
+// gclRecipeRe 匹配 Makefile 里 `gcl:` / `gcl-docker:` 两条 recipe（恰好一行、以 tab 开头）。
+var gclRecipeRe = regexp.MustCompile(`(?m)^(gcl|gcl-docker):\n\t(.+)$`)
+
+// TestMakefileGclStripsEnvPrefixVars：`make gcl GCL_JOBS=…` 这类**文档里宣传的命令**必须真能跑。
+//
+// 背景（2026-09-29 实测）：gitlab-ci-local 用 yargs 的 `.env('GCL')` 做前缀映射，**任何
+// `GCL_*` 环境变量都会被当成同名 CLI 选项**——`GCL_JOBS=web` 变成 `--jobs web`，gcl 直接以
+// `Unknown argument: jobs` 退出；`GCL_FOO=bar` → `Unknown argument: foo`，确认是**前缀映射**
+// 而非个别键。而 GNU make 会把**命令行传入**的变量导出进 recipe 环境，于是
+// `make gcl GCL_JOBS=web` **必然失败**——而 Makefile / README / docs/DEVELOPMENT.md /
+// .gitlab-ci.yml 曾共 6 处宣传它（「跑单个 job」的唯一姿势）。
+//
+// 修法是在 recipe 里用 `env -u` 把这些变量摘出环境；make 展开 `$(GCL_JOBS)` 仍照常作为
+// 位置参数传入，用户可见行为不变。本门禁钉住该写法防回退——「文档里的命令其实跑不通」
+// 属于 DEVELOPMENT.md §4「文档改动也要验证：能跑就跑一遍」的范畴，没有别的机械手段能发现。
+func TestMakefileGclStripsEnvPrefixVars(t *testing.T) {
+	text := readRepoFile(t, "Makefile")
+	recipes := gclRecipeRe.FindAllStringSubmatch(text, -1)
+	if len(recipes) == 0 {
+		t.Fatal("Makefile 未找到 gcl / gcl-docker recipe（解析口径需同步）")
+	}
+	for _, m := range recipes {
+		target, recipe := m[1], m[2]
+		for _, v := range []string{"GCL_JOBS", "GCL_EXTRA", "GCL"} {
+			if !strings.Contains(recipe, "-u "+v) {
+				t.Errorf("Makefile 的 `%s` recipe 未用 `env -u %s` 摘除该变量：gcl 的 yargs "+
+					"`.env('GCL')` 会把 `GCL_*` 环境变量当成同名 CLI 选项，而 make 会把命令行变量"+
+					"导出进环境 ⇒ 报 `Unknown argument`。recipe 现为：%s", target, v, recipe)
+			}
+		}
 	}
 }

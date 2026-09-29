@@ -30,7 +30,7 @@
 - E2E 测试用 `S3CLINET_E2E=1` 门控，普通 `go test ./...` 不会执行，CI 因此不受影响。
 
 ### 真实后端 + RustFS 浏览器联调（历史任务 #37，已闭环）
-- #37 已于 2026-09-22 闭环并从 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 移除，归档证据见 [`features.md`](features.md) §V；当前待办以 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题）与 [`roadmap.md`](roadmap.md)（方向）为准。
+- #37 已于 2026-09-22 闭环并从 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 移除，归档证据见 [`FEATURES.md`](FEATURES.md) §V；当前待办以 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题）与 [`ROADMAP.md`](ROADMAP.md)（方向）为准。
 - 一条命令：`make e2e-real`（脚本 [`scripts/e2e-real.sh`](../scripts/e2e-real.sh)）。它会起一份**独立** RustFS 容器、构建真实前端产物与后端、起真实后端托管产物、跑 `pnpm e2e:real`，最后 `trap` 自动清理。
 - **该脚本是这套编排的唯一来源**：本地 `make e2e-real`、GitHub Actions 与 GitLab CI 都调用它，各自只负责「装工具链 / 装浏览器系统依赖」。门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都**实际调用** `bash scripts/e2e-real.sh`（仅出现在 `paths:`/`changes:` 里不算），防止又抄一份编排而漂移。
 - **必须给 RustFS 配 `RUSTFS_CORS_ALLOWED_ORIGINS`**（脚本自起时已默认配好，GitLab service 变量里也配了）：浏览器直传（预签名 PUT）是页面 → S3 的**跨源**请求，缺 CORS 会被浏览器拦下。注意 curl / Playwright `APIRequestContext` **不经 CORS**，只用它们验证会「假绿」——所以用例特意驱动真实浏览器 XHR。
@@ -70,10 +70,25 @@ make rust-audit
 > 四种读取口径）、`openapi_path_params_test.go`（path 参数 ⇔ handler `PathValue` 双向）、
 > `openapi_semantics_test.go`（类型 / required / 枚举）、
 > `openapi_response_contract_test.go`（共享 schema + **端点级**响应）、`api_doc_test.go`（docs 双向
-> + 路由行必须顶格）；仓库级 `repo_infra_gate_test.go`（CI / 发布链 / 工具链 pin）、
-> `doc_number_gate_test.go`（md 叙述性数字）、
+> + 路由行必须顶格）、`openapi_spec_file_test.go`（提交版 [`api/openapi.json`](api/openapi.json)
+> ⇔ 运行时规范语义一致，含 `-update-openapi-spec` 再生成）；仓库级 `repo_infra_gate_test.go`
+> （CI / 发布链 / 工具链 pin / **所有 action 必须 pin 完整 commit SHA** /
+> **nginx 访问日志必须带请求 ID**，见 `TestNginxAccessLogCarriesRequestID` /
+> **告警规则引用的指标与错误码必须真实存在**，见 `TestPrometheusRulesReferenceRealMetrics` /
+> **桌面发布必须产出并上传 SBOM**，见 `TestReleaseWorkflowProducesDesktopSBOM` /
+> **cosign 签名必须接线且两处 pin 同一 SHA**，见 `TestCosignSigningIsWiredAndConsistentlyPinned` /
+> **账号库 JSON Schema 必须与 `model.Account` 双向一致**，见 `TestAccountStoreSchemaMatchesModel` /
+> **`make gcl GCL_JOBS=…` 必须真能跑**（Makefile 的 gcl recipe 需用 `env -u` 摘掉 `GCL_*`
+> 环境变量，否则 gcl 的 yargs `.env('GCL')` 前缀映射会把它当成同名 CLI 选项而报
+> `Unknown argument`），见 `TestMakefileGclStripsEnvPrefixVars`）、
+> `doc_number_gate_test.go`（md 叙述性数字）、`config_doc_gate_test.go`（配置 SSOT
+> [`CONFIGURATION.md`](CONFIGURATION.md) ⇔ `internal/config` 读取的 `S3C_*` 变量全量）、
 > `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）；
-> 前端半边落点在 `apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 / 孤儿模块**）。
+> 前端半边落点是三份：`apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 /
+> 孤儿模块**，引用计数走 **TS AST**——注释与字符串字面量不算引用）、
+> `apps/web/src/a11y_gate.test.ts`（**源码形态**：`:focus-visible` 列表必须含 `textarea`、
+> `prefers-reduced-motion` 媒体查询必须关闭 animation / transition）、
+> `apps/web/src/vite_env_guard.test.ts`（宿主 `NODE_ENV` 隔离）。
 > 各文件的**断言范围与残留**写在文件头。
 >
 > **门禁自身也用 AST 而非裸正则**：判断「handler 是否解码请求体」「是否读取 path 参数」、
@@ -98,20 +113,42 @@ make rust-audit
 | `ci.yml` · `docker` | `docker` | `docker build` + Trivy CRITICAL/HIGH 失败门禁（`.trivyignore`） |
 | `ci.yml` · `desktop` | `desktop` | `cargo check --locked` + `cargo audit`（RustSec，有漏洞即红灯；webkit/gtk 系统依赖） |
 | `ci.yml` · `desktop-build`（仅 `workflow_dispatch`） | `desktop-build`（`when: manual`，仅 `web` 源） | `tauri build --no-bundle` |
-| `ci.yml` · `publish` | **不镜像** | 推送镜像到 GHCR（`needs: docker`，Trivy 通过才推；`if: != 'pull_request'` 即 push / dispatch 才推）。GitLab 侧未配置 registry，故无对应 job；门禁 `TestGitHubWorkflowPushesImage` |
+| `ci.yml` · `publish` | **不镜像** | 推送镜像到 GHCR（`needs: docker`，Trivy 通过才推；`if: != 'pull_request'` 即 push / dispatch 才推），并产出 **CycloneDX SBOM 文件（作为 artifact）+ BuildKit provenance/SBOM attestation + GitHub 产物证明**。GitLab 侧未配置 registry，故无对应 job；门禁 `TestGitHubWorkflowPushesImage` |
+| `codeql.yml` · `analyze` | `semgrep-sast`（GitLab 原生 SAST） | 两侧语言覆盖一致（Go + JS/TS）。**都是报告型、非阈值门禁**：CodeQL 用 `security-and-quality` 查询集；GitLab 侧由 `include: template: Jobs/SAST.gitlab-ci.yml` 引入，`semgrep-sast` 继承 `.sast-analyzer` 的 `allow_failure: true`。逐 `uses:` 的 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住 |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |
 | `e2e-real.yml` | `e2e-real` | **真实 Go 后端（托管真实构建产物）+ 真实 RustFS + 真实浏览器**，不 mock `/api`（含浏览器直传）；本地与两套 CI 共用 `scripts/e2e-real.sh` |
-| `release-desktop.yml` | **不镜像** | 发布目标是 GitHub Release（tauri-action + `gh release upload`），需 Windows/macOS runner 与 `GITHUB_TOKEN` |
+| `release-desktop.yml` | **不镜像** | 发布目标是 GitHub Release（tauri-action + `gh release upload`），需 Windows/macOS runner 与 `GITHUB_TOKEN`；同时为三平台安装包出具**产物证明**（`attest-build-provenance`） |
+
+> **GitLab 侧 SAST 的落地方式与取舍**（2026-09-29 收口 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #66）：
+> GitLab 用官方 `Jobs/SAST.gitlab-ci.yml` 模板（开源分析器，**Free 档即可用**；
+> Advanced SAST / MR 内联标注属 Ultimate）。三条落地约束：
+> ① 本文件自定义了 `stages`，**必须把 `test` 列进去**，否则模板里 `stage: test` 的 job
+>    会因「stage 不存在」直接配置报错；
+> ② Go 与 TypeScript/JavaScript 都由 semgrep 分析器覆盖，实测只新增 `semgrep-sast`
+>    **一个** job（其余分析器由各自 `exists:` 规则决定，本仓库没有对应语言文件）；
+> ③ `allow_failure: true` 继承自模板的 `.sast-analyzer`——分析器自身崩溃不拖垮流水线，
+>    发现项也从不置非零退出码。**这与 GitHub 侧 CodeQL 同构**：两边都是「报告」而非
+>    「阈值门禁」，真正的阈值门禁仍是两套 CI 各自的 Trivy。
+>
+> **此前「不镜像」的理由已作废**：原记「另一套工具链，且无法在 `make gcl` 本地执行器里验证」。
+> 实测**可验证**——`make gcl-list` 能正常解析并列出 `semgrep-sast`（stage `test`，见上方
+> §「本地验证 GitLab 流水线」）。故该理由不再成立，改为**已镜像**。
 
 **触发事件也要对齐**（三套 workflow 的 `on:` 并不相同，别假设一致）：
 
 | 事件 | GitHub 会跑 | GitLab 会跑 |
 |---|---|---|
-| push 到 main/develop | `ci.yml` 五个 job（`server`/`web`/`docker`/`desktop`/**`publish`**） | `server` / `web` / `docker` / `desktop` |
-| pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ 路径命中时的三个 E2E | 同上 + 命中的 E2E |
-| workflow_dispatch / web | 全部四套（`ci.yml` 含 `desktop-build`，共 6 个） | 全部 8 个（`desktop-build` 为手动） |
-| schedule | **只有三个 E2E** | 只有 `rustfs-e2e` / `playwright-e2e` / `e2e-real` |
+| push 到 main/develop | `ci.yml` 五个 job（`server`/`web`/`docker`/`desktop`/**`publish`**）+ `codeql.yml` | `server` / `web` / `docker` / `desktop` / **`semgrep-sast`** |
+| pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ `codeql.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
+| workflow_dispatch / web | 全部五套（`ci.yml` 含 `desktop-build`，共 7 个） | 全部 8 个 + **`semgrep-sast`**（`desktop-build` 为手动） |
+| schedule | `codeql.yml`（周日）+ 三个 E2E（周一/三/五） | 三个 E2E + **`semgrep-sast`**（周一/三/五） |
+
+> **`semgrep-sast` 不进上表的「本文件各 job 的 rules」体系**：它的 `rules` 来自被 `include` 的
+> GitLab 官方模板，**只受「流水线是否创建」约束**（即 `workflow:` 块），不受本文件里
+> `.ci-trigger` / `.e2e-*-trigger` 那套控制。因此**只要流水线建起来它就跑**——上表按这个口径列。
+> 这也是它与 GitHub 侧 `codeql.yml`（有自己独立的 `on:`）的一处结构性差异：
+> 那边是独立 workflow、有自己的触发事件；这边是同一流水线内的一个 job。
 
 本地验证 GitLab 流水线（无需 GitLab 实例，用 [gitlab-ci-local](https://github.com/firecow/gitlab-ci-local) 的 docker executor 跑真实 job；版本 pin 在 `Makefile` 的 `GCL`）：
 
@@ -153,15 +190,54 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | **md 正文里「N 个 `/api/*` 端点」这类数字** | 由 `apps/server/doc_number_gate_test.go` 机械校验（真值取自 `routes.go` 的 `mux.HandleFunc` 注册数）；新增此类声明时在 `docNumberClaims` 登记 |
 | 错误码 / 错误文案 | [`errors.md`](errors.md) |
 | **任何**新功能或 bug 修复 | [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段（Keep a Changelog：Added / Fixed / Changed） |
-| 已实现 / 已修复能力的台账 | [`features.md`](features.md) |
-| 待办事项状态变化 | **问题**（缺陷 / 阻塞 / 技术债）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**方向**（功能候选 / 版本级）→ [`roadmap.md`](roadmap.md) §三。两处各自唯一来源，同一事项只登记一处 |
-| 版本级规划 / 优先级 | [`roadmap.md`](roadmap.md)（不做逐条流水账） |
+| 已实现 / 已修复能力的台账 | [`FEATURES.md`](FEATURES.md) |
+| 待办事项状态变化 | **问题**（缺陷 / 阻塞 / 技术债）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**方向**（功能候选 / 版本级）→ [`ROADMAP.md`](ROADMAP.md) §三。两处各自唯一来源，同一事项只登记一处 |
+| 版本级规划 / 优先级 | [`ROADMAP.md`](ROADMAP.md)（不做逐条流水账） |
 | 分层 / 模块边界 / 目录结构 | [`architecture.md`](architecture.md)；重大决策另加 [`decisions/`](decisions/index.md) ADR |
-| 环境变量 / 配置项 | [`.env.example`](../.env.example) + [`deployment.md`](deployment.md) + `README.md` |
-| 部署 / 镜像 / compose / 发布流程 | [`deployment.md`](deployment.md) |
+| 环境变量 / 配置项 | [`CONFIGURATION.md`](CONFIGURATION.md)（**SSOT**）+ 相应示例文件：compose 透传项改根 [`.env.example`](../.env.example)，服务端可选项改 [`apps/server/.env.example`](../apps/server/.env.example)（分工口径见 CONFIGURATION.md 开头）+ [`DEPLOYMENT.md`](DEPLOYMENT.md) + `README.md` 摘要 |
+| 部署 / 镜像 / compose / 发布流程 | [`DEPLOYMENT.md`](DEPLOYMENT.md) |
 | 安全策略 / 威胁模型 / 加固 | [`threat-model.md`](threat-model.md) 与 [`SECURITY.md`](../.github/SECURITY.md) |
+| 代理权限边界 / 什么必须人类确认 / MCP 工具权限 / AI 披露 | [`AI_POLICY.md`](AI_POLICY.md) |
+| 仓库导航（新增 / 改名核心文档时） | [`llms.txt`](../llms.txt) |
 | 开发流程 / 门禁 / 测试命令 | [`AGENTS.md`](../AGENTS.md)（代理入口）+ 本文件 + [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md) |
+| 接口与请求/响应字段 | [`api.md`](api.md) + `apps/server/internal/handler/openapi_register_*.go`（并跑契约测试）+ **重新生成 [`api/openapi.json`](api/openapi.json)**（见下行） |
+| 提交版 OpenAPI 规范 | [`api/openapi.json`](api/openapi.json)——改 handler / 注册表后必须 `go test ./internal/handler/ -run TestCommittedOpenAPISpecMatchesRuntime -update-openapi-spec` 重新生成，否则门禁红灯 |
+| 运维 / 告警 / 备份恢复 / 容量 / 事故响应 / 事故复盘 | [`OPERATIONS.md`](OPERATIONS.md) + [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md)（复盘格式；填写完成的记录按下方「归档」条冻结进 `archive/`） |
+| 告警阈值 / SLI 表达式 / 指标名 / `code` 标签取值 | [`OPERATIONS.md`](OPERATIONS.md) §4 **与** [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（**必须同改**；规则文件由 `TestPrometheusRulesReferenceRealMetrics` 校验指标与错误码真实存在） |
+| 账号存储格式（`model.Account` 字段增删改） | [`api/accounts.schema.json`](api/accounts.schema.json)（由 `TestAccountStoreSchemaMatchesModel` 反射比对，漂移即红灯）+ [`compatibility.md`](compatibility.md) §4（S3C2 / S3C3 信封字节布局） |
+| 性能特征 / 热路径 / 新增基准 | [`PERFORMANCE.md`](PERFORMANCE.md) + 对应包的 `bench_test.go` |
+| 用户可见的操作方式 / 界面用法 / 快捷键 | [`user-guide.md`](user-guide.md) + [`README.md`](../README.md)（界面改动需重新生成截图：`cd apps/web && pnpm build && pnpm exec playwright test screenshots.spec.ts`，产物落在 [`images/`](images/)） |
+| 版本兼容性 / 弃用 / 支持窗口 | [`compatibility.md`](compatibility.md) |
+| 领域术语 / 内部自造词 | [`glossary.md`](glossary.md) |
+| 翻译 / 新增语言 / 文案 key | [`i18n.md`](i18n.md) |
+| 无障碍（ARIA / 键盘 / 焦点 / 主题） | [`accessibility.md`](accessibility.md) |
+| 支持渠道 / 治理 / 决策与发布权 | [`../.github/SUPPORT.md`](../.github/SUPPORT.md) · [`../.github/GOVERNANCE.md`](../.github/GOVERNANCE.md) |
 | 文档命名 / 存放位置 / 归档 | 本文件 §4 + [`README.md`](../README.md)「文档」段 + [`archive/index.md`](archive/index.md) |
+| **文档登记表（owner / 复审周期 / 最后复审）** | 本文件 §4 下方「文档登记表」——**新增 / 改名 / 归档任何文档时同 PR 登记一行** |
+
+**文档登记表**（2026-09-29 建立）：
+
+> - **owner**：全仓 owner 均为单人维护者 **@weilai1949**。新增协作者 / 转移所有权时同 PR 改本表。
+> - **复审周期**：按文档性质给出的**建议值**（证据等级「建议值」，**未在 CI 中强制**，
+>   也没有任何自动化提醒——它只说明「多久不看就该有人看」，不是 SLA）。
+> - **最后复审**：一律填 `登记时基线（2026-09-29）`——本表建立时**没有**一份文档有过可核实的
+>   「逐份复审」记录，因此**不追溯编造**历史日期。只有真正做过一次逐份复核（不只是改错别字 /
+>   跑门禁），才把该行更新为**那天的日期**。本列因此是「自本表建立起是否被复审过」的凭据，
+>   不是「文档有多新」（最后改动时间看 `git log`）。
+
+| 文档 | 复审周期（**建议**） | 最后复审 |
+|---|---|---|
+| 根 `README.md` · `AGENTS.md` · `CHANGELOG.md` · `llms.txt` | 3 个月 | 登记时基线（2026-09-29） |
+| 子树 `AGENTS.md`：[`apps/server`](../apps/server/AGENTS.md) · [`apps/web`](../apps/web/AGENTS.md) · [`apps/desktop`](../apps/desktop/AGENTS.md) | 6 个月，或子树规则变更时同 PR | 登记时基线（2026-09-29） |
+| `docs/DEVELOPMENT.md` · `CONFIGURATION.md` | 3 个月 | 登记时基线（2026-09-29） |
+| `docs/DEPLOYMENT.md` · `OPERATIONS.md` · `POSTMORTEM_TEMPLATE.md` | 3 个月 | 登记时基线（2026-09-29） |
+| `docs/FEATURES.md` · `KNOWN_ISSUES.md` · `ROADMAP.md` | 每个版本发版前 | 登记时基线（2026-09-29） |
+| `docs/PERFORMANCE.md` · `AI_POLICY.md` | 6 个月 | 登记时基线（2026-09-29） |
+| [`.github/`](../.github/) 社区健康文件：`CONTRIBUTING.md` · `SECURITY.md` · `SUPPORT.md` · `GOVERNANCE.md` · `CODE_OF_CONDUCT.md` | 6 个月 | 登记时基线（2026-09-29） |
+| 产品内容文档：[`api.md`](api.md) · [`architecture.md`](architecture.md) · [`errors.md`](errors.md) · [`threat-model.md`](threat-model.md) · [`user-guide.md`](user-guide.md) · [`compatibility.md`](compatibility.md) · [`glossary.md`](glossary.md) · [`i18n.md`](i18n.md) · [`accessibility.md`](accessibility.md) | 6 个月，或对应功能变更时同 PR | 登记时基线（2026-09-29） |
+| [`docs/api/`](api/openapi.json)（机器可读契约） | 由门禁强制，无需人肉周期 | 登记时基线（2026-09-29） |
+| [`docs/decisions/`](decisions/index.md)（ADR + 模板） | 决策变化 / 新增 ADR 时同 PR | 登记时基线（2026-09-29） |
+| [`docs/archive/`](archive/index.md)（冻结归档 + 索引） | 每次归档操作时同 PR | 登记时基线（2026-09-29） |
 
 落地要求：
 
@@ -172,10 +248,14 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 文档命名与存放约定：
 
-- **位置**：根目录只保留三个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`，将来若加 `SUPPORT.md` 同理）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
-- **命名**：普通文档用小写 kebab-case（如 `threat-model.md`、`roadmap.md`）；**白名单**内才用大写，白名单 = ① 名字被外部约定固定的：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`；② **显式登记的例外**：`KNOWN_ISSUES.md`（2026-09-24 登记——沿用社区通用名，便于外部工具与贡献者按字面检索）。**白名单之外不得新增大写文件名**——历史上按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` 已于 2026-09-17 小写化；新增例外必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)。
-- **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`apps/server/`、`apps/web/`）。目录不存在「约定大写」这一说——大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
-- **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
+- **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
+- **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
+  - **大写** = ① 名字被外部工具固定的：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`。
+  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/` 下的全部文件。
+  - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
+  - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。
+- **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`apps/server/`、`apps/web/`）。**本条只约束目录名**（文件名规则见上一条）——目录不存在「约定大写」这一说，大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
+- **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照、已填写的事故复盘等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
 - **禁止大小写冲突**：任何两个路径不得仅大小写不同——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。重命名后自检一次全仓。
 
 ### 4.1 Agent 指令文件（`AGENTS.md`）的加载机制
@@ -220,7 +300,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 > **登记问题的唯一来源是 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)**，本节不登记问题。
 > 原文三条来自 [`archive/assessment.md`](archive/assessment.md)（H1 / S7 / D5），当时记作「已知技术债」；
 > 三条现已全部闭环，故改写为**闭环状态 + 现行守卫 + 开发规则**——它们已经修好，但
-> 「什么动作会把它改坏」仍是每次改动都要知道的规则。台账见 [`features.md`](features.md)。
+> 「什么动作会把它改坏」仍是每次改动都要知道的规则。台账见 [`FEATURES.md`](FEATURES.md)。
 
 | 曾登记的技术债 | 闭环状态与守卫（回归即红灯） | 开发时仍须遵守 |
 |---|---|---|

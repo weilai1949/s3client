@@ -1,0 +1,101 @@
+# CodeQL 静态应用安全测试（SAST）——P0 供应链门禁之一（OpenSSF Scorecard #14 SAST）。
+#
+# 为什么单独一个 workflow 而不是并进 ci.yml：
+#   - CodeQL 需要 `security-events: write` 权限，而 ci.yml 整体按最小权限设计
+#     （Scorecard #18 Token-Permissions）。把高权限 job 混进主 CI 会抬高整条流水线的权限面。
+#   - 语言矩阵各自独立跑（Go / JS-TS），失败互不阻塞；主 CI 的红灯语义保持单一。
+#
+# 为什么覆盖 Go 与 javascript-typescript 两种语言：
+#   - Go 侧：已有 golangci-lint（含 gosec）+ go vet + govulncheck，但它们是规则/漏洞库驱动，
+#     CodeQL 的数据流分析能补上「用户输入 → 危险汇聚点」这类跨函数污点路径。
+#   - JS/TS 侧：**此前完全没有 SAST**——eslint 管风格与类型（typescript-eslint），
+#     不做安全数据流分析。前端直接处理预签名 URL、Token 与对象 key，是真实攻击面。
+#
+# 为什么 init 之后对 Go 显式 `go build ./...` 而不是依赖 autobuild：
+#   - 本仓库的 Go 模块在 apps/server/（非仓库根），autobuild 的启发式在嵌套模块下不保证
+#     命中；显式构建让「分析到的是真实编译单元」这件事可预期。
+#
+# 供应链纪律（roadmap E5）：所有 `uses:` 一律 pin **完整 commit SHA**，且必须是
+# tag 解引用后的 commit（annotated tag 的 tag-object SHA 用在这里会变成幽灵 SHA，
+# 2026-09-20 审查已记录过该失效模式）。本轮 SHA 经 GitHub API 三重核验：
+# ① refs/tags → ② 若 type=tag 再解引用到 commit → ③ GET /commits/<sha> 返回 200。
+#
+# GitLab 侧未镜像本 job：CodeQL 是 GitHub 原生能力（GitLab 需改用 Security/SAST 模板，
+# 属另一套工具链）。按 `release-desktop.yml` 的既有先例，未镜像必须在
+# docs/DEVELOPMENT.md §3「CI 双平台一致性」表与 docs/KNOWN_ISSUES.md 显式登记。
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 每周日 02:00 UTC 全量扫描（与三个 E2E 冒烟的周一/三/五错开）
+    - cron: '0 2 * * 0'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小权限：只有 analyze 需要写入 code scanning 结果；checkout 只读。
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # Go：版本取自 apps/server/go.mod（与 ci.yml / e2e.yml 同口径，避免手写漂移）。
+      - if: matrix.language == 'go'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+
+      # JS/TS：pnpm 与 Node 的版本必须与 ci.yml / .gitlab-ci.yml 一致
+      # （9.15.0 / 26.10.0），否则 lockfile 解析与 CI 结果会漂移。
+      - if: matrix.language == 'javascript-typescript'
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 9.15.0
+      - if: matrix.language == 'javascript-typescript'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26.10.0
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - if: matrix.language == 'javascript-typescript'
+        name: Install web deps
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - uses: github/codeql-action/init@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality = 安全查询 + 可维护性查询；比默认 security-extended 更严，
+          # 与本仓库「门禁 0 issues」的口径一致。若噪音过多再收窄到 security-extended。
+          queries: security-and-quality
+
+      # Go 显式构建（不依赖 autobuild，见文件头说明）。只 build 不 test：
+      # 测试代码不参与 CodeQL 的污点分析价值有限，且会显著拉长扫描时间。
+      - if: matrix.language == 'go'
+        name: Build Go
+        working-directory: apps/server
+        run: go build ./...
+
+      - uses: github/codeql-action/analyze@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          category: /language:${{ matrix.language }}

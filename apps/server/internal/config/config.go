@@ -15,7 +15,7 @@ import (
 const MinTokenLength = 16
 
 // MinStoreKeyLength 是 S3C_STORE_KEY 允许的最小字符数。该口令是账号密钥落盘加密
-// 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（已闭环：features.md §M）。
+// 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（已闭环：FEATURES.md §M）。
 const MinStoreKeyLength = 16
 
 // ErrShortToken 表示 S3C_TOKEN 长度低于 MinTokenLength。
@@ -250,7 +250,7 @@ func IsLoopbackAddr(addr string) bool {
 //     未知值拒绝启动——此前未知值被 store.Open 静默当 json，绕过下面的明文落盘闸（R4）；
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
 //   - 非回环监听必须设置 S3C_TOKEN；
-//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：features.md §M）；
+//   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：FEATURES.md §M）；
 //   - json / sqlite 且 S3C_STORE_KEY 为空时必须显式 opt-in 明文落盘，否则拒绝启动（KNOWN_ISSUES #29/#31）。
 //     大小写/空白变体先归一化再比较，保证 "JSON" 与 "json" 触发同一道闸。
 //
@@ -307,7 +307,7 @@ func (c Config) Validate() error {
 
 // StorePlaintextWarning 返回「账号 secretKey 将明文落盘」的启动告警文案，配置已加密时返回空串。
 // json / sqlite 驱动在 S3C_STORE_KEY 为空时把 secretKey 明文写入 DataDir，只应出现在本地联调；
-// 生产必须用 encrypted 或 sqlite + S3C_STORE_KEY（残留风险见 docs/roadmap.md §5.1 R3）。
+// 生产必须用 encrypted 或 sqlite + S3C_STORE_KEY（残留风险见 docs/ROADMAP.md §5.1 R3）。
 func (c Config) StorePlaintextWarning() string {
 	// 归一化后比较，保证 "JSON" / " json " 与 "json" 给出同一份告警文案。
 	driver := normalizeStoreDriver(c.StoreDriver)

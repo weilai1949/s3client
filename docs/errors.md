@@ -59,5 +59,5 @@
 
 ## 前端
 
-- `apps/web/src/errors.ts`（若存在）或 `toErrorMessage` 展示后端 `error` 字段；勿依赖 SDK 原文。
+- `apps/web/src/errors.ts` 的 `toErrorMessage` 展示后端 `error` 字段；勿依赖 SDK 原文。
 - 鉴权失败：`401 unauthorized`（与 S3 映射无关）。

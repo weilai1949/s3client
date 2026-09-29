@@ -35,7 +35,7 @@ func TestMetricsEndpointExposed(t *testing.T) {
 	body := rr.Body.String()
 	for _, want := range []string{
 		"s3c_http_requests_total", "s3c_uptime_seconds", "s3c_build_info", "s3c_stream_interrupted_total",
-		// 上游与 ZIP 可观测性（已闭环：features.md §M）。
+		// 上游与 ZIP 可观测性（已闭环：FEATURES.md §M）。
 		"s3c_s3_calls_total", "s3c_s3_call_duration_seconds_bucket", "s3c_s3_stream_bytes_total",
 		"s3c_zip_partial_failures_total", "s3c_zip_failed_keys_total", "s3c_zip_failed_total",
 		// R8：存储硬失败与 SSRF 生效策略的可观测面。
