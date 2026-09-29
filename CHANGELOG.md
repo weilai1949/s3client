@@ -6,6 +6,30 @@
 
 ## [Unreleased]
 
+### 新增（2026-09-29 元信息 / 导航收口：docs 落地页 + 导航覆盖门禁 + `.gitattributes`）
+
+> 背景：10 层文档基线盘点时，第 2 层「元信息 / 导航」判定为部分达标——台账与 AI 入口齐全，
+> 但**缺 `docs/` 目录的落地页**，且 4 个导航面（根 README「文档」段、`AGENTS.md` 入口表、
+> `llms.txt`、`DEVELOPMENT.md` §4 登记表）之间**没有一致性保证**；它们已经漂移过
+> （README 归档清单漏 2 项、AGENTS 入口表曾落后、DEVELOPMENT 文档清单曾漏 `SUPPORT.md`）。
+> 链接门禁只能保证「已有的链接不悬空」，**不能**保证「新文档被登记进导航」。
+
+- 新增 [`docs/README.md`](docs/README.md)：**`docs/` 目录落地页与人类导航 SSOT**（GitHub 按字面名渲染）。
+  按「我要做什么」分五组（用起来 / 部署运维 / 开发贡献 / 状态规划 / 机器可读面），逐条一句话说明；
+  另含「文档维护」节（命名规则、登记表、归档纪律、各文档门禁的落点），使读者不必先猜文档在哪。
+- 新增 [`apps/server/doc_index_gate_test.go`](apps/server/doc_index_gate_test.go)：**导航覆盖门禁**——
+  `docs/*.md` 必须登记进 `docs/README.md`；子目录文档必须出现在落地页或该子目录 `index.md`；含扫描面自检阈值。
+  **TDD 先红**：落地页不存在时红灯；**变异验证**：临时新建 `docs/_nav_probe.md`（模拟「新文档忘登记」）
+  → 红灯点名 `docs/_nav_probe.md（应登记进 docs/README.md）`；删除 → 绿灯。
+- 新增 [`.gitattributes`](.gitattributes)：`* text=auto eol=lf` + Windows 原生脚本（`.bat`/`.cmd`/`.ps1`）
+  保留 CRLF + 图片按二进制。此前仓库没有该文件，行尾取决于各人 `core.autocrlf`——Windows 检出可能整文件
+  变 CRLF，甚至让 shell 脚本 / Dockerfile 因 `\r` 执行失败。入库核查：538 个跟踪文件中**无** CRLF 文本文件，
+  故不触发批量重新规范化。
+- 导航面同步：根 [`README.md`](README.md)「文档」段顶部加落地页指针；[`llms.txt`](llms.txt) 索引补一条；
+  [`AGENTS.md`](AGENTS.md) 文档入口表加一行；[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 命名约定
+  补 `docs/README.md` 的工具固定名属性、登记表补一行。
+- 门禁实测：`go test . -count=1`（含新门禁）全绿；链接门禁扫描面 **1335 条相对链接 / 73 条锚点，0 失效**（写入时实测）。
+
 ### 新增（2026-09-29 文档缺口收口：链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明）
 
 > 背景：10 层文档基线盘点的 P1 缺口清单——此前「链接悬空」「文档无 owner」「ADR 索引与真实文件不一致」

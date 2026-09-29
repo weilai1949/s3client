@@ -212,7 +212,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 翻译 / 新增语言 / 文案 key | [`i18n.md`](i18n.md) |
 | 无障碍（ARIA / 键盘 / 焦点 / 主题） | [`accessibility.md`](accessibility.md) |
 | 支持渠道 / 治理 / 决策与发布权 | [`../.github/SUPPORT.md`](../.github/SUPPORT.md) · [`../.github/GOVERNANCE.md`](../.github/GOVERNANCE.md) |
-| 文档命名 / 存放位置 / 归档 | 本文件 §4 + [`README.md`](../README.md)「文档」段 + [`archive/index.md`](archive/index.md) |
+| 文档命名 / 存放位置 / 归档 / 导航 | 本文件 §4 + [`README.md`](README.md)（docs 导航 SSOT）+ [`../README.md`](../README.md)「文档」段 + [`../llms.txt`](../llms.txt) + [`archive/index.md`](archive/index.md) |
 | **文档登记表（owner / 复审周期 / 最后复审）** | 本文件 §4 下方「文档登记表」——**新增 / 改名 / 归档任何文档时同 PR 登记一行** |
 
 **文档登记表**（2026-09-29 建立）：
@@ -228,6 +228,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 文档 | 复审周期（**建议**） | 最后复审 |
 |---|---|---|
 | 根 `README.md` · `AGENTS.md` · `CHANGELOG.md` · `llms.txt` | 3 个月 | 登记时基线（2026-09-29） |
+| [`docs/README.md`](README.md)（docs 导航落地页 = 人类导航 SSOT） | 3 个月，或新增 / 改名文档时同 PR | 登记时基线（2026-09-29） |
 | 子树 `AGENTS.md`：[`apps/server`](../apps/server/AGENTS.md) · [`apps/web`](../apps/web/AGENTS.md) · [`apps/desktop`](../apps/desktop/AGENTS.md) | 6 个月，或子树规则变更时同 PR | 登记时基线（2026-09-29） |
 | `docs/DEVELOPMENT.md` · `CONFIGURATION.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/DEPLOYMENT.md` · `OPERATIONS.md` · `POSTMORTEM_TEMPLATE.md` | 3 个月 | 登记时基线（2026-09-29） |
@@ -250,7 +251,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 - **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
-  - **大写** = ① 名字被外部工具固定的：`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`。
+  - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`。
   - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/` 下的全部文件。
   - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
   - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。

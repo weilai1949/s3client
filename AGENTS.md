@@ -33,6 +33,7 @@ make e2e-real
 | 需要什么 | 看哪里 |
 |---|---|
 | 开发规范 / 测试分层 / 门禁 / 验收清单 / Red Flags / 技术债 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) |
+| 文档导航（`docs/` 落地页，按「我要做什么」分组） | [`docs/README.md`](docs/README.md) |
 | 改动要同步哪些文档（对照表） | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4「文档同步门禁」 |
 | 接口与请求/响应字段（改 handler 请求体时同步 `openapi_register_*.go` 并跑契约测试） | [`docs/api.md`](docs/api.md) |
 | 问题（缺陷 / 外部阻塞 / 技术债，唯一来源） | [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) |
@@ -53,7 +54,7 @@ make e2e-real
 
 - **根目录只放四个约定文件**：`README.md`（社区约定）、`AGENTS.md`（工具加载器**硬性要求**在根目录）、`CHANGELOG.md`（Keep a Changelog 约定名，主流 changelog 工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)固定查 `/llms.txt`，2026-09-29 登记——LLM 导航索引，非规范正文）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放最高优先级位置可避免被将来的副本静默顶掉；其余文档统一放 `docs/`。
 - **`docs/` 下按性质二分命名**（细则与沿革见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 命名约定）：
-  - **大写** = 工具固定名（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`SUPPORT.md`、`GOVERNANCE.md`、`LICENSE`、`CODEOWNERS`）+ `docs/` 下的**仓库元文档**（仓库自身如何运作）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`。
+  - **大写** = 工具固定名（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`SUPPORT.md`、`GOVERNANCE.md`、`LICENSE`、`CODEOWNERS`）+ `docs/` 下的**仓库元文档**（仓库自身如何运作）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`。其中 `docs/README.md` 属「工具固定名」一类的特殊情形——它是 GitHub 的 **docs 目录落地页**，同时是人类导航 SSOT（每个 docs 文档都必须能从它到达，见 `doc_index_gate_test.go`）。
   - **小写 kebab-case** = `docs/` 下的**产品内容文档**（产品是什么 / 怎么用）：`api.md`、`architecture.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `api/`（机器可读契约）、`archive/`、`decisions/` 下全部文件。
   - 新增 `docs/` 文档先判性质再起名；**变更任何大写文件名必须同 PR 同步本处与该命名约定两处**（防分叉）。
 - **任何两个路径不得仅大小写不同**——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。

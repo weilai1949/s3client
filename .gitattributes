@@ -1,0 +1,21 @@
+# 行尾与文本归一化（跨平台：Linux CI / Docker 构建 / Windows 桌面端开发者）。
+#
+# 背景（2026-09-29 第 2 层「元信息 / 导航」盘点）：仓库此前**没有** .gitattributes，行尾完全取决于
+# 各人 `core.autocrlf` 设置——检出到 Windows 后可能整文件变 CRLF，制造无意义的巨型 diff；更糟的是
+# shell 脚本 / Dockerfile 带 CRLF 时会执行失败（`#!/usr/bin/env bash\r` → 找不到解释器）。
+#
+# 现状核查：入库的 538 个文件中**没有任何** CRLF 文本文件，因此加上本规则**不会**触发批量重新规范化
+# （若将来有人引入 CRLF 提交，git 会在入库时归一为 LF 并提示差异）。
+* text=auto eol=lf
+
+# Windows 原生脚本保留 CRLF（cmd.exe 与部分 PowerShell 场景对 LF 支持不一致）。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 图片按二进制处理：禁止任何行尾转换与「文本化 diff」。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.icns binary

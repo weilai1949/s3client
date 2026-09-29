@@ -243,6 +243,9 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 
 ## 文档
 
+> **完整文档导航见 [docs/README.md](docs/README.md)**——按「我要做什么」分组，含机器可读面与文档维护规则；
+> 下面只列最常用的人门入口。
+
 **用法（产品是什么 / 怎么用）**
 
 - [用户手册](docs/user-guide.md) — 首次配置 / 上传下载 / 对象与桶操作 / 版本与回收站 / 快捷键 / FAQ / 排障

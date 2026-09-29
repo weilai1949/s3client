@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags））
+> 最后更新：2026-09-29（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`））
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1336,6 +1336,27 @@ functions 1095 / lines 3503）。
 > 本轮只准备改动与证据，**未推送、未合并**。
 
 > **文档同步**：[`api.md`](api.md)、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
+
+---
+
+### AV. 2026-09-29 元信息 / 导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）
+
+> **诊断**：第 2 层「元信息 / 导航」此前为部分达标——台账（CHANGELOG / ROADMAP / KNOWN_ISSUES / FEATURES）
+> 与 AI 入口（`AGENTS.md` / `llms.txt`）齐全，但**缺 `docs/` 落地页**，且 4 个导航面之间**无一致性保证**：
+> `doc_link_gate` 只能证明「已有链接不悬空」，证明不了「新文档被登记进导航」。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | `docs/` 无落地页（浏览 30 个文件没有入口） | 新增 [`README.md`](README.md)：人类导航 SSOT，按「我要做什么」分五组 + 机器可读面 + 文档维护规则 | 每篇文档一句话说明；指向各 SSOT（`CONFIGURATION` / `api.md` / `KNOWN_ISSUES` / `ROADMAP`）与各文档门禁的落点 |
+| 2 | 导航面靠人工同步，**已漂移过**（README 归档清单漏 2 项、AGENTS 入口表落后、DEVELOPMENT 清单漏 `SUPPORT.md`） | 新增 [`doc_index_gate_test.go`](../apps/server/doc_index_gate_test.go)：`docs/*.md` 必须登记进落地页；子目录文档必须出现在落地页或该子目录 `index.md` | **TDD 先红**（落地页不存在 → 红灯）；**变异验证**：新建 `docs/_nav_probe.md` → 红灯点名「应登记进 docs/README.md」→ 删除后绿灯；含扫描面自检阈值（≥25 篇） |
+| 3 | **无 `.gitattributes`**：行尾取决于各人 `core.autocrlf` | 新增 [`.gitattributes`](../.gitattributes)：`* text=auto eol=lf` + Windows 脚本（`.bat`/`.cmd`/`.ps1`）CRLF + 图片二进制 | 入库核查 **538 个跟踪文件中 0 个 CRLF 文本文件**，故不触发批量重新规范化；避免 Windows 检出整文件变 CRLF 或脚本因 `\r` 执行失败 |
+| 4 | 四个导航面各写各的 | 同步：根 [`README.md`](../README.md) 文档段顶部加落地页指针、[`llms.txt`](../llms.txt) 补一条、根 [`AGENTS.md`](../AGENTS.md) 入口表加一行、[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 命名约定与「文档登记表」 | 链接门禁实测扫描面 **1335 条相对链接 / 73 条锚点，0 失效**（写入时实测） |
+
+> **未纳入本层**：CHANGELOG 与 git tag 的对应关系属「发布元信息」缺口，已登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#69**
+> （需人类确认口径，不在本轮回写历史）。
+
+> **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条、[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 登记表；
+> 本节为证据台账落点。
 
 ---
 
