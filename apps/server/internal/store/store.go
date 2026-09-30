@@ -14,10 +14,10 @@ import (
 // Store 是 json 与 encrypted 两个文件驱动的统一账号存储：内存状态与 CRUD 由
 // fileStore 提供，本类型只负责选择落盘编解码策略（codec 配置）。
 //
-//   - driver=json：路径 accounts.json。S3C_STORE_KEY 非空时按 S3C2 加密落盘，
-//     同时仍能读取历史明文文件（permissive）。
-//   - driver=encrypted：路径 accounts.json.enc。必须 S3C_STORE_KEY，严格只读写
-//     S3C2（strict），文件盐在建文件时随机并复用。
+//   - driver=json：路径 accounts.json。S3C_STORE_KEY 非空时按 S3C3 信封加密落盘
+//     （读取接受明文 / S3C2 / S3C3，permissive）。
+//   - driver=encrypted：路径 accounts.json.enc。必须 S3C_STORE_KEY，strict —— 只写
+//     S3C3、可读 S3C2 旧格式，文件盐在建文件时随机并复用。
 //
 // 两驱动共享同一 fileStore + 同一 storeCodec（仅配置不同），消除历史重复的
 // EncryptedStore / encryptedCodec。
@@ -26,12 +26,12 @@ type Store struct {
 }
 
 // New 创建 json 驱动 store 并从 path 加载已有数据。
-// 若环境变量 S3C_STORE_KEY 非空，SecretKey 落盘时加密（S3C2，每次写盘换新盐）。
+// 若环境变量 S3C_STORE_KEY 非空，SecretKey 落盘时加密（S3C3 信封，每次写盘换新盐）。
 func New(path string) (*Store, error) {
 	return newStore(path, os.Getenv("S3C_STORE_KEY"), false)
 }
 
-// NewEncrypted 创建 encrypted 驱动 store（严格 S3C2，复用文件盐）。
+// NewEncrypted 创建 encrypted 驱动 store（strict：只写 S3C3、可读 S3C2 旧格式，复用文件盐）。
 // storeKey 必填；文件不存在或为空时生成随机盐并派生密钥。
 func NewEncrypted(path, storeKey string) (*Store, error) {
 	return newStore(path, storeKey, true)
@@ -58,9 +58,9 @@ func newStore(path, storeKey string, strict bool) (*Store, error) {
 
 // storeCodec 是文件驱动的落盘策略（json / encrypted 共用，仅配置不同）：
 //
-//	strict=false（json）：无 key 写明文 JSON，有 key 写 S3C2 加密；读取两者都
-//	                    支持（向后兼容旧明文文件），写盘每次换新盐。
-//	strict=true（encrypted）：只读写 S3C2；文件盐在建文件时随机一次并复用。
+//	strict=false（json）：无 key 写明文 JSON，有 key 写 S3C3 信封；读取接受
+//	                    明文 / S3C2 / S3C3（向后兼容），写盘每次换新盐。
+//	strict=true（encrypted）：只写 S3C3、可读 S3C2；文件盐在建文件时随机一次并复用。
 type storeCodec struct {
 	password string
 	strict   bool

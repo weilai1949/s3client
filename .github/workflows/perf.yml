@@ -1,0 +1,73 @@
+name: Perf (benchmarks)
+
+# 后端热路径的基准 + 性能回归门禁（WS2）。
+#
+# 分工：
+#   - `apps/server/bench_budget_test.go`：**确定性预算门禁**（分配数 / 分配字节 +
+#     极宽的耗时兜底），在每次相关改动与 PR 上跑，红了就是回归；
+#   - 下面的原始基准：每周定时留存数字，供人工跨运行比对「无 PR 的缓慢退化」——
+#     耗时的绝对值对 runner 极敏感，刻意不设紧阈值（口径见 docs/PERFORMANCE.md §4）。
+#
+# 本地同款命令：`make bench`。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/server/bench_budget_test.go'
+      - 'apps/server/internal/store/bench_test.go'
+      - 'apps/server/internal/s3wrap/bench_test.go'
+      - 'apps/server/internal/service/bench_test.go'
+      - 'apps/server/internal/store/**'
+      - 'apps/server/internal/s3wrap/**'
+      - 'Makefile'
+      - '.github/workflows/perf.yml'
+  pull_request:
+    paths:
+      - 'apps/server/bench_budget_test.go'
+      - 'apps/server/internal/store/bench_test.go'
+      - 'apps/server/internal/s3wrap/bench_test.go'
+      - 'apps/server/internal/service/bench_test.go'
+      - 'apps/server/internal/store/**'
+      - 'apps/server/internal/s3wrap/**'
+      - '.github/workflows/perf.yml'
+  schedule:
+    # 每周一 03:00 UTC，留存一份可比的基线数字
+    - cron: '0 3 * * 1'
+
+concurrency:
+  group: perf-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: 后端基准 + 预算门禁
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache: true
+          cache-dependency-path: apps/server/go.sum
+
+      - name: Budget gate（确定性上限：分配数 / 分配字节 + 耗时兜底）
+        run: cd apps/server && go test . -run 'TestBench' -count=1 -v
+
+      - name: Benchmarks（原始基线数字，供跨运行比对）
+        run: |
+          cd apps/server
+          go test ./internal/store/ ./internal/service/ ./internal/s3wrap/ \
+            -run '^$' -bench 'Benchmark' -benchmem -count=1 | tee bench-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: go-bench-${{ github.run_id }}
+          path: apps/server/bench-results.txt
+          retention-days: 30
+          if-no-files-found: error

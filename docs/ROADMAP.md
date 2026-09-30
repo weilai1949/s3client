@@ -35,8 +35,10 @@
 
 **结论**：**P0 与 P1 均已清零**，`v1.0.0` 已打 tag；`v1.0.0-rc1` → `v1.0.0` → `v1.0.x` → `v1.1.0`
 四个里程碑均已收口。已立项的未完成项只有长期性质的第 1 条：**桌面端分发与签名**——外部凭证阻塞
-（E6 未获取），代码层面已无剩余工作。2026-09-24 另在 §三 #4–#16 补录 **13 条趋势展望迭代方向**
-（⬜ 候选、未排期；按 §六 第 1 条的两源分工，**§三 3.2 表即这 13 条的唯一来源**）；
+（E6 未获取），代码层面已无剩余工作。2026-09-24 另在 §三 3.2 补录 **13 条趋势展望迭代方向**
+（#4–#16，⬜ 候选、未排期；其中 #12 供应链证明已于 2026-09-29 落地并按 §六 第 1 条移出），
+2026-09-30 再收口迁入 **#17–#18**（可访问性补强 / 观测指标补全，来源 `accessibility.md` §5.3–§5.5
+与 `OPERATIONS.md` 观测缺口）；按 §六 第 1 条的两源分工，**§三 3.2 表即这批候选的唯一来源**。
 排期进入里程碑后才转 ⏳，评估为不做则转 ➖ 并由 ADR / 决策记录兜底。
 
 > 已修复内容不在此流水账：P0 / P1 逐条记录与验证证据见 [`FEATURES.md`](FEATURES.md)「H」「I」段，
@@ -48,7 +50,7 @@
 
 | 里程碑 | 主题 | 关键验收 | 依赖 |
 |---|---|---|---|
-| **v1.2+** | 长期：桌面分发、可选增强、趋势方向（§三 #4–#16 候选池） | 桌面端签名与自动更新；候选方向按需立项评估 | v1.1.0 |
+| **v1.2+** | 长期：桌面分发、可选增强、趋势方向（§三 #4–#18 候选池） | 桌面端签名与自动更新；候选方向按需立项评估 | v1.1.0 |
 | **v1.3+** | 长期：增量同步与批量能力的体验增强 | 评估用户反馈下的现有模式扩展能力 | v1.2+ |
 | **v2.0+** | 长期：死代码纪律治理 | 升级覆盖率门禁，治理残留死代码（已备选） | v1.3+ |
 
@@ -71,6 +73,9 @@
 > 2026 技术趋势评估得出）：全部 ⬜ **未排期候选池**，不是发布承诺——立项排期后状态改 ⏳ 并
 > 进入 §二 里程碑验收；评估为不做转 ➖。按 §六 第 1 条的两源分工，**本节即这批条目的唯一来源**；
 > 2026-09-24 迁入前曾以 `KNOWN_ISSUES #47`–`#59` 登记，该编号**已停用**、仅作历史映射（见表「原编号」列）。
+> **#17–#18 为 2026-09-30 收口迁入的文档内改进项**（来源 [`accessibility.md`](accessibility.md) §5.3–§5.5
+> 与 [`OPERATIONS.md`](OPERATIONS.md) 的观测缺口声明，按「不留文档内口头待办」纪律迁入）：
+> 同为 ⬜ 未排期候选，「原编号」列记 `—`。
 
 ### 3.1 已立项 / 已决策项
 
@@ -79,10 +84,11 @@
 | 1 | 桌面端分发与签名 | 长期 | ⛔ | **已立项**（[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25），**外部阻塞**：Windows 代码签名证书 / Apple Developer ID + 公证均为外部凭证（**E6**，⬜ 未获取），未获取前无法完成签名与公证；自动更新通道依赖签名产物。**代码层面无剩余工作**——打包与发布链（tag↔清单校验、平台内唯一 `SHA256SUMS`、聚合 job）已收口，未签名产物以 `SHA256SUMS` + 手动放行说明过渡（[DEPLOYMENT.md](DEPLOYMENT.md) §5）；风险 **R5** 见 §五 |
 | 2 | 增量同步与批量能力的体验增强 | FEATURES | ➖ | 现有 `etag` / `size_mtime` / `always` 三模式满足需求，按用户反馈再评估 |
 
-### 3.2 趋势展望候选池（2026-09-24 补录，⬜ 全部未排期）
+### 3.2 候选池（2026-09-24 起补录，⬜ 未排期；已落地条目按 §六 第 1 条移出）
 
 > 编号接续 3.1（§三 内全局唯一；3.1 原 #3「死代码纪律」于 2026-09-24 以前后端两道导出门禁收口移出，
-> 编号不重排故 #3 空号）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
+> 编号不重排故 #3 空号；#12「供应链证明」于 2026-09-29 全部落地后同样移出，#12 空号，证据见
+> [`FEATURES.md`](FEATURES.md) §AQ / §AW）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
 > **已停用**、仅作历史映射——新建与引用一律用本表 `§三 #N`。
 > 立项时在本表把状态改 ⏳；评估为不做改 ➖ 并写决策依据（本表即唯一来源，无第二处需同步）。
 
@@ -95,12 +101,13 @@
 | 8 | 大文件体验：上传断点续传 + 下载并行分段 | #51 | ⬜ | 上传侧已有 multipart 四端点与 4 路并发，缺「刷新 / 断电后恢复」——可持久化分段清单实现续传；下载侧代理已支持 Range / 416，补多段并行 GET 聚合。大文件可靠性是网盘类客户端的分水岭能力 |
 | 9 | 本地文件夹 ↔ 桶 双向同步 + PWA 离线壳 | #52 | ⬜ | `download.ts` 已用 File System Access API 流式落盘，同 API 的目录句柄 + `etag` 比对可复用为本地目录同步；PWA manifest / service worker 让 Web 端可安装离线启动（密钥仍不落地 localStorage，遵守安全基线） |
 | 10 | OpenAPI → 前端类型 / 客户端代码生成 | #53 | ⬜ | `types.ts` / `endpoints.ts` 目前手写、靠契约测试守漂移；以 `/api/openapi.json` 为源生成 TS 类型与端点封装（schema-first），生成物入 CI diff 门禁，从「测出漂移」升级为「不产生漂移」；生成器为 devDependency，不违 ADR-004 |
-| 11 | OpenTelemetry：trace 贯穿签名 / 代理 / 迁移 | #54 | ⬜ | 已有 Prometheus 指标 + `X-Request-ID` + 可选 `S3C_LOG_JSON`；接入 OTLP 导出（开关式、默认关）把请求 ID 升级为跨 presign / proxy / migrate 的 trace，配套 SLO 仪表盘。OTel 已是可观测性事实标准，与既有指标互补不替换 |
-| 12 | 供应链证明：SBOM + SLSA provenance + cosign 签名 | #55 | ✅ | **2026-09-29 全部落地**：① **SBOM**——镜像由 BuildKit `sbom: true` 产出 SPDX attestation，另有可下载的 CycloneDX 文件（复用已 pin 的 Trivy，不引第二套工具）；**桌面三平台安装包自 §AQ 起也有 SBOM**（`sbom-desktop.cdx.json`，覆盖 Tauri 的 429 个 crate + 内嵌 Web 的 24 个运行期包）。② **provenance**——镜像 `provenance: mode=max` 随 registry 走，镜像与桌面产物各有一份 `actions/attest-build-provenance`（GitHub attestations API，`gh attestation verify` 可核验）。③ **cosign**——镜像按 **digest** 无密钥签名，桌面侧对 `SHA256SUMS.txt` 做 `sign-blob`（一次签名传递性覆盖三平台全部产物，资产只多 `.sig`/`.pem` 两个文件）。**仍缺的是「发布者信誉」**：keyless 只证明「由本仓库哪个 commit / workflow 构建」，SmartScreen / Gatekeeper 认的仍是代码签名证书——那是 E6 的外部凭证阻塞，与本条正交 |
+| 11 | OpenTelemetry：trace 贯穿签名 / 代理 / 迁移 | #54 | ⬜ | 已有 Prometheus 指标 + `X-Request-ID` + 可选 `S3C_LOG_JSON`；接入 OTLP 导出（开关式、默认关）把请求 ID 升级为跨 presign / proxy / migrate 的 trace，配套 SLO 仪表盘。OTel 已是可观测性事实标准，与既有指标互补不替换。**2026-09-30 部分落地**：SLO 仪表盘已随本批交付（`deploy/grafana/s3clinet.dashboard.json` + `grafana_dashboard_gate_test.go`）；**OTel trace 仍未做**，本条保持 ⬜。 |
 | 13 | Token 作用域与最小权限（只读 / 前缀限定） | #56 | ⬜ | 现有多 token（`S3C_TOKEN` 逗号分隔）只有全权一种；补作用域声明（只读、限定账号 / 前缀、过期时间），高危端点按 scope 拒绝并进 OpenAPI 契约。least-privilege / 短时凭证是 API 鉴权演进主流，复用常量时间比较与既有中间件链 |
-| 14 | 原生 fuzz 与性质测试纳入门禁 | #57 | ⬜ | 已达成 100% statement 覆盖，但覆盖 ≠ 输入空间探索；对 policy JSON 解析、endpoint 归一化、S3C 信封读取、key 校验等解析面加 Go `Fuzz*` 目标 + CI 有界 fuzz 轮跑，语料入库防回归。弥补覆盖率门禁对非法输入的盲区，符合持续模糊测试实践 |
+| 14 | 原生 fuzz 与性质测试纳入门禁 | #57 | ✅ | 已达成 100% statement 覆盖，但覆盖 ≠ 输入空间探索；对 policy JSON 解析、endpoint 归一化、S3C 信封读取、key 校验等解析面加 Go `Fuzz*` 目标 + CI 有界 fuzz 轮跑，语料入库防回归。弥补覆盖率门禁对非法输入的盲区，符合持续模糊测试实践。**2026-09-30 落地**：`internal/{s3wrap,store,handler}` 的 stdlib `testing.F` 目标（端点归一化 / SSRF、`S3C2`·`S3C3` 信封、桶策略 JSON 与文件名边界）+ `.github/workflows/fuzz.yml` 有界探索（PR 只跑种子语料）；语料入库防回归。证据见 [`FEATURES.md`](FEATURES.md) §BG。 |
 | 15 | 多副本 / HA 能力评估（store 外置） | #58 | ⬜ | 现状为 `flock` 单副本（R4 已决策接受、ADR-002 fail-closed）；评估引入可外置的 store 后端（如 SQLite 共享卷 / Postgres 驱动）以支撑滚动升级与多副本。**属推翻既有决策的评估项**：先出 ADR 再动代码，结论若维持现状则转 ➖ |
 | 16 | 多平台差异化用户体验增强 | #59 | ⬜ | 体验评估计划（桌面 / 移动 / Web 协同体验）；评估产出后按结论拆分或转 ➖ |
+| 17 | 可访问性补强与自动化扫描 | — | ⬜ | 2026-09-30 自 [`accessibility.md`](accessibility.md) §5.3/§5.4 收口迁入：① 焦点陷阱从 `ModalDialog` 提取为可复用组合式并覆盖 `ConfirmDialog` / `PromptDialog` / `PreviewOverlay`；② `aria-live` 补测试断言、操作成功 / 失败统一播报；③ 表格 `caption` / 选中态语义、主要表单控件可见 `<label>`；④ 组件级 `vitest-axe` 扫描（devDependency，不违 ADR-004）——渲染态 axe 侧已落地（[`accessibility.md`](accessibility.md) §4 第 2 条 `e2e/a11y.spec.ts` 四状态 A/AA 规则集），本项只剩组件测试侧；⑤ **对比度修色收尾**：`--ok` / `--danger` 已修至 4.95 / 5.91 达标，剩余低于 AA 的组合见 [`accessibility.md`](accessibility.md) §5.5（浅色 5 行——`--muted` / `--primary` / `--placeholder` / `--brand` 渐变白字（浅端 2.37:1 最弱）；深色 3 行——`--danger` 4.25 / `--placeholder` 3.81 / 渐变白字 4.23），表值由 `apps/server/contrast_gate_test.go` 机械重算钉住；RTL 与正式审计（人工）按需另行立项 |
+| 18 | 可观测性补全：5 个缺失指标 | — | ⬜ | 2026-09-30 自 [`OPERATIONS.md`](OPERATIONS.md) 观测缺口声明收口迁入：账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、卷 / 磁盘容量、优雅关停耗时。落地时**同 PR** 同步 [`OPERATIONS.md`](OPERATIONS.md) §4 与 [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（`TestPrometheusRulesReferenceRealMetrics` 钉指标真实性）；`S3C_EXPOSE_METRICS` 默认 404、开启后匿名可读的安全口径不变 |
 
 ---
 

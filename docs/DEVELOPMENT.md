@@ -42,6 +42,14 @@
 - `e2e/`（mock 版）与 `e2e-real/`（真实联调版）**不在**主 `tsconfig.json` 的 `include` 内，因此长期零静态检查。现补 [`apps/web/tsconfig.e2e.json`](../apps/web/tsconfig.e2e.json) + `pnpm typecheck:e2e`，并把两个目录纳入 `pnpm lint`（`eslint src e2e e2e-real`）。
 - 两套 CI 的 `web` job 与本地 `make check`（`web-typecheck-e2e`）都跑它；门禁 `TestE2ESourcesAreTypechecked` 防漏挂。
 
+### 原生 fuzz（有界，**不是** PR 门禁）
+
+解析面的输入空间探索用 Go stdlib `testing.F`（不引入新依赖）：`internal/s3wrap`（端点归一化 / SSRF）、
+`internal/store`（`S3C2` / `S3C3` 信封——磁盘字节不可信）、`internal/handler`（桶策略 JSON、桶名与
+下载文件名边界）。**PR 只跑种子语料**（`go test ./...` 内的 `-run Fuzz`），保证语料不退化成死代码；
+真正的探索在 [`.github/workflows/fuzz.yml`](../.github/workflows/fuzz.yml)（周一 03:00 UTC + 手动，
+`-fuzztime` 有界，崩溃上传语料）。覆盖率门禁看不见非法输入空间，两者互补。
+
 ## 3. 必验门禁（每次改动提交前）
 
 ```bash
@@ -100,6 +108,21 @@ make rust-audit
 > `TestParseBodyCallsIgnoresCommentsAndStrings`、`TestPathParamDynamicReadUsesAST`、
 > `TestFindReadJSONTargetIgnoresCommentsAndStrings`），不依赖「仓库里正好有一个反例」来证明门禁有效。
 > `//nolint` 消音由 `nolintlint` 拦截（必须写明具体 linter 与理由）。
+>
+> **2026-09-30 新增的门禁落点**（AI 时代文档补强的机械保证，全部经变异验证）：
+> `openapi_examples_gate_test.go`（有请求体的 operation 必须有请求示例、每个 operation 必须有 2xx 示例、
+> 示例字段须过 schema 形状校验，且 [`api.md`](api.md) 的 curl 示例覆盖全部 tag）、
+> `data_model_gate_test.go`（[`data-model.md`](data-model.md) ⇔ 反射 `model.Account` + `store.Open` 的 switch 驱动名）、
+> `contrast_gate_test.go`（[`accessibility.md`](accessibility.md) §5.5 表值与计数 ⇔ `styles.css` token 重算）、
+> `grafana_dashboard_gate_test.go`（[`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)
+> 的指标 / `code` / recording rule 必须真实存在）、`bench_budget_test.go`（PresignPut / 加密写 / 账号写 O(n)
+> 的分配与耗时预算）、`security_txt_gate_test.go`（[`../.well-known/security.txt`](../.well-known/security.txt)
+> 必填字段 + `Expires` 未过期）、`en_docs_gate_test.go`（[`en/README.md`](en/README.md) 每篇须声明中文
+> SSOT 来源与 revision，且可从英文导航到达）、`agent_evals_gate_test.go`（黄金任务集机器可读规格
+> [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) 与
+> [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致）。前端**渲染态**无障碍由
+> [`../apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)（axe，4 状态 + 1 条有效性自检）承担，
+> 见 [`accessibility.md`](accessibility.md) §5.2。
 
 ### CI 双平台一致性
 
@@ -115,6 +138,10 @@ make rust-audit
 | `ci.yml` · `desktop-build`（仅 `workflow_dispatch`） | `desktop-build`（`when: manual`，仅 `web` 源） | `tauri build --no-bundle` |
 | `ci.yml` · `publish` | **不镜像** | 推送镜像到 GHCR（`needs: docker`，Trivy 通过才推；`if: != 'pull_request'` 即 push / dispatch 才推），并产出 **CycloneDX SBOM 文件（作为 artifact）+ BuildKit provenance/SBOM attestation + GitHub 产物证明**。GitLab 侧未配置 registry，故无对应 job；门禁 `TestGitHubWorkflowPushesImage` |
 | `codeql.yml` · `analyze` | `semgrep-sast`（GitLab 原生 SAST） | 两侧语言覆盖一致（Go + JS/TS）。**都是报告型、非阈值门禁**：CodeQL 用 `security-and-quality` 查询集；GitLab 侧由 `include: template: Jobs/SAST.gitlab-ci.yml` 引入，`semgrep-sast` 继承 `.sast-analyzer` 的 `allow_failure: true`。逐 `uses:` 的 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住 |
+| `scorecard.yml` · `analysis` | **不镜像** | OpenSSF Scorecard 仓库健康度评分：schedule 周六 02:00 UTC + `workflow_dispatch`；顶层 `permissions: read-all`，仅 analysis job 持 `security-events: write` + `id-token: write`（发布到 api.scorecard.dev 所需 OIDC）。GitLab 无等价原生产品（其 SAST / Dependency Scanning 模板分别扫仓库内代码与发布时点全量依赖，均非本检查）——差异登记见 [`threat-model.md`](threat-model.md) §5.5 |
+| `dependency-review.yml` · `dependency-review` | **不镜像** | PR 期依赖 diff 审查（GitHub 依赖图 API）：每个 `pull_request`（含 dependabot PR），`permissions: contents: read`。GitLab 无等价原生产品；未镜像登记见 [`threat-model.md`](threat-model.md) §5.5 |
+| `perf.yml` · `perf-budget` | **不镜像** | 性能预算门禁（`bench_budget_test.go`：分配数 / 字节的确定性断言为主 + 极宽的耗时兜底）+ 原始 benchmark artifact 留存；`push`/`pull_request` 路径命中 + 周一 03:00 UTC schedule + `workflow_dispatch`。GitLab 无等价原生产品；口径与「测什么 / 不测什么」见 [`PERFORMANCE.md`](PERFORMANCE.md) §4.2 |
+| `fuzz.yml` · `fuzz` | **不镜像** | 原生 fuzz 有界轮跑（stdlib `testing.F`，`-fuzztime` 可配，崩溃上传语料）；周一 03:00 UTC schedule + `workflow_dispatch`。**刻意不进 PR 门禁**（不定长会拖合并），PR 侧只跑种子语料。GitLab 无等价原生产品 |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |
 | `e2e-real.yml` | `e2e-real` | **真实 Go 后端（托管真实构建产物）+ 真实 RustFS + 真实浏览器**，不 mock `/api`（含浏览器直传）；本地与两套 CI 共用 `scripts/e2e-real.sh` |
@@ -135,14 +162,14 @@ make rust-audit
 > 实测**可验证**——`make gcl-list` 能正常解析并列出 `semgrep-sast`（stage `test`，见上方
 > §「本地验证 GitLab 流水线」）。故该理由不再成立，改为**已镜像**。
 
-**触发事件也要对齐**（三套 workflow 的 `on:` 并不相同，别假设一致）：
+**触发事件也要对齐**（各 workflow 的 `on:` 并不相同，别假设一致）：
 
 | 事件 | GitHub 会跑 | GitLab 会跑 |
 |---|---|---|
 | push 到 main/develop | `ci.yml` 五个 job（`server`/`web`/`docker`/`desktop`/**`publish`**）+ `codeql.yml` | `server` / `web` / `docker` / `desktop` / **`semgrep-sast`** |
-| pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ `codeql.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
-| workflow_dispatch / web | 全部五套（`ci.yml` 含 `desktop-build`，共 7 个） | 全部 8 个 + **`semgrep-sast`**（`desktop-build` 为手动） |
-| schedule | `codeql.yml`（周日）+ 三个 E2E（周一/三/五） | 三个 E2E + **`semgrep-sast`**（周一/三/五） |
+| pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ `codeql.yml` + `dependency-review.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
+| workflow_dispatch / web | 全部五套（`ci.yml` 含 `desktop-build`，共 7 个）+ `scorecard.yml` + `perf.yml` + `fuzz.yml`（可带 `fuzztime` 输入） | 全部 8 个 + **`semgrep-sast`**（`desktop-build` 为手动） |
+| schedule | `codeql.yml`（周日）+ `scorecard.yml`（周六）+ 三个 E2E（周一/三/五）+ `perf.yml` / `fuzz.yml`（周一 03:00） | 三个 E2E + **`semgrep-sast`**（周一/三/五） |
 
 > **`semgrep-sast` 不进上表的「本文件各 job 的 rules」体系**：它的 `rules` 来自被 `include` 的
 > GitLab 官方模板，**只受「流水线是否创建」约束**（即 `workflow:` 块），不受本文件里
@@ -185,35 +212,45 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 | 改动类型 | 必须同步的文档 |
 |----------|----------------|
-| 前端使用方式 / 界面 / 快捷键 / 截图 | [`README.md`](../README.md)（必要时补截图） |
+| 前端使用方式 / 界面 / 快捷键 / 截图 | [`README.md`](../README.md)（必要时补截图）+ [`en/index.md`](en/index.md)（英文版同 PR 同步） |
 | 后端接口、请求体、响应字段、状态码 | [`api.md`](api.md) + `apps/server/internal/handler/openapi_register_*.go`（并跑契约测试） |
 | **md 正文里「N 个 `/api/*` 端点」这类数字** | 由 `apps/server/doc_number_gate_test.go` 机械校验（真值取自 `routes.go` 的 `mux.HandleFunc` 注册数）；新增此类声明时在 `docNumberClaims` 登记 |
 | 错误码 / 错误文案 | [`errors.md`](errors.md) |
 | **任何**新功能或 bug 修复 | [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段（Keep a Changelog：Added / Fixed / Changed） |
+| 发版 / 打 tag / 改名版本段 | [`CHANGELOG.md`](../CHANGELOG.md) 顶部「tag ↔ 版本段对应关系（唯一台账）」（快照 tag / 快照段登记；正式版本段由 `changelog_tag_gate_test.go` 正向校验）+ `scripts/release-version.sh`（缺段即 exit 1） |
 | 已实现 / 已修复能力的台账 | [`FEATURES.md`](FEATURES.md) |
 | 待办事项状态变化 | **问题**（缺陷 / 阻塞 / 技术债）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**方向**（功能候选 / 版本级）→ [`ROADMAP.md`](ROADMAP.md) §三。两处各自唯一来源，同一事项只登记一处 |
 | 版本级规划 / 优先级 | [`ROADMAP.md`](ROADMAP.md)（不做逐条流水账） |
-| 分层 / 模块边界 / 目录结构 | [`architecture.md`](architecture.md)；重大决策另加 [`decisions/`](decisions/index.md) ADR |
+| 分层 / 模块边界 / 目录结构 | [`architecture.md`](architecture.md)；重大决策另加 [`decisions/`](decisions/index.md) ADR；architecture §7「关键取舍」表每行必须含 ADR 链接（由 `apps/server/adr_coverage_gate_test.go` 守住） |
 | 环境变量 / 配置项 | [`CONFIGURATION.md`](CONFIGURATION.md)（**SSOT**）+ 相应示例文件：compose 透传项改根 [`.env.example`](../.env.example)，服务端可选项改 [`apps/server/.env.example`](../apps/server/.env.example)（分工口径见 CONFIGURATION.md 开头）+ [`DEPLOYMENT.md`](DEPLOYMENT.md) + `README.md` 摘要 |
 | 部署 / 镜像 / compose / 发布流程 | [`DEPLOYMENT.md`](DEPLOYMENT.md) |
 | 安全策略 / 威胁模型 / 加固 / 依赖与许可证 | [`threat-model.md`](threat-model.md) 与 [`SECURITY.md`](../.github/SECURITY.md)；依赖增删改后跑 [`../scripts/gen-third-party-licenses.sh`](../scripts/gen-third-party-licenses.sh) 重新生成 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)（门禁 `TestThirdPartyLicensesAreComplete`） |
 | 代理权限边界 / 什么必须人类确认 / MCP 工具权限 / AI 披露 | [`AI_POLICY.md`](AI_POLICY.md) |
+| AI 评测任务集 / 披露占比口径 / 贡献度量 | [`AGENT_EVALS.md`](AGENT_EVALS.md)（黄金任务集 / 评分卡 / 台账）+ PR 模板「AI 使用披露」块（两处字段集由 `agent_evals_gate_test.go` 钉住一致） |
 | 仓库导航（新增 / 改名核心文档时） | [`llms.txt`](../llms.txt) |
 | 开发流程 / 门禁 / 测试命令 | [`AGENTS.md`](../AGENTS.md)（代理入口）+ 本文件 + [`CONTRIBUTING.md`](../.github/CONTRIBUTING.md) |
 | 接口与请求/响应字段 | [`api.md`](api.md) + `apps/server/internal/handler/openapi_register_*.go`（并跑契约测试）+ **重新生成 [`api/openapi.json`](api/openapi.json)**（见下行） |
 | 提交版 OpenAPI 规范 | [`api/openapi.json`](api/openapi.json)——改 handler / 注册表后必须 `go test ./internal/handler/ -run TestCommittedOpenAPISpecMatchesRuntime -update-openapi-spec` 重新生成，否则门禁红灯 |
 | 运维 / 告警 / 备份恢复 / 容量 / 事故响应 / 事故复盘 | [`OPERATIONS.md`](OPERATIONS.md) + [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md)（复盘格式；填写完成的记录按下方「归档」条冻结进 `archive/`） |
 | 告警阈值 / SLI 表达式 / 指标名 / `code` 标签取值 | [`OPERATIONS.md`](OPERATIONS.md) §4 **与** [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（**必须同改**；规则文件由 `TestPrometheusRulesReferenceRealMetrics` 校验指标与错误码真实存在） |
-| 账号存储格式（`model.Account` 字段增删改） | [`api/accounts.schema.json`](api/accounts.schema.json)（由 `TestAccountStoreSchemaMatchesModel` 反射比对，漂移即红灯）+ [`compatibility.md`](compatibility.md) §4（S3C2 / S3C3 信封字节布局） |
+| 账号存储格式（`model.Account` 字段增删改） | [`api/accounts.schema.json`](api/accounts.schema.json)（由 `TestAccountStoreSchemaMatchesModel` 反射比对，漂移即红灯）+ [`compatibility.md`](compatibility.md) §4（S3C2 / S3C3 信封字节布局）+ [`data-model.md`](data-model.md)（汇总地图；与代码不一致时按其 §0 回退权威来源） |
 | 性能特征 / 热路径 / 新增基准 | [`PERFORMANCE.md`](PERFORMANCE.md) + 对应包的 `bench_test.go` |
 | 用户可见的操作方式 / 界面用法 / 快捷键 | [`user-guide.md`](user-guide.md) + [`README.md`](../README.md)（界面改动需重新生成截图：`cd apps/web && pnpm build && pnpm exec playwright test screenshots.spec.ts`，产物落在 [`images/`](images/)） |
-| 版本兼容性 / 弃用 / 支持窗口 | [`compatibility.md`](compatibility.md) |
+| 版本兼容性 / 弃用 / 支持窗口 / 客户端支持矩阵 | [`compatibility.md`](compatibility.md) §6.2（矩阵每行状态带源码 / CI 依据；改构建目标（vite `build.target` / tsconfig `target`）、浏览器特性依赖（File System Access / `:focus-visible` 等）、Playwright 浏览器项目或发布矩阵（release-desktop.yml）时必须同步复核对应行） |
 | 领域术语 / 内部自造词 | [`glossary.md`](glossary.md) |
 | 翻译 / 新增语言 / 文案 key | [`i18n.md`](i18n.md) |
 | 无障碍（ARIA / 键盘 / 焦点 / 主题） | [`accessibility.md`](accessibility.md) |
 | 支持渠道 / 治理 / 决策与发布权 | [`../.github/SUPPORT.md`](../.github/SUPPORT.md) · [`../.github/GOVERNANCE.md`](../.github/GOVERNANCE.md) |
 | 文档命名 / 存放位置 / 归档 / 导航 | 本文件 §4 + [`README.md`](README.md)（docs 导航 SSOT）+ [`../README.md`](../README.md)「文档」段 + [`../llms.txt`](../llms.txt) + [`archive/index.md`](archive/index.md) |
 | **文档登记表（owner / 复审周期 / 最后复审）** | 本文件 §4 下方「文档登记表」——**新增 / 改名 / 归档任何文档时同 PR 登记一行** |
+| 数据模型 / 存储格式（字段 / 驱动 / 信封） | [`data-model.md`](data-model.md)（**地图**；冲突时按其 §0 回退到 schema / ADR / 代码权威来源） |
+| 告警 / SLI 仪表盘（Grafana） | [`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)（与 [`OPERATIONS.md`](OPERATIONS.md) §4 **和** `deploy/prometheus/s3clinet.rules.yml` 同改；指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 校验） |
+| 性能预算 / 热路径 | [`PERFORMANCE.md`](PERFORMANCE.md) §4 + `apps/server/bench_budget_test.go`（改预算须同改两处；原始基准见 [`.github/workflows/perf.yml`](../.github/workflows/perf.yml)） |
+| 漏洞披露渠道 / `security.txt` | [`../.well-known/security.txt`](../.well-known/security.txt)（`Expires` 到期前必须续期，门禁 `security_txt_gate_test.go`）+ [`../.github/SECURITY.md`](../.github/SECURITY.md) |
+| 原生 fuzz 目标与语料 | `apps/server/internal/*/*_fuzz_test.go` + 本文件 §2（新增解析面须同补 fuzz 目标；语料入库防回归） |
+| AI 评测黄金任务集 / 评分锚点 | [`AGENT_EVALS.md`](AGENT_EVALS.md) + [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml)（两处 id / 标题逐字一致，由 `agent_evals_gate_test.go` 钉住）+ [`../scripts/evals/run-golden-task.sh`](../scripts/evals/run-golden-task.sh) |
+| 可访问性渲染态扫描 / 对比度记录 | [`accessibility.md`](accessibility.md) §4 / §5.2 / §5.5 + [`../apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts) + `apps/server/contrast_gate_test.go`（改 `styles.css` 必须同改 §5.5 表值） |
+| 英文文档（新增 / 更新翻译） | [`en/README.md`](en/README.md) · [`i18n.md`](i18n.md) §7（中文为 SSOT；`en_docs_gate_test.go` 校验来源声明、revision 与可达性） |
 
 **文档登记表**（2026-09-29 建立）：
 
@@ -235,12 +272,18 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | `docs/DEPLOYMENT.md` · `OPERATIONS.md` · `POSTMORTEM_TEMPLATE.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/FEATURES.md` · `KNOWN_ISSUES.md` · `ROADMAP.md` | 每个版本发版前 | 登记时基线（2026-09-29） |
 | `docs/PERFORMANCE.md` · `AI_POLICY.md` | 6 个月 | 登记时基线（2026-09-29） |
+| [`AGENT_EVALS.md`](AGENT_EVALS.md)（AI 评测与贡献度量） | 6 个月，或评测口径 / 披露字段集变更时同 PR | 登记时基线（2026-09-30） |
 | [`.github/`](../.github/) 社区健康文件：`CONTRIBUTING.md` · `SECURITY.md` · `SUPPORT.md` · `GOVERNANCE.md` · `CODE_OF_CONDUCT.md` | 6 个月 | 登记时基线（2026-09-29） |
-| 产品内容文档：[`api.md`](api.md) · [`architecture.md`](architecture.md) · [`errors.md`](errors.md) · [`threat-model.md`](threat-model.md) · [`user-guide.md`](user-guide.md) · [`compatibility.md`](compatibility.md) · [`glossary.md`](glossary.md) · [`i18n.md`](i18n.md) · [`accessibility.md`](accessibility.md) | 6 个月，或对应功能变更时同 PR | 登记时基线（2026-09-29） |
+| 产品内容文档：[`api.md`](api.md) · [`architecture.md`](architecture.md) · [`data-model.md`](data-model.md) · [`errors.md`](errors.md) · [`threat-model.md`](threat-model.md) · [`user-guide.md`](user-guide.md) · [`compatibility.md`](compatibility.md) · [`glossary.md`](glossary.md) · [`i18n.md`](i18n.md) · [`accessibility.md`](accessibility.md) | 6 个月，或对应功能变更时同 PR | 登记时基线（2026-09-29） |
+| [`en/index.md`](en/index.md)（英文 README 入口） | 3 个月，或根 `README.md` 变更时同 PR | 登记时基线（2026-09-30） |
 | [`docs/api/`](api/openapi.json)（机器可读契约） | 由门禁强制，无需人肉周期 | 登记时基线（2026-09-29） |
 | [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)（**脚本自动生成，勿手工编辑**） | 依赖增删改时同 PR 重新生成 | 登记时基线（2026-09-29） |
 | [`docs/decisions/`](decisions/index.md)（ADR + 模板） | 决策变化 / 新增 ADR 时同 PR | 登记时基线（2026-09-29） |
 | [`docs/archive/`](archive/index.md)（冻结归档 + 索引） | 每次归档操作时同 PR | 登记时基线（2026-09-29） |
+| [`en/README.md`](en/README.md) · [`en/architecture.md`](en/architecture.md)（英文快照） | 3 个月，或中文源文档变更时同 PR | 登记时基线（2026-09-30） |
+| [`../.well-known/security.txt`](../.well-known/security.txt)（机器可读漏洞披露） | 到期前续期（≤ 12 个月，门禁强制） | 登记时基线（2026-09-30） |
+| [`../CITATION.cff`](../CITATION.cff)（工具固定名：GitHub 引用元数据） | 6 个月，或作者 / 许可变化时同 PR | 登记时基线（2026-09-30） |
+| [`../deploy/grafana/`](../deploy/grafana/) · [`../scripts/evals/`](../scripts/evals/)（机器可读运维 / 评测资产） | 由门禁强制，无需人肉周期 | 登记时基线（2026-09-30） |
 
 落地要求：
 
@@ -251,13 +294,13 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 文档命名与存放约定：
 
-- **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
+- **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有**工具固定名**留在根目录：`LICENSE` 与 `CITATION.cff`（GitHub 的 cite 功能只认根目录，2026-09-30 登记）。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
-  - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
-  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/` 下的全部文件。
+  - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）、`CITATION.cff`（GitHub 引用元数据，只认根目录）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
+  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。
   - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
   - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。
-- **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`apps/server/`、`apps/web/`）。**本条只约束目录名**（文件名规则见上一条）——目录不存在「约定大写」这一说，大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。
+- **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`docs/en/`、`apps/server/`、`apps/web/`）。**本条只约束目录名**（文件名规则见上一条）——目录不存在「约定大写」这一说，大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。`docs/en/` 为英文文档目录（当前唯一文件 [`en/index.md`](en/index.md)）：中文为 SSOT、英文页是翻译快照，根 `README.md` 变更时同 PR 同步。
 - **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照、已填写的事故复盘等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
 - **禁止大小写冲突**：任何两个路径不得仅大小写不同——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。重命名后自检一次全仓。
 

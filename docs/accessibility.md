@@ -212,13 +212,25 @@ const stack: KeydownHandler[] = []
 
 1. **没有做过正式的 WCAG 审计**：仓库内无任何审计报告、无合规声明、无 VPAT / ACR 类文件。
    本文件（以及任何其它文档）都**不能**被引用为「符合 WCAG」的证据。
-2. **没有引入任何自动化可访问性检测工具**：全仓（排除 `node_modules` 与 CI 构建缓存）搜不到
-   `axe-core` / `pa11y` / `lighthouse` / `eslint-plugin-jsx-a11y` 之类的依赖、配置或 CI job。
-   复现：`grep -rniE "wcag|axe-core|pa11y|lighthouse" --include=*.md --include=*.ts --include=*.vue --include=*.json --include=*.yml --include=*.go .`
-   （排除 `node_modules`、`.gitlab-ci-local/`、`coverage/`）→ 无命中。
+2. ~~**没有引入任何自动化可访问性检测工具**~~ ✅ **已于 2026-09-30 部分闭环**：
+   现引入 `@axe-core/playwright`（**devDependency**，只进 E2E，不动 `dependencies`——不违反
+   前端「运行时仅 `vue`」的 [ADR-004](decisions/0004-minimal-frontend-deps.md)）并新增
+   [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)：在**真实 Chromium + 真实构建产物**
+   下对 4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题初始态）跑
+   WCAG 2.0 + 2.1 的 A / AA 规则集，**serious / critical 违规即红灯**；另有一条
+   「注入已知违规必须被报出」的自检用例，防止扫描器失效后静默全绿。CI 由既有
+   [`.github/workflows/e2e-playwright.yml`](../.github/workflows/e2e-playwright.yml) 的
+   `pnpm e2e:ci` 覆盖（`testDir: ./e2e` 自动纳入），**无需新增 workflow**。
+   **仍未覆盖**：屏幕阅读器实测，以及 axe 规则集本身不判定的项——故这**不是审计**，
+   也不构成任何合规声明（见 §4 第 1 条）。
 3. **没有做屏幕阅读器实测**：无 NVDA / JAWS / VoiceOver / TalkBack 的实测记录或截图证据。
-4. **没有对比度自动检测，也没有对比度专项核查记录**：颜色全部走 CSS 变量（`--text` / `--muted` / `--primary` …），
-   但没有脚本或测试校验前景/背景对比度，`styles.css` 里也没有相关注释或断言。
+4. ~~**没有对比度自动检测**~~ ✅ **已于 2026-09-30 部分闭环**：渲染态的对比度现由
+   `e2e/a11y.spec.ts` 的 axe `color-contrast` 规则自动检测（浅色 + 深色初始态等 4 个状态），
+   并已据此修掉 2 组实测不达标的 token（`--ok` 2.55:1 → 4.95:1、`--danger` 4.41:1 → 5.91:1，
+   token 公式值，见 §5.5）。**静态 token 表（§5.5）仍保留且仍须维护**：axe 不评估它无法解析的背景
+   （`--brand` 渐变上的白字）与**未出现在被扫描状态里**的配对，两份互补而非替代；
+   表内数值与计数由 [`apps/server/contrast_gate_test.go`](../apps/server/contrast_gate_test.go)
+   从 `styles.css` 机械重算比对，改色不重算即红灯。
 5. ~~**没有处理 `prefers-reduced-motion`**~~ ✅ **已于 2026-09-29 修复（KNOWN_ISSUES #67②）**：
    此前全仓搜不到该媒体查询，`styles.css` 的 `rise` / `toast-in` / `skel` 关键帧与
    `ModalDialog` 的 `modal-fade`、`ObjectContextMenu` 的 `pop-in` 过渡在「减少动效」偏好下
@@ -267,8 +279,9 @@ const stack: KeydownHandler[] = []
 7. **文案切换联动**：`aria-label` 与可见文案来自同一批 i18n key，切语言后**同步**变（不应出现「按钮是英文、
    朗读名称还是中文」）。核对方式：切到英文后检查 `aria-label` 内容的语言。
 8. **主题**：切到 `auto`，在操作系统里切换深浅色，界面应即时跟随；刷新后保持所选主题。
-9. **动效偏好（当前为已知缺口）**：在系统里开启「减少动态效果」，观察过渡 / 动画——**现状是仍会播放**，
-   这一条用于确认缺口仍在（修好后应作为回归项保留）。
+9. **动效偏好（回归项）**：在系统里开启「减少动态效果」，触发过渡 / 动画（如弹窗、toast、骨架屏）——
+   **应立即停止播放**（#67② 已修：`styles.css` 的 `prefers-reduced-motion` 块关闭 `animation` / `transition`）；
+   若仍会播放即为回退，先看 [`a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 是否被绕过。
 
 ### 5.2 仓库里已有的自动化手段（部分覆盖，非审计）
 
@@ -277,24 +290,34 @@ const stack: KeydownHandler[] = []
 | `components/ModalDialog.test.ts`（14 例） | 焦点移入 / 恢复、`document.contains` 保护、`Escape`、`Tab` 陷阱（首尾回卷、中间不干预）、仅关闭按钮时自回卷、footer 插槽与 `aria-modal` 属性 | `cd apps/web && pnpm test src/components/ModalDialog.test.ts` |
 | `composables/useKeydownStack.test.ts`（9 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
-| Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查对比度、不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
+| Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
+| **`e2e/a11y.spec.ts`（5 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题初始态）的 **serious / critical 违规必须为 0**；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
 
 > 以上命令均为 `apps/web/package.json` 的既有脚本（`test` = `vitest run`、`build` = `vue-tsc --noEmit && vite build`、
 > `e2e` = `playwright test`）；行尾的路径参数是 vitest 的文件过滤，不是自定义脚本。
 
-**没有任何自动化手段覆盖**：对比度、屏幕阅读器播报、`aria-live` 播报时机、非 `ModalDialog`
-模态的焦点陷阱。（`prefers-reduced-motion` 与 `<html lang>` 自 2026-09-29 起**已各有回归门禁**：
-`src/a11y_gate.test.ts` 与 `src/i18n/index.test.ts`——但它们是**源码形态 / 行为**断言，
-不是 a11y 规则集扫描，仍不构成审计。）
+**自 2026-09-30 起仍没有任何自动化手段覆盖**：屏幕阅读器播报、`aria-live` 播报时机、
+非 `ModalDialog` 模态的焦点陷阱、axe 无法解析的背景（渐变）上的对比度。
+**已经覆盖的**：渲染态 WCAG A/AA 规则集（含对比度）→ `e2e/a11y.spec.ts`；
+`prefers-reduced-motion` 与 `<html lang>` → `src/a11y_gate.test.ts` 与 `src/i18n/index.test.ts`
+（源码形态 / 行为断言）。即便如此，**没有一条构成审计**——审计需要人工评审 + 辅助技术实测。
 
 ### 5.3 建议的（尚未加入的）机械化检查
 
 以下都**还没做**，仅作为后续选项列出，不要误读为「已具备」：
 
-- 引入 `vitest-axe` / `axe-core` 对组件测试挂载后的 DOM 做规则集扫描（能与现有 happy-dom 测试并列跑）；
-- 在 Playwright E2E 里跑 `@axe-core/playwright`，覆盖真实浏览器下的对比度与结构规则；
+- ~~在 Playwright E2E 里跑 `@axe-core/playwright`，覆盖真实浏览器下的对比度与结构规则~~ ✅
+  **已于 2026-09-30 完成**：即 [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)
+  （4 个界面状态 + 1 条有效性自检，见 §5.2；CI 由既有 `e2e-playwright.yml` 覆盖）；
+- 引入 `vitest-axe` 对组件测试**挂载后的 DOM** 做规则集扫描（能与现有 happy-dom 测试并列跑）——
+  **仍未做**。与 E2E 版互补：组件级能覆盖 E2E 到不了的边界态，但 happy-dom 不做级联 / 布局，
+  判不了对比度，只能判结构规则；
 - ~~增加一条针对 `prefers-reduced-motion` 的样式断言~~ ✅ **已于 2026-09-29 完成**：
   即 `src/a11y_gate.test.ts`（同时钉住 `textarea:focus-visible`）。
+
+> `vitest-axe` 与下节的实现类改进项已于 **2026-09-30** 按两源分工登记
+> [`ROADMAP.md`](ROADMAP.md) §三 **#17**（候选 ⬜ 未排期，唯一来源在该表）——本节只保留选项说明，
+> 不再作为待办清单。
 
 ### 5.4 改进项（与本文件 §4 一一对应）
 
@@ -302,8 +325,46 @@ const stack: KeydownHandler[] = []
 |---|---|
 | ~~高~~ | ~~处理 `prefers-reduced-motion`~~ ✅ 2026-09-29 完成（#67②） |
 | ~~高~~ | ~~让 `<html lang>` 跟随界面语言~~ ✅ 2026-09-29 完成（#67①） |
-| 中 | 把焦点陷阱从 `ModalDialog` 提取为可复用的组合式函数，覆盖其余三个模态 |
-| 中 | 为 `aria-live` 区域补测试断言；把「操作成功 / 失败」统一纳入 live region |
-| 中 | 引入自动化 a11y 扫描（§5.3 前两条） |
-| 低 | 补对比度核查记录；为数据表补 `caption` / 选中态语义；为主要表单控件补可见 `<label>`；~~把 `textarea` 纳入 `:focus-visible` 规则~~ ✅ 2026-09-29 完成（#67③） |
-| 低 | 组织一次正式审计（含辅助技术实测）——在此之前，所有文档都不得声称任何 WCAG 合规等级 |
+| ~~低~~ | ~~把 `textarea` 纳入 `:focus-visible` 规则~~ ✅ 2026-09-29 完成（#67③） |
+| ~~低~~ | ~~补对比度核查记录~~ ✅ 2026-09-30 完成（§5.5 静态记录，含如实标注的不达标组合） |
+| ~~中~~ | ~~引入自动化 a11y 扫描~~ ✅ 2026-09-30 完成 Playwright + axe 侧（`e2e/a11y.spec.ts`）；`vitest-axe` 组件侧仍属下方「中」项 |
+| 中 | 焦点陷阱提取为可复用组合式函数、覆盖其余三个模态；`aria-live` 补测试断言并把「操作成功 / 失败」统一纳入 live region；`vitest-axe` 组件级扫描 → **登记 [`ROADMAP.md`](ROADMAP.md) §三 #17（候选 ⬜，唯一来源）** |
+| 低 | ~~对比度修色：`--ok` / `--danger`~~ ✅ 2026-09-30 完成（`--ok` 2.55→4.95、`--danger` 4.41→5.91，token 公式值；修色由 axe 扫描驱动，见 §5.5）；**剩余**：浅色 `--muted` / `--primary` / `--placeholder` 与 `--brand` 渐变白字（axe 覆盖不到，理由见 §5.5）；数据表 `caption` / 选中态语义；主要表单控件可见 `<label>`；RTL 支持；组织一次正式审计（含辅助技术实测）→ 同上登记 [`ROADMAP.md`](ROADMAP.md) §三 #17 |
+
+> 在正式审计之前，所有文档都**不得**声称任何 WCAG 合规等级（见 §4 第 1 条）。
+
+### 5.5 对比度核查记录（静态计算，2026-09-30）
+
+> **方法**：按 WCAG 2.1 相对亮度公式（sRGB 通道线性化后 `0.2126R + 0.7152G + 0.0722B`）对
+> [`styles.css`](../apps/web/src/styles.css) 的设计 token 做**前景 / 背景配对**计算；深色主题的
+> `rgba()` 覆层先按 alpha 合成到 `--panel` 再算。**这是静态 token 级记录、不是审计**：不含渐变中间
+> 色、图片、阴影与实机渲染，也不覆盖组件临时配色。判定按 WCAG AA **正文 4.5:1**（大字 / UI 图形 3:1）。
+> **本表数值与计数由 [`apps/server/contrast_gate_test.go`](../apps/server/contrast_gate_test.go) 从
+> `styles.css` 机械重算比对**（改色不重算即红灯）；渲染态另有自动检测（`e2e/a11y.spec.ts` 的 axe
+> `color-contrast` 规则），但 axe 不评估渐变背景（`--brand` 上的白字）与**未出现在被扫描状态里**的
+> 配对——两者互补，不能只看 axe 绿灯。数值口径统一取 **token 公式值**（渲染态读数允许 ±0.1 级差异，
+> 不改判定）。
+
+| 组合（前景 on 背景） | 浅色 | 深色 | AA 判定（4.5:1） |
+|---|---|---|---|
+| `--text` on `--bg` | 13.86 | 15.98 | 双主题达标 |
+| `--text` on `--panel` | 14.71 | 14.62 | 双主题达标 |
+| `--muted` on `--bg` | 4.44 | 7.21 | 浅色**差 0.06 未达 AA**（>3:1）；深色达标 |
+| `--muted` on `--panel` | 4.71 | 6.60 | 双主题达标 |
+| `--primary` on `--panel`（链接 / 描边按钮文字） | 3.21 | 7.80 | 浅色**未达 AA**（>3:1）；深色达标 |
+| `--primary` on `--bg` | 3.02 | 8.52 | 同上 |
+| `--placeholder` on `--input-bg` | 2.58 | 3.81 | 浅色 **<3:1**；深色仅达 3:1 档 |
+| `--tag-text` on `--tag-bg` | 5.94 | 7.58 | 双主题达标 |
+| `--danger` on `--danger-bg` | **5.91** ✅ | 4.25 | 浅色已修（2026-09-30）达标；深色略低于 AA（>3:1） |
+| `--ok` on `--ok-bg` | **4.95** ✅ | 7.07 | 浅色已修（2026-09-30）达标；深色达标 |
+| 白字 on `--brand` 渐变（深端 `--brand-to`） | 4.23 | 4.23 | 略低于 AA；**浅端 `--brand-from` 仅 2.37**（主按钮 / 标题白字最弱点） |
+
+> **结论（2026-09-30 修色后）**：`--ok` / `--danger` 浅色两组已修至达标（token 公式值 4.95 / 5.91）。
+> 本表共 **11 行**；浅色主题 **5 行**低于 AA——`--muted` on `--bg` 4.44（差 0.06）、`--primary` on
+> `--panel` 3.21、`--primary` on `--bg` 3.02、`--placeholder` on `--input-bg` 2.58、`--brand` 渐变
+> 白字 4.23（浅端 2.37，最弱，主按钮 / 标题）；深色主题 **3 行**低于 AA——`--danger` 4.25、
+> `--placeholder` 3.81、`--brand` 渐变白字 4.23（brand token 不随主题变，两列同值）。
+> **为什么 axe 全绿而这几组仍在**：`--brand` 是 `background-image` 渐变（axe 无法解析其上的白字），
+> `--placeholder` 是 placeholder 文本（axe 不判该规则），`--muted` / `--primary` 在被扫描的四个状态里
+> 没有以「小字正文」形态出现——**扫描通过 ≠ 全站达标**。本仓库**不声称 WCAG 合规**（§4 第 1 条），
+> 剩余修色统一归入 [`ROADMAP.md`](ROADMAP.md) §三 #17「可访问性补强」的对比度修色子项。

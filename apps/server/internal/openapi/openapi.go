@@ -15,6 +15,7 @@ package openapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -48,20 +49,25 @@ type Param struct {
 // Schema JSON Schema 子集（足够描述我们 69 个端点的形态）。
 // 字段用指针 omitempty 表达「字段缺省时省略」，避免输出噪声。
 type Schema struct {
-	Ref         string             `json:"$ref,omitempty"`
-	Type        string             `json:"type,omitempty"`
-	Format      string             `json:"format,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Enum        []any              `json:"enum,omitempty"`
-	Default     any                `json:"default,omitempty"`
-	Properties  map[string]*Schema `json:"properties,omitempty"`
-	Required    []string           `json:"required,omitempty"`
-	Items       *Schema            `json:"items,omitempty"`
+	Ref         string `json:"$ref,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Format      string `json:"format,omitempty"`
+	Description string `json:"description,omitempty"`
+	Enum        []any  `json:"enum,omitempty"`
+	Default     any    `json:"default,omitempty"`
+	// Example 是 schema 级示例（`example`）。json.RawMessage 使示例以原始 JSON 原样嵌入，
+	// 不必先解码成 any；调用方用 ex("...") 构造（见 handler/openapi_examples.go）。
+	Example    json.RawMessage    `json:"example,omitempty"`
+	Properties map[string]*Schema `json:"properties,omitempty"`
+	Required   []string           `json:"required,omitempty"`
+	Items      *Schema            `json:"items,omitempty"`
 }
 
 // MediaType 一个请求 / 响应体的描述。
 type MediaType struct {
 	Schema *Schema `json:"schema"`
+	// Example 是媒体类型级示例（`example`），OpenAPI 3.0 允许任意 JSON 值。
+	Example json.RawMessage `json:"example,omitempty"`
 }
 
 // Request 描述请求体。
@@ -72,12 +78,18 @@ type Request struct {
 
 // Response 描述单个响应。
 // Ref 非空时输出为 {"$ref": "#/components/responses/<name>"}（复用共享响应，如 NotFound）。
-// JSON / Ref 带 `json:"-"`：结构体默认序列化会把二者静默丢弃，让 components.responses 里的
-// 共享响应变成无 schema 空壳（review §R15b），因此必须自定义 MarshalJSON，与端点级渲染同形。
+// JSON / Example / Ref / ContentType 带 `json:"-"`：结构体默认序列化会把它们静默丢弃，让
+// components.responses 里的共享响应变成无 schema 空壳（review §R15b），因此必须自定义
+// MarshalJSON，与端点级渲染同形。
 type Response struct {
 	Description string  `json:"description,omitempty"`
 	JSON        *Schema `json:"-"`
-	Ref         string  `json:"-"`
+	// Example 是响应级示例（写在 content.<mediaType>.example 下）。
+	Example json.RawMessage `json:"-"`
+	// ContentType 覆盖响应的媒体类型（默认 application/json）。二进制 / SSE / 文本端点的
+	// 2xx 响应没有 JSON schema，用它可以给出可读示例（如 application/zip）。
+	ContentType string `json:"-"`
+	Ref         string `json:"-"`
 }
 
 // MarshalJSON 输出 OpenAPI Response Object（$ref 或 description+content），
@@ -106,6 +118,20 @@ type Op struct {
 	Params    []Param
 	Request   *Request
 	Responses map[string]Response
+}
+
+// OpExample 是一个 operation 的示例集合：请求体示例 + 各状态码的响应示例。
+//
+// 与 Op 分开登记（handler 侧 applyExamples 在全部注册完成后统一附加），原因：示例是纯文档数据，
+// 内联进每条 Operation(...) 调用会把注册语句撑成巨型字面量、淹没结构信息。字段为原始 JSON，
+// 因此示例可以逐字节 review，也不会因 struct 往返而改变数字/转义形式。
+type OpExample struct {
+	Request   json.RawMessage
+	Responses map[string]json.RawMessage
+	// ContentTypes 覆盖指定状态码的响应媒体类型（默认 application/json）。
+	// 二进制 / SSE / 文本端点的 2xx 没有 JSON schema，用它把示例挂到真实媒体类型下
+	// （如 application/zip、text/event-stream），而不是错误地标成 JSON。
+	ContentTypes map[string]string
 }
 
 // Registry 维护所有 path -> method -> Op 的映射。
@@ -167,6 +193,52 @@ func (r *Registry) Operation(method, path string, op Op) {
 	}
 	r.paths[path][strings.ToUpper(method)] = op
 	r.spec = nil
+}
+
+// SetExamples 为已注册的 operation 附加请求 / 响应示例。
+//
+// 返回 error 而非静默忽略：示例 key（method+path）或状态码拼错时，示例会「凭空消失」且
+// 生成的规范仍然合法——这正是最难发现的一类文档腐烂。调用方（handler.applyExamples）在
+// 注册期即失败，门禁测试再对最终规范兜底。
+func (r *Registry) SetExamples(method, path string, ex OpExample) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	m := strings.ToUpper(method)
+	ops := r.paths[path]
+	if ops == nil {
+		return fmt.Errorf("openapi: 未注册的 path %q", path)
+	}
+	op, ok := ops[m]
+	if !ok {
+		return fmt.Errorf("openapi: 未注册的 operation %s %s", m, path)
+	}
+	if ex.Request != nil {
+		if op.Request == nil {
+			return fmt.Errorf("openapi: %s %s 无 requestBody，不能登记请求示例", m, path)
+		}
+		op.Request.Content.Example = ex.Request
+	}
+	for status, raw := range ex.Responses {
+		resp, ok := op.Responses[status]
+		if !ok {
+			return fmt.Errorf("openapi: %s %s 未注册响应 %s", m, path, status)
+		}
+		resp.Example = raw
+		if ct, ok := ex.ContentTypes[status]; ok {
+			resp.ContentType = ct
+		}
+		op.Responses[status] = resp
+	}
+	// ContentTypes 指向未登记示例的状态码是配置错误（媒体类型会被静默忽略）。
+	for status := range ex.ContentTypes {
+		if _, ok := ex.Responses[status]; !ok {
+			return fmt.Errorf("openapi: %s %s 的 ContentTypes 指向了未提供示例的状态码 %s", m, path, status)
+		}
+	}
+	ops[m] = op
+	r.spec = nil
+	return nil
 }
 
 // MarshalJSON 输出 OpenAPI 3.0 JSON。
@@ -310,10 +382,12 @@ func renderMedia(mt MediaType) map[string]any {
 	if mt.Schema == nil {
 		return map[string]any{}
 	}
+	media := map[string]any{"schema": mt.Schema}
+	if mt.Example != nil {
+		media["example"] = mt.Example
+	}
 	return map[string]any{
-		"application/json": map[string]any{
-			"schema": mt.Schema,
-		},
+		"application/json": media,
 	}
 }
 
@@ -331,17 +405,27 @@ func renderResponses(rs map[string]Response) map[string]any {
 }
 
 // renderResponse 渲染单个响应条目：$ref 优先（复用共享响应），否则 description + 可选
-// JSON schema。components.responses（经 Response.MarshalJSON）与端点级 responses 共用
-// 此函数——两处输出必须同形，否则契约 SSOT 会漂移（review §R15b）。
+// content（schema / example）。content 的媒体类型默认 application/json，二进制 / SSE / 文本
+// 端点可用 ContentType 覆盖。components.responses（经 Response.MarshalJSON）与端点级 responses
+// 共用此函数——两处输出必须同形，否则契约 SSOT 会漂移（review §R15b）。
 func renderResponse(r Response) map[string]any {
 	if r.Ref != "" {
 		return map[string]any{"$ref": r.Ref}
 	}
 	entry := map[string]any{"description": r.Description}
-	if r.JSON != nil {
-		entry["content"] = map[string]any{
-			"application/json": map[string]any{"schema": r.JSON},
+	if r.JSON != nil || r.Example != nil {
+		media := map[string]any{}
+		if r.JSON != nil {
+			media["schema"] = r.JSON
 		}
+		if r.Example != nil {
+			media["example"] = r.Example
+		}
+		ct := r.ContentType
+		if ct == "" {
+			ct = "application/json"
+		}
+		entry["content"] = map[string]any{ct: media}
 	}
 	return entry
 }
@@ -414,6 +498,22 @@ func EnumStr(values ...string) *Schema {
 	return &Schema{Type: "string", Enum: e}
 }
 
+// Ex 把一段 JSON 字面量转成示例值；非法 JSON 立即 panic。
+// 示例是静态数据，写错应在本包第一次构造（注册表 / 规范生成）时就炸出来，而不是生成一份
+// 「合法但示例字段早已改名」的契约。
+func Ex(raw string) json.RawMessage {
+	if !json.Valid([]byte(raw)) {
+		panic("openapi: 示例不是合法 JSON: " + raw)
+	}
+	return json.RawMessage(raw)
+}
+
+// withExample 给 schema 附上示例，返回同一指针以支持 `"X": withExample(BuildObj(...), "...")`。
+func withExample(s *Schema, raw string) *Schema {
+	s.Example = Ex(raw)
+	return s
+}
+
 func defaultSecurity() map[string]any {
 	return map[string]any{
 		"bearerAuth": map[string]any{
@@ -434,10 +534,10 @@ func defaultSecurityRequirement() []map[string][]string {
 // 并被各端点以 $ref 接线（见 openapi_register_*.go）。片段保持与真实响应形状一致。
 func sharedSchemas() map[string]*Schema {
 	return map[string]*Schema{
-		"Error": BuildObj(map[string]*Schema{
+		"Error": withExample(BuildObj(map[string]*Schema{
 			"error": Str(),
-		}, "error"),
-		"Account": BuildObj(map[string]*Schema{
+		}, "error"), `{"error":"account not found"}`),
+		"Account": withExample(BuildObj(map[string]*Schema{
 			"id":             Str(),
 			"name":           Str(),
 			"endpoint":       Str(),
@@ -450,25 +550,25 @@ func sharedSchemas() map[string]*Schema {
 			"useSSL":         Bool(),
 			"createdAt":      Str("date-time"),
 			"updatedAt":      Str("date-time"),
-		}, "id", "name", "endpoint", "accessKey"),
-		"Bucket": BuildObj(map[string]*Schema{
+		}, "id", "name", "endpoint", "accessKey"), `{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
+		"Bucket": withExample(BuildObj(map[string]*Schema{
 			"name":         Str(),
 			"creationDate": Str("date-time"),
-		}, "name", "creationDate"),
-		"ObjectItem": BuildObj(map[string]*Schema{
+		}, "name", "creationDate"), `{"name":"my-bucket","creationDate":"2026-09-30T05:00:00Z"}`),
+		"ObjectItem": withExample(BuildObj(map[string]*Schema{
 			"key":          Str(),
 			"size":         Int64(),
 			"lastModified": Str("date-time"),
 			"etag":         Str(),
 			"storageClass": Str(),
 			"isDir":        Bool(),
-		}, "key", "size", "lastModified", "isDir"),
-		"ListObjectsResp": BuildObj(map[string]*Schema{
+		}, "key", "size", "lastModified", "isDir"), `{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}`),
+		"ListObjectsResp": withExample(BuildObj(map[string]*Schema{
 			"objects":        Arr(Ref("#/components/schemas/ObjectItem")),
 			"commonPrefixes": Arr(Str()),
 			"isTruncated":    Bool(),
 			"nextToken":      Str(),
-		}, "objects", "commonPrefixes", "isTruncated"),
+		}, "objects", "commonPrefixes", "isTruncated"), `{"objects":[{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}],"commonPrefixes":["docs/"],"isTruncated":false,"nextToken":""}`),
 	}
 }
 

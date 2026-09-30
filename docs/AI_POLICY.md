@@ -128,17 +128,24 @@
 5. AI 生成的**安全、鉴权、加密、权限**代码必须由人类专家复核。
 6. 不得让代理自动发布、部署或修改生产配置。
 
-披露模板（粘贴进 PR 的「AI 使用披露」段）：
+披露模板（粘贴进 PR 的「AI 使用披露」段；字段集由
+[`apps/server/agent_evals_gate_test.go`](../apps/server/agent_evals_gate_test.go) 与 PR 模板钉住一致，
+**新增 / 删除字段必须两处同改**）：
 
 ```text
 AI 使用披露：
 - 工具：<工具 / 模型名称>
 - 用途：<如生成初版测试用例、辅助重构、文档润色>
 - 范围：<涉及文件或模块>
+- 占比：<AI 生成 / 辅助比例的估计值，如 30–50%；纯格式化 / 拼写修正写 0>
 - 人工审查：<已审查并验证；说明验证方式，如门禁实跑结果>
 - 敏感数据：<未向外部模型发送任何密钥 / 用户数据 / 未公开源码>
 - 许可证：<确认未引入第三方受限代码>
 ```
+
+披露只是起点——「**披露 → 度量 → 评测**」闭环见 [`AGENT_EVALS.md`](AGENT_EVALS.md)
+（黄金任务集 / 加权评分卡 / 贡献度量台账；「占比」是自报告估计值，只服务改进 AI 使用方式，
+**不用于绩效评价**）。
 
 ## 6. 安全与隐私（代理视角）
 
@@ -234,7 +241,9 @@ Human sponsor: @<维护者>
 | 每个 `apps/` 子树都有子树 `AGENTS.md`，且**回指**根文件（仓库级规则不分叉） | `TestEveryAppSubtreeHasAgentsMd`：逐个 `apps/*` 断言存在、≤ 4 KiB、含 `../../AGENTS.md` 链接 | **代码强制** |
 | §4「本仓库当前**未提交 MCP 配置**」 | `TestAiPolicyClaimsMatchRepoState`：根目录一旦出现 `.mcp.json` 即红灯，迫使同步本政策 | **代码强制** |
 | 其它 AI 工具入口（如 `.github/copilot-instructions.md`）保持**纯指针**、不复制规则 | 同上：断言 ≤ 2 KiB 且必须指向 `AGENTS.md` | **代码强制** |
-| §5「实质性 AI 生成内容必须披露」 | PR 模板「AI 使用披露」块的**存在性**由门禁断言；**填没填**由人工评审（单人维护，未接自动校验 bot） | 部分（结构强制 / 内容人工） |
+| §5「实质性 AI 生成内容必须披露」 | PR 模板「AI 使用披露」块的**存在性**由 `ai_governance_gate` 断言；披露块的「占比」字段与 §5 模板字段集一致性由 `agent_evals_gate` 钉住；**填没填 / 占比如实与否**由人工评审（单人维护，未接自动校验 bot） | 部分（结构强制 / 内容人工） |
+| [`AGENT_EVALS.md`](AGENT_EVALS.md) 的结构（黄金任务集 / 评分卡 / 度量三节标记 + GT 集 ≥ 3 条）、[`scripts/agent-eval.sh`](../scripts/agent-eval.sh) 存在且非空壳、本政策回引 AGENT_EVALS、披露字段集两处一致 | `apps/server/agent_evals_gate_test.go`（`TestAgentEvals*` 三条 + PR 模板 / §5 模板字段集两条） | **代码强制** |
+| 评分卡打分、度量台账回填、评测结果好坏 | **无机械保证**——属人工评审（单人维护：评审人即维护者本人；回填时机见 AGENT_EVALS §四） | ⚠️ 人工 |
 | 机器可读契约、配置 SSOT、文档数字与链接、文档导航覆盖、第三方许可证、死代码 | `TestCommittedOpenAPISpecMatchesRuntime` · `config_doc_gate` · `doc_number_gate` · `doc_link_gate` · `doc_index_gate` · `third_party_licenses_gate` · `deadcode_gate` | **代码强制** |
 | §3 权限矩阵的「需确认 / 禁止」档 | **无机械保证**——靠代理与人读本政策 + PR 评审；本仓库未接入自动审批或权限网关 | ⚠️ 人工 |
 | 「进入发布模式需人类授权」「不自动合并 PR / 不自动删分支或数据」 | **无机械保证**（仓库侧未配置约束 bot 权限的分支保护策略即代码） | ⚠️ 人工 |

@@ -683,6 +683,157 @@ OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；**经�
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
 鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 10 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
 
+## 请求示例（curl）
+
+以下示例假设后端监听 `127.0.0.1:8080`，且已设置 `S3C_TOKEN`（未设置 token 时无需 `Authorization` 头）。先导出变量：
+
+```bash
+export BASE="http://127.0.0.1:8080"
+export S3C_TOKEN="<Bearer Token>"
+export ACCOUNT_ID="<账号 UUID，见 GET /api/accounts 返回的 id>"
+```
+
+### accounts
+
+```bash
+# 列出全部账号
+curl -sS -X GET "$BASE/api/accounts" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+200 {"accounts":[{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}]}
+```
+
+```bash
+# 新建账号（secretKey 只在此请求体内出现，响应不回传）
+curl -sS -X POST "$BASE/api/accounts" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretKey":"secret","bucket":"my-bucket","pathStyle":true,"useSSL":false}'
+```
+```json
+201 {"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}
+```
+
+### buckets
+
+```bash
+# 列出账号下的桶
+curl -sS -X GET "$BASE/api/accounts/$ACCOUNT_ID/buckets" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+200 {"buckets":[{"name":"my-bucket","creationDate":"2026-09-30T05:00:00Z"}]}
+```
+
+### bucket-settings
+
+```bash
+# 配置桶 CORS（rules 传空数组 = 删除全部规则）
+curl -sS -X PUT "$BASE/api/accounts/$ACCOUNT_ID/bucket/cors" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"my-bucket","rules":[{"id":"r1","allowedMethods":["GET","PUT"],"allowedOrigins":["https://app.example.com"],"allowedHeaders":["*"],"exposeHeaders":["ETag"],"maxAgeSeconds":3600}]}'
+```
+```json
+200 {"updated":1}
+```
+
+### objects
+
+```bash
+# 生成预签名 URL（method=get|put|post；expiresIn 秒，默认 3600，上限 86400）
+curl -sS -X POST "$BASE/api/accounts/$ACCOUNT_ID/presign" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"my-bucket","key":"docs/a.txt","method":"get","expiresIn":3600}'
+```
+```json
+200 {"method":"get","bucket":"my-bucket","key":"docs/a.txt","url":"https://s3.example.com/my-bucket/docs/a.txt?X-Amz-Signature=...","expiresIn":3600}
+```
+
+### object-meta
+
+```bash
+# 覆盖写入对象标签（tags 传空数组 = 清空）
+curl -sS -X PUT "$BASE/api/accounts/$ACCOUNT_ID/object-tags" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"my-bucket","key":"docs/a.txt","tags":[{"key":"env","value":"prod"}]}'
+```
+```json
+200 {"tags":[{"key":"env","value":"prod"}]}
+```
+
+### multipart
+
+```bash
+# 初始化分段上传
+curl -sS -X POST "$BASE/api/accounts/$ACCOUNT_ID/multipart/init" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"my-bucket","key":"big.bin","contentType":"application/octet-stream"}'
+```
+```json
+200 {"uploadId":"UPLOAD123","key":"big.bin","bucket":"my-bucket"}
+```
+
+### versions
+
+```bash
+# 列出版本与删除标记（需桶版本控制已开启）
+curl -sS -X GET "$BASE/api/accounts/$ACCOUNT_ID/versions?bucket=my-bucket&prefix=docs/" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+200 {"versions":[{"key":"docs/a.txt","versionId":"v2","isLatest":true,"lastModified":"2026-09-30T05:00:00Z","size":17,"etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD"}],"deleteMarkers":[],"isTruncated":false,"nextKeyMarker":"","nextVersionIdMarker":""}
+```
+
+### trash
+
+```bash
+# 彻底清除某 key 的全部版本与删除标记
+curl -sS -X POST "$BASE/api/accounts/$ACCOUNT_ID/trash/purge" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bucket":"my-bucket","key":"docs/b.txt"}'
+```
+```json
+200 {"purged":"docs/b.txt","deleted":3}
+```
+
+### migrate
+
+```bash
+# 增量同步（mode=etag|size_mtime|always）
+curl -sS -X POST "$BASE/api/migrate/sync" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"","mode":"etag"}'
+```
+```json
+200 {"scanned":100,"skipped":60,"copied":40,"failed":0,"failedKeys":[],"truncated":false}
+```
+
+### system
+
+```bash
+# 健康检查（withAuth 豁免：无需 Authorization 头）
+curl -sS -X GET "$BASE/api/health"
+```
+```json
+200 {"status":"ok","version":"v1.0.0","time":"2026-09-30T05:00:00Z","store":{"ok":true}}
+```
+
+```bash
+# 拉取 OpenAPI 规范（需 S3C_EXPOSE_OPENAPI=1；该端点**不**豁免鉴权）
+curl -sS -X GET "$BASE/api/openapi.json" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+200 {"openapi":"3.0.3","info":{"title":"s3clinet API","version":"v1.0.0"}}
+```
+
 ## 静态资源
 
 - 非 `/api` 路径由 Go 托管 `apps/web/dist`；未命中的页面路由（无扩展名）回退到 `index.html`（SPA），带扩展名的缺失资源返回 404。

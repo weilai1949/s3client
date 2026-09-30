@@ -84,6 +84,20 @@
     "schemas": {
       "Account": {
         "type": "object",
+        "example": {
+          "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+          "name": "minio",
+          "endpoint": "http://localhost:9000",
+          "publicEndpoint": "https://s3.example.com",
+          "region": "us-east-1",
+          "accessKey": "AKIAEXAMPLE",
+          "secretSet": true,
+          "bucket": "my-bucket",
+          "pathStyle": true,
+          "useSSL": false,
+          "createdAt": "2026-09-30T05:00:00Z",
+          "updatedAt": "2026-09-30T05:00:00Z"
+        },
         "properties": {
           "accessKey": {
             "type": "string"
@@ -133,6 +147,10 @@
       },
       "Bucket": {
         "type": "object",
+        "example": {
+          "name": "my-bucket",
+          "creationDate": "2026-09-30T05:00:00Z"
+        },
         "properties": {
           "creationDate": {
             "type": "string",
@@ -149,6 +167,9 @@
       },
       "Error": {
         "type": "object",
+        "example": {
+          "error": "account not found"
+        },
         "properties": {
           "error": {
             "type": "string"
@@ -160,6 +181,23 @@
       },
       "ListObjectsResp": {
         "type": "object",
+        "example": {
+          "objects": [
+            {
+              "key": "docs/a.txt",
+              "size": 17,
+              "lastModified": "2026-09-30T05:00:00Z",
+              "etag": "\"9c1d2f3a4b5c6d7e\"",
+              "storageClass": "STANDARD",
+              "isDir": false
+            }
+          ],
+          "commonPrefixes": [
+            "docs/"
+          ],
+          "isTruncated": false,
+          "nextToken": ""
+        },
         "properties": {
           "commonPrefixes": {
             "type": "array",
@@ -188,6 +226,14 @@
       },
       "ObjectItem": {
         "type": "object",
+        "example": {
+          "key": "docs/a.txt",
+          "size": 17,
+          "lastModified": "2026-09-30T05:00:00Z",
+          "etag": "\"9c1d2f3a4b5c6d7e\"",
+          "storageClass": "STANDARD",
+          "isDir": false
+        },
         "properties": {
           "etag": {
             "type": "string"
@@ -239,6 +285,20 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "accounts": [
+                    {
+                      "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                      "name": "minio",
+                      "endpoint": "http://localhost:9000",
+                      "accessKey": "AKIAEXAMPLE",
+                      "secretSet": true,
+                      "bucket": "my-bucket",
+                      "pathStyle": true,
+                      "useSSL": false
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -268,6 +328,15 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "minio",
+                "endpoint": "http://localhost:9000",
+                "accessKey": "AKIAEXAMPLE",
+                "secretKey": "secret",
+                "bucket": "my-bucket",
+                "pathStyle": true,
+                "useSSL": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -314,6 +383,16 @@
           "201": {
             "content": {
               "application/json": {
+                "example": {
+                  "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                  "name": "minio",
+                  "endpoint": "http://localhost:9000",
+                  "accessKey": "AKIAEXAMPLE",
+                  "secretSet": true,
+                  "bucket": "my-bucket",
+                  "pathStyle": true,
+                  "useSSL": false
+                },
                 "schema": {
                   "$ref": "#/components/schemas/Account"
                 }
@@ -337,6 +416,13 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "endpoint": "http://localhost:9000",
+                "accessKey": "AKIAEXAMPLE",
+                "secretKey": "secret",
+                "pathStyle": true,
+                "useSSL": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -382,6 +468,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "buckets": [
+                    {
+                      "name": "my-bucket",
+                      "creationDate": "2026-09-30T05:00:00Z"
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -422,6 +516,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -454,6 +551,16 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                  "name": "minio",
+                  "endpoint": "http://localhost:9000",
+                  "accessKey": "AKIAEXAMPLE",
+                  "secretSet": true,
+                  "bucket": "my-bucket",
+                  "pathStyle": true,
+                  "useSSL": false
+                },
                 "schema": {
                   "$ref": "#/components/schemas/Account"
                 }
@@ -480,6 +587,14 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "minio",
+                "endpoint": "http://localhost:9000",
+                "accessKey": "AKIAEXAMPLE",
+                "bucket": "my-bucket",
+                "pathStyle": true,
+                "useSSL": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -525,6 +640,16 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                  "name": "minio",
+                  "endpoint": "http://localhost:9000",
+                  "accessKey": "AKIAEXAMPLE",
+                  "secretSet": true,
+                  "bucket": "my-bucket",
+                  "pathStyle": true,
+                  "useSSL": false
+                },
                 "schema": {
                   "$ref": "#/components/schemas/Account"
                 }
@@ -563,6 +688,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -601,6 +729,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "name": "my-bucket",
+                "region": "us-east-1",
+                "acl": "private"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -632,6 +765,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "created": "my-bucket",
+                  "region": "us-east-1",
+                  "acl": "private"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -675,6 +813,12 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "region": "us-east-1",
+                  "createdAt": "2026-09-30T05:00:00Z",
+                  "versioning": "Enabled"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -715,6 +859,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "status": "Enabled"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -742,6 +890,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "versioning": "Enabled"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -779,6 +930,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -811,6 +965,28 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "rules": [
+                    {
+                      "id": "r1",
+                      "allowedMethods": [
+                        "GET",
+                        "PUT"
+                      ],
+                      "allowedOrigins": [
+                        "https://app.example.com"
+                      ],
+                      "allowedHeaders": [
+                        "*"
+                      ],
+                      "exposeHeaders": [
+                        "ETag"
+                      ],
+                      "maxAgeSeconds": 3600
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -881,6 +1057,28 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "rules": [
+                  {
+                    "id": "r1",
+                    "allowedMethods": [
+                      "GET",
+                      "PUT"
+                    ],
+                    "allowedOrigins": [
+                      "https://app.example.com"
+                    ],
+                    "allowedHeaders": [
+                      "*"
+                    ],
+                    "exposeHeaders": [
+                      "ETag"
+                    ],
+                    "maxAgeSeconds": 3600
+                  }
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -943,6 +1141,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "updated": 1
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -980,6 +1181,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1012,6 +1216,13 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "configured": true,
+                  "algorithm": "AES256",
+                  "kmsKeyId": "",
+                  "bucketKeyEnabled": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1052,6 +1263,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "algorithm": "AES256",
+                "bucketKeyEnabled": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1086,6 +1302,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "configured": true,
+                  "algorithm": "AES256"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1133,6 +1353,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1165,6 +1388,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "configured": true,
+                  "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1199,6 +1427,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1222,6 +1454,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "configured": true
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1269,6 +1504,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1301,6 +1539,15 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "tags": [
+                    {
+                      "key": "env",
+                      "value": "prod"
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1347,6 +1594,15 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "tags": [
+                  {
+                    "key": "env",
+                    "value": "prod"
+                  }
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1385,6 +1641,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "updated": 1
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1422,6 +1681,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1454,6 +1716,13 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "configured": true,
+                  "indexDocument": "index.html",
+                  "errorDocument": "error.html",
+                  "redirectAllRequestsTo": ""
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1494,6 +1763,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "indexDocument": "index.html",
+                "errorDocument": "error.html"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1522,6 +1796,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "configured": true
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1563,6 +1840,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "buckets": [
+                    {
+                      "name": "my-bucket",
+                      "creationDate": "2026-09-30T05:00:00Z"
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1599,6 +1884,12 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "newBucket": "archive",
+                "newKey": "a.txt"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1630,6 +1921,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "copied": "a.txt",
+                  "bucket": "archive"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1663,6 +1958,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "targetBucket": "archive",
+                "targetPrefix": "2026/",
+                "keys": [
+                  "docs/a.txt",
+                  "docs/b.txt"
+                ],
+                "deleteSource": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1698,6 +2003,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "copied": 2,
+                  "failed": 0,
+                  "total": 2
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1746,6 +2056,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "targetBucket": "archive",
+                "targetPrefix": "2026/",
+                "keys": [
+                  "docs/a.txt",
+                  "docs/b.txt"
+                ],
+                "deleteSource": false
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1781,6 +2101,10 @@
           "202": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "total": 2
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1814,6 +2138,12 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "prefix": "docs/",
+                "targetBucket": "archive",
+                "targetPrefix": "2026/docs/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1845,6 +2175,12 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "copied": 12,
+                  "failed": 0,
+                  "total": 12,
+                  "truncated": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1893,6 +2229,12 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "prefix": "docs/",
+                "targetBucket": "archive",
+                "targetPrefix": "2026/docs/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1924,6 +2266,11 @@
           "202": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "total": 12,
+                  "truncated": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -1960,6 +2307,13 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "keys": [
+                  "docs/a.txt",
+                  "docs/b.txt"
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -1986,6 +2340,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": 2,
+                  "failed": 0
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2032,6 +2390,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/b.txt",
+                "versionId": "dm1"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2059,6 +2422,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "restored": "docs/b.txt",
+                  "versionId": "dm1"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2092,6 +2459,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "prefix": "docs/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2115,6 +2486,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": 11,
+                  "failed": 0,
+                  "truncated": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2154,6 +2530,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "prefix": "docs/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2177,6 +2557,11 @@
           "202": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "total": 11,
+                  "truncated": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2213,6 +2598,13 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "keys": [
+                  "docs/a.txt",
+                  "docs/b.txt"
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2237,6 +2629,11 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/zip": {
+                "example": "\u003cZIP 字节流（application/zip，流式打包不落盘）\u003e"
+              }
+            },
             "description": "application/zip 流"
           },
           "400": {
@@ -2288,6 +2685,17 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "key": "docs/a.txt",
+                  "size": 17,
+                  "lastModified": "2026-09-30T05:00:00Z",
+                  "etag": "\"9c1d2f3a4b5c6d7e\"",
+                  "contentType": "text/plain; charset=utf-8",
+                  "storageClass": "STANDARD",
+                  "metadata": {
+                    "owner": "alice"
+                  }
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2345,6 +2753,15 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "rules": [
+                    {
+                      "id": "expire-logs",
+                      "prefix": "logs/",
+                      "days": 30
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2392,6 +2809,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "rules": [
+                  {
+                    "id": "expire-logs",
+                    "prefix": "logs/",
+                    "days": 30
+                  }
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2433,6 +2860,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "updated": 1
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2463,6 +2893,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2486,6 +2920,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "created": "docs/",
+                  "bucket": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2519,6 +2957,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "big.bin",
+                "uploadId": "UPLOAD123"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2546,6 +2989,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "aborted": true
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2576,6 +3022,17 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "big.bin",
+                "uploadId": "UPLOAD123",
+                "parts": [
+                  {
+                    "partNumber": 1,
+                    "etag": "\"e1\""
+                  }
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2622,6 +3079,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "completed": "big.bin"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2652,6 +3112,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "big.bin",
+                "contentType": "application/octet-stream"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2678,6 +3143,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "uploadId": "UPLOAD123",
+                  "key": "big.bin",
+                  "bucket": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2714,6 +3184,13 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "big.bin",
+                "uploadId": "UPLOAD123",
+                "partNumber": 1,
+                "expiresIn": 3600
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2748,6 +3225,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "partNumber": 1,
+                  "url": "https://s3.example.com/my-bucket/big.bin?partNumber=1\u0026X-Amz-Signature=...",
+                  "expiresIn": 3600
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2808,6 +3290,19 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "owner": "owner",
+                  "public": false,
+                  "grants": [
+                    {
+                      "grantee": "AllUsers",
+                      "permission": "READ"
+                    }
+                  ],
+                  "url": "https://s3.example.com/my-bucket/docs/a.txt"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2862,6 +3357,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "acl": "public-read"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -2896,6 +3396,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "acl": "public-read"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2939,6 +3442,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "tags": [
+                    {
+                      "key": "env",
+                      "value": "prod"
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -2982,6 +3493,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "tags": [
+                  {
+                    "key": "env",
+                    "value": "prod"
+                  }
+                ]
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3024,6 +3545,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "tags": [
+                    {
+                      "key": "env",
+                      "value": "prod"
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3098,6 +3627,23 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "objects": [
+                    {
+                      "key": "docs/a.txt",
+                      "size": 17,
+                      "lastModified": "2026-09-30T05:00:00Z",
+                      "etag": "\"9c1d2f3a4b5c6d7e\"",
+                      "storageClass": "STANDARD",
+                      "isDir": false
+                    }
+                  ],
+                  "commonPrefixes": [
+                    "docs/"
+                  ],
+                  "isTruncated": false,
+                  "nextToken": ""
+                },
                 "schema": {
                   "$ref": "#/components/schemas/ListObjectsResp"
                 }
@@ -3123,6 +3669,12 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "method": "get",
+                "expiresIn": 3600
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3160,6 +3712,13 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "method": "get",
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "url": "https://s3.example.com/my-bucket/docs/a.txt?X-Amz-Signature=...",
+                  "expiresIn": 3600
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3256,6 +3815,11 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/octet-stream": {
+                "example": "\u003c对象字节流；text 模式为纯文本前 1 MiB\u003e"
+              }
+            },
             "description": "二进制流 / text/plain"
           },
           "404": {
@@ -3279,6 +3843,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "newKey": "archive/a.txt"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3310,6 +3879,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "renamed": "archive/a.txt"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3340,6 +3912,14 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "contentType": "text/markdown",
+                "metadata": {
+                  "owner": "alice"
+                }
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3369,6 +3949,9 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "updated": "docs/a.txt"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3409,6 +3992,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "storageClass": "STANDARD_IA"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3439,6 +4027,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "changed": "docs/a.txt",
+                  "versionId": "",
+                  "storageClass": "STANDARD_IA"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3489,6 +4082,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "ok": true,
+                  "bucket": "my-bucket"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3551,6 +4148,19 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleteMarkers": [
+                    {
+                      "key": "docs/b.txt",
+                      "versionId": "dm1",
+                      "isLatest": true,
+                      "lastModified": "2026-09-30T04:00:00Z"
+                    }
+                  ],
+                  "isTruncated": false,
+                  "nextKeyMarker": "",
+                  "nextVersionIdMarker": ""
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3614,6 +4224,10 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/b.txt"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3637,6 +4251,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "purged": "docs/b.txt",
+                  "deleted": 3
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3692,6 +4310,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "deleted": "docs/a.txt",
+                  "versionId": "v1"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3735,6 +4357,11 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "versionId": "v1"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -3762,6 +4389,10 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "restored": "docs/a.txt",
+                  "versionId": "v3"
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3836,6 +4467,30 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "versions": [
+                    {
+                      "key": "docs/a.txt",
+                      "versionId": "v2",
+                      "isLatest": true,
+                      "lastModified": "2026-09-30T05:00:00Z",
+                      "size": 17,
+                      "etag": "\"9c1d2f3a4b5c6d7e\"",
+                      "storageClass": "STANDARD"
+                    }
+                  ],
+                  "deleteMarkers": [
+                    {
+                      "key": "docs/b.txt",
+                      "versionId": "dm1",
+                      "isLatest": true,
+                      "lastModified": "2026-09-30T04:00:00Z"
+                    }
+                  ],
+                  "isTruncated": false,
+                  "nextKeyMarker": "",
+                  "nextVersionIdMarker": ""
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -3935,6 +4590,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "status": "ok",
+                  "version": "v1.0.0",
+                  "time": "2026-09-30T05:00:00Z",
+                  "store": {
+                    "ok": true
+                  }
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4037,6 +4700,11 @@
         "operationId": "metrics",
         "responses": {
           "200": {
+            "content": {
+              "text/plain": {
+                "example": "# HELP s3c_build_info 构建信息\ns3c_build_info{version=\"v1.0.0\"} 1\ns3c_store_up 1\n"
+              }
+            },
             "description": "text/plain; version=0.0.4"
           },
           "404": {
@@ -4056,6 +4724,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                "sourceBucket": "src-bucket",
+                "sourceKeys": [
+                  "docs/a.txt"
+                ],
+                "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                "targetBucket": "dst-bucket",
+                "targetPrefix": "migrated/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -4090,6 +4768,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "migrated": 1,
+                  "failed": 0,
+                  "failedKeys": []
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4127,6 +4810,16 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                "sourceBucket": "src-bucket",
+                "sourceKeys": [
+                  "docs/a.txt"
+                ],
+                "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                "targetBucket": "dst-bucket",
+                "targetPrefix": "migrated/"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -4161,6 +4854,10 @@
           "202": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "total": 1
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4190,6 +4887,31 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobs": [
+                    {
+                      "id": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                      "created": "2026-09-30T05:00:00Z",
+                      "finishedAt": "2026-09-30T05:05:00Z",
+                      "total": 100,
+                      "status": "done",
+                      "progress": {
+                        "done": 100,
+                        "total": 100,
+                        "migrated": 98,
+                        "failed": 2,
+                        "status": "done"
+                      },
+                      "result": {
+                        "migrated": 98,
+                        "failed": 2,
+                        "failedKeys": [
+                          "bad.txt"
+                        ]
+                      }
+                    }
+                  ]
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4309,6 +5031,24 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "done": true,
+                  "progress": {
+                    "done": 100,
+                    "total": 100,
+                    "migrated": 98,
+                    "failed": 2,
+                    "status": "done"
+                  },
+                  "result": {
+                    "migrated": 98,
+                    "failed": 2,
+                    "failedKeys": [
+                      "bad.txt"
+                    ]
+                  }
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4395,6 +5135,11 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "cancelled": true,
+                  "done": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4436,6 +5181,11 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "text/event-stream": {
+                "example": "data: {\"done\":1,\"total\":100,\"migrated\":1,\"failed\":0,\"status\":\"running\"}\n\n"
+              }
+            },
             "description": "text/event-stream"
           }
         },
@@ -4451,6 +5201,15 @@
         "requestBody": {
           "content": {
             "application/json": {
+              "example": {
+                "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                "sourceBucket": "src-bucket",
+                "sourcePrefix": "",
+                "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                "targetBucket": "dst-bucket",
+                "targetPrefix": "",
+                "mode": "etag"
+              },
               "schema": {
                 "type": "object",
                 "properties": {
@@ -4490,6 +5249,14 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "scanned": 100,
+                  "skipped": 60,
+                  "copied": 40,
+                  "failed": 0,
+                  "failedKeys": [],
+                  "truncated": false
+                },
                 "schema": {
                   "type": "object",
                   "properties": {
@@ -4557,6 +5324,13 @@
           "200": {
             "content": {
               "application/json": {
+                "example": {
+                  "openapi": "3.0.3",
+                  "info": {
+                    "title": "s3clinet API",
+                    "version": "v1.0.0"
+                  }
+                },
                 "schema": {
                   "type": "object"
                 }

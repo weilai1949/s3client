@@ -4,6 +4,8 @@ S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提�
 
 版本命名：稳定里程碑 **v1.0.0** 之后日常发版用**时间戳**（`v1.0.0-YYYYMMDDHHmmss`），预发布可用 **`v1.0.0-rcN`**；当前版本 `v1.0.0`；详见 [Changelog](CHANGELOG.md)。
 
+> **English**: see [README (English)](docs/en/index.md) —— 根 README 的完整英文翻译（中文为 SSOT，本页为翻译快照）。
+
 [!TIP]
 - 后端默认绑定 `127.0.0.1`（更安全），并开启 CORS 白名单与可选 Bearer 鉴权。
 - 前端直传：浏览器拿到 v4 签名 URL 后**直接**上传到 S3，不经过本服务。
@@ -252,8 +254,10 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [REST API 参考](docs/api.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
 - [OpenAPI 规范文件](docs/api/openapi.json) — 机器可读契约（**不跑服务也能读**；Swagger UI / 代码生成 / AI 代理可直接消费）
 - [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
-- [兼容性与弃用政策](docs/compatibility.md) — 版本命名 / 支持窗口 / API 演进承诺 / 存储格式兼容 / 弃用规则
+- [兼容性与客户端支持矩阵](docs/compatibility.md) — 版本命名 / 支持窗口 / API 演进承诺 / 存储格式兼容 / 弃用规则 / 浏览器与桌面 OS 支持矩阵（§6.2）
 - [术语表](docs/glossary.md) — S3 领域术语 + 本项目自造词
+- [数据模型与存储格式](docs/data-model.md) — `model.Account` / 三驱动 / `S3C2`·`S3C3` 信封的地图（非 SSOT，冲突裁决见其 §0）
+- [English docs](docs/en/README.md) — 英文文档导航（中文为 SSOT，英文为翻译快照）；架构英文版见 [en/architecture.md](docs/en/architecture.md)
 
 **运维与安全**
 
@@ -264,12 +268,15 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
 - [第三方许可证清单](docs/THIRD_PARTY_LICENSES.md) — **自动生成**的依赖与许可证清单（产物核验命令见威胁模型 §5.3）
 - [性能基线](docs/PERFORMANCE.md) — 热路径基准与解读（含加密写入与 O(n) 写入的取舍）
+- [Grafana SLO 仪表盘](deploy/grafana/s3clinet.dashboard.json) — 与 `deploy/prometheus/s3clinet.rules.yml` 同源的告警 / SLI 面板
+- [漏洞披露（机器可读）](.well-known/security.txt) — RFC 9116；人类可读策略见 [SECURITY.md](.github/SECURITY.md)
 
 **贡献与治理**
 
 - [开发指南（TDD 优先）](docs/DEVELOPMENT.md) — 测试规范 / 门禁 / 验收清单 / Red Flags / 技术债
 - [架构设计](docs/architecture.md) — 总体架构 + 关键设计决策（[ADR](docs/decisions/index.md)）
 - [AI 使用与代理治理](docs/AI_POLICY.md) — 代理模式 / 权限矩阵 / MCP 工具权限 / AI 披露模板 / DoD
+- [AI 代理评测与贡献度量](docs/AGENT_EVALS.md) — 黄金任务集 GT-1..GT-4 / 五维评分卡 / AI 贡献度量口径（与 AI_POLICY 互补）
 - [国际化与本地化](docs/i18n.md) — 语言现状 / 新增一门语言的步骤 / 文案覆盖率门禁
 - [可访问性](docs/accessibility.md) — ARIA / 键盘可达性 / 主题 / 已知限制（**未做正式 WCAG 审计**）
 - [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）

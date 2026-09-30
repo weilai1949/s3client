@@ -24,6 +24,9 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	registerTrash(r)
 	registerMigrate(r)
 	registerSystem(r)
+
+	// 示例在所有 operation 注册完成后统一附加（集中登记，见 openapi_examples.go）。
+	applyExamples(r)
 }
 
 // ---- Tags ----

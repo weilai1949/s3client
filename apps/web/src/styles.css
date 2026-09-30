@@ -25,13 +25,24 @@
   --hover: rgba(255, 255, 255, .8);
   --placeholder: #8aa89a;
 
-  /* 语义色 */
+  /* 语义色
+   *
+   * `--danger` / `--ok` 是**前景文字色**（`.tag.ok` / `.conn.ok` / `.btn.danger` / `.msg.err`
+   * 都用它当 `color`），因此必须满足 WCAG AA 的 4.5:1（普通字号）。2026-09-30 的 axe 扫描
+   * （`e2e/a11y.spec.ts`）实测原值不达标：
+   *   - `#0faf7d` on `--ok-bg #e4f8ef` = 2.55:1，on `--bg #f2faf6` = 2.66:1；
+   *   - `#dc2626` on `--danger-bg #fef2f2` = 4.41:1（差一点）。
+   * 现值（WCAG 2.1 token 公式值，与 `apps/server/contrast_gate_test.go` 同口径）：
+   * `#047857` on `#e4f8ef` = 4.95:1；`#b91c1c` on `#fef2f2` = 5.91:1。
+   * （渲染态 axe 读数曾记 5.02 / 5.98，差约 1%；记录口径统一取公式值，改色后由门禁重算。）
+   * 改这两个 token 会同时影响连接指示点（`background: var(--ok)`）与危险按钮边框——
+   * 只会更深，不会降低可辨识度。 */
   --primary: #10a37c;
   --primary-soft: #e6f8f0;
-  --danger: #dc2626;
+  --danger: #b91c1c;
   --danger-bg: #fef2f2;
   --danger-border: #fecaca;
-  --ok: #0faf7d;
+  --ok: #047857;
   --ok-bg: #e4f8ef;
   --ok-border: #a7f3d0;
   --warn: #d97706;

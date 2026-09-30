@@ -1,0 +1,85 @@
+name: Fuzz
+
+# 定时 + 手动触发的**有界**原生 fuzz（Go stdlib `testing.F`）。
+#
+# 为什么独立成 workflow：fuzz 与 PR 门禁的诉求不同——PR 只跑种子语料
+# （`go test ./...` 内的 `-run Fuzz`，见 ci.yml），定时跑才做真正的输入空间探索。
+# 把不定长的 fuzz 塞进 PR 会让合并延迟不可控（`-fuzztime` 只能按上界估计），
+# 因此本 workflow 只做探索与崩溃留存，**不改变 PR 门禁语义**。
+#
+# 覆盖的解析面（与 apps/server 内 `*_fuzz_test.go` 一一对应）：
+#   - internal/s3wrap  端点归一化 / SSRF 校验（Ssrf 面）
+#   - internal/store   S3C2 / S3C3 加密信封解析（磁盘不可信字节）
+#   - internal/handler 桶策略 JSON、桶名与下载文件名边界
+#
+# 镜像说明：GitLab CI（.gitlab-ci.yml）**不镜像**本 workflow——定时探索的收益与 PR
+# 门禁无关，且种子语料已在两套 CI 的普通 `go test` 中覆盖。若将来需要，按
+# .gitlab-ci.yml 的 schedule 模式补一条流水线，并保持 `-fuzztime` 有界。
+
+on:
+  schedule:
+    # 每周一 03:00 UTC（避开 CI 高峰）。
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: '每个 fuzz target 的时长（Go duration，有界）'
+        required: false
+        default: '30s'
+        type: string
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # 一个 target 崩溃不应掩盖其余 target 的结果。
+      fail-fast: false
+      matrix:
+        target:
+          - ./internal/s3wrap/:FuzzNormalizeEndpoint
+          - ./internal/s3wrap/:FuzzValidateEndpoint
+          - ./internal/store/:FuzzParseEnvelope
+          - ./internal/store/:FuzzEnvelopeRoundTrip
+          - ./internal/handler/:FuzzPutBucketPolicyBody
+          - ./internal/handler/:FuzzValidBucketName
+          - ./internal/handler/:FuzzSanitizeFilename
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache: true
+          cache-dependency-path: apps/server/go.sum
+
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: apps/server
+        env:
+          TARGET: ${{ matrix.target }}
+          # schedule 触发时 inputs.fuzztime 为空，回落默认值，保证时长始终有界。
+          FUZZTIME: ${{ inputs.fuzztime || '30s' }}
+        run: |
+          set -euo pipefail
+          pkg="${TARGET%%:*}"
+          fn="${TARGET##*:}"
+          echo "fuzz ${pkg} -fuzz ^${fn}\$ -fuzztime ${FUZZTIME}"
+          go test "${pkg}" -run '^$' -fuzz "^${fn}\$" -fuzztime "${FUZZTIME}"
+
+      # 崩溃语料（testdata/fuzz/...）必须留存，否则只能靠日志复现。
+      - name: Upload crash corpus
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-crashes-${{ strategy.job-index }}
+          path: apps/server/**/testdata/fuzz/**
+          retention-days: 30
+          if-no-files-found: ignore

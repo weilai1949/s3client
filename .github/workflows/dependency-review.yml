@@ -1,0 +1,58 @@
+# Dependency Review —— 每个 PR 的依赖 diff 审查（P0 供应链）。
+#
+# 与其它供应链门禁的分工：
+#   - Trivy / govulncheck / cargo audit：发布时点的**全量**漏洞扫描（阈值门禁，两套 CI 一致）；
+#   - 本 workflow：PR 时点对**该 PR 引入的依赖变更**做 diff 审查（漏洞 + 许可证），并把摘要
+#     写进 job summary。价值在于「变更进入 main 之前」：dependabot 的自动 PR 与人类升级依赖
+#     的 PR 都在进入主分支前被拦一次。
+#
+# 触发：每个 pull_request（不设 paths 过滤——依赖审查的价值恰在路径命中与否不可预判时）；
+# 含 dependabot 自动 PR。
+#
+# 权限（Scorecard #18 Token-Permissions）：`permissions: contents: read`，无任何写权限
+# （默认不往 PR 里发评论，故不需要 pull-requests: write）。
+#
+# 默认阈值（v5 默认值，本文件刻意不显式覆盖，保持上游最小口径）：fail-on-severity: low、
+# fail-on-scopes: runtime、license-check: true。与 Trivy 的 CRITICAL/HIGH 口径不同是**有意的**：
+# 它只对 PR 引入的依赖 diff 生效，更严的默认口径成本更低；许可证识别不出的依赖只会告知、
+# 不会失败（上游文档口径）。
+#
+# v5 运行环境注意：运行时为 node24，要求 runner ≥ v2.327.1（ubuntu-latest 已满足）；
+# 依赖 GitHub 依赖图 API，公开仓库直接可用。
+#
+# 供应链纪律（同 codeql.yml）：所有 `uses:` 一律 pin **完整 commit SHA**。本轮 SHA 经
+# GitHub API 三重核验（2026-09-30）：
+#   - actions/checkout@11d5960a326750d5838078e36cf38b85af677262：复用仓库内既有 SHA
+#     （与 ci.yml / codeql.yml 一致，保持仓库内单一来源）；
+#   - actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 = tag v5.0.0
+#     （截至 2026-09-30 的最新 release，2026-05-08）——refs/tags → type=commit（非 annotated
+#     tag，SHA 即 commit）→ GET /commits/<sha> 200
+#     （commit message "Merge pull request #1098 from actions/ahpook/v5-release"）。
+#
+# GitLab 侧未镜像本 workflow：GitHub 原生能力（依赖图 diff API），GitLab 无等价原生产品
+# （其 Dependency Scanning 模板是发布时点全量扫描，且本仓库未启用）。按「未镜像必须显式登记」
+# 纪律，差异登记在 docs/DEVELOPMENT.md §3「CI 双平台一致性」对照表与 docs/threat-model.md §5.5。
+
+name: Dependency Review
+
+on:
+  pull_request:
+
+concurrency:
+  group: dependency-review-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review (PR diff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5

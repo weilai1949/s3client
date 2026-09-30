@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use S3 Client (s3clinet) in your work, please cite it using the metadata below."
+title: "S3 Client (s3clinet)"
+type: software
+version: "1.0.0"
+abstract: >-
+  S3 兼容对象存储客户端工具（AWS Signature V4 签名），提供 Web 端与 Tauri 2 桌面端。
+  后端为 Go（分层 store → model → s3wrap → handler），默认回环绑定并支持 Bearer 鉴权、
+  创建期 + 拨号期双重 SSRF 校验与加密账号存储（AES-256-GCM + Argon2id）。
+authors:
+  - alias: weilai1949
+    website: "https://github.com/weilai1949"
+license: MIT
+repository-code: "https://github.com/weilai1949/s3client"
+url: "https://github.com/weilai1949/s3client"
+keywords:
+  - s3
+  - aws-signature-v4
+  - object-storage
+  - minio
+  - rustfs
+  - go
+  - tauri

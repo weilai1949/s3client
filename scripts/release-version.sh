@@ -94,5 +94,13 @@ sed -i "s/\`$OLD_DISPLAY_RE\`（当前版本）/\`$DISPLAY\`（当前版本）/"
 # GitHub issue 模板的版本占位
 sed -i "s/- 版本：\`$OLD_DISPLAY_RE\`/- 版本：\`$DISPLAY\`/" .github/ISSUE_TEMPLATE/bug_report.md
 
+# 硬检查：CHANGELOG 必须有 `## [<version>]` 版本段（tag 与段的一一对应由
+# apps/server/changelog_tag_gate_test.go 校验；历史快照 tag / 段的口径见 CHANGELOG 顶部
+# 「tag ↔ 版本段对应关系（唯一台账）」——KNOWN_ISSUES #69 收口）。
+if ! grep -q "^## \[$DISPLAY\]" CHANGELOG.md; then
+  echo "error: CHANGELOG.md 缺少 '## [$DISPLAY]' 版本段——请先按 CHANGELOG 顶部" \
+       "「tag ↔ 版本段对应关系」口径补段（快照 tag 需登记映射表）再重跑" >&2
+  exit 1
+fi
+
 echo "Done. Files updated under $ROOT"
-echo "Remember to add a CHANGELOG.md entry for [$DISPLAY]"

@@ -1,0 +1,17 @@
+# security.txt —— RFC 9116 机器可读的漏洞披露入口。
+#
+# 人类可读的安全策略见 .github/SECURITY.md；威胁模型见 docs/threat-model.md。
+# Contact 复用 .github/SECURITY.md 登记的**唯一保证可达**渠道（GitHub 私有漏洞报告），
+# 本仓库未公开安全邮箱，故此处只有 https URL，不发明 mailto 地址。
+#
+# 续期要求（RFC 9116 §2.5.5）：Expires 必须存在且不得过期，建议小于一年。
+# 本文件由 apps/server/security_txt_gate_test.go 强制校验——
+# 命令：cd apps/server && go test . -run TestSecurityTxt -count=1
+# 过期后该门禁红灯，必须续期（把 Expires 推到当前时间之后、一年之内）。
+
+Contact: https://github.com/weilai1949/s3client/security/advisories/new
+Expires: 2027-06-30T00:00:00Z
+Preferred-Languages: zh-CN, en
+Canonical: https://github.com/weilai1949/s3client/blob/main/.well-known/security.txt
+Policy: https://github.com/weilai1949/s3client/blob/main/.github/SECURITY.md
+Policy: https://github.com/weilai1949/s3client/blob/main/docs/threat-model.md

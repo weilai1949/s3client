@@ -15,7 +15,7 @@ import (
 )
 
 // fileCodec 是 fileStore 的落盘编解码策略：把磁盘字节还原为账号列表，
-// 以及把内存快照序列化为磁盘字节。各驱动只差在格式（明文 json / S3C2 加密），
+// 以及把内存快照序列化为磁盘字节。各驱动只差在格式（明文 json / S3C3 加密信封），
 // CRUD 语义完全由 fileStore 统一实现。
 type fileCodec interface {
 	// missing 在文件不存在或为空时调用；加密驱动借此生成新盐，明文驱动无操作。

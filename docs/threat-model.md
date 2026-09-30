@@ -2,7 +2,7 @@
 
 > 本文档描述 s3clinet 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
-> 最后更新：2026-09-29。
+> 最后更新：2026-09-30。
 
 ## 1. 威胁模型（STRIDE × 边界）
 
@@ -123,8 +123,13 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 ## 5. 依赖与供应链
 
 - **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ `govulncheck@v1.8.0`（Go 可达漏洞，
-  go1.26.6 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+ actions 全部 pin SHA
-  （12 个 SHA 经 GitHub API 核验有效，2026-09-22 复验均 200）。
+  go1.26.6 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+
+  **OpenSSF Scorecard**（每周六 + 手动，仓库健康度评分发布到 OpenSSF API 与 code scanning，见 §5.5）+
+  **Dependency Review**（每个 PR 对依赖 diff 做漏洞 / 许可证审查，见 §5.5）+
+  actions 全部 pin 完整 commit SHA（门禁 `TestWorkflowActionsAreShaPinned` 扫描
+  `.github/workflows/` 全部 `uses:`；本轮新增两枚 SHA 经 GitHub API 三重核验，2026-09-30：
+  `ossf/scorecard-action` v2.4.4 → `2d1146689b8cda280b9bc96326124645441f03bc`、
+  `actions/dependency-review-action` v5.0.0 → `a1d282b36b6f3519aa1f3fc636f609c47dddb294`）。
 - **Rust 告警 triage**：`cargo audit` 当前 7 条 unmaintained / unsound 告警（`proc-macro-error`、
   5 个 `unic-*`、`glib 0.18.5`），均为上游尚未发布修复版本的传递依赖（tauri/wry 链路），
   不用 `.cargo/audit.toml` ignore 清单掩盖；新增可达漏洞会让 CI 红灯。
@@ -186,8 +191,56 @@ Trivy 镜像扫描命令与 CI 同一镜像 digest（见 [`.github/workflows/ci.
   **不解决**发布者信誉。
 - **Rust 侧 7 条 unmaintained / unsound 告警**维持 triage（见上），不用 ignore 清单掩盖。
 - **仓库内不存放 SBOM / 证明文件**：它们是 CI 产物与 registry attestation——入库会让「证据」与
-  构建时刻脱钩，核验方式见 §5.3。
+  构建时刻脱钩，核验方式见 §5.3。**本条口径保持不变**：新增的两个 workflow（§5.5）也不产出
+  入库 SBOM，Scorecard 的 SARIF 仅以 CI 产物形式保留 5 天。
 - **许可证清单不含容器基础镜像的 OS 包**：该部分由 Trivy 扫描与镜像 SBOM 覆盖。
+- **GitLab 侧未镜像 Scorecard 与 Dependency Review**：两者是 GitHub 原生产品（依赖
+  code scanning API / 依赖图 diff API 与 OIDC 发布通道），GitLab 无等价物——按「未镜像必须
+  显式登记」纪律记在 §5.5 与 `DEVELOPMENT.md` §3 对照表；GitLab 侧的 `semgrep-sast`（§7）与
+  Dependency Scanning 模板分别是「仓库内代码 SAST」与「发布时点全量扫描」，**不等于**这里的
+  仓库健康度评分与 PR 依赖 diff 审查。
+- **Scorecard 的 `workflow_dispatch` 触发属上游标记的实验性支持**；其 `Branch-Protection` 检查项
+  依赖仓库自身的规则集 / 分支保护配置，未配置时表现为该项低分而不是流水线失败。
+- **Dependency Review 只覆盖「PR 内变更的依赖」**：发布时点的全量漏洞门禁仍是 Trivy /
+  govulncheck / cargo audit（见 §5 开头），两者互补不互替。
+
+### 5.5 GitHub 原生供应链 workflow（Scorecard + Dependency Review）
+
+2026-09-30 起新增两个 GitHub 原生供应链 workflow，补齐此前「仓库内部门禁齐全、但仓库外部
+健康度评分与 PR 期依赖审查缺失」的两块空白。两者与既有 CodeQL 的分工：CodeQL 扫**仓库内代码**，
+Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 diff**。
+
+**① [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml)（OpenSSF Scorecard）**
+
+- **触发**：`schedule` 每周六 02:00 UTC（与 codeql 周日、三个 E2E 周一/三/五错开）+ `workflow_dispatch`
+  （官方模板另支持 `push` 与 `branch_protection_rule`，本仓库未加——避免每次 push 都跑一条慢任务；
+  `workflow_dispatch` 在上游 README 标记为实验性支持，见 §5.4）。
+- **步骤**（官方模板口径）：checkout（`persist-credentials: false`）→ `ossf/scorecard-action`
+  （`results_format: sarif` + `publish_results: true`）→ `actions/upload-artifact`（SARIF 产物，
+  保留 5 天）→ `github/codeql-action/upload-sarif`（进 Security 页 code scanning 面板）。
+- **权限**：顶层 `permissions: read-all`；仅 `analysis` job 持 `security-events: write`（上传 SARIF）
+  与 `id-token: write`（`publish_results: true` 必需的 OIDC 令牌，结果发布到 api.scorecard.dev，
+  公开仓库可挂 Scorecard badge）。这组口径同时满足上游「发布结果」的工作流限制：顶层无 write
+  权限、无顶层 env/defaults、仅 scorecard job 可持 `id-token`。
+- **只评分、不设阈值门禁**：与 CodeQL 同属报告型——分数与告警看 Security 面板；阈值型门禁仍是
+  两套 CI 各自的 Trivy（口径见 `DEVELOPMENT.md` §3）。
+
+**② [`../.github/workflows/dependency-review.yml`](../.github/workflows/dependency-review.yml)（PR 依赖审查）**
+
+- **触发**：每个 `pull_request`（含 dependabot 自动 PR）——依赖审查的价值恰在「变更进入 main
+  之前」，故不设 `paths` 过滤。
+- **步骤**：checkout → `actions/dependency-review-action`（v5；默认 `fail-on-severity: low`、
+  `fail-on-scopes: runtime`、`license-check: true`——与 Trivy 的 CRITICAL/HIGH 阈值不同是**有意的**：
+  它只对 PR **引入的**依赖 diff 生效，更严的默认口径成本更低；许可证识别不出只会告知、不失败）。
+- **权限**：`permissions: contents: read`（仅此一项；默认不往 PR 发评论，故无需 `pull-requests: write`）。
+- **运行环境**：v5 运行时为 node24，要求 runner ≥ 2.327.1（`ubuntu-latest` 已满足）；依赖 GitHub
+  依赖图 API，公开仓库直接可用。
+
+**与 GitLab 侧差异（未镜像，显式登记）**：两个 workflow 都是 GitHub 原生能力，GitLab 没有等价
+原生产品——GitLab 的 SAST（`semgrep-sast`，见 §7）是仓库内代码扫描，Dependency Scanning 模板是
+发布时点全量扫描，都不等于「仓库外部健康度评分」或「PR 依赖 diff 审查」。按 `release-desktop.yml` /
+`codeql.yml` 的既有先例，「未镜像必须显式登记」：登记行在 `DEVELOPMENT.md` §3「CI 双平台一致性」
+对照表（GitLab 列写「不镜像」及理由）；两侧共同保持的阈值门禁一致（Trivy / govulncheck / cargo audit）。
 
 ## 6. 已知风险
 

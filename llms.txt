@@ -32,7 +32,12 @@ make test-all                                                                   
 - [.github/copilot-instructions.md](.github/copilot-instructions.md)：GitHub Copilot 的**纯指针**入口（只指向 AGENTS.md / DEVELOPMENT / AI_POLICY，不复制规则；由 `apps/server/ai_governance_gate_test.go` 校验其保持为指针）
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：开发规范正文——测试分层、门禁、验收清单、Red Flags、文档同步门禁
 - [docs/AI_POLICY.md](docs/AI_POLICY.md)：AI 使用与代理治理——代理模式、权限矩阵、MCP 工具权限、AI 披露模板、DoD、多代理协作
+- [docs/AGENT_EVALS.md](docs/AGENT_EVALS.md)：AI 代理评测与贡献度量——黄金任务集、五维评分卡、披露「占比」口径（效果证据层，与 AI_POLICY 互补）
+- [docs/en/README.md](docs/en/README.md)：英文文档落地页 / 导航（已翻译页 + 中文专属文档；中文为 SSOT，英文为翻译快照）
+- [docs/en/architecture.md](docs/en/architecture.md)：`docs/architecture.md` 的英文翻译（页头声明中文 SSOT 与来源 revision）
+- [docs/en/index.md](docs/en/index.md)：英文 README（根 README 完整翻译；中文为 SSOT，本页为翻译快照）
 - [docs/architecture.md](docs/architecture.md)：总体架构与模块边界
+- [docs/data-model.md](docs/data-model.md)：数据模型与存储格式地图——`model.Account` 12 字段、json / sqlite / encrypted 三驱动、`S3C3` 信封；**非 SSOT**，冲突裁决顺序见其 §0
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md)：配置参考（全部 `S3C_*` 环境变量 SSOT、启动期硬失败、客户端设置）
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：部署形态、Docker Compose、Nginx、升级与回滚
 - [docs/OPERATIONS.md](docs/OPERATIONS.md)：运维手册——可观测性、SLO 与告警、Runbook、备份恢复、灾难恢复、事故响应
@@ -43,7 +48,7 @@ make test-all                                                                   
 - [docs/api/accounts.schema.json](docs/api/accounts.schema.json)：**机器可读账号库格式**（JSON Schema 2020-12）——校验 / 生成 `accounts.json`，由反射门禁与 `model.Account` 双向对齐
 - [docs/errors.md](docs/errors.md)：S3 错误 → HTTP 状态映射
 - [docs/user-guide.md](docs/user-guide.md)：用户手册——界面操作、快捷键、FAQ、排障
-- [docs/compatibility.md](docs/compatibility.md)：版本命名、支持窗口、API 演进与弃用政策、存储格式兼容
+- [docs/compatibility.md](docs/compatibility.md)：版本命名、支持窗口、API 演进与弃用政策、存储格式兼容、客户端（浏览器 / 操作系统）支持矩阵（§6.2，含未验证组合与证据等级）
 - [docs/glossary.md](docs/glossary.md)：术语表（S3 领域词 + 本项目自造词）
 - [docs/i18n.md](docs/i18n.md)：国际化——新增一门语言的步骤、文案 key 与覆盖率门禁
 - [docs/accessibility.md](docs/accessibility.md)：可访问性现状与已知限制（**未做正式 WCAG 审计**）
@@ -51,8 +56,11 @@ make test-all                                                                   
 - [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)：缺陷 / 外部阻塞 / 技术债（唯一来源）
 - [docs/ROADMAP.md](docs/ROADMAP.md)：版本规划与里程碑
 - [docs/threat-model.md](docs/threat-model.md)：威胁模型与安全边界
+- [.well-known/security.txt](.well-known/security.txt)：**机器可读漏洞披露入口**（RFC 9116；`Expires` 到期由 `security_txt_gate_test.go` 强制续期）
+- [deploy/grafana/s3clinet.dashboard.json](deploy/grafana/s3clinet.dashboard.json)：SLO / SLI Grafana 仪表盘（指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 守住）
+- [scripts/evals/golden-tasks.yaml](scripts/evals/golden-tasks.yaml)：AI 评测**黄金任务集**机器可读规格（与 [docs/AGENT_EVALS.md](docs/AGENT_EVALS.md) 同源校验）
 - [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md)：**自动生成的第三方依赖与许可证清单**——Go 43 模块 / Rust 428 crates / npm 1 包；由 `scripts/gen-third-party-licenses.sh` 生成，覆盖门禁 `TestThirdPartyLicensesAreComplete`；§5.3 另含「消费者如何验证镜像与桌面产物」的命令
-- [docs/decisions/index.md](docs/decisions/index.md)：架构决策记录（ADR）
+- [docs/decisions/index.md](docs/decisions/index.md)：架构决策记录（ADR，12 篇）——architecture.md §7 取舍表每行必须有决策链接（apps/server/adr_coverage_gate_test.go 守住）
 - [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)：分支 / 提交 / 发布流程
 - [.github/SUPPORT.md](.github/SUPPORT.md)：支持渠道与「不提供什么」
 - [.github/GOVERNANCE.md](.github/GOVERNANCE.md)：治理现状、角色权限、决策与发布权
@@ -65,11 +73,16 @@ make test-all                                                                   
 apps/server/   Go 后端（AWS SDK for Go v2）+ 静态托管
 apps/web/      Vue 3 + Vite + TS 前端
 apps/desktop/  Tauri 2 桌面壳（无 IPC）
-docs/          文档（元文档大写：CONFIGURATION / DEPLOYMENT / DEVELOPMENT / AI_POLICY /
-               KNOWN_ISSUES / FEATURES / ROADMAP；内容文档小写：api / architecture /
-               errors / threat-model；另有 archive/ 与 decisions/）
-deploy/        nginx 反代配置 + prometheus/s3clinet.rules.yml（告警规则，对应 OPERATIONS §4）
-scripts/       开发、发版、E2E 脚本
+docs/          文档（命名二分，与 AGENTS.md / docs/DEVELOPMENT.md §4 三处同步）：
+               元文档大写 = `CONFIGURATION.md` `DEPLOYMENT.md` `DEVELOPMENT.md` `OPERATIONS.md`
+               `PERFORMANCE.md` `AI_POLICY.md` `AGENT_EVALS.md` `KNOWN_ISSUES.md` `FEATURES.md`
+               `ROADMAP.md` `POSTMORTEM_TEMPLATE.md` `THIRD_PARTY_LICENSES.md`（`README.md` 属
+               工具固定名 = 本目录落地页）；内容文档小写 = `api.md` `architecture.md` `data-model.md`
+               `errors.md` `threat-model.md` `user-guide.md` `compatibility.md` `glossary.md` `i18n.md`
+               `accessibility.md`；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
+               `decisions/`（ADR）· `archive/`（冻结归档）
+deploy/        nginx 反代配置 + prometheus/s3clinet.rules.yml（告警规则，对应 OPERATIONS §4） + grafana/（SLO 仪表盘 JSON）
+scripts/       开发、发版、E2E 脚本 + evals/（AI 黄金任务集与 runner）
 ```
 
 ## 禁区（不得直接修改）

@@ -4,7 +4,237 @@
 
 > 「已实现 / 已修复 / 已完善」功能的合并视图（含 0.1.0 起的全量台账）见 [`docs/FEATURES.md`](docs/FEATURES.md)；本文件保留逐字发布历史。
 
+## tag ↔ 版本段对应关系（唯一台账）
+
+> 口径：本表是 git tag 与 CHANGELOG 版本段的**唯一对应台账**，由
+> [`apps/server/changelog_tag_gate_test.go`](apps/server/changelog_tag_gate_test.go) 校验
+> （新增 / 改名 tag 或段必须同 PR 同步本表）。首列 = git tag（`无` 表示该行只登记版本段）；
+> 第二列 = CHANGELOG 版本段（`无` 表示该行只登记 tag）；正式发布（tag 与段一一对应）**不**登记
+> 在本表，由门禁正向校验。
+> 历史事实（2026-09-30 取证，KNOWN_ISSUES #69 闭环证据）：仓库 2026-09-02 以单 commit
+> （`12f39b1`）导入全栈历史，导入前的快照 tag 未随迁，故出现「有段无 tag / 有 tag 无段」
+> 两类快照登记——均为**历史事实台账**，不是待办。
+
+| tag | 版本段 | 性质 | 说明 |
+|---|---|---|---|
+| `无` | `[v1.0.0-20260901182023]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
+| `无` | `[20260901.2]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
+| `无` | `[20260901]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
+| `无` | `[0.1.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；git tag 自 v0.3.0 起存在 |
+| `无` | `[0.2.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；git tag 自 v0.3.0 起存在 |
+| `v1.0.0-20260902164154` | `无` | 快照 tag（无独立段） | 2026-09-02 16:41 打在 `feat(web)` 提交（c33cc07）上，非 release 提交；同日 rc0/rc1 取代 |
+| `v1.0.0-20260902170212` | `无` | 快照 tag（无独立段） | 2026-09-02 17:02 打在 `feat` 提交（a77b878）上；同日 rc0/rc1 取代 |
+| `v1.0.0-20260902170253` | `无` | 快照 tag（无独立段） | 2026-09-02 17:02 打在 `fix(docs)` 提交（7d8ccec）上；同日 rc0/rc1 取代 |
+
+> `[1.0.0]` 段 ↔ tag `v1.0.0`：段日期已按 tag 事实修正为 2026-09-22（tag 指向提交 0cfd4ef），
+> 段内容未改写（历史结论不改写）；该段已移到 `[Unreleased]` 之后恢复倒序。
+
 ## [Unreleased]
+
+### 新增（2026-09-30 AI 时代文档补强：六路并行收口 P0–P2 缺口）
+
+> 起因：以「AI 时代成熟仓库文档基线」对本仓做实测盘点，逐层核对后确认散文层已饱和，
+> 剩余缺口集中在「机器可读深度 + AI 效果证据 + 英文覆盖」。本批由 6 条并行工作流收口，
+> **每条新增能力都配机械门禁，且门禁全部做过变异验证**。
+
+- **安全**：新增 [`.well-known/security.txt`](.well-known/security.txt)（RFC 9116 机器可读漏洞披露入口，
+  `Expires` 到期即红灯强制续期），门禁 `apps/server/security_txt_gate_test.go`。
+- **接口契约**：`docs/api/openapi.json` 补全示例——37/37 有请求体的 operation 均有请求示例、
+  70/70 operation 均有 2xx 示例、5 个共享 schema 均有 `example`；[`docs/api.md`](docs/api.md) 新增
+  「请求示例（curl）」12 条覆盖全部 10 个 tag；门禁 `apps/server/openapi_examples_gate_test.go`
+  （含示例字段的 schema 形状校验与空扫自检）。
+- **数据模型**：新增 [`docs/data-model.md`](docs/data-model.md)——`model.Account` 12 字段、`json` /
+  `sqlite` / `encrypted` 三驱动、`S3C2`/`S3C3` 信封字节布局、原子写与权限、fail-closed 与单写者约束；
+  §0 明确「非 SSOT，冲突时回退 schema / ADR / 代码」；门禁 `apps/server/data_model_gate_test.go`
+  （反射 `model.Account` + 解析 `store.Open` 的 switch 驱动名）。
+- **可观测性**：新增 [`deploy/grafana/s3clinet.dashboard.json`](deploy/grafana/s3clinet.dashboard.json)
+  （31 面板，覆盖 3 条 recording rule 与 §4.1 的 SLI），门禁 `apps/server/grafana_dashboard_gate_test.go`
+  校验指标 / `code` / recording rule 真实存在；[`docs/OPERATIONS.md`](docs/OPERATIONS.md) §4 由
+  「未提供仪表盘」改为落地路径与导入步骤，并新增 §6.5 密钥轮换 Runbook。
+- **性能**：新增 `apps/server/bench_budget_test.go`（分配确定性预算 + 极宽耗时兜底）、
+  `.github/workflows/perf.yml`（周一 03:00 UTC 留存原始基准）与 `make bench`；口径与「刻意不测什么」
+  写在 [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) §4.2。
+- **AI 效果证据**：新增机器可读黄金任务集 [`scripts/evals/golden-tasks.yaml`](scripts/evals/golden-tasks.yaml)
+  与 runner [`scripts/evals/run-golden-task.sh`](scripts/evals/run-golden-task.sh)；
+  [`docs/AGENT_EVALS.md`](docs/AGENT_EVALS.md) §六首次落台账（含一次 `fail` 基线如实保留），
+  并显式声明「无 golden task 端到端实跑，五维记为 N/A ≠ 满分」。
+- **英文覆盖**：新增 [`docs/en/README.md`](docs/en/README.md)（英文导航落地页）与
+  [`docs/en/architecture.md`](docs/en/architecture.md)（`architecture.md` 全文翻译，页头声明中文 SSOT 与
+  来源 revision）；[`docs/i18n.md`](docs/i18n.md) 新增 §7「文档翻译覆盖政策」（SSOT / 优先级 / 快照标记 /
+  漂移处理 / 诚实覆盖现状）；门禁 `apps/server/en_docs_gate_test.go`。
+- **无障碍**：新增 [`apps/web/e2e/a11y.spec.ts`](apps/web/e2e/a11y.spec.ts)——axe 在**真实浏览器 + 真实
+  构建产物**下扫 4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题），
+  serious / critical 违规即红灯，另有 1 条「注入已知违规必须被报出」的空跑防护；
+  同轮修掉 axe 实测出的 2 组对比度不达标（`--ok` 2.55→4.95、`--danger` 4.41→5.91），
+  并把 §5.5 静态记录钉在源码上（`apps/server/contrast_gate_test.go`，表值与计数重算比对）。
+- **原生 fuzz**：[`apps/server/internal/{s3wrap,store,handler}`](apps/server/internal/) 新增 fuzz 目标
+  （端点归一化 / SSRF、`S3C2`/`S3C3` 信封、桶策略 JSON 与文件名边界），
+  `.github/workflows/fuzz.yml` 做有界探索（PR 只跑种子语料，语义不变）。
+- **元信息**：新增 [`CITATION.cff`](CITATION.cff)（GitHub 引用元数据，根目录工具固定名）与
+  [`.github/ISSUE_TEMPLATE/documentation.md`](.github/ISSUE_TEMPLATE/documentation.md)。
+- **修正**：`internal/store` 中把当前写入格式误写为 `S3C2` 的注释改为 `S3C3`（实际
+  `envelope()` 恒写 `S3C3`，`S3C2` 仅只读兼容），与 [`docs/data-model.md`](docs/data-model.md) 对齐。
+
+
+### 修复（2026-09-30 docs 内记录的待修项收口：文档失真 1 处 + 对比度静态核查 + 改进项登记 SSOT）
+
+> 背景：按「docs 里记录了待修的也要处理」逐篇清点非冻结文档，三类记录在案的待修项：
+> ① [`docs/accessibility.md`](docs/accessibility.md) §5.1 第 9 条仍写「动效偏好是已知缺口、仍会播放」，
+> 与同文件 §4 第 5 条（#67② 已修）**自相矛盾**；② §4 第 4 条声明「没有对比度专项核查记录」；
+> ③ §5.3/§5.4 的改进项与 [`docs/OPERATIONS.md`](docs/OPERATIONS.md) 观测缺口在文档正文里当
+> **口头待办**挂着，违反「两源分工 / 不留文档内待办」纪律。
+
+- **文档失真**：`accessibility.md` §5.1 第 9 条改为**回归项**表述（#67② 已修；若仍播放即回退，
+  先看 `apps/web/src/a11y_gate.test.ts` 是否被绕过）。
+- **对比度静态核查记录 + 数值门禁**：新增 [`docs/accessibility.md`](docs/accessibility.md) §5.5——按
+  WCAG 2.1 相对亮度对 `styles.css` 设计 token 做前景 / 背景配对计算（深色 `rgba()` 覆层按 alpha
+  合成到 `--panel`），11 行双主题比值入表；同轮新增
+  [`apps/server/contrast_gate_test.go`](apps/server/contrast_gate_test.go)，把「表值 / 计数声明 ↔
+  `styles.css`」**机械重算比对**（改色不重算即红灯；含 `--brand-from` 注释数字；变异复核步骤见文件头）。
+  对账中纠偏 2 处口径失真：表里 `--danger` 5.98 / `--ok` 5.02 是渲染态读数、不是表中声明的 token
+  公式值（应为 **5.91 / 4.95**，`styles.css` 注释同改）；「4 组低于 AA」计数漏行，按表格实况钉为
+  **共 11 行、浅色 5 行 / 深色 3 行低于 AA**。
+- **改进项登记收口（两源分工）**：`accessibility.md` §5.3/§5.4 与 `OPERATIONS.md` 观测缺口的待办迁入
+  [`docs/ROADMAP.md`](docs/ROADMAP.md) §三 **#17**（可访问性补强与自动化扫描）/ **#18**（可观测性
+  补全 5 指标），原文档改为指针；`ROADMAP` §三 #12「供应链证明」已 2026-09-29 落地、按 §六 第 1 条
+  移出候选池（编号不重排、#12 空号），3.2 节「全部 ⬜ 未排期」等口径随之修正。
+- **新文档登记补全**：并行批次新增的 [`docs/data-model.md`](docs/data-model.md)（数据模型与存储格式
+  地图 + `apps/server/data_model_gate_test.go`）落地时**四个导航面未登记**（`doc_index_gate` 与命名
+  同步门禁会红）——同轮补进 [`docs/README.md`](docs/README.md) 导航、`AGENTS.md` / `DEVELOPMENT.md`
+  §4 命名清单与登记表、[`llms.txt`](llms.txt)，并把「账号存储格式」同步表行补上该地图。
+- **两条尾巴结清**：① `data-model.md` 登记**去重核对**完成——`docs/README.md` 导航 / `AGENTS.md` /
+  [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt) 四面各登记一次、无重复；
+  ②「改 `styles.css` 后 §5.5 表须重算」由口头约定升级为 `contrast_gate_test.go` 机械保证（见上条）。
+- ⚠️ **门禁未实跑**：本轮落笔会话无 shell；`go test . -count=1` / `pnpm test` 待人类实跑（预期全绿）。
+
+### 修复（2026-09-30 导航收口残留：命名约定两处分叉 + `llms.txt` 目录摘要 + README AI 入口 + 机械门禁）
+
+> 背景：2026-09-30 文档基线补缺六项（[`docs/FEATURES.md`](docs/FEATURES.md) §AY–§BC、§BE）落地后，
+> 逐面回读比对仍剩三处「只差一条登记」的分叉（均为本轮实读发现）：`AGENT_EVALS.md` 进了
+> [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 命名清单却漏了 [`AGENTS.md`](AGENTS.md) 的清单
+> （「同 PR 两处同改防分叉」是硬规则），`AGENTS.md` 小写清单另漏 `en/` 子目录；[`llms.txt`](llms.txt)
+> 「目录」段命名摘要落后一代名单（缺 5 个元文档、5 个内容文档与 `en/`）；根 [`README.md`](README.md)
+> 「贡献与治理」缺 `AGENT_EVALS.md` 入口（英文快照 [`docs/en/index.md`](docs/en/index.md)、
+> [`docs/README.md`](docs/README.md)、`llms.txt` 均有）。
+
+- [`AGENTS.md`](AGENTS.md) 命名约定两处补齐（大写清单 + `AGENT_EVALS.md`、小写清单 + `en/`）；
+  [`llms.txt`](llms.txt)「目录」段命名摘要重写为全量名单（元文档 12 + 内容文档 9 + 子目录 4，
+  与 AGENTS / DEVELOPMENT §4 同口径；稍后落地的 `data-model.md` 由下方「新文档登记补全」追加）；
+  根 [`README.md`](README.md) 补「AI 代理评测与贡献度量」入口。
+- 新增 [`apps/server/docs_naming_gate_test.go`](apps/server/docs_naming_gate_test.go)：`docs/` 顶层
+  每个 `.md` 与每个**含 `.md` 的子目录**，名字必须同时登记进三处命名口径（AGENTS 命名约定段 /
+  DEVELOPMENT §4 命名约定段 / `llms.txt` 目录段；**只认反引号登记形态**，散文提及不算），含扫描面
+  自检阈值。**变异复核步骤**：摘掉 AGENTS 命名清单的 `AGENT_EVALS.md` → 红灯点名该文件 → 还原绿灯。
+- [`apps/server/AGENTS.md`](apps/server/AGENTS.md) 的门禁清单补限定语（「常用几道，全量以包根
+  `*_gate_test.go` 为准」）并登记新门禁——此前该清单只列 5 道、实有 13 道，读起来像全量。
+- ⚠️ **门禁未实跑**：本轮落笔会话无 shell，上述新门禁与全量门禁**待人类实跑**复核
+  （`cd apps/server && go test . -count=1`、`golangci-lint run`），实测值照实回填。
+
+### 新增（2026-09-30 客户端支持矩阵：浏览器 / 桌面 OS 支持范围与证据等级）
+
+> 背景：10 层文档基线盘点（FEATURES.md §AN）时，第 6 层「用户文档」的唯一缺口是**没有客户端
+> 支持矩阵**——「哪些浏览器 / 操作系统能用、哪些只是没测过」此前无文档可查。
+
+- 新增 [`docs/compatibility.md`](docs/compatibility.md) §6.2「客户端支持矩阵（浏览器与操作系统）」
+  （§6 改为「兼容矩阵」，原 S3 服务端内容降为 §6.1）：Web 端 Chromium 系 ✅（唯一有自动化覆盖）、
+  Firefox / Safari ⚠️（blob 兜底、全站未实测）、移动端 ❓ 未验证、旧浏览器 / IE ❌；「语法与特性
+  基线」给出建议最低版本（Chrome ≥87 / Edge ≥88 / Firefox ≥78 / Safari ≥14，标注**构建目标推导、
+  未逐版本实测**）；桌面端按 OS 列出产物与架构口径。每条声明带文件与行号依据，证据等级沿用
+  OPERATIONS.md §1.1（代码 / CI 文件 · 构建目标推导 · 上游行为）。
+- [`docs/user-guide.md`](docs/user-guide.md) §十 桌面端新增一行指向矩阵的链接。
+- 刻意**不重编号** §7/§8：POSTMORTEM_TEMPLATE.md 与 GOVERNANCE.md 对 §7 / §8 有散文引用
+  （链接门禁不覆盖），重编号会使其失真——矩阵以 §6.2 小节落地。
+
+### 新增（2026-09-30 ADR 覆盖补足：8 篇决策记录 + 取舍表覆盖门禁）
+
+> 背景：docs/architecture.md §7「关键取舍」表原只有 4 行（ADR-001..004），§2「关键机制」表里大量
+> 已落地决策（SSE 异步任务 / 账号存储三驱动 / 预签名直传 / 有界并发 / ZIP 流式 / 单实例 / REST 无
+> 版本前缀）没有对应 ADR，查「当初为什么这么定」无据可查。
+
+- 新增 [`docs/decisions/0005-sse-async-jobs.md`](docs/decisions/0005-sse-async-jobs.md) 等 **8 篇 ADR**
+  （0005–0012），每条「现状」回读源码逐条核实并给出路径，不可核实处显式标「未验证 / 回溯补记」；
+  Date 取自 `git log --diff-filter=A` 首次引入日期。
+- [`docs/architecture.md`](docs/architecture.md) §2 关键机制表 8 行补 ADR 链接、§7 关键取舍表扩至
+  12 行且每行带决策链接；[`docs/decisions/index.md`](docs/decisions/index.md) 登记 8 行。
+- 新增 [`apps/server/adr_coverage_gate_test.go`](apps/server/adr_coverage_gate_test.go)：断言 §7 取舍表
+  每一行都含指向 `docs/decisions/` 的链接（纯函数解析 + 5 条合成源码口径用例；TDD 先红后绿 +
+  变异验证：摘 ADR-007 链接 → 红灯点名该行 → 还原绿灯）。
+
+### 新增（2026-09-30 供应链收口：OpenSSF Scorecard + PR 依赖审查）
+
+> 背景：第 8 层「安全与供应链」盘点后的两块空白——仓库内部门禁齐全（Trivy / govulncheck /
+> cargo audit / CodeQL / cosign / SBOM / provenance），但仓库外部健康度评分（OpenSSF Scorecard）
+> 与 PR 时点的依赖 diff 审查此前完全没有。
+
+- 新增 [`.github/workflows/scorecard.yml`](.github/workflows/scorecard.yml)：OpenSSF Scorecard——
+  `schedule` 每周六 02:00 UTC + `workflow_dispatch`；checkout（`persist-credentials: false`）→
+  `ossf/scorecard-action`（`results_format: sarif` + `publish_results: true`）→ `actions/upload-artifact`
+  （SARIF 保留 5 天）→ `github/codeql-action/upload-sarif`（code scanning 面板）。权限：顶层
+  `permissions: read-all`，仅 analysis job 持 `security-events: write` + `id-token: write`
+  （发布到 api.scorecard.dev 所需 OIDC）。
+- 新增 [`.github/workflows/dependency-review.yml`](.github/workflows/dependency-review.yml)：
+  每个 `pull_request`（含 dependabot PR）对依赖 diff 做漏洞 / 许可证审查
+  （`actions/dependency-review-action` v5；默认 fail-on-severity: low / fail-on-scopes: runtime /
+  license-check: true）；权限 `contents: read`。
+- 两枚新 SHA 经 GitHub API 三重核验（2026-09-30）：`ossf/scorecard-action` v2.4.4 →
+  `2d1146689b8cda280b9bc96326124645441f03bc`、`actions/dependency-review-action` v5.0.0 →
+  `a1d282b36b6f3519aa1f3fc636f609c47dddb294`；其余 action 复用仓库内既有 SHA。
+- 文档同步：[`docs/threat-model.md`](docs/threat-model.md) §5（新增 §5.5、§5.4 补缺口、开头 CI 门禁行更新）。
+- 门禁实测：`TestWorkflowActionsAreShaPinned` 8 workflow / 56 引用全 SHA；链接 / 锚点门禁全绿。
+
+### 修复（2026-09-30 状态台账 #69 收口：CHANGELOG ↔ git tag 一致性 + 机械门禁）
+
+> 背景：`git tag` 有 3 个时间戳 tag 无对应版本段、3 个 09-01 快照段与 0.1.0 / 0.2.0 段无对应 tag、
+> `[1.0.0]` 段日期与 tag 不符且顺序非倒序（[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #69，
+> 2026-09-29 盘点时发现）。
+
+- CHANGELOG 顶部新增「tag ↔ 版本段对应关系（唯一台账）」：8 行快照登记（5 个快照段 + 3 个快照 tag），
+  正式版本由门禁正向校验；`[1.0.0]` 段日期按 tag 事实修正为 **2026-09-22**（tag 指向提交 0cfd4ef，
+  **内容未改写**），并移到 `[Unreleased]` 之后恢复倒序。
+- 新增 [`apps/server/changelog_tag_gate_test.go`](apps/server/changelog_tag_gate_test.go)：
+  tag ↔ 段双向一致 + `[Unreleased]` 必须居首 + 映射表解析口径（合成用例）+ 扫描面自检阈值；
+  tag 从 `.git/packed-refs` / `.git/refs/tags` 读文件获取（不依赖 git 命令）。TDD 先红（映射表缺失
+  红灯）后绿；变异验证：删映射行 / 改段名 → 红灯点名。
+- [`scripts/release-version.sh`](scripts/release-version.sh) 收尾由 echo 提醒升级为**硬检查**：
+  `grep -q "^## \[$DISPLAY\]" CHANGELOG.md` 缺段即 exit 1（#69 建议处置 (c)）。
+- [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #69 闭环移除（§二 表行移除、§四 台账改「已闭环」、
+  头部「最后更新」改 2026-09-30）。
+- 门禁实测：`go test . -run 'TestChangelog' -count=1` 绿灯；`bash -n scripts/release-version.sh` 通过。
+
+### 新增（2026-09-30 AI 产出效果证据层收口：代理评测与贡献度量）
+
+> 背景：第 11 层「AI 时代」此前只有**过程约束**（[`docs/AI_POLICY.md`](docs/AI_POLICY.md) 的权限矩阵 /
+> 披露 / DoD），没有**效果证据**——同一份 DoD 可以全绿而输出把契约改坏，仓库没有任何可复现的测量。
+
+- 新增 [`docs/AGENT_EVALS.md`](docs/AGENT_EVALS.md)：黄金任务集 **4 条**（GT-1 新增 `/api/*` 端点 ·
+  GT-2 修复 store bug · GT-3 新增 `S3C_*` 配置项 · GT-4 前端 UI 小改；每条含目标 / 前置条件 / 完成判据
+  （全部映射真实门禁）/ 预期红→绿轨迹 / 失败典型形态）+ 加权评分卡（门禁全绿 40% / 契约文档同步 20% /
+  TDD 证据 15% / 死代码安全 15% / 可读性分层 10%，0–4 锚点；硬门槛：门禁全绿或死代码安全任一 0 分
+  直接失败）+ AI 贡献度量口径与台账（**基线 2026-09-30，不追溯编造历史**；PR 收口回填、发版前对账）+
+  评测结果台账（唯一来源，不通过项转 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)）。
+- 新增 [`scripts/agent-eval.sh`](scripts/agent-eval.sh)：机械评测（后端 go vet / 门禁 / test / build +
+  前端 lint / typecheck / test，依赖缺失显式 SKIP）+ JSON 报告 + `EVAL_RESULT` 摘要，失败非零退出；
+  刻意不跑 docker / e2e-real（CI 承担）。
+- 新增 [`apps/server/agent_evals_gate_test.go`](apps/server/agent_evals_gate_test.go)：五条结构不变量——
+  文档三节标记 + GT 表 ≥ 3 / 脚本存在且非空壳 / AI_POLICY 回引 / PR 披露块含「占比」/ 两模板字段集一致。
+  **TDD 先红后绿 + 三条变异验证**（脚本删 `go vet` 关键词、GT 表 4→2、摘除 AI_POLICY 回引 →
+  均红灯点名 → 还原全绿）。
+- 文档同步：[`docs/AI_POLICY.md`](docs/AI_POLICY.md) §5（「披露 → 度量 → 评测」闭环指向）与 §11
+  机械保证表（含如实列出的人工部分）；[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)
+  披露块新增 **`- 占比：`** 字段（字段集由门禁钉住两处一致）。
+
+### 新增（2026-09-30 英文文档入口：docs/en/index.md）
+
+> 背景：第 13 层「质量合规」的文档面只有中文；根目录只允许 4 个约定文件（README / AGENTS /
+> CHANGELOG / llms.txt），英文入口按命名约定落 `docs/en/`（目录小写）。
+
+- 新增 [`docs/en/index.md`](docs/en/index.md)：根 README 的完整英文翻译（项目概览 / 特性全量 / 架构 /
+  目录 / 环境要求 / 配置摘要 / Quick Start（命令逐字保留）/ 测试 / CI / SDK 接口清单 / 中文文档索引 /
+  安全说明 / License），文首声明**中文 README 为 SSOT、本页为翻译快照**，并含「Scope of English docs」
+  小节（如实声明当前唯一英文文档；机器可读契约本身英文友好）。
+- 导航同步：根 [`README.md`](README.md) 顶部语言切换入口、[`docs/README.md`](docs/README.md)、
+  [`llms.txt`](llms.txt)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4（同步表 / 命名约定 / 登记表）。
+- 门禁实测：链接 / 锚点门禁 0 失效；导航覆盖由登记行转绿。
 
 ### 新增（2026-09-29 AI 时代层收口：AI 治理的机械保证 + Copilot 指针入口）
 
@@ -1318,6 +1548,31 @@
 - **lint 再收紧**：`@typescript-eslint/no-explicit-any` 由 warn 改 error（当前 0 违规）。
 
 
+## [1.0.0] - 2026-09-22
+
+首个稳定版（v1）。整合 v0.16.0 之后的全部迭代，此后按 `v1.0.0-年月日十分秒` 版本发布。
+
+### 复制 / 移动 / 删除（跨桶，全闭环）
+- 单文件复制 `POST /copy-object`（不删源）与批量复制/移动 `POST /copy-objects`（保留文件名，`deleteSource` 移动）；文件/文件夹统一「复制到… / 移动到…」对话框（目标桶下拉 + 目标路径/前缀）。
+- 移动语义：文件 = 复制成功后删除源；文件夹 = 复制成功后删除源前缀（副本有失败则保留源）。
+- 修复 `rename` 跨桶同名移动被误拒（同桶内 `newKey == key` 才拒绝）。
+- 未知类型文件行内「预览」按钮常显。
+
+### 大文件分段上传（Multipart Upload 直传）
+- 后端 `multipart/init | part | complete | abort` 四端点；前端 `≥100MB` 自动切 10MB 段、4 路并发直传，任一段失败自动 abort；小文件仍单 PUT。
+- 要求 Bucket CORS 暴露 `ETag` 响应头（见 README）。
+
+### 对象元数据管理（HTTP 头 / ACL / 标签）
+- 对象权限 ACL：`GET/PUT /object-acl`，私有/公共读切换 + 复制公开链接。
+- 对象标签 Tagging：`GET/PUT /object-tags`，键值编辑、一键清空；无标签返回空列表（兼容 `NoSuchTagSet`）。
+
+### 导航与交互
+- 左侧菜单更名（账号管理 / 文件上传 / 服务器设置等），按依赖分组「数据操作 / 配置」，首次进入按账号存在路由到「对象管理」。
+
+### 后端与测试
+- 新增 S3 接口：`CreateMultipartUpload` / `Complete/AbortMultipartUpload` / `PresignUploadPart` / `Get/PutObjectAcl` / `Get/Put/DeleteObjectTagging`。
+- 假 S3 单元测试覆盖上述能力与参数校验；`go test ./...`、`pnpm build` 均通过。
+
 ## [v1.0.0-rc1] - 2026-09-02
 
 相对 `v1.0.0-rc0`：桌面安装包由 CI 在打 tag 时交叉构建并挂到 GitHub Release。
@@ -1435,31 +1690,6 @@
 - **`proxyUrl` 去重**：抽到共享 `web/src/proxy.ts`，`ObjectsPanel` 与 `PreviewOverlay` 共用一份实现。
 - **handler 测试拆分**：`handler_test.go` 1861 行 → 按领域拆成 `helpers_test.go`/`accounts_test.go`/`buckets_test.go`/`objects_test.go`/`multipart_test.go`/`metadata_test.go`/`migrate_test.go`（33 个测试函数 + 6 个助手，无重复丢失）。
 - 新增 `agents.md`：TDD 优先的开发规范与验收清单（与本改动一并落地）。
-
-## [1.0.0] - 2026-08-28
-
-首个稳定版（v1）。整合 v0.16.0 之后的全部迭代，此后按 `v1.0.0-年月日十分秒` 版本发布。
-
-### 复制 / 移动 / 删除（跨桶，全闭环）
-- 单文件复制 `POST /copy-object`（不删源）与批量复制/移动 `POST /copy-objects`（保留文件名，`deleteSource` 移动）；文件/文件夹统一「复制到… / 移动到…」对话框（目标桶下拉 + 目标路径/前缀）。
-- 移动语义：文件 = 复制成功后删除源；文件夹 = 复制成功后删除源前缀（副本有失败则保留源）。
-- 修复 `rename` 跨桶同名移动被误拒（同桶内 `newKey == key` 才拒绝）。
-- 未知类型文件行内「预览」按钮常显。
-
-### 大文件分段上传（Multipart Upload 直传）
-- 后端 `multipart/init | part | complete | abort` 四端点；前端 `≥100MB` 自动切 10MB 段、4 路并发直传，任一段失败自动 abort；小文件仍单 PUT。
-- 要求 Bucket CORS 暴露 `ETag` 响应头（见 README）。
-
-### 对象元数据管理（HTTP 头 / ACL / 标签）
-- 对象权限 ACL：`GET/PUT /object-acl`，私有/公共读切换 + 复制公开链接。
-- 对象标签 Tagging：`GET/PUT /object-tags`，键值编辑、一键清空；无标签返回空列表（兼容 `NoSuchTagSet`）。
-
-### 导航与交互
-- 左侧菜单更名（账号管理 / 文件上传 / 服务器设置等），按依赖分组「数据操作 / 配置」，首次进入按账号存在路由到「对象管理」。
-
-### 后端与测试
-- 新增 S3 接口：`CreateMultipartUpload` / `Complete/AbortMultipartUpload` / `PresignUploadPart` / `Get/PutObjectAcl` / `Get/Put/DeleteObjectTagging`。
-- 假 S3 单元测试覆盖上述能力与参数校验；`go test ./...`、`pnpm build` 均通过。
 
 ## [0.16.0] - 2026-08-28
 

@@ -1,0 +1,505 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "s3clinet 运维手册（OPERATIONS.md §4）",
+      "tooltip": "SLO / 告警基线与 Runbook",
+      "type": "link",
+      "url": "https://github.com/weilai1949/s3clinet/blob/main/docs/OPERATIONS.md"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "panels": [],
+      "title": "① SLI（与 deploy/prometheus/s3clinet.rules.yml 的记录规则同源）",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "SLO 目标 ≤ 0.5%（OPERATIONS.md §4.1）。优先取 recording rule s3clinet:http_5xx_ratio:rate5m（rules.yml 与本面板同源）；refId B 是等价原始表达式，规则未加载时仍可读。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "percentunit" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:http_5xx_ratio:rate5m", "legendFormat": "5xx ratio（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_http_responses_total{class=\"5xx\"}[5m])) / sum(rate(s3c_http_requests_total[5m]))", "legendFormat": "5xx ratio（raw）", "refId": "B" }
+      ],
+      "title": "服务端 5xx 比例（SLO ≤ 0.5%）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "全部已处理 HTTP 请求的速率（所有状态码）。这是错误率的分母。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_http_requests_total[5m]))", "legendFormat": "requests/s", "refId": "A" }
+      ],
+      "title": "HTTP 请求速率",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "按状态类分桶的响应速率。5xx 升高对应上方 SLO 面板；4xx 持续升高通常来自鉴权失败或客户端误用。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "reqps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (class) (rate(s3c_http_responses_total[5m]))", "legendFormat": "{{class}}", "refId": "A" }
+      ],
+      "title": "HTTP 响应速率（按状态类）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "上游错误率 SLO ≤ 1%（OPERATIONS.md §4.1）。canceled 属客户端取消，可在评估时剔除。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "percentunit" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:s3_error_ratio:rate5m", "legendFormat": "upstream error ratio（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_errors_total[5m])) / sum(rate(s3c_s3_calls_total[5m]))", "legendFormat": "upstream error ratio（raw）", "refId": "B" }
+      ],
+      "title": "上游 S3 错误率（SLO ≤ 1%）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "上游调用 p95 延迟，SLO ≤ 2s（OPERATIONS.md §4.1）。记录规则失败或未加载时用 refId B 的原始 histogram_quantile。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:s3_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(s3c_s3_call_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95（raw）", "refId": "B" }
+      ],
+      "title": "上游 S3 延迟 p95（SLO ≤ 2s）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "上游调用的平均耗时（_sum / _count）。均值对尾部不敏感，只作辅助；请与 p95 面板一起看。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_duration_seconds_sum[5m])) / sum(rate(s3c_s3_call_duration_seconds_count[5m]))", "legendFormat": "avg latency", "refId": "A" }
+      ],
+      "title": "上游 S3 平均延迟",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "id": 8,
+      "panels": [],
+      "title": "② 存储健康（硬失败不降级，ADR-002）",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "1 = store 可达，0 = 不可达。== 0 持续 1 分钟触发 S3ClinetAccountStoreDown（critical）。",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 0, "text": "DOWN" }, "1": { "color": "green", "index": 1, "text": "UP" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 26 },
+      "id": 9,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_store_up", "legendFormat": "store_up", "refId": "A" }
+      ],
+      "title": "账号存储可达性（s3c_store_up）",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "存储可用性 SLI：avg_over_time(s3c_store_up[30d])，目标 ≥ 99.9% / 30 天（OPERATIONS.md §4.1）。⚠️ 仅 sqlite 驱动能实时反映故障（见右侧说明）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "percentunit" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 26 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "avg_over_time(s3c_store_up[30d])", "legendFormat": "store availability (30d)", "refId": "A" }
+      ],
+      "title": "存储可用性（30 天均值）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "驱动差异说明。",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 26 },
+      "id": 11,
+      "options": {
+        "content": "**⚠️ 探测粒度按驱动不同（易误判）**\n\n- `sqlite`：`Ping()` 是真实 `db.Ping()`，磁盘写满 / 只读挂载会让 `s3c_store_up 0`。\n- `json` / `encrypted`：`Ping()` **恒为 nil**，存储故障**不会**让本面板变红，只会以写请求 5xx 暴露。\n\n此时请看「服务端 5xx 比例」+ 日志 `msg=\"handler error\"`。详见 OPERATIONS.md §3.1 与 §5 R-3。",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "sqlite 探测口径",
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 12,
+      "panels": [],
+      "title": "③ 上游 S3 调用与错误分诊",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "S3 上游 API 调用速率（成功 + 失败），含分段上传的 CreateMultipartUpload / UploadPart / CompleteMultipartUpload。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "ops" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 33 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_calls_total[5m]))", "legendFormat": "calls/s", "refId": "A" }
+      ],
+      "title": "上游调用速率（含分段上传）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "按错误码分类的上游失败速率。code 取值来自 s3wrap 白名单，白名单外的码统一折叠为 other。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "ops" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 33 },
+      "id": 14,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (code) (rate(s3c_s3_call_errors_total[5m]))", "legendFormat": "{{code}}", "refId": "A" }
+      ],
+      "title": "上游错误速率（按 code）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "凭据 / 权限错误：15 分钟内有增量即 S3ClinetCredentialErrors（critical）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "ops" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 40 },
+      "id": 15,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_errors_total{code=~\"SignatureDoesNotMatch|InvalidAccessKeyId|AccessDenied\"}[15m]))", "legendFormat": "credential errors/s", "refId": "A" }
+      ],
+      "title": "凭据类错误（立即告警）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "上游限流 / 过载：15 分钟内 > 5 次触发 S3ClinetUpstreamThrottling（warning）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "ops" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 40 },
+      "id": 16,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_errors_total{code=~\"SlowDown|ServiceUnavailable|RequestTimeout\"}[15m]))", "legendFormat": "throttling/s", "refId": "A" }
+      ],
+      "title": "上游限流 / 过载",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "连接层不可达（DNS / TLS / 出网策略）：15 分钟内有增量即 S3ClinetUpstreamUnreachable（critical）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "ops" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 40 },
+      "id": 17,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_errors_total{code=\"transport\"}[15m]))", "legendFormat": "transport errors/s", "refId": "A" }
+      ],
+      "title": "上游不可达（transport）",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 },
+      "id": 18,
+      "panels": [],
+      "title": "④ 流式传输 / 分段上传 / ZIP 打包",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "经本服务从上游流式读出的字节速率（大文件下载 / 迁移）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "Bps" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 48 },
+      "id": 19,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_stream_bytes_total[5m]))", "legendFormat": "streamed bytes/s", "refId": "A" }
+      ],
+      "title": "流式读出吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "流式传输在完成前中断的次数（客户端主动断开不计入）。15 分钟内有增量即 S3ClinetStreamInterrupted（warning）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 48 },
+      "id": 20,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "increase(s3c_stream_interrupted_total[1h])", "legendFormat": "interrupted / 1h", "refId": "A" }
+      ],
+      "title": "流式中断（1 小时增量）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "ZIP 打包质量：部分失败 / 整体失败 / 累计失败对象数。SLO 为 0，出现即查（OPERATIONS.md §5 R-6）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 48 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "increase(s3c_zip_partial_failures_total[1h])", "legendFormat": "partial failures / 1h", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "increase(s3c_zip_failed_total[1h])", "legendFormat": "failed zips / 1h", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "increase(s3c_zip_failed_keys_total[1h])", "legendFormat": "failed keys / 1h", "refId": "C" }
+      ],
+      "title": "ZIP 打包质量（SLO = 0）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "分段上传观测说明。",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 55 },
+      "id": 22,
+      "options": {
+        "content": "**分段上传（multipart）没有独立指标**——它经同一套 smithy middleware 计入 `s3c_s3_calls_total` / `s3c_s3_call_errors_total` / `s3c_s3_call_duration_seconds`。\n\n排查直传 / 分段失败时：\n\n1. 看「上游调用速率（含分段上传）」是否有量；\n2. 看「上游错误速率（按 code）」里是否出现 `EntityTooLarge`、`InvalidPartOrder`、`NoSuchUpload`；\n3. 浏览器直传失败还可能是 `ExposeHeader: ETag` 缺失（OPERATIONS.md §5 R-7）。",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "分段上传（multipart）怎么读",
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 60 },
+      "id": 23,
+      "panels": [],
+      "title": "⑤ 进程 / 运行时",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "进程运行秒数。出现下降沿（resets）即视为重启，触发 S3ClinetProcessRestarted（warning）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 61 },
+      "id": 24,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_uptime_seconds", "legendFormat": "uptime", "refId": "A" }
+      ],
+      "title": "进程运行时长",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Go 堆占用。s3c_go_memstats_alloc_bytes > 410MiB（容器 512M 上限的 80%）持续 10 分钟触发 S3ClinetMemoryNearLimit。",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "bytes",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 429916160 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 6, "y": 61 },
+      "id": 25,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_go_memstats_alloc_bytes", "legendFormat": "heap alloc", "refId": "A" }
+      ],
+      "title": "Go 堆占用（红线 410MiB）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "goroutine 数。持续单调上升 = 疑似泄漏。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 61 },
+      "id": 26,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_go_goroutines", "legendFormat": "goroutines", "refId": "A" }
+      ],
+      "title": "Goroutine 数",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "构建版本（恒为 1，版本在 version 标签里）。用于核对升级后前后端版本是否匹配。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 67 },
+      "id": 27,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "name" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_build_info", "legendFormat": "{{version}}", "refId": "A" }
+      ],
+      "title": "构建版本（s3c_build_info）",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "S3C_SSRF_DENY_PRIVATE 的生效值：1 = 拒绝私网 / 回环 S3 端点。与预期配置比对。",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 67 },
+      "id": 28,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_ssrf_deny_private", "legendFormat": "ssrf_deny_private", "refId": "A" }
+      ],
+      "title": "SSRF 生效策略",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "SSRF 策略说明。",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 67 },
+      "id": 29,
+      "options": {
+        "content": "**SSRF 策略口径**\n\n- `0`：默认放行私网 / 回环端点（ADR-003，便于本地与内网 MinIO）。\n- `1`：`S3C_SSRF_DENY_PRIVATE=1`，拒绝私网 / 回环 S3 端点。\n\n升级 / 改配置后请核对本值是否与 `.env` 一致（配置在启动时读取，需重启生效）。",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "SSRF 策略怎么读",
+      "type": "text"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 73 },
+      "id": 30,
+      "panels": [],
+      "title": "⑥ 异步任务 / 队列（观测缺口）",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "异步任务 / 队列没有内置指标，只能外部采集。",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 74 },
+      "id": 31,
+      "options": {
+        "content": "**本服务不提供「在册异步任务数」指标**（OPERATIONS.md §4.3 观测缺口）——迁移 / 复制任务表在内存中（`JobRegistry`），只有 `jobs.json` 用于跨重启对账。\n\n替代做法（**建议值**）：\n\n1. 定时轮询 `GET /api/migrate/jobs` 统计非终态任务数，逼近上限 256 时告警；\n2. 进程重启看 `resets(s3c_uptime_seconds[15m]) > 0`——重启会把进行中的任务标记为 `interrupted`，需人工对账（OPERATIONS.md §5 铁律：先取证，再重启）；\n3. goroutine 数持续上升（见 ⑤）可作为间接信号，但**不能**替代任务数。",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "异步任务 / 队列：为什么没有面板",
+      "type": "text"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [ "s3clinet", "slo", "prometheus" ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "数据源（Prometheus）",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "s3clinet — SLO / 运维概览",
+  "uid": "s3clinet-slo",
+  "version": 1,
+  "weekStart": ""
+}

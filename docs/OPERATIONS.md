@@ -115,7 +115,8 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 > 因此「重启后再看指标」无法判断故障前状态——**先取证，再重启**（§5 开头）。
 
 **观测缺口（本版本没有的指标，不要去找）**：账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、卷 /
-磁盘容量、优雅关停耗时。这些只能靠日志与宿主 / 容器层采集（见 §4.3）。
+磁盘容量、优雅关停耗时。这些只能靠日志与宿主 / 容器层采集（见 §4.3）；补齐方向已按两源分工登记
+[`ROADMAP.md`](ROADMAP.md) §三 **#18**（候选 ⬜ 未排期，唯一来源在该表）。
 
 ```bash
 # 只取关键几行
@@ -175,8 +176,11 @@ tail -f .run/server.log
 > `repo_infra_gate_test.go` 的 `TestPrometheusRulesReferenceRealMetrics` 机械校验
 > ——引用的每个 `s3c_*` 指标必须真实存在于发射点、每个 `code` 取值必须在 `s3wrap` 白名单内
 > （白名单外的码会被折叠成 `other`，写进表达式即**永不命中**且 Prometheus 不报错）。
-> 仍**未提供**的是 SLO 仪表盘（Grafana dashboard）与 OpenTelemetry trace（候选见
-> [`ROADMAP.md`](ROADMAP.md) §三 3.2 #11）；告警规则本身已随仓库分发。
+> **SLO 仪表盘已随仓库分发**：[`deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)
+> （2026-09-30 新增）。Grafana → **Dashboards → New → Import** → 上传该 JSON → 数据源选你的 Prometheus 即可；
+> 盘上的 `s3clinet:*` 记录规则与本节表格同源（**本节与 rules.yml 必须同改**），面板在规则未加载时也各有等价的原始表达式。
+> 该 JSON 由 `grafana_dashboard_gate_test.go` 机械校验：引用的每个指标 / `code` 取值 / 记录规则名都必须真实存在。
+> 仍**未提供**的是 OpenTelemetry trace（候选见 [`ROADMAP.md`](ROADMAP.md) §三 3.2 #11）；告警规则本身已随仓库分发。
 
 ### 4.1 建议 SLI / SLO
 
@@ -329,7 +333,8 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 > `json` / `sqlite` 配 key 时也加密敏感列。**用错 key 或丢 key = 账号库永久不可读**，且 API 不回传 `secretKey`
 > （`AccountView` 只有 `secretSet`），无法从运行中的服务反推明文 → 等价于全部账号配置丢失。
 > 仓库**未提供**在线换 key / 导出工具：轮换 `S3C_STORE_KEY` 等同于重新录入全部账号凭据（**建议**：把 key
-> 当作长期密钥管理，轮换前先做恢复演练）。
+> 当作长期密钥管理，轮换前先做恢复演练）。**确需轮换时按 [§6.5 的 Runbook](#65-轮换-s3c_store_keyrunbook先备份再逐账号重录) 执行**
+> （先备份 → 逐账号重录 → 验证 → 可整体回滚）。
 
 **处置步骤**：
 1. 不要把「能启动」当作目标：先确定**哪个 key 与当前库匹配**（
@@ -578,6 +583,68 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
    （典型：复制成功但源未删除）。
 6. 观察 15 分钟：`s3c_http_responses_total{class="5xx"}` 无新增、`s3c_store_up 1`、无 `handler error` 日志。
 
+### 6.5 轮换 `S3C_STORE_KEY`（Runbook：先备份，再逐账号重录）
+
+> **结论先行**：本仓库**没有**在线换 key / 重加密工具。`S3C_STORE_KEY` 更换后，用旧 key 加密的账号库
+> **无法解密**；运行中的服务也**不回传 `secretKey`**（`AccountView` 只有 `secretSet`），因此**无法**把明文
+> 导出来再写回。唯一的换 key 路径是：**先从你自有的密钥来源取回每个账号的 accessKey / secretKey，
+> 再用新 key 重建账号库并逐个重录**。轮换 = 重新录入全部账号，请把它当成一次**计划内的数据迁移**，
+> 而不是改一个环境变量后重启。
+
+**适用 / 不适用**：
+
+| 情形 | 是否走本 Runbook |
+|---|---|
+| key 疑似泄露、合规要求定期轮换 | ✅ 按本节执行 |
+| 从明文库（`S3C_ALLOW_PLAINTEXT_STORE=1`）首次切到加密库 | ✅ 属于「首次配 key」，旧库是明文、无需解密，直接重录 |
+| key 配错 / 丢失，目标是**找回现有数据** | ❌ 不是轮换，是故障：走 R-4 + §6.3 用**正确**的 key 恢复 |
+
+**前置条件（缺一不可）**：
+
+1. 新的 `S3C_STORE_KEY`（≥ 16 字符，建议 `openssl rand -hex 32`）已存入密码管理器 / KMS，且与备份介质分离（§6.2）；
+2. 全部待迁移账号的 accessKey / secretKey 可从独立来源取回——这是本流程的真正瓶颈，**先确认再动手**；
+3. 已按 §6.1 完成当前账号库备份，并按 §6.4 验证过「备份 + 旧 key」配对可用；
+4. 已确认停机窗口：轮换期间全部账号不可用（单实例、无 HA，§7.2）。
+
+**步骤**：
+
+1. **冻结写入并留档**（在旧 key 仍生效时完成）：
+   ```bash
+   make stop                                                          # 容器：docker compose -f docker-compose.prod.yml stop server
+   ls -l "${S3C_DATA_DIR:-./data}"                                    # 记录文件清单与时间戳
+   cp -a "${S3C_DATA_DIR:-./data}" "${S3C_DATA_DIR:-./data}.pre-rotate-$(date +%Y%m%d%H%M%S)"
+   ```
+2. **用旧 key 启动一次，抄下非敏感字段**（`endpoint` / `region` / `accessKey` / `bucket` / `pathStyle` /
+   `useSSL` / `publicEndpoint`）作为重录对照——key 换掉后旧库就再也读不出来了：
+   ```bash
+   curl -sS -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts
+   ```
+   > `secretKey` **不会**出现在响应里；它必须来自你的密钥来源（步骤 2 解决的是「别漏账号、别抄错字段」）。
+3. **换 key 并重录**（按账号量选一种）：
+   - **就地重建**：把旧账号库改名留档（如 `accounts.json.enc.old-key`），写入新的 `S3C_STORE_KEY`，启动
+     （`encrypted` 在空目录会新建库），再用前端 / `POST /api/accounts` 逐个重录；
+   - **新目录对拷**：把数据目录切到一个新目录，写入新 key 后重录，确认无误再切换挂载。
+4. **逐账号验证**（同 §6.4 第 3 步的最强证据——密钥真能解密并连上 S3）：
+   ```bash
+   curl -sS -X POST -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts/<id>/test
+   ```
+5. **确认完成**：`/api/health` 200 且 `store.ok=true`；`s3c_store_up 1`（`sqlite` 才有实时意义，§3.1）；
+   `GET /api/accounts` 账号数与轮换前一致且每条 `secretSet=true`；每个账号 `test` 返回 `ok:true`；
+   观察 15 分钟无 `msg="handler error"`、`s3c_http_responses_total{class="5xx"}` 无新增。
+
+**回滚**（任一步失败，或发现密钥来源不全）：
+
+1. `make stop`；
+2. 把步骤 1 的 `.pre-rotate-<时间戳>` 目录恢复回 `S3C_DATA_DIR`（目录 0700 / 文件 0600 / 属主运行用户）；
+3. 把 `S3C_STORE_KEY` 改回**旧 key** 后启动；
+4. 按 §6.4 复核账号数与连通性。
+
+> ⚠️ 旧 key 在新库上**不可用**、旧库在新 key 下也**不可读**——两者只能整体配对使用。一旦新库已经写入
+> （哪怕只重录了一个账号），回滚就会丢掉这些改动；因此备份与回滚窗口必须在**停机状态**下完成。
+
+**何时升级**：某个账号的 secretKey 已无法取回（等于该账号不可恢复，需要在对象存储侧重建凭证）→
+按 §9 记为数据事件；轮换期间出现 5xx 或账号缺失 → **立即回滚**，不要边修边写。
+
 ## 7. 灾难恢复
 
 > ⚠️ **本节为建议基线，尚未在代码或 CI 中强制**——按实际部署调整后再落地。
@@ -727,6 +794,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | 配置项 SSOT（全部 `S3C_*` 环境变量、fail-closed 清单） | [`CONFIGURATION.md`](CONFIGURATION.md) |
 | 接口与请求 / 响应字段（含健康检查、指标、桶 CORS） | [`api.md`](api.md) |
 | S3 / API 错误码与用户文案对照 | [`errors.md`](errors.md) |
+| 本地热路径性能基线、`make bench` 与性能回归门禁 | [`PERFORMANCE.md`](PERFORMANCE.md) §4 |
 | 安全边界、默认值、已接受的风险 | [`threat-model.md`](threat-model.md) |
 | 架构与关键决策（含存储硬失败、SSRF 取舍） | [`architecture.md`](architecture.md) · [`decisions/index.md`](decisions/index.md) · [ADR-002](decisions/0002-store-fail-closed.md) |
 | 未闭环缺陷 / 外部阻塞 / 技术债 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) |

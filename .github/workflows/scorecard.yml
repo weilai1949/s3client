@@ -1,0 +1,87 @@
+# OpenSSF Scorecard —— 仓库外部健康度评分（P0 供应链）。
+#
+# 与另外两个供应链 workflow 的分工（各扫一层，不互相替代）：
+#   - codeql.yml：仓库**内部代码**的 SAST 数据流分析（Go / JS-TS）；
+#   - dependency-review.yml：每个 PR 的**依赖 diff** 审查（漏洞 / 许可证）；
+#   - 本 workflow：OpenSSF Scorecard 对**仓库整体**做多检查项评分（Token-Permissions、
+#     Pinned-Dependencies、Branch-Protection、Vulnerabilities、Code-Review 等），
+#     结果发布到 api.scorecard.dev（公开仓库可挂 badge）并上传 Security 页 code scanning 面板。
+#
+# 触发：schedule 每周六 02:00 UTC（与 codeql 周日、三个 E2E 周一/三/五错开）+ workflow_dispatch。
+# 官方模板另支持 push（默认分支）与 branch_protection_rule：本仓库刻意不加 push（避免每次
+# push 都跑一条慢任务）；workflow_dispatch 在上游 README 标记为「实验性支持」——若实测异常
+# 再改回 push 触发（该取舍登记在 docs/threat-model.md §5.5 与 §5.4）。
+#
+# 权限（Scorecard #18 Token-Permissions）：
+#   - 顶层 `permissions: read-all`：默认只读，任何 step 都拿不到写权限；
+#   - job 级只放两个最小写权限：`security-events: write`（codeql-action/upload-sarif 上传结果）、
+#     `id-token: write`（publish_results: true 必需的 OIDC 令牌——上游 api.scorecard.dev
+#     用它核验发布者身份）。
+#   这是上游「发布结果」工作流限制要求的最小口径：顶层不得有 write、不得有顶层 env/defaults、
+#   仅 scorecard job 可持 id-token（详见 ossf/scorecard-action README「Publishing Results」）。
+#
+# 供应链纪律（同 codeql.yml）：所有 `uses:` 一律 pin **完整 commit SHA**，且必须是 tag
+# 解引用后的 commit（annotated tag 的 tag-object SHA 是幽灵 SHA）。本轮 SHA 经 GitHub API
+# 三重核验（2026-09-30）：① refs/tags → ② 若 type=tag 再解引用到 commit → ③ GET /commits/<sha> 200：
+#   - ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc = tag v2.4.4
+#     （截至 2026-09-30 的最新 release，2026-07-23；commit message
+#     "Bump action tag for v2.4.4 release (#1688)"）；
+#   - actions/checkout / actions/upload-artifact / github/codeql-action 复用仓库内既有 SHA
+#     （与 ci.yml / codeql.yml 完全一致，保持仓库内单一来源，由 TestWorkflowActionsAreShaPinned 守住）。
+#
+# GitLab 侧未镜像本 workflow：Scorecard 是 GitHub 原生能力（依赖 code scanning API 与 OIDC
+# 发布通道），GitLab 无等价原生产品。按「未镜像必须显式登记」纪律，差异登记在
+# docs/DEVELOPMENT.md §3「CI 双平台一致性」对照表与 docs/threat-model.md §5.5。
+
+name: Scorecard
+
+on:
+  schedule:
+    # 每周六 02:00 UTC（周一/三/五 E2E 冒烟、周日 CodeQL 之外的日子）
+    - cron: '0 2 * * 6'
+  workflow_dispatch:
+
+concurrency:
+  group: scorecard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 最小权限：整个 workflow 默认只读；写权限只出现在下方 analysis job（见文件头说明）。
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # 上传 SARIF 结果到 code scanning 面板所需。
+      security-events: write
+      # publish_results: true 所需：换取 GitHub OIDC 令牌，供 api.scorecard.dev 核验发布者。
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # 公开仓库：把结果发布到 OpenSSF REST API（api.scorecard.dev），可挂 Scorecard badge。
+          # 私有仓库该值会被上游强制忽略（恒为 false，见上游 README）。
+          publish_results: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
+        with:
+          sarif_file: results.sarif

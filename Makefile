@@ -2,7 +2,7 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0
 
-.PHONY: server server-build tidy web web-build web-typecheck web-typecheck-e2e desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+.PHONY: server server-build tidy web web-build web-typecheck web-typecheck-e2e desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check bench e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
 
 # Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
 GCL ?= npx --yes gitlab-ci-local@4.75.1
@@ -109,6 +109,13 @@ govulncheck:
 # 注意：CI 额外有 Trivy 镜像扫描、RustFS E2E、Playwright E2E 与真实联调 E2E（make e2e-real），
 # 本目标不含（见 docs/DEVELOPMENT.md）。
 check: vet lint test-cover web-test-cover web-typecheck-e2e
+
+# 后端基准 + 性能回归门禁（与 .github/workflows/perf.yml 同命令；解读与 flakiness 口径见
+# docs/PERFORMANCE.md §4）。第一行是确定性预算门禁（分配数 + 极宽的耗时兜底），
+# 第二行是原始基准数字，供人工跨提交比对趋势。
+bench:
+	cd apps/server && go test . -run 'TestBench' -count=1
+	cd apps/server && go test ./internal/store/ ./internal/service/ ./internal/s3wrap/ -run '^$$' -bench 'Benchmark' -benchmem -count=1
 
 # 真实联调浏览器冒烟（KNOWN_ISSUES #37）：docker 自动起一份真实 RustFS + 真实构建产物 +
 # 真实 Go 后端，用 Playwright 跑 apps/web/e2e-real/（不 mock /api），跑完自动清理。

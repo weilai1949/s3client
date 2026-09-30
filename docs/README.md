@@ -18,11 +18,13 @@
 | 我想…… | 看哪里 | 一句话 |
 |---|---|---|
 | 学会用这个工具 | [`user-guide.md`](user-guide.md) | 界面操作 / 首次配置 / 上传下载 / 版本与回收站 / 快捷键 / FAQ / 排障；含「数据与隐私」 |
+| 读英文版 README | [`en/index.md`](en/index.md) | 根 README 的完整英文翻译（中文为 SSOT，英文页为翻译快照）；当前唯一的英文文档 |
+| 读英文版架构与文档导航 | [`en/README.md`](en/README.md) · [`en/architecture.md`](en/architecture.md) | 英文文档落地页（列出已翻译与中文专属文档）+ 架构全文翻译；**中文为 SSOT，英文为翻译快照**，来源 revision 写在页头 |
 | 调 API / 接自己的程序 | [`api.md`](api.md) | REST API 参考（70 个 `/api/*` 端点），与 OpenAPI 注册表同源 |
 | 让工具 / AI 直接读契约 | [`api/openapi.json`](api/openapi.json) | 机器可读契约（53 paths / 70 operations，含鉴权与 tags），**不跑服务即可读** |
 | 校验 / 生成账号库文件 | [`api/accounts.schema.json`](api/accounts.schema.json) | 账号库 `accounts.json` 的 JSON Schema（2020-12），与 `model.Account` 双向对齐 |
 | 查某个报错是什么意思 | [`errors.md`](errors.md) | S3 错误 → HTTP 状态 → 用户文案对照 |
-| 判断能不能升级 / 支持多久 | [`compatibility.md`](compatibility.md) | 版本命名 / 支持窗口 / API 演进与弃用政策 / 存储格式兼容 / S3 厂商矩阵 |
+| 判断能不能升级 / 支持多久 / 哪些浏览器与 OS 能用 | [`compatibility.md`](compatibility.md) | 版本命名 / 支持窗口 / API 演进与弃用政策 / 存储格式兼容 / S3 厂商矩阵 / 客户端（浏览器与操作系统）支持矩阵 |
 | 查某个词是什么意思 | [`glossary.md`](glossary.md) | S3 领域术语 + 本项目自造词 |
 | 换语言 / 加一门语言 | [`i18n.md`](i18n.md) | 语言现状 / 新增语言的步骤 / 文案 key 与覆盖率门禁 |
 | 了解无障碍现状与限制 | [`accessibility.md`](accessibility.md) | ARIA / 键盘可达性 / 主题 / **明确没做**的事（未做正式 WCAG 审计） |
@@ -45,8 +47,10 @@
 | 按规范改代码 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | 规范正文：TDD / 三类测试 / 门禁 / **文档同步门禁 §4** / 验收清单 / Red Flags |
 | 提交 PR / 起分支 / 发版 | [`../.github/CONTRIBUTING.md`](../.github/CONTRIBUTING.md) | 分支与提交规范 / 开发环境 / 发布流程 |
 | 用 AI 代理改代码（或其权限边界） | [`AI_POLICY.md`](AI_POLICY.md) | 五档代理模式 / 权限矩阵（允许·需确认·禁止）/ AI 披露 / DoD / 多代理协作 |
+| 看 AI 代理怎么被评测 / 度量 | [`AGENT_EVALS.md`](AGENT_EVALS.md) | 黄金任务集 GT-1..GT-4 / 五维评分卡 / AI 贡献度量口径（效果证据层，与 AI_POLICY 互补）；机械部分 [`../scripts/agent-eval.sh`](../scripts/agent-eval.sh) |
 | 看懂整体架构与分层 | [`architecture.md`](architecture.md) | B/S 架构、`store → model → s3wrap → handler` 分层、关键机制与取舍 |
-| 查「当初为什么这么定」 | [`decisions/index.md`](decisions/index.md) | ADR 索引（+ [`0000-template.md`](decisions/0000-template.md) 新篇模板） |
+| 查数据怎么落盘 / 三驱动与信封 | [`data-model.md`](data-model.md) | `model.Account` 12 字段 / `json`·`sqlite`·`encrypted` 三驱动 / `S3C3` 信封的**地图**（非 SSOT，冲突裁决顺序见其 §0） |
+| 查「当初为什么这么定」 | [`decisions/index.md`](decisions/index.md) | ADR 索引（12 篇 + [`0000-template.md`](decisions/0000-template.md) 新篇模板；architecture §7 取舍表每行必须有 ADR 链接，由 adr_coverage_gate 守住） |
 | 看安全边界与威胁模型 | [`threat-model.md`](threat-model.md) | STRIDE × 5 条边界 / 安全默认值 / 已接受的风险 / SAST triage |
 | 报告漏洞 / 看安全策略 | [`../.github/SECURITY.md`](../.github/SECURITY.md) | 支持的版本 / **私有**漏洞报告渠道 / 部署加固建议 |
 | 问问题 / 提 issue | [`../.github/SUPPORT.md`](../.github/SUPPORT.md) | 支持渠道 / 提问前自查 / **本仓库不提供什么** |
@@ -70,8 +74,14 @@
 | API 契约 | [`api/openapi.json`](api/openapi.json) | golden 比对（`TestCommittedOpenAPISpecMatchesRuntime`）+ 鉴权表达（`openapi_auth_test.go`） |
 | 账号库格式 | [`api/accounts.schema.json`](api/accounts.schema.json) | 反射比对 `model.Account`（`TestAccountStoreSchemaMatchesModel`） |
 | 告警规则 | [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`） |
+| 供应链评分 / PR 依赖审查 | [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml) · [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | 全 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住；口径见 [`threat-model.md`](threat-model.md) §5.5 |
 | 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`） |
 | 代理硬约束 | [`../AGENTS.md`](../AGENTS.md) | 本页 + `AGENTS.md` 命名约定两处同步 |
+
+| 漏洞披露（机器可读） | [`../.well-known/security.txt`](../.well-known/security.txt) | RFC 9116 必填字段 + `Expires` 未过期（`security_txt_gate_test.go`） |
+| SLI 仪表盘 | [`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json) | 指标 / `code` / recording rule 真实性（`grafana_dashboard_gate_test.go`） |
+| AI 评测黄金任务集 | [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) | 与 [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致（`agent_evals_gate_test.go`） |
+| 性能预算 | [`../apps/server/bench_budget_test.go`](../apps/server/bench_budget_test.go) | 分配确定性断言 + 时间兜底（`bench_budget_test.go`）；数字解读见 [`PERFORMANCE.md`](PERFORMANCE.md) §4 |
 
 ## 文档维护（改文档前先读这节）
 

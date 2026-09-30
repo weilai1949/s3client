@@ -1,0 +1,240 @@
+{
+  "_format": "JSON 内容，.yaml 后缀：JSON 是 YAML 1.2 的严格子集，PyYAML / yaml.safe_load 可直接读，Go 门禁用标准库 encoding/json 解析——不新增任何模块依赖。构造不变量由 apps/server/agent_evals_gate_test.go 钉住，改动前先读 docs/AGENT_EVALS.md §二。",
+  "schema_version": 1,
+  "doc": "docs/AGENT_EVALS.md",
+  "scorecard_dimensions": [
+    { "id": "gate_green", "label": "门禁全绿", "weight_pct": 40 },
+    { "id": "contract_doc_sync", "label": "契约与文档同步", "weight_pct": 20 },
+    { "id": "tdd_evidence", "label": "TDD 证据", "weight_pct": 15 },
+    { "id": "deadcode_security", "label": "死代码与安全纪律", "weight_pct": 15 },
+    { "id": "readability_layering", "label": "可读性与分层", "weight_pct": 10 }
+  ],
+  "tasks": [
+    {
+      "id": "GT-1",
+      "title": "新增一个 `/api/*` 端点",
+      "scope": "在既有 store → model → s3wrap → handler 分层下新增一个 REST 端点（如桶级设置类），契约与文档全量同步；不预装构建产物、不预先改契约文件。",
+      "prompt": "在干净 checkout 上给服务端新增一个 /api/* 端点（桶级设置类），行为测试覆盖正反例；同步 openapi 注册表、docs/api.md、docs/api/openapi.json 与数字声明，跑通全部判据门禁。",
+      "files_likely_touched": [
+        "apps/server/internal/handler/routes.go",
+        "apps/server/internal/handler/*_handler.go",
+        "apps/server/internal/handler/openapi_register_*.go",
+        "apps/server/internal/handler/*_test.go",
+        "apps/server/internal/service/*.go",
+        "docs/api.md",
+        "docs/api/openapi.json"
+      ],
+      "verification_commands": [
+        {
+          "cmd": "cd apps/server && go test ./internal/handler/ -run 'TestAPIDocMatchesRoutes|TestCommittedOpenAPISpecMatchesRuntime' -count=1",
+          "desc": "运行时路由 ↔ 提交版 OpenAPI golden 比对 + docs/api.md 路由表一致"
+        },
+        {
+          "cmd": "cd apps/server && go test . -run 'TestDocNarrativeNumbersMatchSource' -count=1",
+          "desc": "docs 中「N 个 /api/* 端点」数字声明与 routes.go 注册数一致"
+        },
+        {
+          "cmd": "cd apps/server && go test . -run 'TestMarkdownRelativeLinksResolve|TestMarkdownAnchorsResolve' -count=1",
+          "desc": "新增文档链接 / 锚点可解析（doc_link_gate）"
+        },
+        {
+          "cmd": "cd apps/server && go build ./...",
+          "desc": "服务端整体可构建"
+        }
+      ],
+      "expected_artifacts": [
+        "行为测试（HTTP 状态码 / 响应字段，含正反例）的红灯→绿灯记录",
+        "openapi_register_*.go 与 docs/api/openapi.json 重新生成且 golden 比对绿",
+        "docs/api.md 路由表与数字声明同步"
+      ],
+      "scoring_anchors": {
+        "gate_green": "全部判据门禁绿，且附本轮实跑命令 + 输出摘要；若改动涉及签名/直传/分段/复制，还需真实对端 E2E 证据。",
+        "contract_doc_sync": "openapi golden · doc_number_gate · doc_link · doc_index 全绿，且 api.md / openapi.json 与实现同 PR 同步。",
+        "tdd_evidence": "先写会失败的行为测试（断言 HTTP 状态码 / 响应字段），有红灯记录，并注入同类契约错误做变异验证。",
+        "deadcode_security": "golangci-lint 0 issues + deadcode_gate 绿；用户输入在边界校验，AWS SDK 类型不越过 s3wrap。",
+        "readability_layering": "命名领域化、控制流平直、分层合规，diff 最小且无重复公共逻辑。"
+      },
+      "red_green_trajectory": [
+        "行为测试先红（路由未注册 → 404）",
+        "实现 handler + openapi_register_*.go",
+        "golden 比对红（提交版 spec 未更新）",
+        "按提示重新生成 spec",
+        "全绿"
+      ],
+      "failure_modes": [
+        "只改 handler 不更新注册表（契约测试红）",
+        "注册了但 api.md / 数字声明没改（doc_number_gate 红）",
+        "没有红灯记录直接全绿（无 TDD 证据）"
+      ]
+    },
+    {
+      "id": "GT-2",
+      "title": "修复 store 层 bug",
+      "scope": "修复一个数据正确性 bug（如 store.Open 的 json 分支丢入参 storeKey 同型），修复范围最小，不顺手重构无关代码。",
+      "prompt": "在干净 checkout 上先写会失败的行为测试复现一个 store 层数据正确性 bug，再做最小修复；保持 go vet / golangci-lint / deadcode_gate / 覆盖率 100% 全绿，同步文档台账。",
+      "files_likely_touched": [
+        "apps/server/internal/store/*.go",
+        "apps/server/internal/store/*_test.go",
+        "CHANGELOG.md",
+        "docs/FEATURES.md"
+      ],
+      "verification_commands": [
+        {
+          "cmd": "cd apps/server && go vet ./...",
+          "desc": "go vet 全绿"
+        },
+        {
+          "cmd": "cd apps/server && go test ./internal/store/... -count=1",
+          "desc": "store 层行为测试（含新增回归用例）绿"
+        },
+        {
+          "cmd": "cd apps/server && go test . -run 'TestNoSilencingDeadCode|TestNoUnusedExportedProdSymbols' -count=1",
+          "desc": "消音式死代码 / 未引用导出符号门禁绿"
+        },
+        {
+          "cmd": "cd apps/server && go test ./... -count=1",
+          "desc": "全量后端测试无回归"
+        }
+      ],
+      "expected_artifacts": [
+        "复现测试的红灯→绿灯记录（断言外部可见行为：返回值 / 落盘内容）",
+        "最小修复 diff",
+        "CHANGELOG.md [Unreleased] 与 docs/FEATURES.md 台账同步",
+        "make test-cover 的实跑输出（profile 无 count==0）"
+      ],
+      "scoring_anchors": {
+        "gate_green": "go vet / golangci-lint 0 issues / deadcode_gate / 覆盖率 100% 全绿，且附 make test-cover 实跑输出。",
+        "contract_doc_sync": "CHANGELOG [Unreleased] 与 FEATURES 台账同步；不涉及契约面时逐项写明「有意识地不更新」。",
+        "tdd_evidence": "先红后绿；断言外部可见行为而非私有函数；注入同类错误（如再次丢弃 storeKey）做变异验证。",
+        "deadcode_security": "golangci-lint + deadcode_gate 绿；不使用 _ = x / //nolint 消音；分层不外泄（AWS 类型不进 handler）。",
+        "readability_layering": "最小修复、无顺手重构、命名领域化、分层合规。"
+      },
+      "red_green_trajectory": [
+        "复现测试红",
+        "最小修复",
+        "补边界用例",
+        "全绿 + 文档同步"
+      ],
+      "failure_modes": [
+        "白盒断言私有函数",
+        "为凑覆盖率写与实现耦合的 gap 测试",
+        "用 _ = x / //nolint 消音死代码",
+        "顺手重构无关代码导致 diff 失控"
+      ]
+    },
+    {
+      "id": "GT-3",
+      "title": "新增一个 `S3C_*` 配置项",
+      "scope": "新增一个服务端环境变量并在 internal/config 的 FromEnv / Validate 读取，文档与示例文件同步；不得在 internal/config 之外直读环境变量。",
+      "prompt": "在干净 checkout 上新增一个 S3C_* 配置项，在 internal/config 的 FromEnv / Validate 读取，行为测试覆盖启动期 fail-closed 分支；同步 docs/CONFIGURATION.md、apps/server/.env.example，必要时同步 compose 与 DEPLOYMENT.md。",
+      "files_likely_touched": [
+        "apps/server/internal/config/config.go",
+        "apps/server/internal/config/config_test.go",
+        "docs/CONFIGURATION.md",
+        "apps/server/.env.example",
+        ".env.example",
+        "docs/DEPLOYMENT.md"
+      ],
+      "verification_commands": [
+        {
+          "cmd": "cd apps/server && go test . -run 'TestConfigDocCoversAllEnvVars' -count=1",
+          "desc": "config_doc_gate：internal/config 读取的每个 S3C_* 都收录进 docs/CONFIGURATION.md"
+        },
+        {
+          "cmd": "cd apps/server && go test . -run 'TestEnvExampleTokenIsNotAValidCredential|TestMakefileMirrorsCIGates' -count=1",
+          "desc": "repo_infra_gate：示例占位口令不得是有效口令，Makefile 与 CI 门禁镜像"
+        },
+        {
+          "cmd": "cd apps/server && go test ./internal/config/... -count=1",
+          "desc": "config 包行为测试（含新增项的校验 / 默认值 / fail-closed 分支）绿"
+        },
+        {
+          "cmd": "cd apps/server && go build ./...",
+          "desc": "服务端整体可构建"
+        }
+      ],
+      "expected_artifacts": [
+        "config_doc_gate 红灯（未登记）→ 登记 CONFIGURATION.md + .env.example → 绿灯的记录",
+        "FromEnv / Validate 的行为测试（含启动期 fail-closed）",
+        "compose 透传项与根 .env.example / DEPLOYMENT.md 同步（如需）"
+      ],
+      "scoring_anchors": {
+        "gate_green": "config_doc_gate / repo_infra_gate / go test 全绿，且附 go test . -count=1 的红灯→绿灯完整输出。",
+        "contract_doc_sync": "CONFIGURATION.md（SSOT）+ .env.example + compose / DEPLOYMENT.md 全部同步，doc_number / doc_link / doc_index 绿。",
+        "tdd_evidence": "先写覆盖 fail-closed 分支的行为测试并见红灯，再实现；注入无效值做变异验证。",
+        "deadcode_security": "配置读取只在 internal/config；占位值不得是有效口令；golangci-lint / deadcode_gate 绿。",
+        "readability_layering": "沿用现有配置命名与校验风格，无散落的环境变量直读，diff 最小。"
+      },
+      "red_green_trajectory": [
+        "新增变量后 config_doc_gate 红（未登记）",
+        "同步 CONFIGURATION.md + .env.example",
+        "绿"
+      ],
+      "failure_modes": [
+        "只在代码读、文档不登记（gate 红）",
+        "只改文档不改代码（造假）",
+        "把占位 token 写成有效口令（repo_infra_gate S2 红）",
+        "配置读取散落在 config 包外"
+      ]
+    },
+    {
+      "id": "GT-4",
+      "title": "前端 UI 小改",
+      "scope": "一次行为级 UI 改动（弹窗 / 列表 / 快捷键），不引入新运行时依赖（ADR-004）；前置 apps/web/node_modules 已按 lockfile 安装。",
+      "prompt": "在干净 checkout 上完成一次行为级前端 UI 改动，先写失败的组件行为测试（断言渲染结果 / 事件效果）再实现；保持 lint / typecheck / test / coverage / build 与 a11y、deadcode 门禁全绿，界面可见变化时同步截图与 user-guide 配图。",
+      "files_likely_touched": [
+        "apps/web/src/**/*.vue",
+        "apps/web/src/**/*.ts",
+        "apps/web/src/**/*.test.ts",
+        "docs/user-guide.md",
+        "docs/accessibility.md"
+      ],
+      "verification_commands": [
+        {
+          "cmd": "cd apps/web && pnpm lint --max-warnings 0",
+          "desc": "前端 lint 0 warning",
+          "requires_path": "apps/web/node_modules"
+        },
+        {
+          "cmd": "cd apps/web && pnpm typecheck",
+          "desc": "vue-tsc 类型检查（含 e2e）",
+          "requires_path": "apps/web/node_modules"
+        },
+        {
+          "cmd": "cd apps/web && pnpm test",
+          "desc": "前端单测（含 a11y_gate / deadcode_gate）绿",
+          "requires_path": "apps/web/node_modules"
+        },
+        {
+          "cmd": "cd apps/web && pnpm build",
+          "desc": "前端可构建",
+          "requires_path": "apps/web/node_modules"
+        }
+      ],
+      "expected_artifacts": [
+        "先失败的组件行为测试（渲染结果 / 事件效果）红灯→绿灯记录",
+        "a11y_gate.test.ts / deadcode_gate.test.ts 绿",
+        "界面可见变化时的截图 spec 重跑与 user-guide 配图同步",
+        "pnpm test:coverage 实跑输出"
+      ],
+      "scoring_anchors": {
+        "gate_green": "pnpm lint --max-warnings 0 / typecheck / test / test:coverage 四指标 100% / build 全绿，且附 pnpm test:coverage 输出。",
+        "contract_doc_sync": "user-guide.md（含配图）与 accessibility.md 按改动同步；无文档面变化时逐项写明。",
+        "tdd_evidence": "先写失败的组件行为测试再实现，有红灯记录；注入同类渲染/事件错误做变异验证。",
+        "deadcode_security": "a11y_gate / deadcode_gate 绿；禁 v-html，禁 any 掩盖不变量，不引入新运行时依赖（ADR-004）。",
+        "readability_layering": "组件边界清晰、composables 合理复用、无重复公共逻辑。"
+      },
+      "red_green_trajectory": [
+        "先写失败的组件行为测试（断言渲染结果 / 事件效果）",
+        "实现",
+        "全绿"
+      ],
+      "failure_modes": [
+        "引入 Pinia / vue-router 等新依赖（违反 ADR-004）",
+        "使用 v-html",
+        "截图带「无法连接后端」环境噪声（screenshots.spec 有断言）",
+        "类型检查用 any 掩盖不变量"
+      ]
+    }
+  ]
+}
