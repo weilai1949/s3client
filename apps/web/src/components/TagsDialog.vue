@@ -79,8 +79,10 @@ async function submitTags() {
         <div v-if="loading" class="empty" style="padding:14px">{{ t('tags.loading') }}</div>
         <div v-else-if="!rows.length" class="empty" style="padding:14px">{{ t('tags.empty') }}</div>
         <div v-for="(row, i) in rows" :key="row.rowKey" class="row" style="margin-top:6px">
-          <input v-model="row.key" :placeholder="t('tags.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
-          <input v-model="row.value" :placeholder="t('tags.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
+          <label :for="'tag-key-' + row.rowKey">{{ t('tags.keyPh') }}</label>
+          <input :id="'tag-key-' + row.rowKey" v-model="row.key" :placeholder="t('tags.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
+          <label :for="'tag-val-' + row.rowKey">{{ t('tags.valuePh') }}</label>
+          <input :id="'tag-val-' + row.rowKey" v-model="row.value" :placeholder="t('tags.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <button class="btn secondary sm" :aria-label="t('common.delete')" @click="removeTagRow(i)">✕</button>
         </div>
       </div>

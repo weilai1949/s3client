@@ -25,6 +25,7 @@ const emit = defineEmits<{
     </div>
     <div v-if="buckets.length" class="tbl-wrap">
       <table class="tbl">
+        <caption class="sr-only">{{ t('buckets.listTableAria') }}</caption>
         <thead>
           <tr>
             <th>{{ t('common.name') }}</th>

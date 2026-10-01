@@ -66,4 +66,26 @@ describe('Toasts', () => {
     dismissToast(5)
     expect(toasts.some((t) => t.id === 5)).toBe(false)
   })
+
+  it('操作成功 / 失败统一经容器的 aria-live 播报', async () => {
+    const w = mount(Toasts)
+    const region = w.find('[aria-live="polite"]')
+    expect(region.exists(), 'toast 容器必须是 aria-live 播报区').toBe(true)
+
+    // 成功进同一播报区
+    toasts.push({ id: 6, kind: 'ok', text: '上传完成' })
+    await nextTick()
+    expect(region.text()).toContain('上传完成')
+
+    // 失败走同一播报区、同一批 DOM
+    toasts.push({ id: 7, kind: 'err', text: '上传失败' })
+    await nextTick()
+    expect(region.text()).toContain('上传失败')
+
+    // 每条 toast 自身也是 role=status（polite 隐式播报区）
+    const items = w.findAll('.toast')
+    expect(items).toHaveLength(2)
+    expect(items.every((el) => el.attributes('role') === 'status')).toBe(true)
+    w.unmount()
+  })
 })

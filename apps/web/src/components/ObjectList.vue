@@ -166,6 +166,7 @@ function iconFor(e: Entry): string {
   <!-- 列表视图（窗口化 tbody） -->
   <div v-else ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
     <table class="tbl">
+      <caption class="sr-only">{{ t('objects.tableAria') }}</caption>
       <thead>
         <tr>
           <th style="width:30px"></th>
@@ -213,6 +214,7 @@ function iconFor(e: Entry): string {
           :key="e.key"
           class="v-row"
           :class="{ selected: e.kind === 'file' && selected.has(e.key), 'row-folder': e.kind === 'folder' }"
+          :aria-selected="e.kind === 'file' && selected.has(e.key)"
           @click="emit('rowClick', e)"
           @dblclick="emit('rowDbl', e)"
           @contextmenu.prevent="emit('ctx', $event, e)"

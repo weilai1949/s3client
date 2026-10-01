@@ -1,5 +1,6 @@
 import type { MigrationResult } from '../types'
-import { request } from './http'
+import { opPath, request } from './http'
+import { operations } from './operations'
 import { getBase, readToken } from './storage'
 
 /** 异步任务（迁移/复制/删除）进度订阅：SSE + EOF 后状态回读兜底（从 `api.ts` 拆出）。 */
@@ -17,7 +18,7 @@ export interface MigrateProgress {
 /** 查询单个异步任务状态（`s3api.migrateJobStatus` 与本模块的 EOF 兜底轮询共用同一实现）。 */
 export function migrateJobStatus(jobId: string) {
   return request<{ jobId: string; done: boolean; progress: MigrateProgress; result?: MigrationResult }>(
-    `/api/migrate/jobs/${encodeURIComponent(jobId)}`,
+    opPath('migrateJobStatus', { id: jobId }),
   )
 }
 
@@ -55,7 +56,8 @@ export function subscribeMigrateEvents(
   ;(async () => {
     let lastStatus: string | undefined
     try {
-      const res = await fetch(`${getBase()}/api/migrate/jobs/${encodeURIComponent(jobId)}/events`, {
+      const res = await fetch(`${getBase()}${opPath('migrateJobEvents', { id: jobId })}`, {
+        method: operations.migrateJobEvents.method,
         headers,
         signal: ctrl.signal,
       })

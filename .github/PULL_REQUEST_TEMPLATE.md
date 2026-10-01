@@ -22,6 +22,7 @@ assignees: ''
 - [ ] **正确性**：需求/边界/错误路径覆盖；测试断言行为而非实现
 - [ ] **可读性**：命名规范；无死代码；无 rest 兼容 shim
 - [ ] **架构**：沿用 `store → model → s3wrap → handler` 分层；单文件 ≤1000 行
+- [ ] **决策**：新增 / 变更了关键取舍 → 已补 ADR（[`docs/decisions/`](../docs/decisions/index.md)，模板 [`0000-template.md`](../docs/decisions/0000-template.md)）；`architecture.md` §7 取舍行同步且带决策链接（`adr_coverage_gate_test.go` 守）；仅行为微调 / 无取舍写「不适用」
 - [ ] **安全**：用户输入在边界校验；敏感字段不落 localStorage / 不写日志；禁 `v-html`
 - [ ] **性能**：分页；有界并发；无 N+1 / 无界循环
 - [ ] **文档**：已按 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) §4 同步相关文档；`CHANGELOG.md` 的 `[Unreleased]` 已更新

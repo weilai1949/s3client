@@ -322,6 +322,14 @@ func (r *JobRegistry) runningCountLocked() int {
 	return n
 }
 
+// ActiveCount 返回在册（未终结）任务数，与 TryCreate 的上限判定共用同一口径。
+// 供 /api/metrics 的 `s3c_jobs_active` 暴露（ROADMAP #18）。
+func (r *JobRegistry) ActiveCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.runningCountLocked()
+}
+
 // Get 按 id 取任务。
 func (r *JobRegistry) Get(id string) (*Job, bool) {
 	r.mu.Lock()

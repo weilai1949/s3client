@@ -24,6 +24,7 @@ const emit = defineEmits<{
   <ModalDialog :open="open" :title="t('detail.title')" width="min(640px, 100%)" @close="emit('close')">
     <template v-if="detail">
       <table class="tbl detail-tbl">
+        <caption class="sr-only">{{ t('detail.tableAria') }}</caption>
         <tbody>
           <tr><th>{{ t('detail.key') }}</th><td class="mono" style="word-break:break-all">{{ detail.key }}</td></tr>
           <tr><th>{{ t('common.size') }}</th><td>{{ fmtSize(detail.size) }}</td></tr>

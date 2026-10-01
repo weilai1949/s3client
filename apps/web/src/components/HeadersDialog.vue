@@ -93,8 +93,10 @@ async function submitHeaders() {
           <button class="btn secondary sm" @click="addMetaRow">{{ t('headers.add') }}</button>
         </div>
         <div v-for="(m, i) in meta" :key="m.rowKey" class="row" style="margin-top:6px">
-          <input v-model="m.key" :placeholder="t('headers.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
-          <input v-model="m.value" :placeholder="t('headers.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
+          <label :for="'hdr-key-' + m.rowKey">{{ t('headers.colKey') }}</label>
+          <input :id="'hdr-key-' + m.rowKey" v-model="m.key" :placeholder="t('headers.keyPh')" style="flex:1" autocomplete="off" spellcheck="false" />
+          <label :for="'hdr-val-' + m.rowKey">{{ t('headers.valuePh') }}</label>
+          <input :id="'hdr-val-' + m.rowKey" v-model="m.value" :placeholder="t('headers.valuePh')" style="flex:1" autocomplete="off" spellcheck="false" />
           <button class="btn secondary sm" :aria-label="t('common.delete')" @click="removeMetaRow(i)">✕</button>
         </div>
       </div>

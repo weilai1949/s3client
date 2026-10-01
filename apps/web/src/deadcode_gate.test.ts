@@ -328,7 +328,7 @@ function resolveSpec(importer: string, spec: string): string[] {
     else dir.push(part)
   }
   const base = dir.join('/')
-  return [base, `${base}.ts`, `${base}.vue`, `${base}/index.ts`, `${base}/index.vue`]
+  return [base, `${base}.ts`, `${base}.d.ts`, `${base}.vue`, `${base}/index.ts`, `${base}/index.vue`]
 }
 
 /**

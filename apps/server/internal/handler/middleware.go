@@ -66,8 +66,10 @@ func (h *Handler) withLogging(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", reqID)
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		next.ServeHTTP(rec, r)
-		recordHTTPMetric(rec.status)
-		attrs := []any{"method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", time.Since(start).String(), "req", reqID}
+		// 耗时与状态类同处一次调用：HTTP 延迟直方图与请求计数必须同源（ROADMAP #18）。
+		dur := time.Since(start)
+		recordHTTPMetric(rec.status, dur)
+		attrs := []any{"method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", dur.String(), "req", reqID}
 		if r.URL.Path == "/api/health" || r.URL.Path == "/api/metrics" {
 			h.log.Debug("http", attrs...)
 			return

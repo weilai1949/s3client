@@ -212,13 +212,13 @@ async function purge(m: TrashMarker) {
     <div class="toolbar">
       <h3 style="margin:0">{{ t('trash.title') }}</h3>
       <span class="spacer" />
-      <span class="badge">{{ t('trash.account') }}</span>
-      <select v-model="accSel" class="acc-select" :title="tf('trash.switchAccount', { n: state.accounts.length })">
+      <label class="badge" for="trash-acc-select">{{ t('trash.account') }}</label>
+      <select id="trash-acc-select" v-model="accSel" class="acc-select" :title="tf('trash.switchAccount', { n: state.accounts.length })">
         <option v-if="!state.accounts.length" value="">{{ t('trash.noAccounts') }}</option>
         <option v-for="a in state.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
       </select>
-      <span class="badge">{{ t('trash.bucket') }}</span>
-      <select v-model="bucketSel" class="acc-select" :title="t('trash.switchBucket')">
+      <label class="badge" for="trash-bucket-select">{{ t('trash.bucket') }}</label>
+      <select id="trash-bucket-select" v-model="bucketSel" class="acc-select" :title="t('trash.switchBucket')">
         <option v-if="!buckets.length" value="">{{ t('trash.noBuckets') }}</option>
         <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
       </select>
@@ -230,7 +230,7 @@ async function purge(m: TrashMarker) {
       {{ t('trash.needAccount') }}
     </div>
 
-    <div v-else-if="error" class="msg err" style="margin-bottom:10px">
+    <div v-else-if="error" class="msg err" role="alert" style="margin-bottom:10px">
       <span style="flex:1">{{ error }}</span>
       <button class="link" style="flex:none" @click="retry">{{ t('common.retry') }}</button>
     </div>
@@ -243,6 +243,7 @@ async function purge(m: TrashMarker) {
       </div>
       <div v-else ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
         <table class="tbl">
+          <caption class="sr-only">{{ t('trash.tableAria') }}</caption>
           <thead><tr><th>{{ t('trash.colKey') }}</th><th style="width:120px">{{ t('trash.colVersion') }}</th><th style="width:160px">{{ t('trash.colDeletedAt') }}</th><th style="width:180px; text-align:right">{{ t('trash.colActions') }}</th></tr></thead>
           <tbody>
             <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">

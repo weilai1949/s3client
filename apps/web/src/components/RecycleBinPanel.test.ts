@@ -56,6 +56,9 @@ const acc1: Account = {
   bucket: 'b1',
   pathStyle: true,
   useSSL: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 
 const acc2: Account = { ...acc1, id: 'acc-2', name: 'A2' }

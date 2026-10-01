@@ -20,9 +20,9 @@ package main
 // 自检纪律（同 doc_number_gate 等）：docs 顶层 `.md` / 含 `.md` 子目录低于阈值 → Fatal，
 // 防止解析口径塌缩后「全绿但失明」。
 //
-// 变异验证（复核步骤）：摘掉 `AGENTS.md` 命名清单里的 `AGENT_EVALS.md` → 本门禁红灯点名
-// 「AGENTS.md 命名约定段缺 AGENT_EVALS.md」→ 还原后绿灯。
-// ⚠️ 本轮落笔会话无 shell，门禁**未实跑**：复核命令 `cd apps/server && go test . -count=1`。
+// 变异验证（复核步骤，2026-09-30 16:08 已实跑）：摘掉 `AGENTS.md` 命名清单里的 `AGENT_EVALS.md` →
+// 本门禁红灯点名「AGENTS.md 命名约定段 缺 AGENT_EVALS.md」→ 还原后绿灯。
+// 复核命令：`cd apps/server && go test . -count=1`。
 //
 // 相关：`doc_index_gate_test.go`（导航覆盖）、`doc_link_gate_test.go`（链接与锚点）——
 // 三者分别保证「有入口」「链接不死」「命名清单不分叉」。

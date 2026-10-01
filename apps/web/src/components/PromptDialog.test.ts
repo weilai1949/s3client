@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import PromptDialog from './PromptDialog.vue'
 import { promptState, settlePrompt } from '../prompt'
@@ -162,5 +162,71 @@ describe('PromptDialog', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
     expect(settlePrompt).not.toHaveBeenCalled()
     await nextTick() // flush 后 handler 弹出，避免污染后续用例
+  })
+
+  it('打开后焦点移入输入框并全选，关闭后恢复到打开前的元素', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'outside'
+    document.body.appendChild(outside)
+    outside.focus()
+
+    track(mount(PromptDialog, { attachTo: document.body }))
+    promptState.value = 'old.txt'
+    promptState.confirmText = 'common.ok'
+    promptState.open = true
+    await flushPromises()
+    const input = inputEl()
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe('old.txt'.length)
+
+    promptState.open = false
+    await flushPromises()
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
+  })
+
+  it('Tab 焦点陷阱：首尾回卷、中间不干预，焦点不逃出对话框', async () => {
+    track(mount(PromptDialog, { attachTo: document.body }))
+    promptState.confirmText = 'common.ok'
+    promptState.open = true
+    await flushPromises()
+    const input = inputEl()
+    const confirmBtn = bodyBtn('common.ok')
+    const cancelBtn = bodyBtn('common.cancel')
+    expect(document.activeElement).toBe(input)
+
+    // Shift+Tab 在第一个元素上 → 回卷到最后一个
+    let ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancelBtn)
+
+    // Tab 在最后一个元素上 → 回卷到第一个
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(input)
+
+    // 中间位置（确认按钮）不干预
+    confirmBtn.focus()
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(confirmBtn)
+
+    promptState.open = false
+    await flushPromises()
+  })
+
+  it('校验失败文案带 role="alert"：内联失败横幅进 live region 播报', async () => {
+    track(mount(PromptDialog, { attachTo: document.body }))
+    promptState.error = 'invalid name'
+    promptState.open = true
+    await flushPromises()
+    const err = document.body.querySelector('.modal-err')
+    expect(err, '应渲染校验失败文案').toBeTruthy()
+    expect(err!.getAttribute('role')).toBe('alert')
+    expect(err!.textContent).toBe('invalid name')
   })
 })

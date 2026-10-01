@@ -180,6 +180,7 @@ async function downloadVersion(v: CompareVersion) {
 
     <!-- 元数据对比 -->
     <table class="tbl detail-tbl" style="margin-top:12px">
+      <caption class="sr-only">{{ t('compare.tableAria') }}</caption>
       <thead><tr><th style="width:110px">{{ t('compare.prop') }}</th><th>{{ t('compare.colBase') }}</th><th>{{ t('compare.colTarget') }}</th></tr></thead>
       <tbody>
         <tr><th>{{ t('compare.versionId') }}</th><td class="mono" style="word-break:break-all">{{ base?.versionId }}</td><td class="mono" style="word-break:break-all">{{ target?.versionId }}</td></tr>
@@ -203,7 +204,7 @@ async function downloadVersion(v: CompareVersion) {
     <div v-else-if="diffState === 'binary'" class="badge" style="display:block; margin-top:12px; color:var(--muted)">
       {{ t('compare.binary') }}
     </div>
-    <div v-else-if="diffState === 'error'" class="msg err" style="margin-top:12px">
+    <div v-else-if="diffState === 'error'" class="msg err" role="alert" style="margin-top:12px">
       {{ tf('compare.error', { msg: compareError }) }}
     </div>
     <div v-else-if="diffState === 'done'" class="diff" style="margin-top:12px">

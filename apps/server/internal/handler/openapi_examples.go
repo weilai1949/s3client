@@ -27,24 +27,24 @@ var apiExamples = map[string]openapi.OpExample{
 	// ---- accounts ----
 	"GET /api/accounts": {
 		Responses: map[string]json.RawMessage{
-			"200": ex(`{"accounts":[{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}]}`),
+			"200": ex(`{"accounts":[{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}]}`),
 		},
 	},
 	"POST /api/accounts": {
 		Request: ex(`{"name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretKey":"secret","bucket":"my-bucket","pathStyle":true,"useSSL":false}`),
 		Responses: map[string]json.RawMessage{
-			"201": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}`),
+			"201": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
 		},
 	},
 	"GET /api/accounts/{id}": {
 		Responses: map[string]json.RawMessage{
-			"200": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}`),
+			"200": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
 		},
 	},
 	"PUT /api/accounts/{id}": {
 		Request: ex(`{"name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","bucket":"my-bucket","pathStyle":true,"useSSL":false}`),
 		Responses: map[string]json.RawMessage{
-			"200": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false}`),
+			"200": ex(`{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
 		},
 	},
 	"DELETE /api/accounts/{id}": {

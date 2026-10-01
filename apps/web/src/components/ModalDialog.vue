@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref, toRef, watch } from 'vue'
+import { ref, toRef, watch } from 'vue'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { useKeydownStack } from '../composables/useKeydownStack'
 import { t } from '../i18n'
 
@@ -13,32 +14,17 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'close'): void }>()
 
 const card = ref<HTMLElement>()
-const FOCUSABLE = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+const { trapTab } = useFocusTrap(card, toRef(props, 'open'))
 
-let previousFocus: HTMLElement | null = null
 let previousOverflow = ''
 
-function focusables(): HTMLElement[] {
-  // focusables() 仅在打开状态（v-if 渲染出 card）后经 nextTick 调用，card 恒存在；无需判空。
-  return Array.from(card.value!.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null)
-}
-
-// 打开时保存焦点并锁定滚动；关闭时恢复。打开时把焦点移入对话框（初始焦点：第一个可聚焦元素）。
-watch(() => props.open, async (o) => {
+// 打开时锁定滚动、关闭时还原（焦点的保存 / 恢复与初始聚焦由 useFocusTrap 负责）。
+watch(() => props.open, (o) => {
   if (o) {
-    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    await nextTick()
-    const els = focusables()
-    // 打开时 ✕ 关闭按钮恒存在，els 非空；直接聚焦首元素（原 `?? card.value` 兜底不可达，已移除）。
-    els[0]!.focus()
   } else {
     document.body.style.overflow = previousOverflow
-    if (previousFocus && document.contains(previousFocus)) {
-      previousFocus.focus()
-    }
-    previousFocus = null
   }
 })
 
@@ -49,20 +35,7 @@ function onKey(e: KeyboardEvent) {
     emit('close')
     return
   }
-  // 焦点陷阱：Tab 在对话框内循环，避免焦点逃逸到背后页面。
-  if (e.key === 'Tab') {
-    const els = focusables()
-    // 打开时 ✕ 关闭按钮恒存在，els 非空；无需判空。
-    const first = els[0]
-    const last = els[els.length - 1]
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault()
-      last.focus()
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault()
-      first.focus()
-    }
-  }
+  trapTab(e)
 }
 
 useKeydownStack(onKey, toRef(props, 'open'))

@@ -43,7 +43,7 @@
 |---|---|---|---|
 | `S3C_ENV_FILE` | 空 | 路径 | 显式指定 `.env` 路径；设置后为唯一来源，且路径不存在 / 不可读时**拒绝启动** |
 | `S3C_ADDR` | `127.0.0.1:8080` | `host:port` | 监听地址。回环更安全；需远程访问改 `0.0.0.0:8080`，此时**必须**同时设 `S3C_TOKEN` |
-| `S3C_DATA_DIR` | `./data` | 目录路径 | 数据目录：`accounts.json` / `accounts.db` / `accounts.json.enc`，以及单写者锁文件 `.s3clinet.lock` |
+| `S3C_DATA_DIR` | `./data` | 目录路径 | 数据目录：`accounts.json` / `accounts.db` / `accounts.json.enc`，任务清单 `jobs.json`，上次关停耗时 `shutdown.json`，以及单写者锁文件 `.s3clinet.lock` |
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
 | `S3C_TOKEN` | 空 | ≥ 16 字符；逗号分隔可多值 | 非空时所有 `/api/*` 需 `Authorization: Bearer <token>`（`/api/health`、`/api/metrics` 豁免）。非回环监听时**必填**。多 token 轮换时按**最短者**判定长度；删掉旧值即吊销。生成：`openssl rand -hex 32` |

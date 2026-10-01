@@ -528,19 +528,20 @@ onMounted(async () => {
         <div class="bar" :style="{ width: progressPct + '%' }" />
       </div>
 
-      <div v-if="error" class="msg err" style="margin:10px 0">{{ error }}</div>
+      <div v-if="error" class="msg err" role="alert" style="margin:10px 0">{{ error }}</div>
 
       <div v-if="loading" aria-busy="true" :aria-label="t('migrate.listingAria')">
         <div v-for="i in 4" :key="i" class="skel-row" />
       </div>
       <div v-else-if="objects.length" ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
         <table class="tbl">
+          <caption class="sr-only">{{ t('migrate.tableAria') }}</caption>
           <thead><tr><th style="width:30px"></th><th>Key</th><th style="width:100px">{{ t('common.size') }}</th></tr></thead>
           <tbody>
             <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">
               <td :colspan="3" :style="{ height: windowed.padTop + 'px' }" />
             </tr>
-            <tr v-for="o in windowed.items" :key="o.key" class="v-row" :class="{ selected: selected.has(o.key) }" :style="{ height: `${ROW_HEIGHT}px` }">
+            <tr v-for="o in windowed.items" :key="o.key" class="v-row" :class="{ selected: selected.has(o.key) }" :aria-selected="selected.has(o.key)" :style="{ height: `${ROW_HEIGHT}px` }">
               <td><input type="checkbox" :aria-label="tf('objects.selectItem', { name: o.key })" :checked="selected.has(o.key)" @change="toggle(o.key)" /></td>
               <td class="mono">{{ o.key }}</td>
               <td class="muted">{{ fmtSize(o.size) }}</td>

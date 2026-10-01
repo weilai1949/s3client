@@ -42,7 +42,7 @@
 |---|---|---|---|
 | Go 后端 | 默认 `127.0.0.1:8080`（`S3C_ADDR`）；容器内 `0.0.0.0:8080`，非 root 用户 `app`（uid 1000） | `SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（上限 `S3C_SHUTDOWN_TIMEOUT`） | 容器：`docker compose logs server`（json-file，10m × 3 或 5）；本机：`.run/server.log` |
 | nginx | 单 worker 反向代理 / 静态托管；compose 发布 `127.0.0.1:8080:8080` | `SIGQUIT` 优雅停止；`nginx -s reload` 热加载 | `docker compose logs nginx` |
-| 账号存储 | 文件型：`accounts.json` / `accounts.db` / `accounts.json.enc`（取决于 `S3C_STORE_DRIVER`）+ `jobs.json` 任务清单 | 随进程退出释放 `flock` | 不单独打日志，错误由后端日志承载 |
+| 账号存储 | 文件型：`accounts.json` / `accounts.db` / `accounts.json.enc`（取决于 `S3C_STORE_DRIVER`）+ `jobs.json` 任务清单 + `shutdown.json` 上次关停耗时 | 随进程退出释放 `flock` | 不单独打日志，错误由后端日志承载 |
 
 ## 3. 可观测性
 
@@ -86,6 +86,7 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 |---|---|---|---|
 | `s3c_http_requests_total` | counter | 已处理的 HTTP 请求总数（所有响应） | 作为错误率分母 |
 | `s3c_http_responses_total{class="2xx"\|"4xx"\|"5xx"}` | counter | 按状态类分桶的响应数 | `5xx` 增速 > 1%/5m 告警（见 §4） |
+| `s3c_http_request_duration_seconds` | histogram | **HTTP 请求处理耗时**；输出 `_bucket{le=...}` / `_sum` / `_count`（含 proxy / download / zip 等流式端点） | `histogram_quantile(0.95, ...)` > 5s 持续 10 分钟告警（建议，见 §4.2） |
 | `s3c_stream_interrupted_total` | counter | 流式传输**在完成前中断**的次数（上游读失败 / 写超时；客户端主动断开不计入，只记 Debug 日志） | 15 分钟内有增量即查（R-5） |
 | `s3c_zip_partial_failures_total` | counter | ZIP 打包「部分成功」次数 | 有增量即查（ZIP 缺文件比整体失败更隐蔽） |
 | `s3c_zip_failed_keys_total` | counter | ZIP 打包中失败对象的累计个数 | 与上一项联动定位是单对象还是批量失败 |
@@ -95,14 +96,20 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_go_memstats_alloc_bytes` | gauge | 当前堆占用字节 | 逼近容器内存上限（server 512M）即告警 |
 | `s3c_build_info{version="..."}` | gauge | 构建版本（恒为 1，版本在标签里） | 升级后核对版本是否与预期 tag 一致 |
 | `s3c_store_up` | gauge | 账号存储可达性：1 / 0 | `== 0` 持续 1 分钟即告警（沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议） |
+| `s3c_store_write_failures_total` | counter | **账号库写入失败次数**（落盘 / SQL 写入出错、写操作已回滚；重复 ID、NotFound 这类业务拒绝**不计数**） | 15 分钟内有增量即告警（critical，见 §4.2）——`json` / `encrypted` 驱动唯一的主动存储故障信号 |
+| `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | **数据卷容量**：`S3C_DATA_DIR` 所在文件系统总字节 / 本进程可用字节 | 剩余占比 < 20% 持续 10 分钟告警（见 §4.2）；**序列缺失 = 取不到**（见下方口径） |
+| `s3c_jobs_active` | gauge | **在册（未终结）异步任务数**，与 `JobRegistry` 上限同口径（上限 256） | `>= 230` 持续 10 分钟告警（见 §4.2） |
+| `s3c_last_shutdown_duration_seconds` | gauge | **上一次优雅关停耗时**（由 `data/shutdown.json` 在启动时载入；0 = 尚无记录） | 与 `S3C_SHUTDOWN_TIMEOUT`（默认 30s）对比，逼近即说明关停吃紧 |
 | `s3c_ssrf_deny_private` | gauge | SSRF 生效策略：1 = 拒绝私网 / 回环 S3 端点 | 与预期配置比对（`S3C_SSRF_DENY_PRIVATE` 是否真的生效） |
 | `s3c_s3_calls_total` | counter | S3 上游 API 调用总数（成功 + 失败） | 作为上游错误率分母 |
 | `s3c_s3_call_errors_total{code="..."}` | counter | 上游失败调用按错误类分类 | 按 `code` 分诊（R-6）；`SignatureDoesNotMatch` / `InvalidAccessKeyId` 出现即查 |
 | `s3c_s3_call_duration_seconds` | histogram | 上游调用耗时；输出 `_bucket{le=...}` / `_sum` / `_count` | `histogram_quantile(0.95, ...)` > 2s 持续 10 分钟告警（建议） |
 | `s3c_s3_stream_bytes_total` | counter | 经本服务从 S3 流式读出的字节数 | 与业务量比对；中断时用于估算已读量 |
 
-直方图桶上界（逐字）：`"0.01"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`。
-`_bucket{le="+Inf"}` 恒等于 `_count`（= 调用总数），可用于自检指标完整性。
+直方图桶上界（逐字）。上游调用 `s3c_s3_call_duration_seconds`：`"0.01"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`；
+HTTP 请求 `s3c_http_request_duration_seconds`：`"0.005"`、`"0.01"`、`"0.025"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`。
+两者的 `_bucket{le="+Inf"}` 都恒等于 `_count`，可用于自检指标完整性
+（HTTP 侧还恒等于 `s3c_http_requests_total`——同一次请求在同一处记录，不可能漂移）。
 
 **`s3c_s3_call_errors_total` 的 `code` 标签取值是有限白名单**（防止不可信上游用任意 `<Code>` 撑爆标签基数）：
 `AccessDenied`、`BucketNotEmpty`、`EntityTooLarge`、`InvalidAccessKeyId`、`InvalidArgument`、`InvalidPartOrder`、
@@ -111,12 +118,18 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 `SignatureDoesNotMatch`、`SlowDown`；白名单之外的 API 错误码**一律收敛为 `other`**；非 API 错误归
 `transport`（连接 / DNS 等）、`timeout`（上下文超时）、`canceled`（上下文取消）。
 
-> **指标基线特性（排查前必读）**：全部指标是**进程级内存计数**，进程重启即清零；不落盘、无历史。
+> **指标基线特性（排查前必读）**：除 `s3c_last_shutdown_duration_seconds`（唯一落盘的指标，
+> 见 `data/shutdown.json`）外，全部指标是**进程级内存计数**，进程重启即清零；不落盘、无历史。
 > 因此「重启后再看指标」无法判断故障前状态——**先取证，再重启**（§5 开头）。
 
-**观测缺口（本版本没有的指标，不要去找）**：账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、卷 /
-磁盘容量、优雅关停耗时。这些只能靠日志与宿主 / 容器层采集（见 §4.3）；补齐方向已按两源分工登记
-[`ROADMAP.md`](ROADMAP.md) §三 **#18**（候选 ⬜ 未排期，唯一来源在该表）。
+**2026-09-30 观测缺口已全部补齐**（原「账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、
+卷 / 磁盘容量、优雅关停耗时」五项，现均为上表内置指标；补齐记录见 [`ROADMAP.md`](ROADMAP.md)
+空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL）。仍**只能**外部采集的观测面只剩两类：
+**inode 用量**与**跨服务 trace**（见 §4.3）。
+
+> **卷容量序列缺失 ≠ 容量为 0**：`s3c_volume_*` 只在 statfs / `GetDiskFreeSpaceExW` 取到结果时输出。
+> 平台不支持（Linux / macOS / FreeBSD / Windows 之外）、`S3C_DATA_DIR` 未传给 `/api/metrics`
+> 或 statfs 失败（路径不存在）时**不发序列**，此时按 §4.3 用宿主 `node_exporter` / `df` 采集。
 
 ```bash
 # 只取关键几行
@@ -130,7 +143,7 @@ curl -sS http://127.0.0.1:8080/api/metrics | grep -E '^s3c_(store_up|ssrf_deny_p
 | 级别 | `S3C_LOG_LEVEL` = `debug` / `info` / `warn` / `error`，默认 `info` | [`CONFIGURATION.md`](CONFIGURATION.md) |
 | 格式 | `S3C_LOG_JSON=1` → `slog` JSON（容器 / 生产推荐，compose 默认注入 `1`）；否则纯文本 | `main.go` |
 | 启动日志 | `msg="s3clinet server"` + `version` / `addr` / `dataDir` / `store` / `staticDir` / `auth` / `cors` / `region` / `ssrfDenyPrivate` | `main.go` |
-| 关停日志 | `msg="shutting down..."` → `msg="shutdown complete"`；两者间隔即实际关停耗时 | `main.go` |
+| 关停日志 | `msg="shutting down..."` → `msg="shutdown complete"`；两者间隔即实际关停耗时（同一耗时也落盘为 `s3c_last_shutdown_duration_seconds`，见 §3.2） | `main.go` |
 | 访问日志 | `msg="http"` + `method` / `path` / `status` / `dur` / `req` | `middleware.go` |
 | 审计日志 | `msg="audit"` + `audit`（事件名）/ `ip` / `method` / `path`（+ 事件附加字段，如账号 id、bucket） | `handler/audit.go` |
 | 关键错误日志 | `msg="配置校验失败"`、`msg="data dir lock"`、`msg="init store"`、`msg="handler error"`、`msg="stream interrupted"` | `main.go` / `store` / `handler` |
@@ -192,6 +205,9 @@ tail -f .run/server.log
 | 服务可用性 | 外部探测 `/api/health` 返回 200 的成功率 | ≥ 99.5% / 月 |
 | 存储可用性 | `avg_over_time(s3c_store_up[30d])` | ≥ 99.9% / 30 天（注意仅 `sqlite` 驱动能实时反映，见 §3.1） |
 | 服务端错误率 | `sum(rate(s3c_http_responses_total{class="5xx"}[5m])) / sum(rate(s3c_http_requests_total[5m]))` | ≤ 0.5% |
+| HTTP 延迟 | `histogram_quantile(0.95, sum(rate(s3c_http_request_duration_seconds_bucket[5m])) by (le))` | ≤ 5s（含 proxy / download / zip 流式端点，长尾天然存在；普通 API 看 p50 分布） |
+| 账号库写入 | `increase(s3c_store_write_failures_total[15m])` | 0（出现即查；业务性拒绝不计数） |
+| 数据卷剩余空间 | `s3c_volume_free_bytes / s3c_volume_size_bytes` | ≥ 20%（序列缺失的平台按 §4.3 外部采集） |
 | 上游错误率 | `sum(rate(s3c_s3_call_errors_total[5m])) / sum(rate(s3c_s3_calls_total[5m]))` | ≤ 1%（`canceled` 属客户端取消，评估时可剔除） |
 | 上游延迟 | `histogram_quantile(0.95, sum(rate(s3c_s3_call_duration_seconds_bucket[5m])) by (le))` | ≤ 2s |
 | 流式中断 | `increase(s3c_stream_interrupted_total[1h])` | ≤ 1 次 / 小时 |
@@ -210,16 +226,23 @@ tail -f .run/server.log
 | 流式中断 | `increase(s3c_stream_interrupted_total[15m]) > 0` | 立即 | 客户端主动断开不计入，故有增量即真实中断 |
 | 进程重启 | `resets(s3c_uptime_seconds[15m]) > 0` | 立即 | 指标为进程级、重启清零；非计划重启需查因 |
 | 内存逼近上限 | `s3c_go_memstats_alloc_bytes` | > 容器上限的 80%（server 512M → 约 410M） | 容器内存上限由 compose 强制 |
+| 账号库写入失败 | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
+| 在册任务逼近上限 | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
+| 数据卷剩余空间 | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
+| HTTP 延迟升高 | `s3clinet:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
 
 ### 4.3 必须靠外部采集的观测面（本服务不提供指标）
 
 | 关注点 | 现状 | 建议做法（**建议值**） |
 |---|---|---|
-| 数据卷容量 / inode | 无内置指标 | 宿主 `node_exporter` / `df -h` 采集，卷使用率 > 80% 告警 |
-| 账号库可写性（`json` / `encrypted`） | 无内置指标（`Ping` 恒 nil） | 无主动探针可用：只能靠 5xx 比例（§4.2）与 `msg="handler error"` 日志间接发现（见 R-3） |
-| 在册异步任务数 | 无内置指标 | 定期 `GET /api/migrate/jobs` 统计，逼近 256 时告警 |
-| 优雅关停耗时 | 无内置指标 | 日志 `msg="shutting down..."` 与 `msg="shutdown complete"` 的时间差 |
+| 数据卷 **inode**（容量本身已内置 `s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30） | 仍无内置指标 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；卷字节使用率直接用 §4.2 的 S3ClinetVolumeSpaceLow |
+| 数据卷容量（**仅在序列缺失的平台**：Linux / macOS / FreeBSD / Windows 之外） | 该平台 `volumeUsage` 无免依赖实现 → 不发序列 | 宿主 `node_exporter` / `df -h` 采集，卷使用率 > 80% 告警 |
+| 账号库可写性（`json` / `encrypted`） | **主动探针仍无**（`Ping` 恒 nil）；但**写入失败已内置计数** `s3c_store_write_failures_total`（事后信号，2026-09-30） | 用 §4.2 的 S3ClinetStoreWriteFailures（critical）+ 5xx 比例 + `msg="handler error"` 日志三者交叉确认（R-3） |
 | 跨服务 trace | 未接入（[`ROADMAP.md`](ROADMAP.md) §三 3.2 #11 ⬜） | 现阶段用 `X-Request-ID` + nginx 日志关联 |
+
+> 2026-09-30 起，本表原有的「数据卷**容量** / 在册异步任务数 / 优雅关停耗时」三项已由内置指标补齐
+> （`s3c_volume_*`、`s3c_jobs_active`、`s3c_last_shutdown_duration_seconds`，见 §3.2 与 §4.2），
+> 补齐记录见 [`ROADMAP.md`](ROADMAP.md) 空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL。
 
 ## 5. Runbook（故障处置）
 
@@ -451,6 +474,8 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 **判据**：
 1. 日志 `msg="shutting down..."` 与 `msg="shutdown complete"` 的**时间差** ≈ 关停耗时（超时也会打
    `shutdown complete`——退出码仍为 0，**只能靠日志时间差判断超时**）；
+   同一次耗时也落盘为 `s3c_last_shutdown_duration_seconds`（§3.2）：**本次进程的值要等下次启动才可见**
+   （进程退出前监听已关闭，scrape 赶不上），可用来做「历次关停趋势」而非实时判断；
 2. `S3C_SHUTDOWN_TIMEOUT` 取值必须在 **1–3600** 秒（超上界拒绝启动，防止溢出把关停窗口静默清零）；
 3. compose 的 `stop_grace_period: 30s` 与 `S3C_SHUTDOWN_TIMEOUT` 默认都是 30——**若把超时调到
    `stop_grace_period` 之上，docker 会在宽限期结束后直接 `SIGKILL`**，优雅关停形同虚设。
@@ -514,6 +539,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | `accounts.db` | `S3C_STORE_DRIVER=sqlite` | ✅ 必须 | SQLite 主库 |
 | `accounts.db-wal` / `accounts.db-shm` | `sqlite`（WAL 模式） | ✅ 必须（与主库**同批**） | 侧车含尚未 checkpoint 的页；只拷 `.db` 可能丢掉最近写入 |
 | `jobs.json` | 有过异步任务时 | ⚠️ 可选 | 异步任务清单（含 `interrupted` 对账证据，保留 7 天）；丢失只影响重启后的对账视图，不影响账号数据 |
+| `shutdown.json` | 至少完成过一次优雅关停 | ⚠️ 可选 | 上次关停耗时（`{"durationUs":...}`），供 `s3c_last_shutdown_duration_seconds` 在下次启动读入；丢失只让该指标回落 0，不影响服务 |
 | `.s3clinet.lock` | unix 且进程运行过 | ❌ **不需要** | `flock` 锁文件，内容无意义；锁由内核在进程退出时释放，残留文件不影响下次启动 |
 | `accounts.json.tmp` 等 `*.tmp` | 写盘中途崩溃时可能残留 | ❌ 不需要 | 原子写临时残骸；下次写盘会先清理，不影响读取 |
 
@@ -726,7 +752,9 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 5. **处置与验证**：写下实际执行的动作与 §6.4 验证结果。
 6. **复盘与归档**：把上面五步整理成一份完整复盘——格式与字段见
    [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md)（元信息 / 影响面 / 时间线 / 取证 / 根因 / 行动项 /
-   文档同步表）；填写完成后按 [`archive/index.md`](archive/index.md)「归档操作」`git mv` 冻结进
+   文档同步表），**首份已填写的实例**（可照抄结构）见
+   [`archive/incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md)；
+   填写完成后按 [`archive/index.md`](archive/index.md)「归档操作」`git mv` 冻结进
    `docs/archive/`（命名 `incident-YYYYMMDD-<短名>.md`）并在该索引登记一行。
    根因若是代码缺陷 → 仓库 issue，并按 [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 与代码同 PR 同步
    [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) / [`CHANGELOG.md`](../CHANGELOG.md)。
@@ -778,7 +806,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 | 关注点 | 说明 | 建议做法 |
 |---|---|---|
-| 数据卷使用率 | 无内置指标，需宿主采集 | > 80% 告警（§4.3） |
+| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；**inode 仍需宿主采集** | 字节剩余 < 20% 告警（§4.2 S3ClinetVolumeSpaceLow）；inode > 80% 告警（§4.3） |
 | 账号库写放大 | `json` / `encrypted` **每次写盘重写整个文件**（全量快照 + 原子替换）；`sqlite` 为行级更新 | 账号数达到数百时优先 `sqlite`（**建议**，代码未设阈值） |
 | `jobs.json` 增长 | 受 TTL 控制（30 分钟 / 7 天），但大批量任务期间会持续写入 | 无需清理；异常增长按 R-8 排查 |
 | 日志占用 | 由 compose 的 json-file 轮转限制硬上限；本机 `.run/*.log` **不轮转** | 本机部署建议外部 `logrotate`（**建议**） |

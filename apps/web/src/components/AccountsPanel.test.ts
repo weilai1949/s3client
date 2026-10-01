@@ -55,6 +55,8 @@ const acc1: Account = {
   bucket: 'b1',
   pathStyle: false,
   useSSL: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 
 const acc2: Account = {
@@ -67,6 +69,9 @@ const acc2: Account = {
   bucket: '',
   pathStyle: false,
   useSSL: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 
 // ModalDialog 渲染经 Teleport；面板测试用直通 stub 将表单内容留在 wrapper 内

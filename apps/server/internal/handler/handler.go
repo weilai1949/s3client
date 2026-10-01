@@ -21,13 +21,15 @@ type Handler struct {
 	store          store.AccountStore
 	log            *slog.Logger
 	staticDir      string
-	corsOrigins    []string // CORS 白名单；空 = 仅同源 + localhost/tauri
-	tokens         []string // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
-	version        string   // 服务端版本号（ldflags 注入），用于 /api/health 上报
-	exposeMetrics  bool     // 是否暴露 /api/metrics（默认 false：404 假装不存在）
-	exposeOpenAPI  bool     // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
-	cspConnectSrc  string   // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
-	trustedProxies []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
+	corsOrigins    []string      // CORS 白名单；空 = 仅同源 + localhost/tauri
+	tokens         []string      // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
+	version        string        // 服务端版本号（ldflags 注入），用于 /api/health 上报
+	exposeMetrics  bool          // 是否暴露 /api/metrics（默认 false：404 假装不存在）
+	exposeOpenAPI  bool          // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
+	cspConnectSrc  string        // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
+	trustedProxies []string      // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
+	dataDir        string        // 数据目录（S3C_DATA_DIR）；卷容量 statfs 目标 + 关停耗时落盘处
+	lastShutdown   time.Duration // 最近一次优雅关停耗时（跨重启由 shutdown.json 载入）
 	clients        *clientCache
 	migrateJobs    *service.JobRegistry
 	limiter        *ipLimiter
@@ -79,6 +81,13 @@ func (h *Handler) SetCSPConnectSrc(src string) {
 // 需在 Routes() 前调用；不调用则完全不信任 XFF。
 func (h *Handler) SetTrustedProxies(proxies []string) {
 	h.trustedProxies = proxies
+}
+
+// SetDataDir 记录数据目录，供 /api/metrics 的卷容量（statfs 目标）与
+// 优雅关停耗时落盘（shutdown.json）使用。需在 Routes() 前调用；不调用时
+// 容量序列不输出、关停耗时不落盘（测试与嵌入场景，口径见 OPERATIONS.md §3.2）。
+func (h *Handler) SetDataDir(dir string) {
+	h.dataDir = dir
 }
 
 // SetJobPersister 替换任务清单持久化器，并立即按历史清单恢复任务（未完成 → interrupted）。

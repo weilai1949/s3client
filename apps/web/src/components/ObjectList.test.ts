@@ -30,6 +30,7 @@ function file(key: string, overrides: Partial<Entry> = {}): Entry {
       lastModified: '2024-06-01T10:00:00Z',
       etag: 'e1',
       isDir: false,
+      storageClass: 'STANDARD',
     },
     ...overrides,
   }
@@ -91,18 +92,27 @@ describe('ObjectList', () => {
     expect(empty.find('.empty-icon').text()).toBe('📭')
   })
 
-  it('grid meta：size 缺省 → 0 兜底；storageClass 存在 → ` · sc` 追加', () => {
+  it('grid meta：size 缺省 → 0 兜底；storageClass 有值追加、为空 / 无 object 不追加', () => {
     const w = mountList({
       bucketView: 'grid',
       entries: [
         file('a.bin', {
           size: undefined,
-          object: { key: 'a.bin', size: 0, lastModified: '', etag: 'e', isDir: false, storageClass: 'STANDARD' } as Entry['object'] & { storageClass: string },
+          object: { key: 'a.bin', size: 0, lastModified: '', etag: 'e', isDir: false, storageClass: 'STANDARD' },
         }),
+        // 空 storageClass（spec 里必填但可为 ''）→ 三元假分支
+        file('b.bin', {
+          object: { key: 'b.bin', size: 1, lastModified: '', etag: 'e', isDir: false, storageClass: '' },
+        }),
+        // 无 object → `e.object?.storageClass` 短路
+        file('c.bin', { object: undefined }),
       ],
     })
-    const meta = w.find('.grid-item .gi-meta').text()
-    expect(meta).toContain(' · STANDARD')
+    const metas = w.findAll('.grid-item .gi-meta').map((n) => n.text())
+    expect(metas).toHaveLength(3)
+    expect(metas[0]).toContain(' · STANDARD')
+    expect(metas[1]).not.toContain(' · ')
+    expect(metas[2]).not.toContain(' · ')
   })
 
   it('列表行 size/lastModified 缺失：`?? 0` / `?? \'\'` 兜底渲染', () => {
@@ -462,5 +472,21 @@ describe('ObjectList', () => {
     const w = mountList({ bucketView: 'grid', entries: few })
     expect(w.findAll('.grid-item')).toHaveLength(5)
     expect(w.find('.grid-more').exists()).toBe(false)
+  })
+})
+
+describe('ObjectList 选中态语义', () => {
+  it('行 aria-selected 随选中集合变化', async () => {
+    const w = mountList({ entries: [file('a.txt'), file('b.txt')], selected: new Set(['a.txt']) })
+    const rows = w.findAll('tbody tr.v-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].attributes('aria-selected')).toBe('true')
+    expect(rows[1].attributes('aria-selected')).toBe('false')
+
+    await w.setProps({ selected: new Set(['b.txt']) })
+    const after = w.findAll('tbody tr.v-row')
+    expect(after[0].attributes('aria-selected')).toBe('false')
+    expect(after[1].attributes('aria-selected')).toBe('true')
+    w.unmount()
   })
 })

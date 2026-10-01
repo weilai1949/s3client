@@ -118,8 +118,8 @@ async function removeBucket(name: string) {
     <div class="toolbar">
       <h3 style="margin:0">{{ t('buckets.title') }}</h3>
       <span class="spacer" />
-      <span class="badge">{{ t('common.account') }}</span>
-      <select v-model="accSel" class="acc-select" :title="tf('buckets.accountSwitch', { n: state.accounts.length })">
+      <label class="badge" for="buckets-acc-select">{{ t('common.account') }}</label>
+      <select id="buckets-acc-select" v-model="accSel" class="acc-select" :title="tf('buckets.accountSwitch', { n: state.accounts.length })">
         <option v-if="!state.accounts.length" value="">{{ t('buckets.noAccounts') }}</option>
         <option v-for="a in state.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
       </select>
@@ -131,7 +131,7 @@ async function removeBucket(name: string) {
       {{ t('buckets.needAccount') }}
     </div>
 
-    <div v-else-if="error" class="msg err" style="margin-bottom:10px">
+    <div v-else-if="error" class="msg err" role="alert" style="margin-bottom:10px">
       <span style="flex:1">{{ error }}</span>
       <button class="link" style="flex:none" @click="loadBuckets">{{ t('common.retry') }}</button>
     </div>
@@ -144,6 +144,7 @@ async function removeBucket(name: string) {
         {{ t('buckets.empty') }}
       </div>
       <table v-else class="tbl">
+        <caption class="sr-only">{{ t('buckets.listTableAria') }}</caption>
         <thead><tr><th>{{ t('buckets.colName') }}</th><th style="width:170px">{{ t('buckets.colCreated') }}</th><th style="width:200px; text-align:right">{{ t('common.actions') }}</th></tr></thead>
         <tbody>
           <tr v-for="b in buckets" :key="b.name">

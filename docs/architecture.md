@@ -115,6 +115,38 @@ apps/web/src/
 3. ≥100MB 走 multipart：`/multipart/init` → `/multipart/part`（分段预签名）→ `/multipart/complete`。
 4. 后端全程不接触对象字节，仅生成签名。
 
+同一过程的时序图（GitHub 原生渲染 `mermaid`；文字版即上面四步，两处口径须一致）：
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 浏览器 / 桌面壳
+    participant API as Go 后端 handler → service → s3wrap
+    participant S3 as S3 兼容服务
+
+    U->>API: POST /api/accounts/id/presign，method=put
+    Note over API: 本地计算 v4 签名（不访问 S3），密钥不回传前端
+    API-->>U: 200 返回 url 与 expiresIn
+    U->>S3: PUT 对象（浏览器直传，2 路并发 + 进度 + 重试）
+    S3-->>U: 200 + ETag
+    Note over U,API: 对象字节全程不经过后端
+
+    rect rgb(240, 244, 250)
+    Note over U,S3: 大文件走 multipart
+    U->>API: POST /multipart/init
+    API->>S3: CreateMultipartUpload（仅元数据）
+    API-->>U: uploadId
+    U->>API: POST /multipart/part（第 n 段）
+    API-->>U: 分段预签名 URL
+    U->>S3: PUT 分段（逐段直传）
+    S3-->>U: 200 + ETag
+    U->>API: POST /multipart/complete（parts 清单）
+    API->>S3: CompleteMultipartUpload（PartNumber 升序）
+    S3-->>API: 200
+    API-->>U: 完成
+    end
+```
+
 ## 6. 配置体系
 
 所有配置通过环境变量注入（`S3C_*`），支持 `.env`（查找顺序：`S3C_ENV_FILE` → CWD → 可执行文件同目录；真实环境变量优先；**显式 `S3C_ENV_FILE` 不可读时拒绝启动**，不静默回退默认值）。完整矩阵见 [`CONFIGURATION.md`](CONFIGURATION.md)（**SSOT**）。

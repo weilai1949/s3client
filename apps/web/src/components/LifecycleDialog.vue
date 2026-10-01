@@ -79,19 +79,20 @@ async function submitLifecycle() {
       <div v-for="i in 2" :key="i" class="skel-row" />
     </div>
     <table v-else-if="rules.length" class="tbl">
+      <caption class="sr-only">{{ t('lifecycle.tableAria') }}</caption>
       <thead>
         <tr>
           <th style="width:110px">{{ t('lifecycle.colId') }}</th>
-          <th>{{ t('lifecycle.colPrefix') }}</th>
-          <th style="width:110px">{{ t('lifecycle.colDays') }}</th>
+          <th id="lifecycle-prefix-h">{{ t('lifecycle.colPrefix') }}</th>
+          <th id="lifecycle-days-h" style="width:110px">{{ t('lifecycle.colDays') }}</th>
           <th style="width:60px"></th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="(r, i) in rules" :key="r.rowKey">
           <td class="mono">{{ r.id }}</td>
-          <td><input v-model="r.prefix" :placeholder="t('lifecycle.prefixPh')" style="width:100%" autocomplete="off" spellcheck="false" /></td>
-          <td><input v-model.number="r.days" type="number" min="1" style="width:88px" /></td>
+          <td><input v-model="r.prefix" :placeholder="t('lifecycle.prefixPh')" style="width:100%" autocomplete="off" spellcheck="false" aria-labelledby="lifecycle-prefix-h" /></td>
+          <td><input v-model.number="r.days" type="number" min="1" style="width:88px" aria-labelledby="lifecycle-days-h" /></td>
           <td><button class="btn danger sm" @click="removeRule(i)">{{ t('common.delete') }}</button></td>
         </tr>
       </tbody>

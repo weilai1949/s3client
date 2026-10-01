@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { confirmState, settleConfirm } from '../confirm'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { useKeydownStack } from '../composables/useKeydownStack'
 import { t } from '../i18n'
 
-const focusBtn = ref<HTMLButtonElement>()
+const card = ref<HTMLElement>()
+const open = computed(() => confirmState.open)
+
+const { trapTab } = useFocusTrap(card, open)
 
 function onKey(e: KeyboardEvent) {
   if (!confirmState.open) return
@@ -16,25 +20,19 @@ function onKey(e: KeyboardEvent) {
     // 原「仅在栈顶时才响应」的守卫因此恒为 true，属不可达分支，已随其导出一并移除。
     e.preventDefault()
     settleConfirm(true)
+  } else {
+    trapTab(e)
   }
 }
 
-useKeydownStack(onKey, computed(() => confirmState.open))
-
-watch(
-  () => confirmState.open,
-  async (open) => {
-    if (open) await nextTick()
-    if (open) focusBtn.value?.focus()
-  },
-)
+useKeydownStack(onKey, open)
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="confirmState.open" class="modal-backdrop" @click.self="settleConfirm(false)">
-        <div class="modal-card" role="alertdialog" aria-modal="true" :aria-label="confirmState.title">
+        <div ref="card" class="modal-card" role="alertdialog" aria-modal="true" :aria-label="confirmState.title">
           <div class="modal-icon" :class="confirmState.danger ? 'danger' : ''" aria-hidden="true">
             <svg v-if="confirmState.danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -46,7 +44,7 @@ watch(
           <h3 class="modal-title">{{ confirmState.title }}</h3>
           <p class="modal-msg">{{ confirmState.message }}</p>
           <div class="modal-actions">
-            <button ref="focusBtn" class="btn sm" :class="confirmState.danger ? 'danger' : ''" @click="settleConfirm(true)">
+            <button class="btn sm" :class="confirmState.danger ? 'danger' : ''" @click="settleConfirm(true)">
               {{ confirmState.confirmText ?? (confirmState.danger ? t('common.delete') : t('common.ok')) }}
             </button>
             <button class="btn secondary sm" @click="settleConfirm(false)">{{ t('common.cancel') }}</button>

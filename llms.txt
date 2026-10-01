@@ -41,7 +41,7 @@ make test-all                                                                   
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md)：配置参考（全部 `S3C_*` 环境变量 SSOT、启动期硬失败、客户端设置）
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)：部署形态、Docker Compose、Nginx、升级与回滚
 - [docs/OPERATIONS.md](docs/OPERATIONS.md)：运维手册——可观测性、SLO 与告警、Runbook、备份恢复、灾难恢复、事故响应
-- [docs/POSTMORTEM_TEMPLATE.md](docs/POSTMORTEM_TEMPLATE.md)：事故复盘模板——§9.3 取证 / 时间线 / 根因 / 行动项 / 文档同步（**空模板**，填写后归档进 `docs/archive/`）
+- [docs/POSTMORTEM_TEMPLATE.md](docs/POSTMORTEM_TEMPLATE.md)：事故复盘模板——§9.3 取证 / 时间线 / 根因 / 行动项 / 文档同步（**空模板**，填写后归档进 `docs/archive/`；首份已填写实例：`docs/archive/incident-20260916-presign-empty-url.md`）
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md)：性能基线与热路径解读（加密写入 30ms/64MiB、账号写入 O(n)、预签名 33µs）
 - [docs/api.md](docs/api.md)：REST API 参考（与 OpenAPI 注册表一致）
 - [docs/api/openapi.json](docs/api/openapi.json)：**机器可读 API 契约**——不跑服务即可读取，适合代码生成 / 契约 diff / 工具消费
@@ -52,7 +52,7 @@ make test-all                                                                   
 - [docs/glossary.md](docs/glossary.md)：术语表（S3 领域词 + 本项目自造词）
 - [docs/i18n.md](docs/i18n.md)：国际化——新增一门语言的步骤、文案 key 与覆盖率门禁
 - [docs/accessibility.md](docs/accessibility.md)：可访问性现状与已知限制（**未做正式 WCAG 审计**）
-- [docs/FEATURES.md](docs/FEATURES.md)：已实现 / 已修复能力台账（单一事实来源）
+- [docs/FEATURES.md](docs/FEATURES.md)：已实现 / 已修复能力台账（单一事实来源）；**⚠️ 超大**（>200 KB）——按 §A–§BI 字母章节跳转检索，勿整篇读入
 - [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)：缺陷 / 外部阻塞 / 技术债（唯一来源）
 - [docs/ROADMAP.md](docs/ROADMAP.md)：版本规划与里程碑
 - [docs/threat-model.md](docs/threat-model.md)：威胁模型与安全边界
@@ -65,7 +65,7 @@ make test-all                                                                   
 - [.github/SUPPORT.md](.github/SUPPORT.md)：支持渠道与「不提供什么」
 - [.github/GOVERNANCE.md](.github/GOVERNANCE.md)：治理现状、角色权限、决策与发布权
 - [.github/SECURITY.md](.github/SECURITY.md)：安全策略与漏洞报告渠道
-- [CHANGELOG.md](CHANGELOG.md)：逐字发布历史
+- [CHANGELOG.md](CHANGELOG.md)：逐字发布历史；**⚠️ 超大**（>200 KB）——按 `## [<版本>]` 段跳转检索，勿整篇读入
 
 ## 目录
 
@@ -79,7 +79,7 @@ docs/          文档（命名二分，与 AGENTS.md / docs/DEVELOPMENT.md §4 �
                `ROADMAP.md` `POSTMORTEM_TEMPLATE.md` `THIRD_PARTY_LICENSES.md`（`README.md` 属
                工具固定名 = 本目录落地页）；内容文档小写 = `api.md` `architecture.md` `data-model.md`
                `errors.md` `threat-model.md` `user-guide.md` `compatibility.md` `glossary.md` `i18n.md`
-               `accessibility.md`；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
+               `accessibility.md` `handoff-20260930.md`（时点性批次交接快照，收口后归档）；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
                `decisions/`（ADR）· `archive/`（冻结归档）
 deploy/        nginx 反代配置 + prometheus/s3clinet.rules.yml（告警规则，对应 OPERATIONS §4） + grafana/（SLO 仪表盘 JSON）
 scripts/       开发、发版、E2E 脚本 + evals/（AI 黄金任务集与 runner）

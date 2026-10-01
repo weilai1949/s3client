@@ -64,7 +64,8 @@ const emit = defineEmits<{
       <button class="btn secondary sm" :title="t('toolbar.bucketPropsHint')" :disabled="!bucket" @click="emit('open-bucket-info')">{{ t('toolbar.bucketProps') }}</button>
     </label>
     <span class="tb-divider" aria-hidden="true" />
-    <div v-if="pathEditing" class="crumbs path-editor">
+    <label v-if="pathEditing" class="path-editor">
+      <span class="path-lbl">{{ t('toolbar.pathLabel') }}</span>
       <input
         v-model="pathDraft"
         class="path-input"
@@ -74,7 +75,7 @@ const emit = defineEmits<{
         @keydown.esc="emit('cancel-path-edit')"
         @blur="emit('commit-path')"
       />
-    </div>
+    </label>
     <div v-else class="crumbs" :aria-label="t('toolbar.currentPath')">
       <button class="link" @click="emit('go-root')">{{ bucket || 'Bucket' }}</button>
       <template v-for="c in crumbs" :key="c.path">
@@ -87,13 +88,16 @@ const emit = defineEmits<{
       {{ pathEditing ? '✓' : '✎' }}
     </button>
     <span class="spacer" />
-    <input
-      v-model="filter"
-      type="search"
-      class="filter-input"
-      :placeholder="t('toolbar.filterPlaceholder')"
-      :title="filterActive ? t('toolbar.filterActiveHint') : t('toolbar.filterHint')"
-    />
+    <label class="filter-lbl">
+      <span>{{ t('toolbar.filterLabel') }}</span>
+      <input
+        v-model="filter"
+        type="search"
+        class="filter-input"
+        :placeholder="t('toolbar.filterPlaceholder')"
+        :title="filterActive ? t('toolbar.filterActiveHint') : t('toolbar.filterHint')"
+      />
+    </label>
     <span v-if="filterActive" class="badge">
       {{ visibleCount }}/{{ totalCount }}
       <button class="link" style="margin-left:4px" @click="filter = ''">{{ t('common.clear') }}</button>
@@ -144,7 +148,9 @@ const emit = defineEmits<{
 .stats-bar { margin-bottom: 10px; padding: 8px 12px; border-radius: var(--radius); background: var(--panel-2); border: 1px solid var(--border); }
 
 /* 路径编辑 */
-.path-editor { flex: 1; min-width: 220px; }
-.path-input { width: 100%; padding: 6px 10px; font-family: var(--font-mono); font-size: 12px; }
+.path-editor { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 220px; }
+.path-lbl { flex: none; font-size: 12px; color: var(--muted); }
+.path-input { flex: 1; min-width: 0; padding: 6px 10px; font-family: var(--font-mono); font-size: 12px; }
+.filter-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .path-edit-btn { margin-left: 4px; font-size: 13px; }
 </style>

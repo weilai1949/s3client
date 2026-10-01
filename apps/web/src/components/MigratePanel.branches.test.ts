@@ -64,6 +64,9 @@ const acc1: Account = {
   bucket: "src-bucket",
   pathStyle: true,
   useSSL: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 };
 const acc2: Account = {
   ...acc1,
@@ -78,6 +81,7 @@ const objA: ObjectItem = {
   lastModified: "2024-01-01",
   etag: "e1",
   isDir: false,
+  storageClass: 'STANDARD',
 };
 const objB: ObjectItem = {
   key: "b.bin",
@@ -85,6 +89,7 @@ const objB: ObjectItem = {
   lastModified: "2024-01-02",
   etag: "e2",
   isDir: false,
+  storageClass: 'STANDARD',
 };
 const objDir: ObjectItem = {
   key: "dir/",
@@ -92,6 +97,7 @@ const objDir: ObjectItem = {
   lastModified: "",
   etag: "",
   isDir: true,
+  storageClass: 'STANDARD',
 };
 
 const ModalDialogStub = {

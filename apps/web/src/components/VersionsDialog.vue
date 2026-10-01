@@ -265,6 +265,7 @@ async function removeVersion(v: VersionRow) {
       </div>
       <div ref="scrollEl" class="tbl-wrap tbl-virtual" @scroll.passive="onListScroll">
         <table class="tbl">
+          <caption class="sr-only">{{ t('versions.tableAria') }}</caption>
           <thead><tr><th style="width:96px">{{ t('versions.colType') }}</th><th>{{ t('versions.colVersionId') }}</th><th style="width:140px">{{ t('versions.colMtime') }}</th><th style="width:70px">{{ t('versions.colSize') }}</th><th style="width:96px">{{ t('versions.colStorage') }}</th><th style="width:190px">{{ t('versions.colActions') }}</th></tr></thead>
           <tbody>
             <tr v-if="windowed.padTop" class="v-spacer" aria-hidden="true">

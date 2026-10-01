@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-09-30（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18））
+> 最后更新：2026-09-30（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18）、§BG AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）、§BH 门禁实跑回填与 §BG 结构归位、§BI 第二轮收口（ROADMAP ✅ 行移出 / §AU 注记 / 评估缺口补登记 / §四 复测）、§BJ ROADMAP #19 文档可读性与流程机械化（mermaid 时序图 / 超大体量预警 / 复审到期门禁 / PR 模板 ADR 勾选）、§BK KNOWN_ISSUES #70 闭环（`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）、§BL ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘）、§BM ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾）、§BN ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁））
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性） · BF 2026-09-30 docs 内待修项收口（文档失真 + 对比度静态核查 + 改进项登记 SSOT） · BG 2026-09-30 AI 时代文档补强（六路并行：效果证据 / 机器可读 / 元信息） · BH 2026-09-30 门禁实跑回填与 §BG 结构归位 · BI 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 + 评估缺口补登记） · BJ 2026-09-30 ROADMAP #19 文档可读性与流程机械化（mermaid / 体量预警 / 复审到期门禁 / PR ADR 勾选） · BK 2026-09-30 KNOWN_ISSUES #70 闭环（NormalizeEndpoint 幂等修复） · BL 2026-09-30 ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘） · BM 2026-09-30 ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾） · BN 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + 生成物新鲜度门禁）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1334,6 +1334,9 @@ functions 1095 / lines 3503）。
 
 > ⚠️ **需人类复核**：按 [`AI_POLICY.md`](AI_POLICY.md) §3，修改公共 API 契约（`openapi_register_*.go`）属「**需确认**」，
 > 本轮只准备改动与证据，**未推送、未合并**。
+> **2026-09-30 事实注记（§BI）**：该批改动已随后续提交（`git log -S AddTag` → `a984df7`）进入
+> `develop` 且当前与 `origin/develop` 一致——上句「未推送、未合并」是落笔时点状态，按「历史值不改写、
+> 只加注」纪律保留原文；「需确认」是否已由人类履行属流程记录，本表不代答。
 
 > **文档同步**：[`api.md`](api.md)、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
 
@@ -1494,8 +1497,10 @@ functions 1095 / lines 3503）。
 | 4 | 上述分叉**无机械保证**（正因无门禁才漏登） | 新增 [`docs_naming_gate_test.go`](../apps/server/docs_naming_gate_test.go)：`docs/` 顶层 `.md` 与含 `.md` 子目录的名字必须同时登记进三处命名口径（只认反引号登记形态，散文提及不算），含扫描面自检阈值 | 变异复核步骤见文件头：摘 `AGENT_EVALS.md` 登记 → 红灯点名 → 还原绿灯 |
 
 > **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
-> ⚠️ **门禁未实跑**：本轮落笔会话无 shell——复核命令 `cd apps/server && go test . -count=1`
-> （预期全绿）与上述变异复核待人类实跑，实测值照实回填。
+> **门禁实跑回填（2026-09-30 16:08 CST，§BH）**：`cd apps/server && go test . -count=1` 全绿；
+> 变异复核已实跑——摘掉 `AGENTS.md` 命名清单的 `AGENT_EVALS.md` →
+> `TestDocsNamingConventionRegistersEveryDocsFile` 红灯点名「AGENTS.md 命名约定段 缺 AGENT_EVALS.md」→
+> 还原后绿灯。
 
 ---
 
@@ -1530,8 +1535,258 @@ functions 1095 / lines 3503）。
 | 5 | 「改 `styles.css` 后 §5.5 表须重算」只是口头约定（本轮即实测抓到改色未按公式重算） | 新增 [`contrast_gate_test.go`](../apps/server/contrast_gate_test.go)：表格数值 / 计数声明 / `--brand-from` 注释数字 ↔ `styles.css` **机械重算比对**，改色不重算即红灯 | 变异复核步骤见文件头：改 `--ok` 色阶 → 红灯点名该行；把结论句 5 改 4 → 计数红灯 |
 
 > **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
-> ⚠️ **门禁未实跑**：本轮落笔会话无 shell——`go test . -count=1`（链接 / 锚点 / 导航 / 命名 / **新增
-> `contrast_gate`**）与前端单测待人类实跑；`contrast_gate` 的变异复核步骤见其文件头。
+> **门禁实跑回填（2026-09-30 16:08 CST，§BH）**：`cd apps/server && go test . -count=1` 全绿
+> （链接 / 锚点 / 导航 / 命名 / `contrast_gate`）；前端 `pnpm lint` 0 告警、`pnpm test` **74 文件 /
+> 1132 例全绿**、`pnpm build` OK（366.72 kB，gzip 112.72 kB）；`contrast_gate` 计数变异复核已实跑——
+> 把 §5.5 结论句 `共 **11 行**` 改 10 → `TestContrastRecordCountClaimsMatch` 红灯点名 → 还原绿灯
+> （步骤见其文件头）。
+
+---
+
+### BG. 2026-09-30 AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）
+
+> **诊断**：以「AI 时代成熟仓库文档基线」逐层盘点（承接 §AN 的 10 层矩阵），确认散文文档层已饱和，
+> 剩余缺口集中于三类：① **AI 效果证据**只有制度没有可执行任务集与台账；② **机器可读深度**不足
+> （OpenAPI 0 示例、无 `security.txt`、无 SLO 仪表盘、性能无回归门禁、无障碍无自动检测）；
+> ③ **英文覆盖**只有 README、数据模型无单一地图。本批 6 条并行工作流逐条收口，**每条能力配一道
+> 机械门禁并做变异验证**（破坏 → 红灯点名 → 还原 → 绿灯）。
+
+| # | 工作流 | 缺口 | 交付 | 门禁 / 证据 |
+|---|---|---|---|---|
+| 1 | 接口契约 | `openapi.json` 5 schema / 0 示例、无 requestBody 示例；`api.md` 0 条 curl | 37/37 请求体 operation 有请求示例、70/70 有 2xx 示例、5/5 schema 有 `example`；`api.md` 12 条 curl 覆盖 10 tag；非 JSON 2xx 用真实 media type | `openapi_examples_gate_test.go`（含示例字段 schema 形状校验、curl 覆盖与空扫自检）；5 处变异：删响应示例 / 删请求示例 / 加未声明字段 / 删 migrate curl / 空 paths 全部红灯点名 |
+| 2 | 运维与性能 | OPERATIONS 自述「未提供仪表盘」；有基线无回归门禁；密钥轮换无 runbook | `deploy/grafana/s3clinet.dashboard.json`（31 面板）；`bench_budget_test.go` + `perf.yml` + `make bench`；OPERATIONS §4 改指仪表盘 + 新增 §6.5 密钥轮换 Runbook；PERFORMANCE §4 预算表与 flakiness 口径 | `grafana_dashboard_gate_test.go`（18/18 指标真实存在、7/7 `code` 在白名单、3/3 recording rule 匹配）；`bench_budget_test.go`（实测 PresignPut 362 allocs、加密写 151–155 allocs、账号写 O(n) 比值 23–27×，分配断言确定性、时间上限刻意宽松）；4 处变异 |
+| 3 | 安全与输入空间 | 无机器可读漏洞披露入口；解析面无输入空间探索 | `.well-known/security.txt`（RFC 9116）；`internal/{s3wrap,store,handler}` 的 stdlib `testing.F` 目标；`fuzz.yml` 有界探索；`CITATION.cff`；`documentation.md` issue 模板 | `security_txt_gate_test.go`（必填字段 + `Expires` 必须未过期，过期即红灯强制续期）+ `TestWorkflowActionsAreShaPinned` |
+| 4 | AI 效果证据 | 黄金任务集是散文、台账为空 | `scripts/evals/golden-tasks.yaml`（4 任务 / 16 命令 / 20 锚点）+ `run-golden-task.sh`（fail-closed）；AGENT_EVALS §六 首次台账（4 行，含一次 `fail` 基线如实保留） | `agent_evals_gate_test.go` 新增机器可读规格与 runner 断言；2 处变异（删任务 / 篡改标题）。**诚实边界**：无 golden task 端到端实跑，五维记 N/A ≠ 满分 |
+| 5 | 英文与无障碍 | `docs/en/` 只有 README 翻译、无文档翻译政策与门禁；无障碍无自动检测 | `en/README.md`（英文导航）+ `en/architecture.md`（全文翻译，声明中文 SSOT + revision）；`i18n.md` §7 翻译覆盖政策；`e2e/a11y.spec.ts`（axe，4 状态 + 1 自检）；修 `--ok` / `--danger` 对比度 | `en_docs_gate_test.go`（来源声明 / revision / 可达性；3 处变异）；axe 实测先红（3 个状态 serious color-contrast）→ 修色 → 5/5 绿；`contrast_gate_test.go` 把 §5.5 表值与计数钉在 `styles.css`（2 处变异） |
+| 6 | 数据模型 | 账号 / 驱动 / 信封事实散落四处 | `docs/data-model.md`（含 §0 SSOT 裁决表）；`internal/store` 注释把当前写入格式误标 `S3C2` 的 6 处改为 `S3C3` | `data_model_gate_test.go`（反射 `model.Account` 字段 + 解析 `store.Open` switch 驱动名；2 处变异） |
+
+> **一处自我修正（记以免重蹈）**：`accessibility.md` §5.5 首版把 `--danger` / `--ok` 的浅色值写成
+> **渲染态 axe 读数**（5.98 / 5.02），与表头声明的「token 公式值」口径不符；`contrast_gate_test.go`
+> 对账时按 WCAG 2.1 重算为 **5.91 / 4.95** 并纠正，同时发现「4 组低于 AA」的计数漏了
+> `--primary on --panel` 一行（实为 **共 11 行、浅色 5 行 / 深色 3 行**）。教训：静态记录必须由
+> 机械重算钉住，手算数字会漂。
+
+> **文档同步**：[`docs/data-model.md`](data-model.md)（新）、[`docs/en/README.md`](en/README.md) ·
+> [`docs/en/architecture.md`](en/architecture.md)（新）、[`docs/README.md`](README.md)（导航 + 机器可读面）、
+> [`docs/DEVELOPMENT.md`](DEVELOPMENT.md) §2（fuzz）/ §3（门禁落点 + CI 对照表 + 触发表）/ §4（同步表 +
+> 登记表 + 命名）、[`AGENTS.md`](../AGENTS.md)、[`llms.txt`](../llms.txt)、[`CHANGELOG.md`](../CHANGELOG.md)、
+> [`docs/OPERATIONS.md`](OPERATIONS.md)、[`docs/PERFORMANCE.md`](PERFORMANCE.md)、
+> [`docs/AGENT_EVALS.md`](AGENT_EVALS.md)、[`docs/i18n.md`](i18n.md)、[`docs/accessibility.md`](accessibility.md)、
+> [`README.md`](../README.md)；本节为证据台账落点。
+
+---
+
+### BH. 2026-09-30 门禁实跑回填与 §BG 结构归位（「未实跑」标记清零）
+
+> **诊断**：§BD / §BF 与 CHANGELOG 两条目落笔时会话无 shell，留有 4 处「⚠️ 门禁未实跑待人类实跑」
+> 标记；同批并行落笔的 §BG 被追加到文件末尾、错挂在 §三「质量与覆盖率现状」**之后**（字母台账
+> 应全部位于 §二），目录行与头部摘要也停在 §BE / §BF、未含 §BG——正是命名 / 登记「同 PR 两处同改」
+> 要防的那类漂移，只是这次发生在 FEATURES 自身。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | 4 处「门禁未实跑」标记（本文件 §BD / §BF、CHANGELOG 两条） | 按 AGENTS 提交前门禁全量实跑并把实测值写回原标记位：后端 `go vet` / `go build` / `go test ./...` **9/9 包全绿**、`golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 / `pnpm test` **74 文件 1132 例全绿** / `typecheck:e2e` exit 0 / `pnpm build` OK（366.72 kB，gzip 112.72 kB） | 各处原 ⚠️ 标记改为实测值；`docs_naming_gate_test.go` 文件头同步去掉「未实跑」 |
+| 2 | §BD / §BF 留下两处**变异复核**未跑 | 亲手复跑两道：① `docs_naming_gate` 摘掉 `AGENTS.md` 命名清单的 `AGENT_EVALS.md` → `TestDocsNamingConventionRegistersEveryDocsFile` 红灯点名「AGENTS.md 命名约定段 缺 AGENT_EVALS.md」→ 还原绿灯；② `contrast_gate` 把 §5.5 结论句 `共 **11 行**` 改 10 → `TestContrastRecordCountClaimsMatch` 红灯点名「按 4.5:1 从表格重算为 11」→ 还原绿灯 | 复核命令与红灯文案见两门禁文件头；本节即实跑记录 |
+| 3 | §BG 错挂在 §三 之后；目录 / 头部摘要缺 §BF / §BG 登记 | §BG 整块移回 §二 末尾（§BF 与 §三 之间，**纯移动 33 行、内容零改动**）；目录行补 BF / BG / BH，头部摘要补 §BG / §BH | `git diff --stat` 33 insertions / 33 deletions；`doc_link_gate` 校验目录新锚点可达 |
+
+> **文档同步**：[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
+
+---
+
+### BI. 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 / §AU 过期注记 / 评估残留缺口补登记 / §四 基线复测）
+
+> **诊断**：第一轮（§BH）清完「未实跑」标记后继续逐台账回读，发现 4 类残留：① ROADMAP §六 第 3 条
+> 「禁止保留已完成条目的 ✅ 行」被 §三 3.2 **#14** 违反（fuzz 已于同日落地仍留表内）；② 本文件 §AU 的
+> 「未推送、未合并」随事实过期；③ 文档基线评估识别的 4 项缺口（图表 / 体量 / 评审周期 / PR ADR 勾选）
+> **从未落账**——评估会话曾计划登记，但拟用编号 #69 被 CHANGELOG ↔ tag 问题占用并闭环，这批缺口随后无人认领；
+> ④ ROADMAP §四 基线日期停在 2026-09-28。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| 1 | §三 3.2 #14 ✅ 行违反 §六 第 3 条 | 移出该行（编号不重排、#14 转空号），3.2 前言空号清单补 #14 并保留证据指针（§BG） | 移出前 `grep '§三 #14'` 仓内零引用，不产生悬空指针 |
+| 2 | §AU「未推送、未合并」过期 | 原文保留（历史值不改写纪律）+ 2026-09-30 事实注记（已随后续提交进入 `develop`、与 `origin` 一致） | `git log -S AddTag` → `a984df7`；`git status` 显示与 `origin/develop` 一致 |
+| 3 | 4 项评估缺口未落账 | ROADMAP §三 3.2 新增 **#19**：① `docs/` 0 图表 ② 超大文档无体量警示 ③ 评审周期未 CI 强制 ④ PR 模板缺 ADR 勾选 | 实测：`grep mermaid\|plantuml` 全 `docs/` 零命中、`docs/images/` 仅 2 图；CHANGELOG 323 KB / FEATURES 247 KB 平铺进 `llms.txt`（0 体量警示）；`docs/README.md` 自认「建议值，未在 CI 强制」；PR 模板验收清单无 ADR 项 |
+| 4 | §四 基线日期停在 2026-09-28 | 改写为「2026-09-30 复测」并明示复测范围与未重跑项（覆盖率 / E2E / audit 类沿用行内最近实测值） | 同轮实跑：`gofmt` 干净、`govulncheck` 0 可达，叠加 §BH 已回填的 vet / lint / test / build / 前端全绿 |
+
+> **文档同步**：[`ROADMAP.md`](ROADMAP.md) §三 3.2（移出 #14、新增 #19）与 §四、[`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条；本节为证据台账落点。
+
+---
+
+### BJ. 2026-09-30 ROADMAP #19 文档可读性与流程机械化（4 项落地，**已收尾**）
+
+> 来源：[`ROADMAP.md`](ROADMAP.md) §三 3.2 **#19**（2026-09-30 补登记、同日开工）。
+> 收尾状态：4 项实现与文档同步先落地（两道新门禁红→绿 + 变异实跑通过），同日会话完成
+> ⑤ CHANGELOG 记录、⑥ 移出 #19（转空号、证据指针入 3.2 前言空号清单）与 ⑦ 门禁全量复跑，
+> **本批次闭环**。
+
+| # | 缺口 | 处置 | 证据 |
+|---|---|---|---|
+| ① | `docs/` **0 张图表**（`mermaid` / `plantuml` 零命中），关键机制只有散文与 ASCII | [`architecture.md`](architecture.md) §5 数据流（对象上传）补 **mermaid 时序图**（直传 + multipart 两段），与四步文字版同段互指 | 图中链路逐条对 `handler/multipart.go` 核对：`init` / `complete` 走后端、分段由浏览器直传 |
+| ② | 超大文档平铺进 [`../llms.txt`](../llms.txt) **无体量警示**（CHANGELOG ~319 KB / FEATURES ~244 KB） | 两行就地补 `⚠️ 超大`（>200 KB）+ 检索建议（按 `## [<版本>]` 段 / §字母章节）；新增 **`llms_size_gate_test.go`**：目标 >200 KB 的链接所在行必须含该标记 | 首轮**红灯**点名两行 → 补标记转绿；**变异实跑**删 CHANGELOG 行标记 → 红灯「目标 319 KB 超过 200 KB 阈值却无体量警示」→ 还原绿灯（扫描面 43 个文件链接，自检 ≥30） |
+| ③ | 文档复审周期自认「建议值、未在 CI 强制、无任何自动化提醒」 | 新增 **`doc_review_gate_test.go`**：登记表带「N 个月」周期的行超过 `最后复审 + 周期` 即红灯点名，复核后更新日期即绿；无数值周期的口径仍靠人工 | 首轮绿（21 行 / 14 行带月数 / 0 过期）；**变异实跑**把一行日期改成 `2025-01-01` → 红灯「+ 3 个月 = 2025-04-01，今天 2026-09-30」→ 还原绿灯 |
+| ④ | PR 模板验收清单缺「新增 / 变更决策是否补 ADR」勾选项 | [`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) 验收清单新增「决策」行（补 ADR + `architecture.md` §7 取舍行同步 + 无取舍写「不适用」） | 与 `adr_coverage_gate_test.go` 的取舍行断言同一口径 |
+
+> **文档同步（已完成）**：[`DEVELOPMENT.md`](DEVELOPMENT.md) §3（两道新门禁落点）与 §4（复审周期
+> 「建议值」→ 带月数到期**有机械提醒**）、[`README.md`](README.md)（机器可读面 llms 行 + owner /
+> 复审周期行）、[`../llms.txt`](../llms.txt)、[`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)、
+> 本节 + 目录行 + 头部摘要。**本文件即证据台账落点。**
+>
+> **收尾三步（2026-09-30 已完成）**：⑤ [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 顶部
+> 已记「ROADMAP #19 收尾」一条；⑥ [`ROADMAP.md`](ROADMAP.md) §三 3.2 已按 §六 第 1 条**移出 #19**
+> （#19 转空号、编号不重排，前言空号清单已同步）；⑦ 提交前门禁全量复跑**全绿**——
+> `go vet ./...` 干净、`go test ./...` **9/9 包**（`-count=1`）、`go build ./...` OK、
+> 前端 `pnpm test` **74 文件 / 1132 例**、`pnpm build` OK（366.72 kB / gzip 112.72 kB）、
+> 两道新门禁 `go test . -run 'TestLLMSTextWarns|TestDocReviewRegister' -count=1`
+> **2/2 PASS**（21 行 / 14 行带月数 / 0 过期；43 个文件链接 / 2 个超大）。
+
+---
+
+### BK. 2026-09-30 KNOWN_ISSUES #70 闭环：`NormalizeEndpoint` 幂等修复（推翻 ➖ 决策）
+
+> 来源：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#70**（2026-09-30 §BG 原生 fuzz 实测发现，原登记 ➖
+> 「fail-closed、维持现状」）。本批**推翻该决策**并闭环——推翻依据（4 处调用点影响面复核 +
+> 函数头契约自违 + 登记内已写死的最小修法）写入登记的「处理中」版本，闭环后整行按约定移除、
+> §四 台账补「已闭环移除」行（编号不重排）。本文件即证据台账落点。
+
+| # | 项 | 证据 |
+|---|---|---|
+| 1 | **缺陷**：`NormalizeEndpoint("00  /")` → `"http://00  "`（尾随空白），再归一 → `"http://00"`，**不幂等**；`"host/a  /"` / `"http://host  /"` 同理。根因：`strings.TrimRight(rest, "/")` 在 host/path 切分**之前**执行，把尾斜杠后的内部空白顶到结果末尾，而入口 `TrimSpace` 只做一次。函数头明文承诺「去首尾空白」与幂等契约（`service.SameEndpoint` 与建 client 共用同一套规则），现状自违；调用点 4 处（`client.go` / `presign.go` / `ssrf.go` / `service/migrate.go`），输出进 `url.Parse` 与同端比较 | — |
+| 2 | **推翻 ➖ 依据（动手前影响面复核）**：① fail-closed 只是「不可利用」，不豁免「比较判定同一端点、建出的 URL 却不同」的契约破坏；② 修法是登记内**已写死的最小改动**（先切分 host/path，再对 host `TrimSpace`），不碰 scheme 补全 / 大小写 / 路径保留语义；③ 两个退化种子已在 corpus、属性断言已具备，可 TDD 收口 | `KNOWN_ISSUES` #70 ➖ → 🔄 处理中（同日推翻并写依据）→ 闭环移除 |
+| 3 | **TDD 先红**：`ssrf_fuzz_test.go` 新增 `TestNormalizeEndpointIdempotent`（7 例：斜杠前空格暴露 / 路径尾斜杠前空格 / scheme 后 host 尾斜杠前空格 / host 边缘空白 / host 内部空白保留 / 入口首尾空白 / 普通端点；断言**外部可见行为**——输出不以空白结尾 + 对自身幂等） | 首轮**红灯 3 例点名**：`"00  /" = "http://00  " 以空白结尾`、`"host/a  /" = "http://host/a  "`、`"http://host  /" = "http://host  "` → 实现后 **7/7 绿** |
+| 4 | **修法**（`client.go` `NormalizeEndpoint`）：先切分 host/path → host `strings.TrimSpace` → path `TrimRightFunc`（`'/'` ∥ `unicode.IsSpace`，保输出不以空白结尾）→ host 与 path 全空返回 `""`（`"/"` 等输入与旧行为一致）。scheme 补全 / scheme 与 host 小写 / 路径内部原样均不变 | `go test ./internal/s3wrap/ -count=1` **PASS**、`-cover` **100.0% statements**；既有 `TestNormalizeEndpoint` / `TestNormalizeEndpointNeverDoubleScheme` **不改一字即绿** |
+| 5 | **fuzz 死分支清理**：原「输出带尾随空白就跳过幂等断言」的短路分支修复后**不可达**（死代码零容忍）→ 删除；两枚退化种子**保留**在 corpus 作回归（原登记注释建议「修好后与种子一并删除」，此处**刻意不删**：保留 corpus 回归价值高于删除，确定性断言另由 `TestNormalizeEndpointIdempotent` 承担），注释同步改写为已修复口径 | `FuzzNormalizeEndpoint` / `FuzzValidateEndpoint` 各 **10s 有界 fuzz PASS**（678,909 + 246,990 次执行、0 失败，2026-09-30 实跑） |
+| 6 | **变异验证**：把 `client.go` 中 host 的 `strings.TrimSpace(host)` 改为不生效（`_ = strings.TrimSpace(host)`） | **红灯点名** `"00  /"` 与 `"http://host  /"` 两例（path 尾空格例不归 host trim 管，故未点名——符合预期）→ 还原后 7/7 绿；复核命令写在测试文件头 |
+| 门禁 | 全绿实测（2026-09-30） | `gofmt -l .` 干净 / `go vet ./...` **0 告警** / `go build ./...` OK / `golangci-lint run` **0 issues** / `go test ./... -count=1` **9/9 包** / `internal/s3wrap` **100.0% statements**；前端本轮未改 |
+
+> **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #70 闭环移除（§二 表格行 + §四 台账「已闭环移除」
+> + 头部已闭环编号区间补 `#70` + 前言注记改「已于同日闭环并移除」）；[`CHANGELOG.md`](../CHANGELOG.md)
+> `[Unreleased]` 记一条「修复」；本节 + 头部摘要 + 目录行三处同步。`docs/archive/` 冻结件**不回写**。
+
+---
+
+### BL. 2026-09-30 ROADMAP #18 可观测性补全：五个缺失指标（发射点 + 告警 + 仪表盘 + 文档同步）
+
+> 来源：[`ROADMAP.md`](ROADMAP.md) §三 3.2 **#18**（2026-09-30 会话中断批 Task C）。
+> 收尾状态：五个指标的代码、测试、prometheus 规则、grafana 仪表盘与文档同步**先落地且门禁全绿**；
+> 同日会话完成 ⑤ CHANGELOG 记录、⑥ 移出 #18（转空号、证据指针入 3.2 前言空号清单）与 ⑦ 包根门禁
+> 复跑，**本批次闭环**。本文件即证据台账落点。
+
+| 指标（逐字） | 类型 | 口径 / 关键取舍 | 发射点与证据 |
+|---|---|---|---|
+| `s3c_store_write_failures_total` | counter | 只数**真实写入失败**（落盘 / SQL 写错、已回滚）；重复 ID、`NotFound` 等业务拒绝**不计数**。`json` / `encrypted` 驱动 `Ping` 恒 nil，这是它们唯一的主动故障信号 | `store/metrics.go` 包级 `writeFailures` + `filestore.go` `persistLocked` / `sqlite.go` Create·Update·Delete 写失败分支各记一次；`gaps_test.go` `TestStoreWriteFailureCounter` |
+| `s3c_jobs_active` | gauge | **未终结**任务数，与 `JobRegistry` 在册上限（256）同口径 | `service/job.go` `JobRegistry.ActiveCount()`（锁内复用 `runningCountLocked`）；`job_cap_test.go` `TestJobRegistryActiveCount` |
+| `s3c_http_request_duration_seconds` | histogram | 桶上界 `0.005 … 30` + `+Inf`；`+Inf` 与 `_count` 都取 `s3c_http_requests_total`（同一次 `recordHTTPMetric` 记录，结构上不会漂移） | `handler/metrics.go` `recordHTTPMetric(status, dur)`；`middleware.go` 的 `withLogging` 传入 `dur`（计数与直方图同源）；`metrics_test.go` `TestMetricsHTTPDurationHistogram` |
+| `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | `S3C_DATA_DIR` 的 statfs / `GetDiskFreeSpaceExW`；**取不到就不发序列**（平台不支持 / 目录未配置 / statfs 失败），不用 0 冒充 | 新增 `volume_unix.go`（`linux \|\| darwin \|\| freebsd`，`syscall.Statfs`）、`volume_windows.go`（kernel32 延迟绑定——标准库 `syscall` **没有**该 API，`golang.org/x/sys` 违 ADR-004）、`volume_other.go`（恒 `ok=false`） |
+| `s3c_last_shutdown_duration_seconds` | gauge | **上一次**关停耗时：关停在进程退出前发生、scrape 赶不上 → 落盘 `data/shutdown.json` `{"durationUs":N}`，**下次启动载入**后暴露；0 = 尚无记录（单位取微秒，避免亚毫秒关停截断成 0 与「无记录」撞车） | 新增 `handler/shutdown_metric.go`（`LoadLastShutdown` / `RecordShutdown`）；`main.go` 在 `srv.Shutdown` 返回后 `RecordShutdown`；`main_test.go` `TestMainServerSubprocess` 断言子进程退出后文件存在且 `durationUs ∈ (0, 5e6)` |
+
+**告警与仪表盘**（同批落地，两道既有门禁同步钉住「引用的指标必须真实发射」）：
+
+- `deploy/prometheus/s3clinet.rules.yml`：新增记录规则 `s3clinet:http_latency_p95:rate5m` + 4 条告警
+  `S3ClinetStoreWriteFailures` / `S3ClinetJobsNearCapacity` / `S3ClinetVolumeSpaceLow` / `S3ClinetHTTPLatencyHigh`。
+- `deploy/grafana/s3clinet.dashboard.json`：行⑥由「没有面板」改写为真面板 + 新行⑦，面板 **31 → 40**。
+- 变异验证（5/5，改坏 → 红灯点名 → 还原 → 绿）：① 规则里 `s3c_jobs_active` → `s3c_jobs_active_broken`
+  → `TestPrometheusRulesReferenceRealMetrics` 红并点名；② 仪表盘 **`expr`** 里的
+  `s3c_volume_size_bytes` → `…_bytess` → `TestGrafanaDashboardReferencesRealMetrics` 红并点名
+  （注意：改 `description` **不会**红——门禁只扫 `expr`）；③ `metrics.go` 去掉 `metricHTTPDurSumNs.Add`
+  → `TestMetricsHTTPDurationHistogram` 红（`_sum 未随请求增长`）；④ `main.go` 去掉
+  `h.RecordShutdown(...)` → `TestMainServerSubprocess` 红（`shutdown.json` 不存在）；⑤
+  `filestore.go` 去掉 `noteWriteFailure()` → `TestStoreWriteFailureCounter` 红（`0 -> 0`）。
+
+> **门禁实跑（2026-09-30，本会话实测）**：`go vet ./...` 干净 / `golangci-lint run` **0 issues**
+> （`GOOS=windows golangci-lint run ./internal/handler/` 同为 0）/ `go test ./... -count=1`
+> **9/9 包 ok**（root 4.3s / handler 135.9s / s3wrap 43.2s / service 28.9s / store 3.6s）/
+> `go test -race -coverprofile` + awk `count==0` → **9/9 包 100.0%、无未覆盖块** /
+> 交叉编译 `GOOS=windows · darwin · freebsd · openbsd` build OK（`netbsd` / `dragonfly` 在依赖侧
+> `modernc.org/libc` 即编不过，与本批次无关）/ 包根文档门禁 `go test . -count=1` ok（4.7s）。
+> **前端 `pnpm test` / `pnpm build` 未跑**——本批次未改 `apps/web`（Task D 必须跑）。
+
+>
+> **文档同步**：[`OPERATIONS.md`](OPERATIONS.md)（§3.2 表 +6 行、两套直方图桶上界、观测缺口段改
+> 「已补齐」、§4.1 +3 SLI、§4.2 +4 告警、§4.3、§10.3、R-9、组件表、备份表 +`shutdown.json`）、
+> [`api.md`](api.md) 指标条目、[`DEPLOYMENT.md`](DEPLOYMENT.md) §6.3、[`CONFIGURATION.md`](CONFIGURATION.md)
+> `S3C_DATA_DIR` 行、[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条「变更」、
+> 本节 + 头部摘要 + 目录行三处同步。
+
+---
+
+### BM. 2026-09-30 ROADMAP #17 可访问性补强与自动化扫描（5 项全部落地，**已收尾**）
+
+> 来源：[`ROADMAP.md`](ROADMAP.md) §三 3.2 **#17**（2026-09-30 自 [`accessibility.md`](accessibility.md)
+> §5.3–§5.5 收口迁入）。5 个子项同批完成：焦点陷阱 / 播报 / 表格与标签 / 组件级 axe / 对比度修色；
+> 同日会话完成 ⑤ CHANGELOG 记录、⑥ 移出 #17（转空号、证据指针入 3.2 前言空号清单）与 ⑦ 全量门禁复跑，
+> **本批次（含 #19 / #70 / #18 / #17 四项）闭环**。文档 SSOT：[`accessibility.md`](accessibility.md)。
+
+| # | 子项 | 处置 | 证据 |
+|---|---|---|---|
+| ① | 焦点陷阱只覆盖 `ModalDialog`，`ConfirmDialog` / `PromptDialog` / `PreviewOverlay` 可被 Tab 逃出 | 新增 **`composables/useFocusTrap.ts`**（记住 / 恢复焦点 + 初始移入 + `Tab` 首尾回卷），四模态共用；`Tab` 回卷仍由各模态 `useKeydownStack` 栈顶 handler 调 `trapTab(e)`，不破坏 LIFO | 新增 **7 条用例**（三个模态各补焦点恢复 + 首尾回卷 / 中间不干预；`ConfirmDialog` 另补「打开后同 tick 内卸载不抛错」）；`ModalDialog` 原 14 例**不改一字即绿**。`useFocusTrap.ts` 覆盖率 **100%**。**关键取舍**：初始聚焦必须 `await nextTick()`（`flush:'post'` 会跑在 `v-model` 指令 mounted 之前 → 全选落空），故续体开头有空容器守卫 |
+| ② | 两处 `aria-live` 无测试断言；操作失败横幅多数不经 live region | 成功统一走 `toast()` → `Toasts` 的 `aria-live="polite"`；失败的 8 处内联横幅统一 `role="alert"`（`ObjectsPanel` / `AccountsPanel` ×2 / `BucketsPanel` / `CompareDialog` / `MigratePanel` / `RecycleBinPanel` / `ServerPanel` 的 `msg err` + `PromptDialog` 校验失败） | `a11y_gate.test.ts` **新源码门禁**「每个 `msg err` / `modal-err` 开标签必须带 `role="alert`」+ **变异实跑**（去掉 `ServerPanel` 的 `role` → 红灯列出该标签 → 还原绿）；行为断言 3 条：`Toasts` 成功 / 失败同区、`BatchMetadataDialog` 状态区 `aria-live` 承载 running / done、`PromptDialog` 校验失败 `role="alert"` |
+| ③ | 15 张表无 `caption`、行选中无语义；18 个控件只有 placeholder / `title` | 15 张 `<table>` 全部加 **sr-only `<caption>`**（`styles.css` 新增全局 `.sr-only`，裁剪到 1px 但不 `display:none`）；四张行选中表的数据行加 **`:aria-selected`**；18 个控件补**可见标签**（包裹 `<label class="field">` / 行内 `<label for>` / `aria-labelledby` 指向可见列头三种形态，账号与桶切换下拉把**紧邻的可见徽标**直接改成 `<label for>`——**零视觉改动**） | `a11y_gate.test.ts` 两条新源码门禁：每张 `<table>` 紧跟 `<caption class="sr-only">`、行选中表声明 `:aria-selected`（**自检**：全仓恰好 4 个组件）；行为断言 3 条：`ObjectList` 行 `aria-selected` 随选中集合变化、`TagsDialog` `label[for]` 能解析到目标输入框、`BatchMetadataDialog` 三控件被可见 `<label>` 包裹。扫描复核：可见表单控件 **77 / 77** 有可关联标签，仅剩 2 个 `display:none` 文件选择框（不可见、由带标签的拖放区触发）。**顺带修掉**：批量元数据 3 处 `aria-label` 是**硬编码英文**（中文界面朗读英文），改为与可见标签同一条 i18n 键（+4 个 i18n 键：`batchEdit.tagsModeLabel` / `headers.colKey` / `toolbar.pathLabel` / `toolbar.filterLabel`，zh / en 各一） |
+| ④ | 组件级 axe 扫描缺失（渲染态只有 E2E 侧 4 个初始状态） | 新增 **devDependency `vitest-axe`**（`dependencies` 仍只有 `vue`，不违 ADR-004）+ **`src/a11y_axe.test.ts`**：对挂载后的组件 DOM 跑 WCAG 2.0 / 2.1 A + AA 规则集，serious / critical 即红灯；非阻塞项打印供人工判断；happy-dom 无 CSS 级联故显式关掉 `color-contrast` | **6 例**：`ModalDialog` 带 footer / `ConfirmDialog` 危险态 / `PromptDialog` 带校验失败 / `Toasts` 成功+失败堆叠 / `ObjectList` 带 caption 与选中行 / **空跑自检**（注入 `image-alt` 必须被报出）。**落地当天即抓到真问题**：`aria-multiselectable` 写在原生 `<table>` 上 → `aria-allowed-attr`（critical），已按其判定移除（详见下表第 5 行） |
+| ⑤ | 对比度修色收尾：§5.4「剩余」6 组低 AA | `styles.css` 修色 + §5.5 表**同步重算**：`--muted` `#64786f`→`#62766d`（4.44→4.57）、`--primary` `#10a37c`→`#0d8162`（3.21 / 3.02→4.85 / 4.56）、`--placeholder` 浅 `#8aa89a`→`#657b71`（2.58→4.54）、深 `#5f7a6d`→`#6e867a`（3.81→4.54）、`--danger` 深 `#ef4444`→`#f05050`（4.25→4.54）、`--brand-from/to` `#2dbd98` / `#0e8c66`→`#1f8067` / `#0d825e`（白字 2.37 / 4.23→4.84 / 4.80） | §5.5 现为 **13 行**（原 11 + 新增 `--brand-mark-from/to` on `--bg` 两行）、**双主题各 0 行低于 AA**；`--brand` **拆 token**：同一渐变既是白字背景又是 logo 文字、方向相反，故新增 `--brand-mark-*` 专供 header logo（浅色沿用加深值 4.56 / 4.52，**深色块回亮值** `#2dbd98` / `#138e69` → 7.87 / 4.54），避免「为白字加深」反把深色主题 logo 拖到 4.1:1。**变异实跑**：把 `--muted` 改回 `#64786f` → `contrast_gate` 红灯点名两格「记 4.57，重算 4.44」→ 还原绿 |
+
+> **门禁实跑（2026-10-01，全部为本会话实测）**：前端 `pnpm test` **75 文件 / 1155 例**（较批次前 +23）、
+> `pnpm test:coverage` 四指标 **100%**（statements 4321 / branches 2932 / functions 1130 / lines 3706）、
+> `pnpm lint` **0 告警**、`pnpm build` OK（`index.js` 371.05 kB / gzip 113.84 kB、`index.css` 32.40 kB）；
+> 后端 `gofmt -l .` **干净**（顺带修正上批遗留的两处注释对齐）、`go vet ./...` 干净、
+> `golangci-lint run` **0 issues**、`go test ./... -count=1` **9/9 包**（root 4.4s / handler 131.8s /
+> s3wrap 33.3s / service 29.5s / store 3.0s）、包根文档门禁 `go test . -count=1` **ok**、
+> `go test . -run TestContrast -count=1` **PASS**、`make check` **exit 0**、`make bench` **exit 0**。
+> **同轮补跑的渲染态 / 真实链路验证**（本批次改了前端，按 AGENTS 必跑）：
+> `pnpm e2e` **22 passed / 0 skipped**（含 `e2e/a11y.spec.ts` 5 条 axe 扫描——本批配色 / `role` /
+> `caption` 改动在**真实 Chromium + 真实构建产物**上零 serious/critical）；
+> `make e2e-real` **3 passed**（真实后端 + RustFS + 真实产物，`S3C_TOKEN` 生产同构形态；
+> 本机 8080 被 `haproxy` 占用，用 `SERVER_PORT=8081`，脚本编排不变）；
+> `S3CLINET_E2E=1` **4/4 PASS**（临时起 RustFS 跑完即删）；
+> `govulncheck ./...` **0 可达**、`cargo audit --no-fetch` **0 漏洞**。
+> **唯一未能实跑**：`pnpm audit`——所用镜像 `registry.npmmirror.com` 不提供
+> `/-/npm/v1/security/audits` 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果。
+
+> **文档同步**：[`accessibility.md`](accessibility.md)（§1.2 属性分布 +2 行 / `role` 分布 `alert` 1→9、
+> §1.3、§1.4 重写为「统一播报」口径、**新增 §1.6** 表格与可见标签、§2.2 重写为 `useFocusTrap`、
+> §4 第 2 / 7 / 8 / 9 / 10 条改 ✅ 并补 `vitest-axe`、§5.2 表 +3 行、§5.3 `vitest-axe` 划掉、
+> §5.4 中 / 低两行收口、**§5.5 整表重算 + 结论改写**）、[`../CHANGELOG.md`](../CHANGELOG.md)
+> `[Unreleased]` 一条「变更」、[`../AGENTS.md`](../AGENTS.md) / [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 /
+> [`../llms.txt`](../llms.txt) 三处命名清单 + [`README.md`](README.md) 导航行（`handoff-20260930.md` 登记）、
+> [`../apps/web/package.json`](../apps/web/package.json) devDependencies +1、本节 + 头部摘要 + 目录行三处同步。
+
+### BN. 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁，**已收尾**）
+
+> 来源：[`ROADMAP.md`](ROADMAP.md) §三 3.2 **#10**（原编号 #53）。目标是把「靠契约测试**测出**漂移」
+> 升级为「结构上**产生不出**漂移」：`/api/openapi.json` 成为前端 URL / method / 实体类型的唯一来源，
+> 生成物提交进仓库并由**新鲜度门禁**钉死。生成器与解析库均为 **devDependency**，`dependencies`
+> 仍只有 `vue`，不违 [ADR-004](decisions/0004-minimal-frontend-deps.md)。
+
+| # | 子项 | 处置 | 证据 |
+|---|---|---|---|
+| ① | 生成器与两份提交产物 | 新增 **`apps/web/scripts/gen-api.mjs`**（读 `docs/api/openapi.json`）+ `package.json` 脚本 **`pnpm gen:api`**，产出 `src/api/schema.d.ts`（**4506 行**，`openapi-typescript@7.13.0` Node API 生成，**无时间戳横幅**故字节稳定）与 `src/api/operations.ts`（**88 行 / 70 条** `operationId → {method, path, params}`）；`--check` 逐字节比对两份产物，不一致即退出 1 并提示跑 `pnpm gen:api`。缺 `operationId` 或 id 冲突时生成器直接失败 | `pnpm gen:api --check` **exit 0**（本批实跑）；解析到 **70 个操作 / 53 条 path / 5 个共享 `components.schemas`** |
+| ② | URL 与 method 真正来自 spec（消除漂移的那半边） | `src/api/http.ts` 新增 **`opPath()`** + 条件剩余元组 `PathArgs<Id>`：无占位符的操作可省参，**有占位符的操作漏参即编译错误**，替换一律 `encodeURIComponent`；`src/api/endpoints.ts` **整体重写**——**58 处 URL / method** 全部改走 `opPath('<opId>')` / `operations.<opId>.method` | `src/api.test.ts` 全部 URL / method 断言**通过**（证明 operationId ⇔ wrapper 映射正确）。**三处 wrapper 与 operationId 不同名**已记录：`listVersions`→`listObjectVersions`、`copyFilesAsync`→`copyObjectsAsync`、`downloadZipToDisk`→`downloadZip` |
+| ③ | 散落的硬编码 `/api/…` 收编 | 另 5 处一并改造：`src/api/download.ts`、`src/api/jobs.ts`（含 SSE `migrateJobEvents` 的 `method`）、`src/api/index.ts`、`src/proxy.ts`（保留自有 `apiBase` 前缀）、`src/components/ServerPanel.vue` | 全仓生产代码**不再手写端点路径**；query 串**刻意仍手写**——query 名不在 path 模板里，且已由后端 `openapi_query_params_test.go` 钉住 |
+| ④ | 黄金 spec 的 `required` 缺口（前端类型变严格的前置修复） | 后端 `internal/openapi/openapi.go` `sharedSchemas()`：`AccountView` / `objectItem` / `listObjectsResponse` **均无 `omitempty`**（字段恒定序列化），但 `required` 只列了 4/12、4/6、3/4 —— 补齐 `Account` 12 项、`ObjectItem` 6 项、`ListObjectsResp` 4 项；黄金契约 `-update-openapi-spec` 重生成（`docs/api/openapi.json` **+13/-2**） | **这是 spec 的缺陷，不是前端类型的问题**；响应契约测试只比**字段集合**不比 `required`，故收紧后 `TestOpenAPI\|TestCommitted\|TestAPI` 仍 ok。**57 条内联 2xx 响应仍无 `required`**，端点级响应类型继续手写——**未并入 #10 的完成口径** |
+| ⑤ | 生成物成为真实消费者 + 新鲜度门禁 | `src/types.ts` 头部改为从 spec 派生 4 个共享实体（`Account` / `ObjectItem` / `ListObjectsResponse` / `BucketItem`），使 `schema.d.ts` 不是孤儿模块；新增 **`src/api/generated.gate.test.ts`**（**3 例**）：新鲜度逐字节比对、结构自检（条数 ≥60 防「空表永远绿」+ 占位符 ⇔ `params` 逐个对齐）、`opPath` 编码行为 | 死代码门禁曾红报 `./api/schema.d.ts（模块无人 import）`，派生后 `pnpm test` 全绿——**门禁倒逼 codegen 必须有真实消费者**。新鲜度门禁是 #10「生成物入 CI diff 门禁」的**字面落地** |
+
+> **门禁实跑（2026-10-01，全部为本会话实测）**：前端 `pnpm test` **76 文件 / 1158 例**（较批次前 +3，
+> 新增 `src/api/generated.gate.test.ts`）、`pnpm test:coverage` 四指标 **100%
+> （4327 / 2932 / 1131 / 3712）**、`pnpm lint` **0 告警**、`pnpm typecheck` + `pnpm typecheck:e2e`
+> 均 exit 0、`pnpm build` OK（`index.js` **377.34 kB / gzip 114.83 kB**、CSS 32.40 kB）、
+> `pnpm gen:api --check` **exit 0**；后端 `gofmt -l .` **干净**、`go vet ./...` **0 告警**、
+> `go build ./...` OK、`golangci-lint run` **0 issues**、`go test ./... -count=1` **9/9 包**、
+> `make test-cover` **9/9 包 100.0%（`count==0` 零块）**、`govulncheck ./...` **0 可达漏洞**
+> （另 21 个「被 require 但未调用」的模块级漏洞，不构成可达面）。
+> **仓库级**：`make check` **exit 0**、`make bench` **exit 0**。
+> **渲染态与真实链路**（本批改了前端，按 AGENTS 必跑）：`pnpm e2e` **22 passed / 0 skipped**、
+> `make e2e-real` **3 passed**（真实后端 + RustFS + 真实产物；本机 8080 被 `haproxy` 占用故用
+> `SERVER_PORT=8081`）、`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E -v` **4/4 PASS**
+> （临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000`，跑完 `docker rm -f` 并核验端口已关闭）。
+> 第三方许可证清单已按新 devDependency 重生成：`./scripts/gen-third-party-licenses.sh` →
+> **Go 43 模块 / Rust 428 crates / npm 1 包，UNKNOWN 0 项**（devDependency 不入清单，内容无变化）。
+> **唯一未能实跑**：`pnpm audit`——镜像 `registry.npmmirror.com` 不提供 audit 端点
+> （`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果。
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 一条「变更」、
+> [`ROADMAP.md`](ROADMAP.md) §三 3.2 **删除 #10 行**（转空号，前言空号清单 +1）与 §四 门禁基线
+> （例数 / 覆盖率 / **新增「前端生成物新鲜度」一行**）、[`DEVELOPMENT.md`](DEVELOPMENT.md) §3
+> 门禁落点补 `src/api/generated.gate.test.ts`、[`api.md`](api.md) 「前端可基于此生成 TypeScript
+> client」由设想改为既成事实、本节 + 头部摘要 + 目录行三处同步。
 
 ---
 
@@ -1586,6 +1841,42 @@ functions 1095 / lines 3503）。
 > #67 / #68 补 5 条（`a11y_gate.test.ts` 3 条源码形态 + `i18n` 2 条行为）。故一降三升之间，
 > **行为覆盖面是净增的**，覆盖率四指标始终 100%。`App.test.ts` / `i18n/index.test.ts` 中
 > 只改注释里文档路径（`features.md` → `FEATURES.md`）的部分不涉及例数。
+>
+> **2026-10-01 §BM 复测**（ROADMAP #17 可访问性批次收口后全量重跑；roadmap §四 门禁基线同步为此轮实跑值）：
+> `gofmt -l` 干净 / `go vet` **0 告警** / `golangci-lint` **0 issues** / 后端 `go test ./...`
+> **9/9 包** + `make test-cover` **9/9 包 100.0%（`count==0` 零块）** / `go build` OK /
+> `govulncheck ./...` **0 可达漏洞**；前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e`
+> 均 exit 0 / **75 文件 1155 例全绿**（§BM 新增 23 例，文件 74 → 75）/
+> `pnpm test:coverage` **四指标 100%（4321 / 2932 / 1130 / 3706）** / `pnpm build` OK
+> （**371.05 kB，gzip 113.84 kB**；CSS 32.40 kB——§BM 新增全局 `.sr-only` 工具类与
+> `--brand-mark-*` 注释）；**真实浏览器 E2E 首次在本环境实跑** `pnpm e2e` **22 passed / 0 skipped**
+> （含 `e2e/a11y.spec.ts` 5 条 axe 扫描——本批配色 / `role` / `caption` 改动的渲染态验证）；
+> `cargo audit --no-fetch` **0 漏洞**（7 条告警已 triage）。
+> 同轮补跑**两项真实 E2E**（本轮改了前端，按 AGENTS 必跑）：`make e2e-real` **3 passed / 0 skipped**
+> （真实后端 + RustFS + 真实产物，`S3C_TOKEN` 生产同构形态；本机 8080 被 `haproxy` 占用，用
+> `SERVER_PORT=8081`，脚本编排不变）；`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`
+> **4/4 PASS**（临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000`，跑完即删）；另
+> `make check` **exit 0**（vet / lint / 后端覆盖率 / 前端覆盖率 / `typecheck:e2e` 一把跑齐）、
+> `make bench` **exit 0**（确定性预算门禁 + 原始基准数字通过）。
+> **未能实跑**：`pnpm audit`——镜像 `registry.npmmirror.com` 不提供 audit 端点
+> （`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 与 2026-09-22 值。
+
+> **2026-10-01 §BN 复测**（ROADMAP #10 代码生成批次收口后全量重跑；roadmap §四 门禁基线同步为此轮实跑值）：
+> `gofmt -l` 干净 / `go vet` **0 告警** / `golangci-lint` **0 issues** / `go build ./...` OK /
+> 后端 `go test ./... -count=1` **9/9 包** + `make test-cover` **9/9 包 100.0%（`count==0` 零块）** /
+> `govulncheck ./...` **0 可达漏洞**；前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `typecheck:e2e`
+> 均 exit 0 / **76 文件 1158 例全绿**（§BN 新增 3 例，文件 75 → 76，新增 `src/api/generated.gate.test.ts`）/
+> `pnpm test:coverage` **四指标 100%（4327 / 2932 / 1131 / 3712）** / `pnpm build` OK
+> （**377.34 kB，gzip 114.83 kB**；CSS 32.40 kB——`src/api/operations.ts` 进入生产包）/
+> **`pnpm gen:api --check` exit 0**（§BN 新登记的生成物新鲜度门禁）。
+> **仓库级**：`make check` **exit 0**、`make bench` **exit 0**。
+> **渲染态与真实链路**（本批改了前端，按 AGENTS 必跑）：`pnpm e2e` **22 passed / 0 skipped**、
+> `make e2e-real` **3 passed**（`SERVER_PORT=8081`）、`S3CLINET_E2E=1 go test ./internal/s3wrap/
+> -run 'TestE2E' -v` **4/4 PASS**——**首轮 4/4 全红是环境性的**（本机 `127.0.0.1:9000` 当时无
+> RustFS，`connection refused`），临时起 `rustfs/rustfs:1.0.0-rc.3` 后复跑 4/4 PASS，
+> 跑完 `docker rm -f` 并核验端口已关闭。
+> 第三方许可证清单重生成：**Go 43 模块 / Rust 428 crates / npm 1 包，UNKNOWN 0 项**（devDependency 不入清单）。
+> **未能实跑**：`pnpm audit`——同上，镜像不提供 audit 端点，沿用 CI 结果。
 
 | 门禁 | 结果 |
 |---|---|
@@ -1594,16 +1885,17 @@ functions 1095 / lines 3503）。
 | `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
 | `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
 | 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | **74 文件 / 1132** 测试全绿（2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**；2026-09-29 §AK 新增 `vite_env_guard.test.ts` 2 例 → **1128**；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例并改写为行为断言 → 1126**；**同日 §AO 补死代码门禁的口径用例 → 1127**；**同日 §AP 收口 #67 / #68 新增 `a11y_gate.test.ts` 3 例 + `i18n` 2 例 → 1132、文件数 74**——中间的一降三升**不是丢测试**，说明见下方 §AN / §AO / §AP 复测段） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**；**2026-09-29 §AN 复测 4293 / 2932 / 1129 / 3676**） |
-| `vue-tsc --noEmit` / `vite build` | 干净 / OK（366.72 kB，gzip 112.72 kB；CSS 31.84 kB，2026-09-29 §AP 实测） |
+| 前端 `pnpm test` | **76 文件 / 1158** 测试全绿（**2026-10-01 §BN +3 例**——新增 `src/api/generated.gate.test.ts`（生成物新鲜度 / 结构自检 / `opPath` 行为），文件 75 → 76；**2026-10-01 §BM +23 例**——焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态与可见标签等，新增文件 `src/a11y_axe.test.ts`；2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**；2026-09-29 §AK 新增 `vite_env_guard.test.ts` 2 例 → **1128**；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例并改写为行为断言 → 1126**；**同日 §AO 补死代码门禁的口径用例 → 1127**；**同日 §AP 收口 #67 / #68 新增 `a11y_gate.test.ts` 3 例 + `i18n` 2 例 → 1132、文件数 74**——中间的一降三升**不是丢测试**，说明见下方 §AN / §AO / §AP 复测段） |
+| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；**2026-10-01 §BN 复测 4327 / 2932 / 1131 / 3712**；2026-10-01 §BM 复测 4321 / 2932 / 1130 / 3706；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**；**2026-09-29 §AN 复测 4293 / 2932 / 1129 / 3676**） |
+| `vue-tsc --noEmit` / `vite build` | 干净 / OK（**377.34 kB，gzip 114.83 kB；CSS 32.40 kB，2026-10-01 §BN 实测**；2026-10-01 §BM 为 371.05 kB / gzip 113.84 kB / CSS 32.40 kB；2026-09-29 §AP 为 366.72 kB / gzip 112.72 kB / CSS 31.84 kB） |
 | `eslint` | 0 违规（`no-explicit-any: error`） |
 | `gofmt -l .` | 干净 |
 | `docker compose config` | base / prod / tls 均通过 |
-| E2E（Playwright，`/api` mock） | **17 passed / 0 skipped**（含 `screenshots.spec.ts` 2 例，2026-09-29 实测） |
-| E2E（真实 RustFS，`S3CLINET_E2E=1`） | 按需运行，默认不阻塞 CI |
+| E2E（Playwright，`/api` mock） | **22 passed / 0 skipped**（**2026-10-01 实跑**：含 `e2e/a11y.spec.ts` 5 条 axe 扫描 + `screenshots.spec.ts` 2 例；此前 2026-09-29 记为 17 passed） |
+| E2E（真实后端 + RustFS，`make e2e-real`） | **3 passed / 0 skipped**（**2026-10-01 复测**，见上方复测段） |
+| E2E（真实 RustFS，`S3CLINET_E2E=1`） | **4/4 PASS**（**2026-10-01 复测**：`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash`；仍属按需运行、不阻塞 CI） |
 | E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（KNOWN_ISSUES #37；不 mock `/api`，含浏览器直传） |
-| Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5） |
+| Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5。**2026-10-01 `--no-fetch` 复测**结论不变——本环境拉不到 advisory DB，用本地缓存） |
 
 ### 已知边界与取舍
 - **单实例**：文件型 store（`json` / `sqlite`）+ 内存任务表不支持多副本，启动时对 `S3C_DATA_DIR` 加 `flock` 单写者锁，第二实例启动即失败；非 unix（Windows）无跨进程文件锁，为文档化 no-op。
@@ -1611,36 +1903,3 @@ functions 1095 / lines 3503）。
 - OpenAPI `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`，109 处引用）；`Unauthorized` / `TooManyRequests` / `InternalError` 作为全局错误词汇保留在 `components.responses`（Bearer 鉴权全局生效），不绑定单个端点。
 - `POST /api/accounts/preview-buckets` 使用表单临时凭据只读 `ListBuckets` 并立即返回，**不落库、不校验对已有账号**；缺 `endpoint`/`accessKey`/`secretKey` 返回 400，上游 `ListBuckets` 失败返回 500。仍受 `s3wrap.New` 的 endpoint 格式校验与拨号期 SSRF（禁 IMDS/链路本地）防护。
 - 桌面端仅做壳与分发，不使用 Tauri IPC。
-
----
-
-### BG. 2026-09-30 AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）
-
-> **诊断**：以「AI 时代成熟仓库文档基线」逐层盘点（承接 §AN 的 10 层矩阵），确认散文文档层已饱和，
-> 剩余缺口集中于三类：① **AI 效果证据**只有制度没有可执行任务集与台账；② **机器可读深度**不足
-> （OpenAPI 0 示例、无 `security.txt`、无 SLO 仪表盘、性能无回归门禁、无障碍无自动检测）；
-> ③ **英文覆盖**只有 README、数据模型无单一地图。本批 6 条并行工作流逐条收口，**每条能力配一道
-> 机械门禁并做变异验证**（破坏 → 红灯点名 → 还原 → 绿灯）。
-
-| # | 工作流 | 缺口 | 交付 | 门禁 / 证据 |
-|---|---|---|---|---|
-| 1 | 接口契约 | `openapi.json` 5 schema / 0 示例、无 requestBody 示例；`api.md` 0 条 curl | 37/37 请求体 operation 有请求示例、70/70 有 2xx 示例、5/5 schema 有 `example`；`api.md` 12 条 curl 覆盖 10 tag；非 JSON 2xx 用真实 media type | `openapi_examples_gate_test.go`（含示例字段 schema 形状校验、curl 覆盖与空扫自检）；5 处变异：删响应示例 / 删请求示例 / 加未声明字段 / 删 migrate curl / 空 paths 全部红灯点名 |
-| 2 | 运维与性能 | OPERATIONS 自述「未提供仪表盘」；有基线无回归门禁；密钥轮换无 runbook | `deploy/grafana/s3clinet.dashboard.json`（31 面板）；`bench_budget_test.go` + `perf.yml` + `make bench`；OPERATIONS §4 改指仪表盘 + 新增 §6.5 密钥轮换 Runbook；PERFORMANCE §4 预算表与 flakiness 口径 | `grafana_dashboard_gate_test.go`（18/18 指标真实存在、7/7 `code` 在白名单、3/3 recording rule 匹配）；`bench_budget_test.go`（实测 PresignPut 362 allocs、加密写 151–155 allocs、账号写 O(n) 比值 23–27×，分配断言确定性、时间上限刻意宽松）；4 处变异 |
-| 3 | 安全与输入空间 | 无机器可读漏洞披露入口；解析面无输入空间探索 | `.well-known/security.txt`（RFC 9116）；`internal/{s3wrap,store,handler}` 的 stdlib `testing.F` 目标；`fuzz.yml` 有界探索；`CITATION.cff`；`documentation.md` issue 模板 | `security_txt_gate_test.go`（必填字段 + `Expires` 必须未过期，过期即红灯强制续期）+ `TestWorkflowActionsAreShaPinned` |
-| 4 | AI 效果证据 | 黄金任务集是散文、台账为空 | `scripts/evals/golden-tasks.yaml`（4 任务 / 16 命令 / 20 锚点）+ `run-golden-task.sh`（fail-closed）；AGENT_EVALS §六 首次台账（4 行，含一次 `fail` 基线如实保留） | `agent_evals_gate_test.go` 新增机器可读规格与 runner 断言；2 处变异（删任务 / 篡改标题）。**诚实边界**：无 golden task 端到端实跑，五维记 N/A ≠ 满分 |
-| 5 | 英文与无障碍 | `docs/en/` 只有 README 翻译、无文档翻译政策与门禁；无障碍无自动检测 | `en/README.md`（英文导航）+ `en/architecture.md`（全文翻译，声明中文 SSOT + revision）；`i18n.md` §7 翻译覆盖政策；`e2e/a11y.spec.ts`（axe，4 状态 + 1 自检）；修 `--ok` / `--danger` 对比度 | `en_docs_gate_test.go`（来源声明 / revision / 可达性；3 处变异）；axe 实测先红（3 个状态 serious color-contrast）→ 修色 → 5/5 绿；`contrast_gate_test.go` 把 §5.5 表值与计数钉在 `styles.css`（2 处变异） |
-| 6 | 数据模型 | 账号 / 驱动 / 信封事实散落四处 | `docs/data-model.md`（含 §0 SSOT 裁决表）；`internal/store` 注释把当前写入格式误标 `S3C2` 的 6 处改为 `S3C3` | `data_model_gate_test.go`（反射 `model.Account` 字段 + 解析 `store.Open` switch 驱动名；2 处变异） |
-
-> **一处自我修正（记以免重蹈）**：`accessibility.md` §5.5 首版把 `--danger` / `--ok` 的浅色值写成
-> **渲染态 axe 读数**（5.98 / 5.02），与表头声明的「token 公式值」口径不符；`contrast_gate_test.go`
-> 对账时按 WCAG 2.1 重算为 **5.91 / 4.95** 并纠正，同时发现「4 组低于 AA」的计数漏了
-> `--primary on --panel` 一行（实为 **共 11 行、浅色 5 行 / 深色 3 行**）。教训：静态记录必须由
-> 机械重算钉住，手算数字会漂。
-
-> **文档同步**：[`docs/data-model.md`](data-model.md)（新）、[`docs/en/README.md`](en/README.md) ·
-> [`docs/en/architecture.md`](en/architecture.md)（新）、[`docs/README.md`](README.md)（导航 + 机器可读面）、
-> [`docs/DEVELOPMENT.md`](DEVELOPMENT.md) §2（fuzz）/ §3（门禁落点 + CI 对照表 + 触发表）/ §4（同步表 +
-> 登记表 + 命名）、[`AGENTS.md`](../AGENTS.md)、[`llms.txt`](../llms.txt)、[`CHANGELOG.md`](../CHANGELOG.md)、
-> [`docs/OPERATIONS.md`](OPERATIONS.md)、[`docs/PERFORMANCE.md`](PERFORMANCE.md)、
-> [`docs/AGENT_EVALS.md`](AGENT_EVALS.md)、[`docs/i18n.md`](i18n.md)、[`docs/accessibility.md`](accessibility.md)、
-> [`README.md`](../README.md)；本节为证据台账落点。

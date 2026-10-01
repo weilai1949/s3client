@@ -46,30 +46,24 @@ func FuzzNormalizeEndpoint(f *testing.F) {
 		{"http://host/%zz", false},
 		{"?x=1", false},
 		{"#frag", false},
-		// 回归种子（2026-09-30 fuzz 发现，见下方已知边界说明）：
-		// 去掉尾部 `/` 会暴露原串内部的尾随空格 → "http://00  "。
+		// 回归种子（2026-09-30 fuzz 发现，KNOWN_ISSUES #70 已修复）：曾暴露
+		// 「切分前去尾斜杠」把内部空白顶到结果末尾的非幂等缺陷，现应幂等。
 		{"00  /", false},
 		{"host/a  /", false},
 	} {
 		f.Add(seed.endpoint, seed.useSSL)
 	}
 
-	// 已知退化分支（fuzz 发现，2026-09-30，**报告项，未改生产代码**）：`NormalizeEndpoint`
-	// 在切分 host/path **之前**执行 `TrimRight(rest, "/")`，因此 `"00  /"` 归一化为带尾随
-	// 空白的 `"http://00  "`；而入口只 `TrimSpace` 一次，于是第二次归一化会再 trim 掉空格
-	// ——该分支上既无「无尾随空白」保证，也**不幂等**。
-	//
-	// 它不是崩溃/DoS/SSRF 绕过：`ValidateEndpoint("00  /")` 对 `"http://00  "` 解析失败即
-	// fail-closed；带尾随空白的路径（`"host/a  /"`）也无害。fuzz 内对退化分支显式短路，
-	// 使幂等性断言只作用于契约内的输入，避免把「已报告的边界」伪装成持续红灯。
-	// 修复（先切 host/path 再去尾斜杠，或对 host 再 TrimSpace）属生产代码改动，交由 lead 决策；
-	// 修好后本分支与 `"00  /"` / `"host/a  /"` 两个回归种子应同步删除。
+	// KNOWN_ISSUES #70（2026-09-30 已修复）：`NormalizeEndpoint` 曾在切分 host/path **之前**
+	// 对整个 rest 去尾斜杠，把尾斜杠之后的内部空白暴露到结果末尾 → 输出带尾随空白且
+	// 不幂等（`"00  /"` → `"http://00  "` → 再归一 `"http://00"`）。修复改为**先切分
+	// host/path**、host `TrimSpace`、path 去尾部斜杠与空白，输出保证
+	// `got == strings.TrimSpace(got)`——原「带尾随空白就跳过幂等断言」的短路分支已不可达
+	// 而删除（死代码零容忍）。`"00  /"` / `"host/a  /"` 两个原退化输入**保留**在 corpus
+	// 作回归种子，另有确定性断言 `TestNormalizeEndpointIdempotent`。
 	f.Fuzz(func(t *testing.T, endpoint string, useSSL bool) {
 		got := NormalizeEndpoint(endpoint, useSSL)
 		if got == "" {
-			return
-		}
-		if got != strings.TrimSpace(got) {
 			return
 		}
 		if strings.HasSuffix(got, "/") {
@@ -101,6 +95,42 @@ func FuzzNormalizeEndpoint(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestNormalizeEndpointIdempotent 钉住 KNOWN_ISSUES #70 的修复（2026-09-30 推翻 ➖ 转修复）：
+// 归一化必须幂等，且结果不得以空白结尾——入口 TrimSpace 只做一次，若先去尾斜杠会把
+// 尾斜杠之后的内部空白暴露到结果末尾，二次归一化就会把它 trim 掉（`f(x) != f(f(x))`）。
+//
+// 复核命令：cd apps/server && go test ./internal/s3wrap/ -run 'TestNormalizeEndpointIdempotent' -count=1 -v
+// 变异验证：删掉 client.go 里 host 的 `strings.TrimSpace(host)` → 本测试红灯点名
+// `"00  /"` / `"http://host  /"` → 还原后绿灯（2026-09-30 实跑）。
+func TestNormalizeEndpointIdempotent(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		endpoint string
+		useSSL   bool
+	}{
+		{"斜杠前空格暴露为尾随空白", "00  /", false},
+		{"路径尾斜杠前空格", "host/a  /", false},
+		{"scheme 后 host 尾斜杠前空格", "http://host  /", false},
+		{"host 边缘空白", "host /x", false},
+		{"host 内部空白保留", "host/my dir/", false},
+		{"入口首尾空白", "  minio.local:9000/  ", false},
+		{"普通端点", "minio.local:9000", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := NormalizeEndpoint(tc.endpoint, tc.useSSL)
+			if got == "" {
+				return
+			}
+			if got != strings.TrimSpace(got) {
+				t.Fatalf("NormalizeEndpoint(%q) = %q 以空白结尾", tc.endpoint, got)
+			}
+			if again := NormalizeEndpoint(got, tc.useSSL); again != got {
+				t.Fatalf("NormalizeEndpoint 不幂等: %q -> %q (再归一 %q)", tc.endpoint, got, again)
+			}
+		})
+	}
 }
 
 // FuzzValidateEndpoint 探索 SSRF 校验入口：任意输入不 panic、错误文案非空。

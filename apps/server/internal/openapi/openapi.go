@@ -550,7 +550,8 @@ func sharedSchemas() map[string]*Schema {
 			"useSSL":         Bool(),
 			"createdAt":      Str("date-time"),
 			"updatedAt":      Str("date-time"),
-		}, "id", "name", "endpoint", "accessKey"), `{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
+		}, "id", "name", "endpoint", "publicEndpoint", "region", "accessKey", "secretSet",
+			"bucket", "pathStyle", "useSSL", "createdAt", "updatedAt"), `{"id":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"AKIAEXAMPLE","secretSet":true,"bucket":"my-bucket","pathStyle":true,"useSSL":false,"createdAt":"2026-09-30T05:00:00Z","updatedAt":"2026-09-30T05:00:00Z"}`),
 		"Bucket": withExample(BuildObj(map[string]*Schema{
 			"name":         Str(),
 			"creationDate": Str("date-time"),
@@ -562,13 +563,13 @@ func sharedSchemas() map[string]*Schema {
 			"etag":         Str(),
 			"storageClass": Str(),
 			"isDir":        Bool(),
-		}, "key", "size", "lastModified", "isDir"), `{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}`),
+		}, "key", "size", "lastModified", "etag", "storageClass", "isDir"), `{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}`),
 		"ListObjectsResp": withExample(BuildObj(map[string]*Schema{
 			"objects":        Arr(Ref("#/components/schemas/ObjectItem")),
 			"commonPrefixes": Arr(Str()),
 			"isTruncated":    Bool(),
 			"nextToken":      Str(),
-		}, "objects", "commonPrefixes", "isTruncated"), `{"objects":[{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}],"commonPrefixes":["docs/"],"isTruncated":false,"nextToken":""}`),
+		}, "objects", "commonPrefixes", "isTruncated", "nextToken"), `{"objects":[{"key":"docs/a.txt","size":17,"lastModified":"2026-09-30T05:00:00Z","etag":"\"9c1d2f3a4b5c6d7e\"","storageClass":"STANDARD","isDir":false}],"commonPrefixes":["docs/"],"isTruncated":false,"nextToken":""}`),
 	}
 }
 

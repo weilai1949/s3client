@@ -62,6 +62,7 @@ async function toggleVersioning() {
   <div v-if="loading" class="empty" style="padding:20px">{{ t('overview.loading') }}</div>
   <div v-else>
     <table class="tbl detail-tbl">
+      <caption class="sr-only">{{ t('overview.tableAria') }}</caption>
       <tbody>
         <tr><th>{{ t('overview.bucket') }}</th><td class="mono" style="word-break:break-all">{{ bucket }}</td></tr>
         <tr><th>{{ t('overview.region') }}</th><td>{{ info.region || '—' }}</td></tr>

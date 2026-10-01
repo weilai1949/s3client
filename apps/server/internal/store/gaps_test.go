@@ -468,6 +468,39 @@ func TestGapJSONRenameFailureRollback(t *testing.T) {
 	}
 }
 
+// TestStoreWriteFailureCounter ROADMAP #18 指标①（账号库写入失败次数）的真值来源。
+// 口径 = **真实写入失败**（落盘 / SQL 写入出错，写操作已回滚）；成功写入与业务性拒绝
+// （重复 ID、NotFound）不计数——否则该指标会把客户端 4xx 也当成存储故障来告警。
+func TestStoreWriteFailureCounter(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "accounts.json")
+	st, err := New(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	before := WriteFailureCount()
+	if _, err := st.Create(gapAcc("ok")); err != nil {
+		t.Fatalf("正常写入: %v", err)
+	}
+	if got := WriteFailureCount(); got != before {
+		t.Fatalf("成功写入不应计数：%d -> %d", before, got)
+	}
+	if err := st.Delete("no-such-id"); err == nil {
+		t.Fatal("删除不存在的账号必须返回错误")
+	}
+	if got := WriteFailureCount(); got != before {
+		t.Fatalf("业务性拒绝（NotFound）不应计数：%d -> %d", before, got)
+	}
+
+	swapPathToDir(t, p) // rename 目标是目录 → 落盘失败
+	if _, err := st.Create(gapAcc("boom")); err == nil {
+		t.Fatal("落盘失败时 Create 必须返回错误")
+	}
+	if got := WriteFailureCount(); got != before+1 {
+		t.Fatalf("落盘失败应计 1 次：%d -> %d", before, got)
+	}
+}
+
 func TestGapEncryptedRenameFailureAndMaskedNoop(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "data")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

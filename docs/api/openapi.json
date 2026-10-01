@@ -140,9 +140,17 @@
         },
         "required": [
           "accessKey",
+          "bucket",
+          "createdAt",
           "endpoint",
           "id",
-          "name"
+          "name",
+          "pathStyle",
+          "publicEndpoint",
+          "region",
+          "secretSet",
+          "updatedAt",
+          "useSSL"
         ]
       },
       "Bucket": {
@@ -221,6 +229,7 @@
         "required": [
           "commonPrefixes",
           "isTruncated",
+          "nextToken",
           "objects"
         ]
       },
@@ -257,10 +266,12 @@
           }
         },
         "required": [
+          "etag",
           "isDir",
           "key",
           "lastModified",
-          "size"
+          "size",
+          "storageClass"
         ]
       }
     },
@@ -291,11 +302,15 @@
                       "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
                       "name": "minio",
                       "endpoint": "http://localhost:9000",
+                      "publicEndpoint": "https://s3.example.com",
+                      "region": "us-east-1",
                       "accessKey": "AKIAEXAMPLE",
                       "secretSet": true,
                       "bucket": "my-bucket",
                       "pathStyle": true,
-                      "useSSL": false
+                      "useSSL": false,
+                      "createdAt": "2026-09-30T05:00:00Z",
+                      "updatedAt": "2026-09-30T05:00:00Z"
                     }
                   ]
                 },
@@ -387,11 +402,15 @@
                   "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
                   "name": "minio",
                   "endpoint": "http://localhost:9000",
+                  "publicEndpoint": "https://s3.example.com",
+                  "region": "us-east-1",
                   "accessKey": "AKIAEXAMPLE",
                   "secretSet": true,
                   "bucket": "my-bucket",
                   "pathStyle": true,
-                  "useSSL": false
+                  "useSSL": false,
+                  "createdAt": "2026-09-30T05:00:00Z",
+                  "updatedAt": "2026-09-30T05:00:00Z"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Account"
@@ -555,11 +574,15 @@
                   "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
                   "name": "minio",
                   "endpoint": "http://localhost:9000",
+                  "publicEndpoint": "https://s3.example.com",
+                  "region": "us-east-1",
                   "accessKey": "AKIAEXAMPLE",
                   "secretSet": true,
                   "bucket": "my-bucket",
                   "pathStyle": true,
-                  "useSSL": false
+                  "useSSL": false,
+                  "createdAt": "2026-09-30T05:00:00Z",
+                  "updatedAt": "2026-09-30T05:00:00Z"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Account"
@@ -644,11 +667,15 @@
                   "id": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
                   "name": "minio",
                   "endpoint": "http://localhost:9000",
+                  "publicEndpoint": "https://s3.example.com",
+                  "region": "us-east-1",
                   "accessKey": "AKIAEXAMPLE",
                   "secretSet": true,
                   "bucket": "my-bucket",
                   "pathStyle": true,
-                  "useSSL": false
+                  "useSSL": false,
+                  "createdAt": "2026-09-30T05:00:00Z",
+                  "updatedAt": "2026-09-30T05:00:00Z"
                 },
                 "schema": {
                   "$ref": "#/components/schemas/Account"

@@ -31,6 +31,247 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成：schema-first + 生成物新鲜度门禁）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BN**；`docs/ROADMAP.md` §三 3.2 **#10 已移出**
+> （转空号，前言空号清单 +1）。`dependencies` 仍只有 `vue`，生成器与解析库均为 devDependency，
+> 不违 [ADR-004](docs/decisions/0004-minimal-frontend-deps.md)。
+
+- **① 生成器与两份提交产物**：新增 [`apps/web/scripts/gen-api.mjs`](apps/web/scripts/gen-api.mjs)
+  与 `pnpm gen:api` 脚本，从黄金契约 [`docs/api/openapi.json`](docs/api/openapi.json) 生成
+  [`apps/web/src/api/schema.d.ts`](apps/web/src/api/schema.d.ts)（**4506 行**类型，`openapi-typescript@7.13.0`
+  Node API，**无时间戳横幅**故字节稳定）与 [`apps/web/src/api/operations.ts`](apps/web/src/api/operations.ts)
+  （**70 条** `operationId → {method, path, params}`）；`--check` 模式逐字节比对，不一致即非零退出。
+- **② URL / method 真正来自 spec**（消除漂移的那半边）：[`http.ts`](apps/web/src/api/http.ts) 新增
+  `opPath()` + 条件剩余元组——**无占位符的操作可省参、有占位符的漏参即编译错误**，替换一律
+  `encodeURIComponent`；[`endpoints.ts`](apps/web/src/api/endpoints.ts) 整体重写，**58 处 URL / method**
+  全部由 `operations` 派生；另收编 `download.ts` / `jobs.ts`（含 SSE）/ `index.ts` / `proxy.ts` /
+  `ServerPanel.vue` 五处硬编码 `/api/…`。query 串刻意仍手写（query 名不在 path 模板内，已由后端
+  `openapi_query_params_test.go` 钉住）。
+- **③ 黄金 spec `required` 缺口修复**：`AccountView` / `objectItem` / `listObjectsResponse` **无 `omitempty`**
+  （字段恒定序列化），但 `sharedSchemas()` 的 `required` 只列了 4/12、4/6、3/4 —— 补齐后重生成
+  `docs/api/openapi.json`（**+13/-2**）。响应契约测试只比字段集合不比 `required`，故收紧后仍全绿。
+  **57 条内联 2xx 响应仍无 `required`**，未并入本条完成口径。
+- **④ `types.ts` 改为从 spec 派生** 4 个共享实体（`Account` / `ObjectItem` / `ListObjectsResponse` /
+  `BucketItem`），使 `schema.d.ts` 成为真实消费者而非孤儿模块（死代码门禁曾因此红灯）。
+- **⑤ 新鲜度门禁落地**：新增 [`apps/web/src/api/generated.gate.test.ts`](apps/web/src/api/generated.gate.test.ts)
+  （**3 例**）——生成物与 spec 逐字节一致、结构自检（条数 ≥60 防「空表永远绿」+ 占位符 ⇔ `params` 逐个对齐）、
+  `opPath` 编码行为。这是 #10「生成物入 CI diff 门禁」的字面落地：改 spec 忘了 `pnpm gen:api` 即红灯。
+- **门禁实跑（2026-10-01）**：前端 `pnpm test` **76 文件 / 1158 例**、`pnpm test:coverage` 四指标
+  **100%**（4327 / 2932 / 1131 / 3712）、`pnpm lint` **0 告警**、`pnpm typecheck` + `typecheck:e2e` 均 exit 0、
+  `pnpm build` OK（377.34 kB / gzip 114.83 kB）、`pnpm gen:api --check` **exit 0**；
+  后端 `gofmt -l .` 干净、`go vet` 干净、`golangci-lint run` **0 issues**、`go build` OK、
+  `go test ./... -count=1` **9/9 包**、`make test-cover` **9/9 包 100%**、`govulncheck` **0 可达**；
+  `make check` / `make bench` **exit 0**。
+- **真实链路复跑**（本批改了前端，按 AGENTS 必跑）：`pnpm e2e` **22 passed / 0 skipped**、
+  `make e2e-real` **3 passed**（`SERVER_PORT=8081`）、`S3CLINET_E2E=1` **4/4 PASS**（首轮 4/4 全红为
+  环境性——本机 `127.0.0.1:9000` 当时无 RustFS；临时起 `rustfs/rustfs:1.0.0-rc.3` 后复跑通过，跑完即删）。
+  第三方许可证清单重生成：Go 43 模块 / Rust 428 crates / npm 1 包，UNKNOWN 0 项。
+  **唯一未能实跑**：`pnpm audit`——镜像不提供 audit 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果。
+
+### 变更（2026-09-30 ROADMAP #17 可访问性补强：焦点陷阱 / 播报 / 表格与标签 / 组件级 axe / 对比度修色收尾）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BM**；本批次为 2026-09-30 会话中断批的收尾项
+> （⑤ CHANGELOG 记录 + ⑥ 移出 #17 + ⑦ 全量门禁复跑）。文档 SSOT：[`docs/accessibility.md`](docs/accessibility.md)。
+
+- **① 焦点陷阱提取为可复用组合式**：新增 [`apps/web/src/composables/useFocusTrap.ts`](apps/web/src/composables/useFocusTrap.ts)，
+  `ModalDialog` / `ConfirmDialog` / `PromptDialog` / `PreviewOverlay` **四模态共用**「记住并恢复焦点 +
+  初始移入 + `Tab` 首尾回卷」——此前只有 `ModalDialog` 有陷阱，键盘用户可 Tab 逃出另外三个。
+  `Tab` 回卷由各模态自己的 `useKeydownStack` 栈顶 handler 调用 `trapTab(e)`，不破坏 LIFO 语义。
+  初始聚焦必须 `await nextTick()` 而非 `flush: 'post'`（`v-model` 是运行时指令，其 mounted 钩子排在
+  post 队列里更晚，先跑会让 `PromptDialog` 全选落空），故续体开头有一道空容器守卫。
+  新增 7 条用例（三个模态各补焦点恢复 + `Tab` 回卷，`ConfirmDialog` 另补「打开后同 tick 内卸载不抛错」）。
+- **② 操作成功 / 失败统一播报 + `aria-live` 补断言**：成功统一走 `toast()` → `Toasts` 的
+  `aria-live="polite"` 容器（新增「成功 / 失败同区播报」用例）；失败的**内联横幅**统一
+  `role="alert"`（`ObjectsPanel` / `AccountsPanel` ×2 / `BucketsPanel` / `CompareDialog` /
+  `MigratePanel` / `RecycleBinPanel` / `ServerPanel` 的 `msg err` + `PromptDialog` 校验失败），
+  并由 `src/a11y_gate.test.ts` **源码门禁**钉住「每个 `msg err` / `modal-err` 开标签必须带
+  `role="alert"`」（变异验证：去掉 `ServerPanel` 的 `role` → 红灯点名该标签 → 还原绿）。
+  `BatchMetadataDialog` 状态区的 `aria-live` 也补了行为断言。
+- **③ 表格 `caption` / 选中态语义 / 可见标签**：`src/components` 下 **15 张 `<table>` 全部带
+  sr-only `<caption>`**（`styles.css` 新增全局 `.sr-only` 工具类）；四张有行选中的表给数据行加
+  `:aria-selected`（`aria-multiselectable` **刻意不用**——组件级 axe 判定它在原生 `<table>` 上
+  非法，见下）；**18 个只有 placeholder / `title` 的控件补可见标签**，三种形态：包裹
+  `<label class="field">`（批量元数据 3 个，原硬编码英文 `aria-label` 改为与可见标签**同一条 i18n 键**）、
+  行内 `<label for>`（标签 / HTTP 头 / CORS 键值行、账号与桶切换下拉——紧邻的可见徽标直接改成
+  `<label for>`，**零视觉改动**、工具栏路径与过滤框）、`aria-labelledby` 指向**可见列头**
+  （`BucketTags` / `LifecycleDialog`——一个 `<th>` 无法 `for` 到 N 行输入）。
+  现存可见表单控件 100% 有可关联标签，仅剩 2 个 `display:none` 的文件选择框（不可见、由带标签的
+  拖放区触发）。
+- **④ 组件级 `vitest-axe` 扫描**：新增 **devDependency** `vitest-axe`（`dependencies` 仍只有 `vue`，
+  不违 [ADR-004](docs/decisions/0004-minimal-frontend-deps.md)）与 [`apps/web/src/a11y_axe.test.ts`](apps/web/src/a11y_axe.test.ts)
+  ——对**挂载后的组件 DOM** 跑与 `e2e/a11y.spec.ts` 同口径的 WCAG 2.0 / 2.1 A + AA 规则集，
+  覆盖 E2E 到不了的边界态（弹窗、toast 堆叠、带选中行的列表），**serious / critical 即红灯**，
+  另有「注入 `image-alt` 必须被报出」的空跑自检；happy-dom 无 CSS 级联故**显式关掉 `color-contrast`**。
+  **它在落地当天就抓到一条真问题**：`aria-multiselectable` 写在原生 `<table>` 上属
+  `aria-allowed-attr`（critical）违规，已按其判定移除。
+- **⑤ 对比度修色收尾**：`apps/web/src/styles.css` 修 6 组低 AA 配对，`docs/accessibility.md` §5.5
+  表**同步重算**为 **13 行、双主题各 0 行低于 AA**——`--muted` 4.44→4.57、`--primary` 3.21 / 3.02→4.85 / 4.56、
+  `--placeholder` 浅 2.58→4.54 深 3.81→4.54、`--danger` 深 4.25→4.54、白字 on `--brand` 2.37 / 4.23→4.84 / 4.80。
+  **`--brand` 拆 token**：该渐变同时是「白字背景」与「header logo 渐变文字」，方向相反——
+  `:root` 把 `--brand-from/to` 加深到白字达标，新增 `--brand-mark-*` 专供 logo（浅色沿用加深值、
+  **深色块回亮值** `#2dbd98` / `#138e69`），避免「为白字加深」反把深色主题 logo 拖到 4.1:1。
+  由 `apps/server/contrast_gate_test.go` 从 `styles.css` 机械重算钉住（变异验证：把 `--muted` 改回
+  `#64786f` → 红灯点名两格「记 4.57，重算 4.44」→ 还原绿）。
+- **门禁实跑（2026-10-01）**：前端 `pnpm test` **75 文件 / 1155 例**、`pnpm test:coverage` 四指标
+  **100%**（4321 / 2932 / 1130 / 3706）、`pnpm lint` **0 告警**、`pnpm build` OK（371.05 kB / gzip 113.84 kB）；
+  后端 `gofmt -l .` 干净、`go vet ./...` 干净、`golangci-lint run` **0 issues**、
+  `go test ./... -count=1` **9/9 包**、`make test-cover` **9/9 包 100%**、`govulncheck` **0 可达**、
+  包根文档门禁 `go test . -count=1` ok、`make check` / `make bench` **exit 0**。
+- **渲染态与真实链路复跑**（本批次改了前端，按 AGENTS 必跑）：`pnpm e2e` **22 passed / 0 skipped**
+  ——其中 `e2e/a11y.spec.ts` 的 5 条 axe 扫描在**真实 Chromium + 真实构建产物**上对本批配色 /
+  `role` / `caption` 改动**零 serious/critical**；`make e2e-real` **3 passed**（真实后端 + RustFS +
+  真实产物；本机 8080 被 `haproxy` 占用，用 `SERVER_PORT=8081`）；`S3CLINET_E2E=1`
+  **4/4 PASS**；`cargo audit --no-fetch` **0 漏洞**。
+  **唯一未能实跑**：`pnpm audit`——所用镜像不提供 audit 端点
+  （`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果，已在 `ROADMAP.md` §四 如实标注。
+
+### 变更（2026-09-30 ROADMAP #18 可观测性补全：五个缺失指标补齐 + 告警规则 + 仪表盘 + 文档同步）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BL**；本批次为 2026-09-30 会话中断批的
+> 收尾段（⑤ CHANGELOG 记录 + ⑥ 移出 #18 + ⑦ 包根门禁复跑）。
+
+- **五个指标补齐**（发射点 `apps/server/internal/handler/metrics.go`，仍为无 prometheus 客户端库的
+  手写 `fmt.Fprintf`）：① `s3c_store_write_failures_total`（counter，只数真实落盘 / SQL 写失败——
+  重复 ID、`NotFound` 等业务拒绝不计数；`json` / `encrypted` 驱动 `Ping` 恒 nil，这是它们唯一的主动
+  故障信号）；② `s3c_jobs_active`（gauge，未终结任务数，与 `JobRegistry` 256 在册上限同口径）；
+  ③ `s3c_http_request_duration_seconds`（histogram，桶上界 `0.005 … 30` + `+Inf`，`+Inf` 与 `_count`
+  都取同一次 `recordHTTPMetric` 的 `s3c_http_requests_total`，结构上不漂移）；④
+  `s3c_volume_size_bytes` / `s3c_volume_free_bytes`（gauge，`S3C_DATA_DIR` 的 statfs /
+  `GetDiskFreeSpaceExW`；**取不到就不发序列**，不用 0 冒充）；⑤ `s3c_last_shutdown_duration_seconds`
+  （gauge，**上一次**关停耗时——关停在进程退出前发生、scrape 赶不上 → 落盘 `data/shutdown.json`
+  `{"durationUs":N}`，下次启动载入后暴露，0 = 尚无记录；单位取微秒，避免亚毫秒关停被截断成 0
+  与「无记录」撞车）。
+- **代码落点**：`handler/metrics.go` 新增 `recordHTTPMetric(status, dur)` 与五个输出块、
+  `middleware.go` 的 `withLogging` 传入 `dur`（计数与直方图同源）、`handler.go` 新增 `dataDir` /
+  `lastShutdown` + `SetDataDir`；新增 `handler/shutdown_metric.go`、`volume_unix.go`（`linux ||
+  darwin || freebsd`）、`volume_windows.go`（kernel32 `GetDiskFreeSpaceExW` 延迟绑定——标准库
+  `syscall` **没有**该 API，`golang.org/x/sys` 违 ADR-004）、`volume_other.go`；`store/metrics.go`
+  包级 `writeFailures` + `WriteFailureCount()`，`filestore.go` `persistLocked` 与 `sqlite.go` 三处
+  写失败分支各记一次；`service/job.go` 新增 `JobRegistry.ActiveCount()`；`main.go` 接线
+  `SetDataDir` / `LoadLastShutdown` 并在 `srv.Shutdown` 返回后 `RecordShutdown`。
+- **告警与仪表盘**：[`deploy/prometheus/s3clinet.rules.yml`](deploy/prometheus/s3clinet.rules.yml)
+  新增记录规则 `s3clinet:http_latency_p95:rate5m` 与 4 条告警（`S3ClinetStoreWriteFailures` /
+  `S3ClinetJobsNearCapacity` / `S3ClinetVolumeSpaceLow` / `S3ClinetHTTPLatencyHigh`）；
+  [`deploy/grafana/s3clinet.dashboard.json`](deploy/grafana/s3clinet.dashboard.json) 行⑥由「没有面板」
+  改写为真面板 + 新行⑦，面板 31 → 40（两道既有门禁 `TestPrometheusRulesReferenceRealMetrics` /
+  `TestGrafanaDashboardReferencesRealMetrics` 同步钉住「规则与面板引用的指标必须真实发射」）。
+- **测试（先红后绿）**：`metrics_test.go` +5 用例与助手、`TestMetricsEndpointExposed` 指标名清单扩至
+  五个新指标；`store/gaps_test.go` `TestStoreWriteFailureCounter`；`service/job_cap_test.go`
+  `TestJobRegistryActiveCount`；`main_test.go` `TestMainServerSubprocess` 断言子进程退出后
+  `shutdown.json` 存在且 `durationUs ∈ (0, 5e6)`。
+- **文档同步**：[`docs/OPERATIONS.md`](docs/OPERATIONS.md)（§3.2 表 +6 行、直方图桶上界、观测缺口段改
+  「已补齐」、§4.1 +3 SLI、§4.2 +4 告警、§4.3、§10.3、R-9、组件表、备份表 +`shutdown.json`）、
+  [`docs/api.md`](docs/api.md) 指标条目、[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §6.3、
+  [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) `S3C_DATA_DIR` 行。
+- **门禁实跑**（2026-09-30）：`go vet ./...` 干净 / `golangci-lint run` **0 issues**（含
+  `GOOS=windows` 同为 0）/ `go test ./... -count=1` **9/9 包** / `-race -coverprofile` awk `count==0`
+  **9/9 包 100.0%、无未覆盖块** / 交叉编译 windows·darwin·freebsd·openbsd build OK / 包根文档门禁
+  `go test . -count=1` ok。**变异验证 5/5**（规则错名 → 红、仪表盘 `expr` 错名 → 红、去掉
+  `_sum` 累加 → 红、去掉 `RecordShutdown` → 红、去掉 `noteWriteFailure` → 红，均点名后还原绿）。
+  前端本轮未改，`pnpm test` / `pnpm build` **未跑**（Task D 需跑）。
+
+### 修复（2026-09-30 KNOWN_ISSUES #70 闭环：`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BK**；问题登记见
+> [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #70（已闭环移除，编号不重排）。
+
+- **缺陷**：`NormalizeEndpoint("00  /")` → `http://00  `（尾随空白），再归一 → `http://00`，**不幂等**；
+  `"host/a  /"` / `"http://host  /"` 同理。根因是 `strings.TrimRight(rest, "/")` 在 host/path 切分
+  **之前**执行，把尾斜杠后的内部空白顶到结果末尾，而入口 `TrimSpace` 只做一次——函数头承诺的
+  「去首尾空白」与幂等契约（`SameEndpoint` 与建 client 共用）自违。原登记为 ➖「fail-closed 维持
+  现状」，本批**复核 4 处调用点影响面后推翻该决策**。
+- **修法**（登记内已写死的最小改动，未改其它语义）：`internal/s3wrap/client.go` 的
+  `NormalizeEndpoint` 改为**先切分 host/path** → host `TrimSpace` → path 去尾部斜杠与空白
+  （`TrimRightFunc`，`/` ∥ `unicode.IsSpace`），保输出不以空白结尾、对自身幂等。
+- **TDD 与验证**：`ssrf_fuzz_test.go` 新增 `TestNormalizeEndpointIdempotent`（7 例，先**红灯 3 例**
+  点名 → 实现后绿）；变异验证（去掉 host `TrimSpace` → 红灯点名两例 → 还原绿，命令写在测试头）；
+  既有用例不改一字即绿；两目标各 10s 有界 fuzz **PASS**（678,909 + 246,990 次执行）；fuzz 内
+  修复后不可达的「尾随空白短路分支」按死代码零容忍删除，两枚退化种子保留在 corpus 作回归。
+- **门禁实跑**（2026-09-30）：`gofmt` 干净 / `go vet` 0 告警 / `go build` OK /
+  `golangci-lint` **0 issues** / `go test ./... -count=1` **9/9 包** / `internal/s3wrap` **100.0%** 覆盖率。
+
+### 变更（2026-09-30 ROADMAP #19 收尾：文档可读性与流程机械化 4 项 + 两道新门禁）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BJ**；本批次为 2026-09-30 会话中断批的收尾段
+> （⑤ CHANGELOG 记录 + ⑥ 移出 #19 + ⑦ 门禁全量复跑）。
+
+- **4 项缺口落地**：① [`docs/architecture.md`](docs/architecture.md) §5 数据流补 **mermaid 时序图**
+  （对象上传直传 + multipart 两段，图中链路逐条对 `handler/multipart.go` 核对）；②
+  [`llms.txt`](llms.txt) 两行（本文件 / `docs/FEATURES.md`）就地补 `⚠️ 超大`（>200 KB）+ 按
+  `## [<版本>]` 段 / §字母章节的检索建议；③ 复审周期口径由「建议值、未在 CI 强制」改为
+  **「有机械提醒」**——新门禁 [`apps/server/doc_review_gate_test.go`](apps/server/doc_review_gate_test.go)
+  按登记表「N 个月」周期到期即红灯点名（[`docs/README.md`](docs/README.md) 维护表同口径改写）；
+  ④ [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) 验收清单新增
+  「决策（补 ADR）」勾选行（与 `adr_coverage_gate_test.go` 取舍行断言同一口径）。
+- **两道新门禁红→绿 + 变异实跑**：`llms_size_gate_test.go` 首轮**红灯点名两行** → 补标记转绿；
+  **变异**删 CHANGELOG 行标记 → 红灯「目标 319 KB 超过 200 KB 阈值却无体量警示」→ 还原绿灯
+  （扫描面 43 个文件链接）。`doc_review_gate_test.go` 首轮绿（21 行 / 14 行带月数 / 0 过期）；
+  **变异**把一行日期改成 `2025-01-01` → 红灯「+ 3 个月 = 2025-04-01，今天 2026-09-30」→ 还原绿灯。
+- **台账收口**：[`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2 按 §六 第 1 条**移出 #19**（#19 转空号、
+  编号不重排，证据指针写入 3.2 前言空号清单）；[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §3
+  （两道新门禁落点）与 §4（复审周期机械提醒）同批同步。
+
+### 变更（2026-09-30 文档归档：首份已填写的事故复盘冻结入 `docs/archive/` + 归档触发规则入档）
+
+- **新增首份事故复盘并按「归档操作」四步冻结**：按 [`docs/POSTMORTEM_TEMPLATE.md`](docs/POSTMORTEM_TEMPLATE.md)
+  §1–§10 填写 [`docs/archive/incident-20260916-presign-empty-url.md`](docs/archive/incident-20260916-presign-empty-url.md)
+  （`PM-20260916-presign-empty-url`，**near-miss 示例**）——`b3b287c`（2026-09-05 为达 100% 覆盖率删除被误判
+  「不可达」的预签名错误分支）→ 签名失败回 `200 {"url":""}`；2026-09-16 评估实测发现（`ASSESSMENT` L1 /
+  `KNOWN_ISSUES` #23）、2026-09-17 `5954bfa` 统一 `writePresignResult` + 源码门禁 `TestPresignErrorsNotSwallowed`
+  闭环、2026-09-19 `0fbd560` 收口 #23 余项。四步执行：① `git mv` 落位 `docs/archive/`（**新文件无既往历史可保**，
+  等价于直接落位，不复制、不删了重加）；② 引用收敛——[`docs/POSTMORTEM_TEMPLATE.md`](docs/POSTMORTEM_TEMPLATE.md)
+  （原「尚无已填写的复盘实例」改指首例 + 取证纪律指针）、[`docs/OPERATIONS.md`](docs/OPERATIONS.md) §9.3 第 6 步、
+  [`docs/README.md`](docs/README.md)「找冻结的历史快照」行与文档维护表；③
+  [`docs/archive/index.md`](docs/archive/index.md) 归档清单登记一行、「已归档 4 份」→ **5 份**；④ 本条。
+  **正文字段全挂 git 取证，无运行期实测值的字段写「未留存 + 原因」，未编造时间戳 / 日志 / 指标 / 报障记录**。
+- **归档触发规则入档**（三处同口径）：[`docs/archive/index.md`](docs/archive/index.md) 头注、
+  [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4「归档」条、[`docs/README.md`](docs/README.md) 文档维护表——
+  **已填写的事故复盘在事件闭环、行动项登记完成后按「归档操作」四步冻结**；首例已于 2026-09-30 执行，
+  当前**无待归档例外**。
+- **闭环复核实测**（记录在该复盘 §8）：`go test ./internal/handler/ -run 'TestWritePresignResult|TestPresignErrorsNotSwallowed' -count=1`
+  **3/3 PASS**；变异把 `objects.go` get 分支改回 `u, _ := ...` → `TestPresignErrorsNotSwallowed` **红灯点名**
+  「`objects.go:418` 忽略了预签名错误（会返回 200 + 空 url）」→ 还原后绿灯、`git status` 无残留。
+
+### 修复（2026-09-30 第二轮收口：ROADMAP ✅ 行移出 + §AU 过期注记 + 评估残留缺口补登记 + §四 基线复测）
+
+> 背景：第一轮清完「未实跑」标记后继续逐台账回读，发现 4 类残留——台账合规、过期状态、
+> 从未落账的评估缺口与过期的基线日期（证据见 [`docs/FEATURES.md`](docs/FEATURES.md) **§BI**）。
+
+- **ROADMAP §六 第 3 条合规**：§三 3.2 **#14**（原生 fuzz，2026-09-30 已落地 ✅）按「禁止保留已完成
+  条目的 ✅ 行」移出，编号不重排、#14 转空号，证据指针（[`docs/FEATURES.md`](docs/FEATURES.md) §BG）
+  保留在 3.2 前言空号清单——与 #3 / #12 同口径。
+- **FEATURES §AU 过期状态加注**：「未推送、未合并」为落笔时点状态，该批改动已随 `a984df7` 进入
+  `develop` 且与 `origin/develop` 一致；原文保留（历史值不改写纪律）+ 事实注记，「需确认」流程是否
+  履行不代答。
+- **补登记 4 项评估残留缺口** → [`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2 新行 **#19**：
+  ① `docs/` 0 张图表（`mermaid` / `plantuml` 全目录零命中）；② 超大文档无体量警示（CHANGELOG 323 KB /
+  FEATURES 247 KB 平铺进 `llms.txt`）；③ 文档复审周期「建议值，未在 CI 强制」；④ PR 模板验收清单缺
+  「新增 / 变更决策是否补 ADR」勾选项——此前评估识别但从未落账，按「不留口头待办」补账。
+- **§四 门禁基线复测回填**：改写为「2026-09-30 复测」并明示复测范围（`gofmt` / `vet` / lint / test /
+  build / `govulncheck` 0 可达 + 前端 lint / typecheck / test / build 全绿）与未重跑项（覆盖率 / E2E /
+  audit 类沿用行内最近实测值），不虚报覆盖范围。
+
+### 修复（2026-09-30 门禁实跑回填：4 处「未实跑」标记清零 + FEATURES §BG 结构归位）
+
+> 背景：[`docs/FEATURES.md`](docs/FEATURES.md) §BD / §BF 及本文件同批两条目落笔时会话无 shell，
+> 留下 4 处「⚠️ 门禁未实跑待人类实跑」标记；同批并行落笔的 §BG 被追加到 FEATURES 文件末尾、
+> 错挂在 §三「质量与覆盖率现状」**之后**（字母台账应全部位于 §二），目录行与头部摘要也缺
+> §BF / §BG 登记——属「登记两处同改」要防的同类漂移。
+
+- **门禁全量实跑并回填实测值**：后端 `go vet` / `go build` / `go test ./...`（**9/9 包全绿**）+
+  `golangci-lint`（**0 issues**）；前端 `pnpm lint` + `pnpm test`（**74 文件 / 1132 例全绿**）+
+  `typecheck:e2e` + `pnpm build`（366.72 kB，gzip 112.72 kB）全绿。FEATURES §BD / §BF 与本文件
+  两条目的 ⚠️ 标记改为实测值，
+  [`apps/server/docs_naming_gate_test.go`](apps/server/docs_naming_gate_test.go) 文件头同步去掉「未实跑」。
+- **两处变异复核实跑**（完整证据见 [`docs/FEATURES.md`](docs/FEATURES.md) §BH）：
+  ① `docs_naming_gate` 摘 `AGENTS.md` 命名清单的 `AGENT_EVALS.md` →
+  `TestDocsNamingConventionRegistersEveryDocsFile` 红灯点名 → 还原绿灯；
+  ② `contrast_gate` 把 §5.5 计数 `共 **11 行**` 改 10 → `TestContrastRecordCountClaimsMatch`
+  红灯点名 → 还原绿灯。
+- **FEATURES 结构归位**：§BG 整块移回 §二 末尾（§BF 与 §三 之间，**纯移动 33 行、内容零改动**，
+  `git diff --stat` 33 insertions / 33 deletions）；目录行补 BF / BG / BH，头部摘要补 §BG / §BH。
+
 ### 新增（2026-09-30 AI 时代文档补强：六路并行收口 P0–P2 缺口）
 
 > 起因：以「AI 时代成熟仓库文档基线」对本仓做实测盘点，逐层核对后确认散文层已饱和，
@@ -105,7 +346,9 @@
 - **两条尾巴结清**：① `data-model.md` 登记**去重核对**完成——`docs/README.md` 导航 / `AGENTS.md` /
   [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt) 四面各登记一次、无重复；
   ②「改 `styles.css` 后 §5.5 表须重算」由口头约定升级为 `contrast_gate_test.go` 机械保证（见上条）。
-- ⚠️ **门禁未实跑**：本轮落笔会话无 shell；`go test . -count=1` / `pnpm test` 待人类实跑（预期全绿）。
+- ✅ **门禁实跑回填（2026-09-30 16:08 CST）**：`cd apps/server && go test . -count=1` 全绿（含
+  `contrast_gate`）；前端 `pnpm lint` + `pnpm test`（74 文件 / 1132 例）+ `pnpm build` 全绿；
+  `contrast_gate` 计数变异复核已实跑（§5.5 `共 **11 行**` 改 10 → 红灯点名 → 还原绿灯）。
 
 ### 修复（2026-09-30 导航收口残留：命名约定两处分叉 + `llms.txt` 目录摘要 + README AI 入口 + 机械门禁）
 
@@ -127,8 +370,9 @@
   自检阈值。**变异复核步骤**：摘掉 AGENTS 命名清单的 `AGENT_EVALS.md` → 红灯点名该文件 → 还原绿灯。
 - [`apps/server/AGENTS.md`](apps/server/AGENTS.md) 的门禁清单补限定语（「常用几道，全量以包根
   `*_gate_test.go` 为准」）并登记新门禁——此前该清单只列 5 道、实有 13 道，读起来像全量。
-- ⚠️ **门禁未实跑**：本轮落笔会话无 shell，上述新门禁与全量门禁**待人类实跑**复核
-  （`cd apps/server && go test . -count=1`、`golangci-lint run`），实测值照实回填。
+- ✅ **门禁实跑回填（2026-09-30 16:08 CST）**：`cd apps/server && go test . -count=1` 全绿、
+  `golangci-lint run` **0 issues**；`docs_naming_gate` 变异复核已实跑（摘 AGENTS 命名清单的
+  `AGENT_EVALS.md` → `TestDocsNamingConventionRegistersEveryDocsFile` 红灯点名 → 还原绿灯）。
 
 ### 新增（2026-09-30 客户端支持矩阵：浏览器 / 桌面 OS 支持范围与证据等级）
 

@@ -65,7 +65,8 @@
 | 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，含编号台账与闭环凭证） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
-| 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查类**时点性文档**的归档索引（只读、不回写） |
+| 接手中断的进行中批次 | [`handoff-20260930.md`](handoff-20260930.md) | 2026-09-30 会话中断批的**时点快照**：执行到哪、还剩什么（非 SSOT——待办看 `ROADMAP.md` §三 / `KNOWN_ISSUES.md`，已完成看 `FEATURES.md`；批次收口后归档冻结） |
+| 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查 / 事故复盘类**时点性文档**的归档索引（只读、不回写；含首份已填写复盘 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md)） |
 
 ## 机器可读面（给工具与 AI）
 
@@ -75,7 +76,7 @@
 | 账号库格式 | [`api/accounts.schema.json`](api/accounts.schema.json) | 反射比对 `model.Account`（`TestAccountStoreSchemaMatchesModel`） |
 | 告警规则 | [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`） |
 | 供应链评分 / PR 依赖审查 | [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml) · [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | 全 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住；口径见 [`threat-model.md`](threat-model.md) §5.5 |
-| 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`） |
+| 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`）+ 超大文档体量预警（`llms_size_gate_test.go`：目标 >200 KB 必须就地标 `⚠️ 超大`） |
 | 代理硬约束 | [`../AGENTS.md`](../AGENTS.md) | 本页 + `AGENTS.md` 命名约定两处同步 |
 
 | 漏洞披露（机器可读） | [`../.well-known/security.txt`](../.well-known/security.txt) | RFC 9116 必填字段 + `Expires` 未过期（`security_txt_gate_test.go`） |
@@ -89,9 +90,9 @@
 |---|---|
 | 新增 / 改名 / 删除文档 | 同一 PR 内同步：本页导航 + [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 命名约定与「文档登记表」+ 根 [`llms.txt`](../llms.txt) + 引用它的全部文档；并在 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 记一条 |
 | 命名 | `docs/` 下**元文档大写**（描述仓库自身如何运作）、**产品内容小写 kebab-case**（描述产品是什么 / 怎么用）；本页 `README.md` 属「工具固定名」（GitHub 按字面名渲染目录落地页）。细则见 [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 |
-| 归档 | 结论绑定在某个 commit / 日期上的时点性文档（评估、审查、事故复盘）`git mv` 进 [`archive/`](archive/index.md) **冻结**——不移除、不回写、不改写历史结论 |
+| 归档 | 结论绑定在某个 commit / 日期上的时点性文档（评估、审查、事故复盘）`git mv` 进 [`archive/`](archive/index.md) **冻结**——不移除、不回写、不改写历史结论；**已填写的事故复盘在事件闭环后按该页「归档操作」四步冻结**（首例 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 已于 2026-09-30 执行） |
 | 链接与锚点 | 全仓 md 的相对链接与页内锚点由 `doc_link_gate_test.go` 机械校验（含扫描面自检阈值） |
 | 导航覆盖 | `docs/` 下每篇文档必须有导航入口，由 `doc_index_gate_test.go` 校验 |
 | 文档里的数字 | 「N 个 `/api/*` 端点」由 `doc_number_gate_test.go` 钉在 `routes.go` 上；配置项由 `config_doc_gate_test.go` 钉在 `CONFIGURATION.md` 上 |
-| owner / 复审周期 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §4「文档登记表」（当前 owner 为单人维护者；复审周期是**建议值**，未在 CI 强制） |
+| owner / 复审周期 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §4「文档登记表」（当前 owner 为单人维护者；复审周期是**建议值**，但带月数的到期由 `doc_review_gate_test.go` 机械红灯） |
 | AI 工具入口（根/子树 `AGENTS.md`、Copilot 指针、`llms.txt`） | 体积预算、子树覆盖与回指由 `apps/server/ai_governance_gate_test.go` 断言；政策与门禁的对应关系见 [`AI_POLICY.md`](AI_POLICY.md) §11 |

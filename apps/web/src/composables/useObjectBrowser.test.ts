@@ -104,8 +104,8 @@ describe('useObjectBrowser', () => {
   it('selectAll selects all when not all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false, storageClass: 'STANDARD' },
     ]
     browser.selectAll()
     expect(browser.selected.value.size).toBe(2)
@@ -114,7 +114,7 @@ describe('useObjectBrowser', () => {
   it('selectAll clears when all selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
     ]
     browser.selected.value = new Set(['a.txt'])
     browser.selectAll()
@@ -136,7 +136,7 @@ describe('useObjectBrowser', () => {
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
     ]
     browser.selected.value = new Set(['a.txt'])
 
@@ -184,7 +184,7 @@ describe('useObjectBrowser', () => {
     browser.panelActive.value = true
     browser.currentBucket.value = 'b1'
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
     ]
     browser.selected.value = new Set(['a.txt'])
 
@@ -196,7 +196,7 @@ describe('useObjectBrowser', () => {
         kind: 'file',
         key: 'a.txt',
         name: 'a.txt',
-        object: { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
+        object: { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
       } as Entry),
     ).not.toThrow()
   })
@@ -248,9 +248,9 @@ describe('useObjectBrowser', () => {
   it('toggleWithShift selects range', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [
-      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false },
-      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false },
-      { key: 'c.txt', size: 3, lastModified: '', etag: 'e3', isDir: false },
+      { key: 'a.txt', size: 1, lastModified: '', etag: 'e1', isDir: false, storageClass: 'STANDARD' },
+      { key: 'b.txt', size: 2, lastModified: '', etag: 'e2', isDir: false, storageClass: 'STANDARD' },
+      { key: 'c.txt', size: 3, lastModified: '', etag: 'e3', isDir: false, storageClass: 'STANDARD' },
     ]
     browser.toggleWithShift('a.txt', false)
     expect(browser.selected.value.has('a.txt')).toBe(true)
@@ -361,7 +361,7 @@ describe('useObjectBrowser gaps', () => {
     } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
-    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false }] as unknown as ObjectItem[]
+    browser.objects.value = [{ key: 'a.txt', size: 1, lastModified: '', isDir: false, storageClass: 'STANDARD' }] as unknown as ObjectItem[]
     browser.selected.value = new Set(['a.txt'])
     await browser.loadMore()
     expect(browser.objects.value.map((o) => o.key)).toEqual(['a.txt', 'b.txt'])
@@ -414,8 +414,8 @@ describe('useObjectBrowser gaps', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.commonPrefixes.value = ['dir/']
     browser.objects.value = [
-      { key: 'zz.txt', size: 10, lastModified: '2024-02-01', isDir: false },
-      { key: 'aa.txt', size: 2, lastModified: '2024-01-01', isDir: false },
+      { key: 'zz.txt', size: 10, lastModified: '2024-02-01', isDir: false, storageClass: 'STANDARD' },
+      { key: 'aa.txt', size: 2, lastModified: '2024-01-01', isDir: false, storageClass: 'STANDARD' },
     ] as unknown as ObjectItem[]
     // default sort name asc
     let entries = browser.visibleEntries.value
@@ -500,7 +500,7 @@ describe('useObjectBrowser remaining', () => {
 
   it('loadAll paginates until exhausted and toasts', async () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
-      objects: [{ key: 'x.txt', size: 1, lastModified: '', isDir: false }],
+      objects: [{ key: 'x.txt', size: 1, lastModified: '', isDir: false, storageClass: 'STANDARD' }],
       commonPrefixes: [], nextToken: 'tok', isTruncated: true,
     } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
@@ -513,7 +513,7 @@ describe('useObjectBrowser remaining', () => {
   it('loadAll 在 nextToken 为空时也至少加载第一页（不得静默只加载 0 条并误报「已加载全部」）', async () => {
     // 单页场景：首轮请求返回无 nextToken，随后不应再发分页请求。
     vi.mocked(s3api.listObjects).mockResolvedValue({
-      objects: [{ key: 'only.txt', size: 1, lastModified: '', isDir: false }],
+      objects: [{ key: 'only.txt', size: 1, lastModified: '', isDir: false, storageClass: 'STANDARD' }],
       commonPrefixes: [], nextToken: '', isTruncated: false,
     } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
@@ -531,13 +531,13 @@ describe('useObjectBrowser remaining', () => {
 
   it('loadAll 在 nextToken 为空但已有旧列表时重置为第一页（不重复追加导致重复项）', async () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
-      objects: [{ key: 'p1.txt', size: 1, lastModified: '', isDir: false }],
+      objects: [{ key: 'p1.txt', size: 1, lastModified: '', isDir: false, storageClass: 'STANDARD' }],
       commonPrefixes: [], nextToken: '', isTruncated: false,
     } as unknown as ListObjectsResult)
     const browser = useObjectBrowser(makeBindings())
     browser.currentBucket.value = 'b1'
     // 旧列表已有数据但 nextToken 为空（例如此前加载失败残留）
-    browser.objects.value = [{ key: 'stale.txt', size: 9, lastModified: '', isDir: false }] as unknown as ObjectItem[]
+    browser.objects.value = [{ key: 'stale.txt', size: 9, lastModified: '', isDir: false, storageClass: 'STANDARD' }] as unknown as ObjectItem[]
     browser.nextToken.value = ''
     await browser.loadAll()
     // 应重置为第一页，而不是在旧列表上追加（stale 被替换，且无重复 p1）

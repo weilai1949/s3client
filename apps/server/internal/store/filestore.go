@@ -194,7 +194,11 @@ func (f *fileStore) snapshotLocked() []*model.Account {
 
 // persistLocked 假定调用方已持有写锁，把当前快照交给 codec 编码后原子写盘。
 func (f *fileStore) persistLocked() error {
-	return atomicfile.WriteFile(f.path, f.codec.encode(f.snapshotLocked()))
+	if err := atomicfile.WriteFile(f.path, f.codec.encode(f.snapshotLocked())); err != nil {
+		noteWriteFailure()
+		return err
+	}
+	return nil
 }
 
 // marshalAccounts 把账号列表序列化为缩进 JSON（两个驱动的共同中间表示）。

@@ -1,5 +1,5 @@
 import type { ServerProfile } from '../types'
-import { request } from './http'
+import { opPath, request } from './http'
 import * as store from './storage'
 
 /**
@@ -52,7 +52,7 @@ export const api = {
 
   /** 探测后端健康（/api/health，免鉴权）；用于不可用后的自动恢复轮询。 */
   health(): Promise<{ status: string; version: string; store?: { ok: boolean } }> {
-    return request<{ status: string; version: string; store?: { ok: boolean } }>('/api/health')
+    return request<{ status: string; version: string; store?: { ok: boolean } }>(opPath('health'))
   },
 
   listServers(): ServerProfile[] {

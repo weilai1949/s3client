@@ -20,6 +20,7 @@ import { api } from '../api'
 import { downloadProxyObject, fetchProxy, fetchProxyBlob } from '../proxy'
 import { toast } from '../store'
 import { t, tf } from '../i18n'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { useKeydownStack } from '../composables/useKeydownStack'
 
 const props = defineProps<{
@@ -59,14 +60,21 @@ function isMediaKind(kind: PreviewState['kind']): boolean {
   return kind === 'image' || kind === 'video' || kind === 'audio' || kind === 'pdf'
 }
 
+const open = computed(() => !!props.preview)
+const card = ref<HTMLElement>()
+const { trapTab } = useFocusTrap(card, open)
+
 // Escape 关闭预览（与 ModalDialog 行为一致；经 keydown 栈，仅顶层生效）。
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && props.preview) {
     e.preventDefault()
     emit('close')
+    return
   }
+  trapTab(e)
 }
-useKeydownStack(onKeydown, computed(() => !!props.preview))
+
+useKeydownStack(onKeydown, open)
 onBeforeUnmount(() => {
   cancelFetch()
   releaseMediaUrl()
@@ -150,7 +158,7 @@ watch(() => props.preview, async (p) => {
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="preview" class="pv-backdrop" @click.self="emit('close')">
-        <div class="pv-card" role="dialog" aria-modal="true" :aria-label="tf('preview.aria', { key: preview.key })">
+        <div ref="card" class="pv-card" role="dialog" aria-modal="true" :aria-label="tf('preview.aria', { key: preview.key })">
           <div class="pv-head">
             <span class="mono" style="word-break:break-all">{{ preview.key }}</span>
             <div class="pv-actions">

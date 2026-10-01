@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -193,6 +194,11 @@ func newHTTPClient() *ssrfAwareClient {
 // 必须用同一套规则，否则会出现「比较判定为同一端点、建出的 URL 却连不上」。
 // 旧实现只做大小写敏感的前缀判断，把 "HTTP://Host" 当成裸主机，产出损坏的
 // "http://HTTP://Host"（FEATURES.md §K，KNOWN_ISSUES #10）。
+//
+// 顺序有讲究（KNOWN_ISSUES #70）：**先切分 host/path，再分别归一**。若先对整个
+// rest 去尾斜杠，会把尾斜杠之后的内部空白暴露到结果末尾，而入口 TrimSpace 只做
+// 一次——输出带尾随空白且二次归一化不同（不幂等）。故 host 去首尾空白、path 去
+// 尾部斜杠与空白，保证输出不以空白结尾、对自身幂等。
 func NormalizeEndpoint(endpoint string, useSSL bool) string {
 	ep := strings.TrimSpace(endpoint)
 	if ep == "" {
@@ -209,14 +215,15 @@ func NormalizeEndpoint(endpoint string, useSSL bool) string {
 		}
 		rest = ep
 	}
-	rest = strings.TrimRight(rest, "/")
-	if rest == "" {
-		return ""
-	}
 	// 只小写 host，保留路径大小写。
 	host, path := rest, ""
 	if i := strings.Index(rest, "/"); i >= 0 {
 		host, path = rest[:i], rest[i:]
+	}
+	host = strings.TrimSpace(host)
+	path = strings.TrimRightFunc(path, func(r rune) bool { return r == '/' || unicode.IsSpace(r) })
+	if host == "" && path == "" {
+		return ""
 	}
 	return scheme + "://" + strings.ToLower(host) + path
 }

@@ -263,3 +263,23 @@ describe('TagsDialog 稳定行键', () => {
     expect(valueInputs().map((el) => el.value)).toEqual(['prod', 'ops'])
   })
 })
+
+describe('TagsDialog 可见标签', () => {
+  it('每行键 / 值输入都有可见 <label for>，且 for 能解析到目标输入框', async () => {
+    const w = mountDialog()
+    await openDialog(w, [{ key: 'env', value: 'prod' }])
+
+    const labels = Array.from(
+      document.body.querySelectorAll<HTMLLabelElement>('label[for^="tag-key-"], label[for^="tag-val-"]'),
+    )
+    expect(labels, '键 / 值各应有一个可见 label').toHaveLength(2)
+    for (const lb of labels) {
+      expect((lb.textContent ?? '').trim().length, '可见 label 不能为空文本').toBeGreaterThan(0)
+      const target = document.getElementById(lb.getAttribute('for')!)
+      expect(target, `label for=${lb.getAttribute('for')} 找不到目标输入框`).toBeTruthy()
+      expect(target!.tagName).toBe('INPUT')
+    }
+    // 关联后输入框确实拿到了可访问名称来源（label 文本 == 字典里的键 / 值文案）
+    expect(labels.map((l) => (l.textContent ?? '').trim()).sort()).toEqual(['tags.keyPh', 'tags.valuePh'])
+  })
+})

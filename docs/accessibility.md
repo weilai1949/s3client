@@ -36,8 +36,10 @@
 | 属性 | 次数 | 主要用途（本仓库） |
 |---|---:|---|
 | `aria-hidden` | 43 | 纯装饰元素：emoji、内联 SVG 图标、虚拟滚动的上下垫片行（`v-spacer`） |
-| `aria-label` | 28 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、`<select>` / `<input>`（批量改元数据、标签输入行）、列表与网格的行选择框、加载态容器（配合 `aria-busy`） |
+| `aria-label` | 28 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、批量改元数据三个控件（**2026-09-30 起与可见 `<label>` 同键**，见 §1.6）、列表与网格的行选择框、加载态容器（配合 `aria-busy`） |
+| `aria-selected` | 4 | **2026-09-30 起（#17③）**：四张有行选中的表，其数据行随选中集合变化（**刻意不用 `aria-multiselectable`**——axe 的 `aria-allowed-attr` 判定它在原生 `<table>` 上非法，见 §1.6） |
 | `aria-modal` | 4 | 四个模态容器，值均为 `"true"` |
+| `aria-labelledby` | 4 | **2026-09-30 起（#17③）**：`BucketTags` / `LifecycleDialog` 表格单元格里的输入框——一个 `<th>` 无法 `for` 到 N 行输入，故指向**可见列头**（见 §1.6） |
 | `aria-sort` | 3 | 列表视图三个可排序表头（名称 / 大小 / 时间） |
 | `aria-busy` | 3 | 列举中 / 加载中的容器（`ObjectList`、`MigratePanel`、`LifecycleDialog`） |
 | `aria-valuenow` / `aria-valuemin` / `aria-valuemax` | 2 / 2 / 2 | 两处 `role="progressbar"`（`UploadPanel` 总进度、`MigratePanel` 任务进度） |
@@ -49,14 +51,14 @@
 | role | 次数 | 位置 |
 |---|---:|---|
 | `menuitem` | 17 | `ObjectContextMenu.vue`（右键菜单的每个按钮） |
-| `columnheader` | 3 | `ObjectList.vue` 三个可排序表头（配 `tabindex="0"` 与 `aria-sort`） |
+| `alert` | 9 | **2026-09-30 起（#17②）统一口径**：`ObjectsPanel` / `AccountsPanel`（2 处）/ `BucketsPanel` / `CompareDialog` / `MigratePanel` / `RecycleBinPanel` / `ServerPanel` 的 `msg err` 横幅与 `PromptDialog` 校验失败（源码门禁钉住，见 §1.4） |
 | `status` | 3 | `ObjectList.vue`（网格截断提示）、`UploadQueue.vue`、`Toasts.vue`（单条 toast） |
 | `dialog` | 3 | `ModalDialog.vue`、`PromptDialog.vue`、`PreviewOverlay.vue` |
+| `columnheader` | 3 | `ObjectList.vue` 三个可排序表头（配 `tabindex="0"` 与 `aria-sort`） |
 | `progressbar` | 2 | `UploadPanel.vue`、`MigratePanel.vue` |
 | `button` | 2 | `UploadPanel.vue` 拖放区、`ObjectList.vue` 网格单元格（自定义可点区域） |
 | `menu` | 1 | `ObjectContextMenu.vue` 容器（`tabindex="-1"`） |
 | `alertdialog` | 1 | `ConfirmDialog.vue`（破坏性操作确认） |
-| `alert` | 1 | `ObjectsPanel.vue` 错误横幅 |
 
 说明：**数据表没有显式 ARIA grid 角色**——它用的是原生 `<table>` / `<thead>` / `<th>` / `<tr>`，
 语义由浏览器给出；`role="columnheader"` 只冗余地写在**那三个可排序表头**上（与 `tabindex="0"`、
@@ -65,15 +67,27 @@
 
 ### 1.4 `aria-live` 区域
 
-全仓只有 **2 处**，且都是 `aria-live="polite"`（没有 `assertive`）：
+**2026-09-30 起（ROADMAP §三 #17②）**：「操作成功 / 失败统一播报」已收口——
+**成功**统一走 `toast()` → `Toasts` 容器；**失败**若是面板内联横幅则自带 `role="alert"`，
+并由 [`apps/web/src/a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 的源码门禁钉住
+「每个 `msg err` / `modal-err` 开标签必须声明 `role="alert"`」。
 
-| 位置 | 播报内容 |
-|---|---|
-| `Toasts.vue` | 全局 toast 容器（每条 toast 另带 `role="status"`） |
-| `BatchMetadataDialog.vue` | 批量改元数据的执行状态 / 结果区（`v-if="running \|\| result"`） |
+带 `aria-live` 属性的区域仍是 **2 处**（都是 `aria-live="polite"`，没有 `assertive`）：
 
-`ObjectsPanel.vue` 的错误横幅是 `role="alert"`（隐式 assertive），但它不经过 `aria-live` 属性。
-**这两个 `aria-live` 区域都没有专门的测试断言**（见 §5.2）。
+| 位置 | 播报内容 | 测试断言 |
+|---|---|---|
+| `Toasts.vue` | 全局 toast 容器（每条 toast 另带 `role="status"`）——**操作成功 / 失败的统一播报通道** | `Toasts.test.ts`「操作成功 / 失败统一经容器的 aria-live 播报」 |
+| `BatchMetadataDialog.vue` | 批量改元数据的执行状态 / 结果区（`v-if="running \|\| result"`） | 同名组件测试「执行状态经 aria-live 播报区呈现（running 与 done 都在区内）」 |
+
+**内联失败横幅**（不经 toast 的那部分）用 `role="alert"`（隐式 assertive）而非 `aria-live` 属性：
+`ObjectsPanel` / `AccountsPanel` / `BucketsPanel` / `CompareDialog` / `MigratePanel` /
+`RecycleBinPanel` / `ServerPanel` 的 `class="msg err"`，以及 `PromptDialog` 的 `class="modal-err"`
+（校验失败）。这些都是 `v-if` 条件渲染——`role="alert"` 只在元素**插入 DOM 时**播报一次，
+不会因为文案更新而反复打断。行为断言见 `PromptDialog.test.ts`
+「校验失败文案带 role="alert"」；**漏加 / 回退由 `a11y_gate` 源码门禁红灯点名**（已做变异验证：
+去掉 `ServerPanel` 的 `role` → 门禁列出该标签 → 还原绿灯）。
+
+`ObjectsPanel.vue` 的错误横幅原本就是 `role="alert"`，本批是把它变成**全仓统一口径**而非孤例。
 
 ### 1.5 对话框的 `aria-modal`
 
@@ -88,6 +102,53 @@
 
 `ModalDialog.test.ts` 有对属性本身的断言（`renders footer slot, custom width and dialog attributes`
 断言 `aria-modal === 'true'`）；其余三个组件没有对 `aria-modal` 的专项断言。
+
+### 1.6 表格可访问名称与表单可见标签（2026-09-30 起，ROADMAP §三 #17③）
+
+**表格 `caption`**：`src/components` 下 **15 张 `<table>` 全部带 `<caption class="sr-only">`**
+（`.sr-only` 为 `src/styles.css` 新增的全局工具类——裁剪到 1px 但**不** `display:none`，
+否则会一并从无障碍树里消失）。用 sr-only 而非可见 caption：这些表上方都已有可见标题 / 面板标题，
+再来一行可见 caption 只会视觉重复；WCAG 要的是「表有可访问名称」，不要求它可见。
+由 [`apps/web/src/a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 的
+「每张数据表都有 `<caption class="sr-only">`」源码门禁钉住（`<caption>` 必须紧跟开标签，
+否则读取后续 120 字符匹配不到即红灯）。
+
+**行选中语义**：四张有行选中的表，其数据行声明 `:aria-selected`（随选中集合变化）：
+
+| 组件 | 选择控件 | 依据 |
+|---|---|---|
+| `ObjectList.vue` | 复选框 | 列表视图多选 / Shift 连选 |
+| `MigratePanel.vue` | 复选框 | 迁移对象多选 |
+| `AccountsPanel.vue` | 单选按钮组（`name="acc"`） | 当前账号 |
+| `ServerPanel.vue` | 单选按钮组（`name="server"`） | 当前生效服务器 |
+
+> **为什么不写 `aria-multiselectable`**：初版把它写在了 `<table>` 上，**组件级 axe 扫描
+> （§5.2）当场报 `aria-allowed-attr`（critical）**——该属性只属于 `grid` / `listbox` /
+> `select` 等选择型角色，原生 `table` 不支持。为一条属性把整张表升级成 `role="grid"`
+> （连带 `gridcell` 与方向键焦点管理）不划算，故**移除该属性**、只保留合法的 `aria-selected`；
+> 「多选还是单选」由复选框 vs 单选按钮本身表达。这正是组件级扫描存在的价值：它把
+> 「看起来对、实则非法」的 ARIA 当场点名。
+
+行为断言见 `ObjectList.test.ts`「行 aria-selected 随选中集合变化」；名单与属性存在性由
+a11y_gate 源码门禁钉住（含**自检**：全仓声明 `:aria-selected` 的组件**恰好**是这 4 张，
+防扫描面塌缩）。
+
+**表单可见标签**：`src` 下 77 个可见表单控件**全部**有可关联的标签来源，三种形态按场景取用——
+
+1. **包裹 `<label class="field">`**（既有主流形态，约 40 处）；
+2. **行内可见 `<label for>`**（紧凑行编辑器）：`TagsDialog` / `HeadersDialog` 的键值行、
+   `ObjectsPanel` / `BucketsPanel` / `RecycleBinPanel` 紧邻下拉的**可见徽标**改成
+   `<label for>`（文案不变、零视觉改动）、`ObjectToolbar` 的路径编辑框与过滤框、
+   `BatchMetadataDialog` 的 ACL / 标签模式 / 存储类型三个控件（原硬编码英文 `aria-label`
+   改为与可见 `<label>` **同一条 i18n 键**，顺带修掉「切换英文才对、中文界面却朗读英文」）；
+3. **`aria-labelledby` 指向可见列头**（表格单元格）：`BucketTags` / `LifecycleDialog` 的输入框
+   ——一个 `<th>` 无法 `for` 到 N 行输入，改指向**可见**列头，文本仍是可见的、且程序可关联，
+   又不必在每行重复一遍列头文字。
+
+仅剩 2 个 `display:none` 的 `<input type="file">` 无标签：它们不可见也不可聚焦，
+由已带标签的拖放区 / 按钮触发，属正常形态。断言见 `TagsDialog.test.ts`
+「每行键 / 值输入都有可见 `<label for>`」与 `BatchMetadataDialog.test.ts`
+「三个控件都被可见 `<label>` 包裹」。
 
 ---
 
@@ -122,25 +183,35 @@ const stack: KeydownHandler[] = []
 
 ### 2.2 模态下的焦点处理
 
-`ModalDialog.vue` 是最完整的一处，做四件事：
+**2026-09-30 起（ROADMAP §三 #17①）**：「记住 / 恢复焦点 + 初始移入 + `Tab` 首尾回卷」已抽成
+[`apps/web/src/composables/useFocusTrap.ts`](../apps/web/src/composables/useFocusTrap.ts)，**四个模态共用**
+（`ModalDialog` / `ConfirmDialog` / `PromptDialog` / `PreviewOverlay`），不再是「只有 `ModalDialog` 有陷阱」。
 
 1. **记住并恢复焦点**：打开时把 `document.activeElement` 存进 `previousFocus`，
-   关闭时若该元素**仍在文档里**（`document.contains`）则 `focus()` 回去；
-   已从文档移除则不做恢复（`ModalDialog.test.ts` 有对应用例，防「恢复崩溃」）。
+   关闭时若该元素**仍在文档里**（`document.contains`）则 `focus()` 回去；已从文档移除则不做恢复
+   （`ModalDialog.test.ts` 有对应用例，防「恢复崩溃」）。
 2. **焦点移入对话框**：打开后 `await nextTick()`，聚焦第一个可聚焦元素
    （选择器 `a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])`，
-   并用 `offsetParent !== null` 过滤不可见元素；因为关闭按钮恒存在，所以取 `els[0]` 是安全的）。
+   并用 `offsetParent !== null` 过滤不可见元素）。四个模态的首个可聚焦元素恰好都是「主操作」：
+   `ModalDialog` 的 ✕、`ConfirmDialog` 的确认按钮、`PromptDialog` 的输入框、`PreviewOverlay` 的下载按钮。
 3. **焦点陷阱**：`Tab` 在最后一个元素上回卷到第一个、`Shift+Tab` 在第一个元素上回卷到最后一个，
    中间位置不干预（不 `preventDefault`）。用例：`Tab focus trap cycles first/last and ignores mid elements`、
-   `Tab trap with only the close button wraps to itself`。
-4. **锁背景滚动**：打开时把 `document.body.style.overflow` 置 `hidden`，关闭时还原原值。
+   `Tab trap with only the close button wraps to itself`，以及另外三个模态各自的同名用例。
+4. **`Tab` 回卷由各模态的 keydown 栈 handler 调用 `trapTab(e)`**——组合式**不**自行监听 window，
+   否则会破坏「一次按键只影响最上层模态」的 LIFO 语义（见 §2.1）。
+5. **锁背景滚动**仍是 `ModalDialog` 自己的事（只它一个锁），打开置 `hidden`、关闭还原原值。
+
+> **为什么初始聚焦要 `await nextTick()` 而不能用 `flush: 'post'`**：`v-model` 是**运行时指令**，
+> 它的 `mounted` 钩子同样排在 post 队列里且晚于本 watcher——先跑会拿到尚未写入 DOM 的输入值，
+> `PromptDialog` 的全选会落空。代价是「打开的同一 tick 内关闭 / 卸载」会让挂起的续体看到已被置空的
+> 模板 ref，故续体开头有一道空容器守卫（由 `ConfirmDialog.test.ts` 的
+> 「打开后同 tick 内卸载」用例覆盖）。
 
 `Escape` 由键栈处理并 `preventDefault` 后 `emit('close')`（用例 `Escape emits close with preventDefault`）。
 
 `ConfirmDialog` / `PromptDialog` / `PreviewOverlay` **不是**通过 `ModalDialog` 实现的
-（各自有 `.modal-card` / `.pv-card` 模板），它们只做**初始聚焦**：
-`ConfirmDialog` 打开后 `nextTick` 聚焦确认按钮，`PromptDialog` 打开后 `nextTick` 聚焦输入框。
-也就是说：**焦点陷阱只有 `ModalDialog` 这一份实现**，其余模态依赖「栈顶独占 + 初始聚焦」。
+（各自有 `.modal-card` / `.pv-card` 模板），但它们与 `ModalDialog` 一样经 `useFocusTrap` 获得
+**初始聚焦 + 焦点陷阱**；`ConfirmDialog` / `PromptDialog` 的 `Enter` 确认语义仍由各自的键栈 handler 保留。
 
 ### 2.3 组件内的键盘操作
 
@@ -221,6 +292,14 @@ const stack: KeydownHandler[] = []
    「注入已知违规必须被报出」的自检用例，防止扫描器失效后静默全绿。CI 由既有
    [`.github/workflows/e2e-playwright.yml`](../.github/workflows/e2e-playwright.yml) 的
    `pnpm e2e:ci` 覆盖（`testDir: ./e2e` 自动纳入），**无需新增 workflow**。
+   **2026-09-30 再补组件级一侧（ROADMAP §三 #17④）**：新增 devDependency `vitest-axe`
+   （同样只进 devDependencies，`dependencies` 仍只有 `vue`，**不违反 ADR-004**）与
+   [`apps/web/src/a11y_axe.test.ts`](../apps/web/src/a11y_axe.test.ts)——对**挂载后的组件 DOM**
+   跑同一套 WCAG A / AA 规则集，覆盖 E2E 到不了的边界态（对话框打开、toast 堆叠、列表带选中行），
+   同样只阻塞 serious / critical，并带「注入 `image-alt` 必须被报出」的空跑自检。
+   它在落地当天就抓到一条真问题：`aria-multiselectable` 在原生 `<table>` 上**非法**
+   （`aria-allowed-attr` critical，见 §1.6）。happy-dom 不做 CSS 级联 / 布局，故该文件
+   **显式关掉 `color-contrast` 规则**——对比度仍由 E2E 侧 axe 与 §5.5 静态 token 表负责。
    **仍未覆盖**：屏幕阅读器实测，以及 axe 规则集本身不判定的项——故这**不是审计**，
    也不构成任何合规声明（见 §4 第 1 条）。
 3. **没有做屏幕阅读器实测**：无 NVDA / JAWS / VoiceOver / TalkBack 的实测记录或截图证据。
@@ -244,17 +323,22 @@ const stack: KeydownHandler[] = []
    `i18n/index.ts` 新增 `applyDocumentLang()`——模块初始化时同步一次，`setLocale()` 时再同步，
    故切到英文后文档语言标记即为 `en-US`（屏幕阅读器发音选择、浏览器翻译提示都随之正确）。
    由 `i18n/index.test.ts` 的 2 条用例钉住（`setLocale` 与 `cycleLocale` 两条路径）。
-7. **焦点陷阱只覆盖 `ModalDialog`**：`ConfirmDialog` / `PromptDialog` / `PreviewOverlay` 没有
-   `Tab` 循环，只靠「键栈栈顶独占 + 初始聚焦」。键盘用户在这些模态里 `Tab` 可以走出对话框。
-   → 改进项。
-8. **`aria-live` 覆盖很窄**：只有 2 处（`Toasts`、`BatchMetadataDialog` 状态区），
-   且**都没有测试断言**；异步操作完成（如列表刷新、桶设置保存）多数不经过 live region。
-9. **表格语义未完整声明**：数据表用原生 `<table>`，但没有 `caption`，也没有为「可选中的行」
-   声明 `aria-selected` / `aria-multiselectable`；网格视图的单元格是 `role="button"`，
-   其名称依赖单元格内文本节点，未加 `aria-label`。
-10. **表单标签依赖 `aria-label` 而非可见 `<label>`**：多数输入框用 `aria-label` 提供名称
-    （可访问名称没问题），但**没有可见标签**；只有少数场景用了 `sr-only` 的 `<label>`
-    （`BatchMetadataDialog` 的标签键/值、`BucketPolicyVisualEditor` 的 JSON 文本域）。
+7. ~~**焦点陷阱只覆盖 `ModalDialog`**~~ ✅ **已于 2026-09-30 修复（ROADMAP §三 #17①）**：
+   焦点陷阱抽成 [`useFocusTrap.ts`](../apps/web/src/composables/useFocusTrap.ts)，`ConfirmDialog` /
+   `PromptDialog` / `PreviewOverlay` 同样具备 `Tab` 回卷 + 焦点恢复（详见 §2.2），
+   由三个组件各自的「Tab 焦点陷阱」用例钉住。
+8. ~~**`aria-live` 覆盖很窄**~~ ✅ **已于 2026-09-30 收口（ROADMAP §三 #17②）**：
+   两处 `aria-live` 区域**都有了测试断言**；「操作成功 / 失败统一播报」= 成功统一走 `toast()` →
+   `Toasts` 的 `aria-live` 容器，失败的内联横幅统一 `role="alert"`（源码门禁钉住，见 §1.4）。
+   **仍不覆盖**：屏幕阅读器实测播报时机、`aria-live` 的实际朗读效果（需辅助技术人工验证）。
+9. **表格语义**：~~数据表没有 `caption`，也没有为「可选中的行」声明 `aria-selected` /
+   `aria-multiselectable`~~ ✅ **已于 2026-09-30 修复（ROADMAP §三 #17③）**——15 张表全部带
+   sr-only `<caption>`，四张有行选中的表声明行 `aria-selected`（见 §1.6，源码门禁 + 行为断言 +
+   组件级 axe 三重钉；`aria-multiselectable` 经 axe 判定在原生 `<table>` 上**非法**，刻意不用）。
+   **仍未做**：网格视图的单元格是 `role="button"`，
+   其名称依赖单元格内文本节点，未加 `aria-label`（不在 #17 范围内，RTL 与正式审计同批按需另行立项）。
+10. ~~**表单标签依赖 `aria-label` 而非可见 `<label>`**~~ ✅ **已于 2026-09-30 修复
+    （ROADMAP §三 #17③）**：可见控件全部有可关联标签，三种形态与剩余例外见 §1.6。
 11. **没有 RTL / 从右到左布局支持**，也没有多语言之外的区域格式（日期 / 数字）本地化测试。
 12. ~~**`textarea` 不在统一焦点样式内**~~ ✅ **已于 2026-09-29 修复（KNOWN_ISSUES #67③）**：
     全局 `:focus-visible` 规则的选择器列表已纳入 `textarea`（详见 §2.4），
@@ -288,17 +372,25 @@ const stack: KeydownHandler[] = []
 | 手段 | 覆盖什么 | 命令 |
 |---|---|---|
 | `components/ModalDialog.test.ts`（14 例） | 焦点移入 / 恢复、`document.contains` 保护、`Escape`、`Tab` 陷阱（首尾回卷、中间不干预）、仅关闭按钮时自回卷、footer 插槽与 `aria-modal` 属性 | `cd apps/web && pnpm test src/components/ModalDialog.test.ts` |
+| `components/{ConfirmDialog,PromptDialog,PreviewOverlay}.test.ts` 的焦点用例（各 2–3 例） | **2026-09-30 起（#17①）**：初始焦点落点、关闭后焦点恢复到打开前元素、`Tab` 首尾回卷 / 中间不干预；`PromptDialog` 另断言全选（`selectionStart`/`selectionEnd`），`ConfirmDialog` 另断言「打开后同 tick 内卸载不抛错」 | `pnpm test src/components/ConfirmDialog.test.ts` 等三个文件 |
+| **live region 断言**：`Toasts.test.ts`（1 例）、`BatchMetadataDialog.test.ts`（1 例）、`PromptDialog.test.ts`（1 例）、`a11y_gate.test.ts`（源码门禁） | **2026-09-30 起（#17②）**：toast 容器 `aria-live="polite"` 且成功 / 失败文案都在区内、批量改元数据状态区 `aria-live` 承载 running / done、校验失败横幅 `role="alert"`、**每个 `msg err` / `modal-err` 开标签必须带 `role="alert"`**（漏加即红灯点名） | `pnpm test src/a11y_gate.test.ts` |
+| **表格与可见标签断言**：`a11y_gate.test.ts`（2 条源码门禁）、`ObjectList.test.ts` / `TagsDialog.test.ts` / `BatchMetadataDialog.test.ts` 各 1 例 | **2026-09-30 起（#17③）**：每张 `<table>` 紧跟 sr-only `<caption>`、行选中表声明 `aria-multiselectable`（名单自检恰好 4 张）、行 `aria-selected` 随选中集合变化、键值行 `label[for]` 能解析到目标输入框、批量元数据三控件被可见 `<label>` 包裹 | `pnpm test src/a11y_gate.test.ts` 等 |
 | `composables/useKeydownStack.test.ts`（9 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
 | Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
 | **`e2e/a11y.spec.ts`（5 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题初始态）的 **serious / critical 违规必须为 0**；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
+| **`src/a11y_axe.test.ts`（6 例，vitest-axe + axe-core）** | **2026-09-30 起（#17④）组件级**：对**挂载后的组件 DOM** 跑同一套 WCAG 2.0 / 2.1 A + AA 规则集，覆盖 E2E 到不了的边界态（`ModalDialog` 带 footer / `ConfirmDialog` 危险态 / `PromptDialog` 带校验失败 / `Toasts` 成功+失败堆叠 / `ObjectList` 带 caption 与选中行）；**serious / critical 即红灯**，非阻塞项打印供人工判断；另 1 例「注入 `image-alt` 必须被报出」空跑自检。**不判对比度**（happy-dom 无 CSS 级联，显式关掉 `color-contrast`） | `cd apps/web && pnpm test src/a11y_axe.test.ts` |
 
 > 以上命令均为 `apps/web/package.json` 的既有脚本（`test` = `vitest run`、`build` = `vue-tsc --noEmit && vite build`、
 > `e2e` = `playwright test`）；行尾的路径参数是 vitest 的文件过滤，不是自定义脚本。
 
-**自 2026-09-30 起仍没有任何自动化手段覆盖**：屏幕阅读器播报、`aria-live` 播报时机、
-非 `ModalDialog` 模态的焦点陷阱、axe 无法解析的背景（渐变）上的对比度。
+**自 2026-09-30 起仍没有任何自动化手段覆盖**：屏幕阅读器**实测**播报（`aria-live` 的存在、
+内容落位与 `role="alert"` 由单测 + 源码门禁钉住，但**真正读没读出来、何时读**只能靠辅助技术人工验证）、
+axe 无法解析的背景（渐变）上的对比度。
 **已经覆盖的**：渲染态 WCAG A/AA 规则集（含对比度）→ `e2e/a11y.spec.ts`；
+**组件挂载态的 WCAG A/AA 结构规则 → 2026-09-30 起已覆盖**（`src/a11y_axe.test.ts`，除对比度）；
+**非 `ModalDialog` 模态的焦点陷阱 → 2026-09-30 起已覆盖**（`useFocusTrap` + 四个组件的 `Tab` 用例）；
+**`aria-live` / `role="alert"` 的存在与内容 → 2026-09-30 起已覆盖**（见上表 live region 行）；
 `prefers-reduced-motion` 与 `<html lang>` → `src/a11y_gate.test.ts` 与 `src/i18n/index.test.ts`
 （源码形态 / 行为断言）。即便如此，**没有一条构成审计**——审计需要人工评审 + 辅助技术实测。
 
@@ -309,15 +401,17 @@ const stack: KeydownHandler[] = []
 - ~~在 Playwright E2E 里跑 `@axe-core/playwright`，覆盖真实浏览器下的对比度与结构规则~~ ✅
   **已于 2026-09-30 完成**：即 [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)
   （4 个界面状态 + 1 条有效性自检，见 §5.2；CI 由既有 `e2e-playwright.yml` 覆盖）；
-- 引入 `vitest-axe` 对组件测试**挂载后的 DOM** 做规则集扫描（能与现有 happy-dom 测试并列跑）——
-  **仍未做**。与 E2E 版互补：组件级能覆盖 E2E 到不了的边界态，但 happy-dom 不做级联 / 布局，
-  判不了对比度，只能判结构规则；
+- ~~引入 `vitest-axe` 对组件测试**挂载后的 DOM** 做规则集扫描（能与现有 happy-dom 测试并列跑）~~ ✅
+  **已于 2026-09-30 完成**（ROADMAP §三 #17④）：即 [`apps/web/src/a11y_axe.test.ts`](../apps/web/src/a11y_axe.test.ts)
+  （`vitest-axe` **仅 devDependency**，`dependencies` 仍只有 `vue`，不违 ADR-004）。与 E2E 版互补：
+  组件级覆盖 E2E 到不了的边界态（对话框打开、toast 堆叠、列表带选中行）；happy-dom 不做级联 / 布局，
+  故该文件**显式关掉 `color-contrast`**，只判结构规则——对比度仍由 `e2e/a11y.spec.ts` 与 §5.5 负责。
 - ~~增加一条针对 `prefers-reduced-motion` 的样式断言~~ ✅ **已于 2026-09-29 完成**：
   即 `src/a11y_gate.test.ts`（同时钉住 `textarea:focus-visible`）。
 
-> `vitest-axe` 与下节的实现类改进项已于 **2026-09-30** 按两源分工登记
-> [`ROADMAP.md`](ROADMAP.md) §三 **#17**（候选 ⬜ 未排期，唯一来源在该表）——本节只保留选项说明，
-> 不再作为待办清单。
+> `vitest-axe` 与下节的实现类改进项曾于 **2026-09-30** 按两源分工登记 [`ROADMAP.md`](ROADMAP.md)
+> §三 **#17**；**同日已全部落地并按 §六 第 1 条移出转空号**（证据 [`FEATURES.md`](FEATURES.md) **§BM**）
+> ——本节只保留选项说明，不再作为待办清单。
 
 ### 5.4 改进项（与本文件 §4 一一对应）
 
@@ -327,9 +421,9 @@ const stack: KeydownHandler[] = []
 | ~~高~~ | ~~让 `<html lang>` 跟随界面语言~~ ✅ 2026-09-29 完成（#67①） |
 | ~~低~~ | ~~把 `textarea` 纳入 `:focus-visible` 规则~~ ✅ 2026-09-29 完成（#67③） |
 | ~~低~~ | ~~补对比度核查记录~~ ✅ 2026-09-30 完成（§5.5 静态记录，含如实标注的不达标组合） |
-| ~~中~~ | ~~引入自动化 a11y 扫描~~ ✅ 2026-09-30 完成 Playwright + axe 侧（`e2e/a11y.spec.ts`）；`vitest-axe` 组件侧仍属下方「中」项 |
-| 中 | 焦点陷阱提取为可复用组合式函数、覆盖其余三个模态；`aria-live` 补测试断言并把「操作成功 / 失败」统一纳入 live region；`vitest-axe` 组件级扫描 → **登记 [`ROADMAP.md`](ROADMAP.md) §三 #17（候选 ⬜，唯一来源）** |
-| 低 | ~~对比度修色：`--ok` / `--danger`~~ ✅ 2026-09-30 完成（`--ok` 2.55→4.95、`--danger` 4.41→5.91，token 公式值；修色由 axe 扫描驱动，见 §5.5）；**剩余**：浅色 `--muted` / `--primary` / `--placeholder` 与 `--brand` 渐变白字（axe 覆盖不到，理由见 §5.5）；数据表 `caption` / 选中态语义；主要表单控件可见 `<label>`；RTL 支持；组织一次正式审计（含辅助技术实测）→ 同上登记 [`ROADMAP.md`](ROADMAP.md) §三 #17 |
+| ~~中~~ | ~~引入自动化 a11y 扫描~~ ✅ 2026-09-30 完成 **两侧**：Playwright + axe 整页侧（`e2e/a11y.spec.ts`）与 vitest-axe 组件侧（`src/a11y_axe.test.ts`），见 §5.2 |
+| 中 | ~~焦点陷阱提取为可复用组合式函数、覆盖其余三个模态~~ ✅ 2026-09-30 完成（`useFocusTrap.ts`，见 §2.2）；~~`aria-live` 补测试断言并把「操作成功 / 失败」统一纳入 live region~~ ✅ 2026-09-30 完成（见 §1.4）；~~`vitest-axe` 组件级扫描~~ ✅ 2026-09-30 完成（`src/a11y_axe.test.ts`，见 §5.2 与 §4 第 2 条） |
+| 低 | ~~对比度修色：`--ok` / `--danger`~~ ✅ 2026-09-30 完成（`--ok` 2.55→4.95、`--danger` 4.41→5.91，token 公式值；修色由 axe 扫描驱动，见 §5.5）；**剩余**浅色 `--muted` / `--primary` / `--placeholder` 与 `--brand` 渐变白字、深色 `--danger` / `--placeholder` / `--brand` → ✅ **2026-09-30 修色收尾完成**，§5.5 现为 **13 行、双主题各 0 行低于 AA**（含 `--brand` 拆出 `--brand-mark-*` 供 header logo，见 §5.5 结论）；~~数据表 `caption` / 选中态语义；主要表单控件可见 `<label>`~~ ✅ 2026-09-30 完成（见 §1.6）；RTL 支持；组织一次正式审计（含辅助技术实测）——**两项本就不在 #17 范围内**（原行文「按需另行立项」），仍列本节 §4 已知限制，需要时另行登记 |
 
 > 在正式审计之前，所有文档都**不得**声称任何 WCAG 合规等级（见 §4 第 1 条）。
 
@@ -349,22 +443,31 @@ const stack: KeydownHandler[] = []
 |---|---|---|---|
 | `--text` on `--bg` | 13.86 | 15.98 | 双主题达标 |
 | `--text` on `--panel` | 14.71 | 14.62 | 双主题达标 |
-| `--muted` on `--bg` | 4.44 | 7.21 | 浅色**差 0.06 未达 AA**（>3:1）；深色达标 |
-| `--muted` on `--panel` | 4.71 | 6.60 | 双主题达标 |
-| `--primary` on `--panel`（链接 / 描边按钮文字） | 3.21 | 7.80 | 浅色**未达 AA**（>3:1）；深色达标 |
-| `--primary` on `--bg` | 3.02 | 8.52 | 同上 |
-| `--placeholder` on `--input-bg` | 2.58 | 3.81 | 浅色 **<3:1**；深色仅达 3:1 档 |
+| `--muted` on `--bg` | 4.57 | 7.21 | 双主题达标（浅色修色 `#64786f`→`#62766d`：4.44→4.57） |
+| `--muted` on `--panel` | 4.85 | 6.60 | 双主题达标 |
+| `--primary` on `--panel`（链接 / 描边按钮文字） | 4.85 | 7.80 | 双主题达标（浅色修色 `#10a37c`→`#0d8162`：3.21→4.85） |
+| `--primary` on `--bg` | 4.56 | 8.52 | 双主题达标（同上：3.02→4.56） |
+| `--placeholder` on `--input-bg` | 4.54 | 4.54 | 双主题达标（浅 `#8aa89a`→`#657b71`：2.58→4.54；深 `#5f7a6d`→`#6e867a`：3.81→4.54） |
 | `--tag-text` on `--tag-bg` | 5.94 | 7.58 | 双主题达标 |
-| `--danger` on `--danger-bg` | **5.91** ✅ | 4.25 | 浅色已修（2026-09-30）达标；深色略低于 AA（>3:1） |
-| `--ok` on `--ok-bg` | **4.95** ✅ | 7.07 | 浅色已修（2026-09-30）达标；深色达标 |
-| 白字 on `--brand` 渐变（深端 `--brand-to`） | 4.23 | 4.23 | 略低于 AA；**浅端 `--brand-from` 仅 2.37**（主按钮 / 标题白字最弱点） |
+| `--danger` on `--danger-bg` | **5.91** ✅ | 4.54 | 双主题达标（浅色 2026-09-30 已修；深色 `#ef4444`→`#f05050`：4.25→4.54） |
+| `--ok` on `--ok-bg` | **4.95** ✅ | 7.08 | 双主题达标（浅色 2026-09-30 已修） |
+| `--brand-mark-from` on `--bg`（header logo 渐变文字 · 浅端） | 4.56 | 7.87 | 双主题达标（**深色底回亮值 `#2dbd98`**，见下方 token 说明） |
+| `--brand-mark-to` on `--bg`（header logo 渐变文字 · 深端） | 4.52 | 4.54 | 双主题达标 |
+| 白字 on `--brand` 渐变（深端 `--brand-to`） | 4.80 | 4.80 | 双主题达标；浅端 `--brand-from` 4.84（原 2.37 / 4.23，渐变两端已加深） |
 
-> **结论（2026-09-30 修色后）**：`--ok` / `--danger` 浅色两组已修至达标（token 公式值 4.95 / 5.91）。
-> 本表共 **11 行**；浅色主题 **5 行**低于 AA——`--muted` on `--bg` 4.44（差 0.06）、`--primary` on
-> `--panel` 3.21、`--primary` on `--bg` 3.02、`--placeholder` on `--input-bg` 2.58、`--brand` 渐变
-> 白字 4.23（浅端 2.37，最弱，主按钮 / 标题）；深色主题 **3 行**低于 AA——`--danger` 4.25、
-> `--placeholder` 3.81、`--brand` 渐变白字 4.23（brand token 不随主题变，两列同值）。
-> **为什么 axe 全绿而这几组仍在**：`--brand` 是 `background-image` 渐变（axe 无法解析其上的白字），
+> **结论（2026-09-30 修色收尾后）**：本表共 **13 行**；浅色主题 **0 行**低于 AA；
+> 深色主题 **0 行**低于 AA。
+> 本轮把 §5.4「剩余」清单里的 6 组**全部修到 ≥4.5**（token 公式值）：
+> `--muted` 4.44→4.57、`--primary` 3.21 / 3.02→4.85 / 4.56、`--placeholder` 浅 2.58→4.54、
+> `--placeholder` 深 3.81→4.54、`--danger` 深 4.25→4.54、白字 on `--brand` 2.37 / 4.23→4.84 / 4.80。
+> **`--brand` 的拆分**：该渐变同时是「主按钮 / 激活 tab / 拖放区图标的**白字背景**」与
+> 「header logo 的**渐变文字**」——两个方向的对比度要求相反（背景要暗、文字在深色底上要亮）。
+> 故 `:root` 把 `--brand-from/to` 加深到白字达标，并新增 `--brand-mark-from/to` 专供 logo 文字：
+> 浅色沿用加深值（在 `--bg` 上 4.56 / 4.52），**深色块里回亮值**（`#2dbd98` / `#138e69`，
+> 在 `--bg` 上 7.87 / 4.54）——否则「为白字加深」会把深色主题 logo 反拖到 4.1:1。
+> **为什么此前 axe 全绿而这些组合仍在**：`--brand` 是 `background-image` 渐变（axe 无法解析其上的白字），
 > `--placeholder` 是 placeholder 文本（axe 不判该规则），`--muted` / `--primary` 在被扫描的四个状态里
-> 没有以「小字正文」形态出现——**扫描通过 ≠ 全站达标**。本仓库**不声称 WCAG 合规**（§4 第 1 条），
-> 剩余修色统一归入 [`ROADMAP.md`](ROADMAP.md) §三 #17「可访问性补强」的对比度修色子项。
+> 没有以「小字正文」形态出现——**扫描通过 ≠ 全站达标**。本仓库**不声称 WCAG 合规**（§4 第 1 条）：
+> 表内全绿只代表**这些 token 配对**达标，仍不含渐变中间色、图片、阴影与组件临时配色。
+
+

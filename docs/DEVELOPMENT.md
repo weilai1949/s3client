@@ -92,11 +92,15 @@ make rust-audit
 > `doc_number_gate_test.go`（md 叙述性数字）、`config_doc_gate_test.go`（配置 SSOT
 > [`CONFIGURATION.md`](CONFIGURATION.md) ⇔ `internal/config` 读取的 `S3C_*` 变量全量）、
 > `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）；
-> 前端半边落点是三份：`apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 /
+> 前端半边落点是四份：`apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 /
 > 孤儿模块**，引用计数走 **TS AST**——注释与字符串字面量不算引用）、
 > `apps/web/src/a11y_gate.test.ts`（**源码形态**：`:focus-visible` 列表必须含 `textarea`、
 > `prefers-reduced-motion` 媒体查询必须关闭 animation / transition）、
-> `apps/web/src/vite_env_guard.test.ts`（宿主 `NODE_ENV` 隔离）。
+> `apps/web/src/vite_env_guard.test.ts`（宿主 `NODE_ENV` 隔离）、
+> `apps/web/src/api/generated.gate.test.ts`（**生成物新鲜度**：`pnpm gen:api --check` 直接跑仓库自己的
+> `scripts/gen-api.mjs`，[`api/openapi.json`](api/openapi.json) 与提交的 `src/api/schema.d.ts` /
+> `src/api/operations.ts` 不逐字节一致即红灯，另有结构自检防「空表永远绿」——改 spec 忘了重跑
+> `pnpm gen:api` 就是红的；见 ROADMAP §三 3.2 #10 / FEATURES §BN）。
 > 各文件的**断言范围与残留**写在文件头。
 >
 > **门禁自身也用 AST 而非裸正则**：判断「handler 是否解码请求体」「是否读取 path 参数」、
@@ -120,7 +124,11 @@ make rust-audit
 > 必填字段 + `Expires` 未过期）、`en_docs_gate_test.go`（[`en/README.md`](en/README.md) 每篇须声明中文
 > SSOT 来源与 revision，且可从英文导航到达）、`agent_evals_gate_test.go`（黄金任务集机器可读规格
 > [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) 与
-> [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致）。前端**渲染态**无障碍由
+> [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致）。追加两道**文档维护自身**的门禁
+> （2026-09-30，ROADMAP §三 3.2 #19 落地）：`llms_size_gate_test.go`（[`../llms.txt`](../llms.txt)
+> 里目标 >200 KB 的链接必须就地标 `⚠️ 超大` 体量预警，防 LLM 按索引整读被截断）、
+> `doc_review_gate_test.go`（本文件 §4「文档登记表」带「N 个月」周期的行超过
+> `最后复审 + 周期` 即红灯——复审从「建议值」升级为**有机械提醒**，见该节说明）。前端**渲染态**无障碍由
 > [`../apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)（axe，4 状态 + 1 条有效性自检）承担，
 > 见 [`accessibility.md`](accessibility.md) §5.2。
 
@@ -255,8 +263,11 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 **文档登记表**（2026-09-29 建立）：
 
 > - **owner**：全仓 owner 均为单人维护者 **@weilai1949**。新增协作者 / 转移所有权时同 PR 改本表。
-> - **复审周期**：按文档性质给出的**建议值**（证据等级「建议值」，**未在 CI 中强制**，
->   也没有任何自动化提醒——它只说明「多久不看就该有人看」，不是 SLA）。
+> - **复审周期**：按文档性质给出的**建议值**（证据等级「建议值」——**带「N 个月」的到期由
+>   [`doc_review_gate_test.go`](../apps/server/doc_review_gate_test.go) 机械检查**：超过
+>   `最后复审 + 周期` 即红灯点名该行，复核后把日期更新为复核当天即绿；无数值周期的口径
+>   （「每个版本发版前」「由门禁强制」「每次归档操作时同 PR」）仍靠人工。它只说明
+>   「多久不看就该有人看」，不是 SLA）。
 > - **最后复审**：一律填 `登记时基线（2026-09-29）`——本表建立时**没有**一份文档有过可核实的
 >   「逐份复审」记录，因此**不追溯编造**历史日期。只有真正做过一次逐份复核（不只是改错别字 /
 >   跑门禁），才把该行更新为**那天的日期**。本列因此是「自本表建立起是否被复审过」的凭据，
@@ -280,10 +291,12 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)（**脚本自动生成，勿手工编辑**） | 依赖增删改时同 PR 重新生成 | 登记时基线（2026-09-29） |
 | [`docs/decisions/`](decisions/index.md)（ADR + 模板） | 决策变化 / 新增 ADR 时同 PR | 登记时基线（2026-09-29） |
 | [`docs/archive/`](archive/index.md)（冻结归档 + 索引） | 每次归档操作时同 PR | 登记时基线（2026-09-29） |
+| [`docs/archive/incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md)（首份已填写事故复盘，**冻结件**） | 不复审——归档 = 冻结，不回写、不改写 | 2026-09-30（归档登记） |
 | [`en/README.md`](en/README.md) · [`en/architecture.md`](en/architecture.md)（英文快照） | 3 个月，或中文源文档变更时同 PR | 登记时基线（2026-09-30） |
 | [`../.well-known/security.txt`](../.well-known/security.txt)（机器可读漏洞披露） | 到期前续期（≤ 12 个月，门禁强制） | 登记时基线（2026-09-30） |
 | [`../CITATION.cff`](../CITATION.cff)（工具固定名：GitHub 引用元数据） | 6 个月，或作者 / 许可变化时同 PR | 登记时基线（2026-09-30） |
 | [`../deploy/grafana/`](../deploy/grafana/) · [`../scripts/evals/`](../scripts/evals/)（机器可读运维 / 评测资产） | 由门禁强制，无需人肉周期 | 登记时基线（2026-09-30） |
+| [`handoff-20260930.md`](handoff-20260930.md)（进行中批次**时点快照**，非 SSOT） | 批次收口时同 PR 归档冻结（无固定周期） | 登记时基线（2026-09-30） |
 
 落地要求：
 
@@ -297,11 +310,11 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有**工具固定名**留在根目录：`LICENSE` 与 `CITATION.cff`（GitHub 的 cite 功能只认根目录，2026-09-30 登记）。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
   - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）、`CITATION.cff`（GitHub 引用元数据，只认根目录）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
-  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。
+  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。**时点性批次交接快照**同用小写（先例 `assessment.md`，结论绑定日期、批次收口后归档）：`handoff-20260930.md`。
   - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
   - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。
 - **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`docs/en/`、`apps/server/`、`apps/web/`）。**本条只约束目录名**（文件名规则见上一条）——目录不存在「约定大写」这一说，大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。`docs/en/` 为英文文档目录（当前唯一文件 [`en/index.md`](en/index.md)）：中文为 SSOT、英文页是翻译快照，根 `README.md` 变更时同 PR 同步。
-- **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照、已填写的事故复盘等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
+- **归档**：时点性文档（综合评估、分支 / 版本审查、迁移对照、已填写的事故复盘等，结论绑定在某个 commit 或日期上）在结论被后续工作取代后，用 `git mv` 移入 [`docs/archive/`](archive/index.md) **冻结**——**不移除、不回写、不改写历史结论**，并在该目录索引登记一行、修正全仓引用。判断标准与操作步骤见 [archive/index.md](archive/index.md)。`decisions/` 的 ADR **不归档、不删除**：决策变化时新写一篇 ADR 引用旧篇并标 `Superseded`。**归档触发规则**：**已填写的事故复盘**（`incident-YYYYMMDD-<短名>.md`）在事件闭环、行动项登记完成后按同一「四步」冻结——首例 [`archive/incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 已于 2026-09-30 执行。**当前无待归档例外**——`assessment.md`（2026-09-16 综合评估）已于 2026-09-24 完成引用收敛并归档至 `docs/archive/`，`review-2026-09-19.md` 已于 2026-09-23 同样归档；归档清单见 [archive/index.md](archive/index.md)。
 - **禁止大小写冲突**：任何两个路径不得仅大小写不同——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。重命名后自检一次全仓。
 
 ### 4.1 Agent 指令文件（`AGENTS.md`）的加载机制

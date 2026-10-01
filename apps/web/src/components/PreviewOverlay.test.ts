@@ -403,4 +403,58 @@ describe('PreviewOverlay', () => {
     expect(w.find('img').attributes('src')).toBe('blob:img')
     expect(w.text()).not.toContain('preview.fail')
   })
+
+  it('打开后焦点移入浮层（下载按钮），关闭后恢复到打开前的元素', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'outside'
+    document.body.appendChild(outside)
+    outside.focus()
+
+    const w = mountOverlay()
+    await w.setProps({ preview: preview({ kind: 'none' }) })
+    await flushPromises()
+    expect(document.activeElement).toBe(actionBtn(w, 'common.download').element)
+
+    await w.setProps({ preview: null })
+    await flushPromises()
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
+  })
+
+  it('Tab 焦点陷阱：首尾回卷、中间不干预，焦点不逃出浮层', async () => {
+    const w = mountOverlay()
+    await w.setProps({ preview: preview({ kind: 'none' }) })
+    await flushPromises()
+    const download = actionBtn(w, 'common.download').element as HTMLElement
+    const close = actionBtn(w, 'common.close').element as HTMLElement
+    expect(document.activeElement).toBe(download)
+
+    // Shift+Tab 在第一个元素上 → 回卷到最后一个
+    let ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(close)
+
+    // Tab 在最后一个元素上 → 回卷到第一个
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(download)
+
+    // Tab 在第一个元素上（不带 shift）→ 透传
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(download)
+
+    // Shift+Tab 在最后一个元素上 → 透传
+    close.focus()
+    ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(close)
+
+    await w.setProps({ preview: null })
+    await flushPromises()
+  })
 })

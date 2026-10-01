@@ -62,11 +62,12 @@ async function saveTags() {
   <div v-if="loading" class="empty" style="padding:20px">{{ t('bucketTags.loading') }}</div>
   <div v-else>
     <table class="tbl">
-      <thead><tr><th style="width:40%">{{ t('bucketTags.colKey') }}</th><th>{{ t('bucketTags.colValue') }}</th><th style="width:60px"></th></tr></thead>
+      <caption class="sr-only">{{ t('bucketTags.tableAria') }}</caption>
+      <thead><tr><th id="bucket-tags-key-h" style="width:40%">{{ t('bucketTags.colKey') }}</th><th id="bucket-tags-val-h">{{ t('bucketTags.colValue') }}</th><th style="width:60px"></th></tr></thead>
       <tbody>
         <tr v-for="(row, i) in tags" :key="row.rowKey">
-          <td><input v-model="row.key" class="mono" placeholder="key" /></td>
-          <td><input v-model="row.value" class="mono" placeholder="value" /></td>
+          <td><input v-model="row.key" class="mono" placeholder="key" aria-labelledby="bucket-tags-key-h" /></td>
+          <td><input v-model="row.value" class="mono" placeholder="value" aria-labelledby="bucket-tags-val-h" /></td>
           <td><button class="btn secondary sm" @click="removeRow(i)">{{ t('common.remove') }}</button></td>
         </tr>
       </tbody>

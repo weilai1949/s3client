@@ -96,6 +96,10 @@ func runServer(ctx context.Context) int {
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
 	// 「复制成功但源未删除」的移动任务（KNOWN_ISSUES #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))
+	// 数据目录用于 /api/metrics 的卷容量（statfs）与关停耗时落盘；
+	// 上一次优雅关停的耗时在启动时载入，使该指标跨进程可读（ROADMAP #18）。
+	h.SetDataDir(cfg.DataDir)
+	h.LoadLastShutdown()
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -135,12 +139,17 @@ func runServer(ctx context.Context) int {
 	}()
 
 	<-ctx.Done()
+	// 关停耗时从收到信号起算，覆盖「取消在册任务 + 等待在途请求」两段
+	// （与日志 "shutting down..." → "shutdown complete" 的时间差同口径）。
+	shutdownStart := time.Now()
 	logger.Info("shutting down...")
 	h.Shutdown()
 	shutdownTimeout := time.Duration(cfg.ShutdownTimeoutSec) * time.Second
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx) // ctx 超时在生产不可达；shutting down 流程已写 INFO。
+	// 落盘后进程即退出，/api/metrics 无法再 scrape 本次值 —— 指标由下次启动载入暴露。
+	h.RecordShutdown(time.Since(shutdownStart))
 	logger.Info("shutdown complete")
 	// goroutine 已记录过 "server error"；此处只决定退出码，不重复刷日志。
 	select {

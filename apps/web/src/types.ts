@@ -1,18 +1,18 @@
+import type { components } from './api/schema'
+
+// ---------------------------------------------------------------------------
+// 与后端共享的实体类型：**直接派生自 spec**（`pnpm gen:api` 生成的 schema.d.ts），
+// 不再手写字段清单（ROADMAP §三 #10，schema-first）。
+//
+// 为什么可行：这 4 个是 `components.schemas` 里的共享 schema，后端有三道门禁逐字段钉住
+//   - `TestOpenAPI_ResponseSchemasMatchDTOs` —— schema 字段集 ⇄ 真实 DTO 字段集双向；
+//   - `TestOpenAPI_AccountSchemaIsAccountView` —— Account 逐字段 + 明确不含 secretKey；
+//   - `TestCommittedOpenAPISpecMatchesRuntime` —— docs/api/openapi.json ⇄ 运行时规范。
+// 于是「后端改字段 → spec 变 → 生成物变 → 这里变 → `vue-tsc` 红」，漂移不再靠人工发现。
+// ---------------------------------------------------------------------------
+
 /** 后端返回的账号视图：不回传 secretKey，secretSet 表示是否已设置密钥。 */
-export interface Account {
-  id: string
-  name: string
-  endpoint: string
-  publicEndpoint?: string
-  region: string
-  accessKey: string
-  secretSet: boolean
-  bucket: string
-  pathStyle: boolean
-  useSSL: boolean
-  createdAt?: string
-  updatedAt?: string
-}
+export type Account = components['schemas']['Account']
 
 /** 新建 / 编辑账号的提交载荷：secretKey 仅用于输入（编辑时留空表示保持不变）。 */
 export interface AccountInput {
@@ -27,21 +27,9 @@ export interface AccountInput {
   useSSL: boolean
 }
 
-export interface ObjectItem {
-  key: string
-  size: number
-  lastModified: string
-  etag: string
-  storageClass?: string
-  isDir: boolean
-}
+export type ObjectItem = components['schemas']['ObjectItem']
 
-export interface ListObjectsResponse {
-  objects: ObjectItem[]
-  commonPrefixes: string[]
-  isTruncated: boolean
-  nextToken: string
-}
+export type ListObjectsResponse = components['schemas']['ListObjectsResp']
 
 export interface PresignResponse {
   method: 'get' | 'put' | 'post'
@@ -52,12 +40,8 @@ export interface PresignResponse {
   expiresIn: number
 }
 
-export interface BucketItem {
-  name: string
-  creationDate: string
-}
+export type BucketItem = components['schemas']['Bucket']
 
-/** HeadObject 返回的对象元数据详情。 */
 export interface ObjectMeta {
   key: string
   size: number

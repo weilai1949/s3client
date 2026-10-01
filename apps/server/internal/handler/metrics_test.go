@@ -1,18 +1,22 @@
 package handler
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/weilai1949/s3clinet/apps/server/internal/model"
 	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3clinet/apps/server/internal/service"
 	"github.com/weilai1949/s3clinet/apps/server/internal/store"
 )
 
@@ -23,7 +27,10 @@ func TestMetricsEndpointExposed(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// 显式开启 metrics 暴露。
-	h := New(st, logger, t.TempDir(), nil, "", "test", true, false).Routes()
+	handler := New(st, logger, t.TempDir(), nil, "", "test", true, false)
+	// 卷容量指标取 S3C_DATA_DIR 的 statfs 结果：不设目录则该序列不输出（口径见下）。
+	handler.SetDataDir(t.TempDir())
+	h := handler.Routes()
 	// 触发一次请求以累计计数
 	rr0 := httptest.NewRecorder()
 	h.ServeHTTP(rr0, httptest.NewRequest(http.MethodGet, "/api/health", nil))
@@ -40,6 +47,10 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		"s3c_zip_partial_failures_total", "s3c_zip_failed_keys_total", "s3c_zip_failed_total",
 		// R8：存储硬失败与 SSRF 生效策略的可观测面。
 		"s3c_store_up", "s3c_ssrf_deny_private",
+		// ROADMAP #18 补齐的五个观测缺口（2026-09-30）。
+		"s3c_store_write_failures_total", "s3c_jobs_active",
+		"s3c_http_request_duration_seconds_bucket", "s3c_http_request_duration_seconds_sum",
+		"s3c_volume_size_bytes", "s3c_volume_free_bytes", "s3c_last_shutdown_duration_seconds",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
@@ -208,5 +219,276 @@ func TestMetricsEndpointHiddenByDefault(t *testing.T) {
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status=%d, want 404", rr.Code)
+	}
+}
+
+// ---- ROADMAP #18：五个缺失指标（2026-09-30 补齐，观测缺口声明同步撤除） ----
+
+// metricsBody 请求一次 /api/metrics 并返回正文（要求 200）。
+func metricsBody(t *testing.T, h http.Handler) string {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/metrics = %d, want 200: %s", rr.Code, rr.Body.String())
+	}
+	return rr.Body.String()
+}
+
+// metricValue 取 Prometheus 文本里**无标签**序列的当前值；序列缺失返回 found=false。
+func metricValue(t *testing.T, body, name string) (v float64, found bool) {
+	t.Helper()
+	m := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(name) + ` (\S+)$`).FindStringSubmatch(body)
+	if m == nil {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(m[1], 64)
+	if err != nil {
+		t.Fatalf("%s 的取值 %q 不是数字：%v", name, m[1], err)
+	}
+	return v, true
+}
+
+// mustMetric 要求序列存在并返回其值（缺失即 Fatal）。
+func mustMetric(t *testing.T, body, name string) float64 {
+	t.Helper()
+	v, found := metricValue(t, body, name)
+	if !found {
+		t.Fatalf("缺少指标 %s：\n%s", name, body)
+	}
+	return v
+}
+
+// httpDurBucketRe 匹配 HTTP 延迟直方图的桶行（保持输出顺序）。
+var httpDurBucketRe = regexp.MustCompile(`(?m)^s3c_http_request_duration_seconds_bucket\{le="([^"]+)"\} (\d+)$`)
+
+// parseHTTPDuration 校验 HTTP 延迟直方图满足 Prometheus 契约（le 单调不减、
+// `le="+Inf"` 是最后一个桶且等于 `_count`），返回 `_count` / `_sum` / `s3c_http_requests_total`。
+func parseHTTPDuration(t *testing.T, body string) (count, sum, total float64) {
+	t.Helper()
+	matches := httpDurBucketRe.FindAllStringSubmatch(body, -1)
+	if len(matches) < 2 {
+		t.Fatalf("未解析到 s3c_http_request_duration_seconds 的桶（指标缺失或口径失效）：\n%s", body)
+	}
+	var prev float64
+	var inf float64
+	for i, m := range matches {
+		n, err := strconv.ParseFloat(m[2], 64)
+		if err != nil {
+			t.Fatalf("解析桶计数 %q: %v", m[2], err)
+		}
+		if n < prev {
+			t.Errorf("le=%s 的桶计数 %g < 前一个 %g：违反 le 单调不减", m[1], n, prev)
+		}
+		prev = n
+		if m[1] == "+Inf" {
+			if i != len(matches)-1 {
+				t.Errorf(`le="+Inf" 出现在第 %d/%d 个桶（必须是最后一个）`, i+1, len(matches))
+			}
+			inf = n
+		}
+	}
+	if matches[len(matches)-1][1] != "+Inf" {
+		t.Fatalf("最后一个桶是 le=%q，应为 +Inf", matches[len(matches)-1][1])
+	}
+	count = mustMetric(t, body, "s3c_http_request_duration_seconds_count")
+	sum = mustMetric(t, body, "s3c_http_request_duration_seconds_sum")
+	total = mustMetric(t, body, "s3c_http_requests_total")
+	if inf != count {
+		t.Errorf(`le="+Inf" 桶 = %g 但 _count = %g：Prometheus 要求两者相等`, inf, count)
+	}
+	if count != total {
+		t.Errorf("_count = %g 但 s3c_http_requests_total = %g：两者必须同一次请求同步增长", count, total)
+	}
+	return count, sum, total
+}
+
+// TestMetricsHTTPDurationHistogram ROADMAP #18 指标③：HTTP 请求延迟直方图。
+// 每个请求都要进桶并累加 _sum / _count，且与 s3c_http_requests_total 恒等。
+func TestMetricsHTTPDurationHistogram(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := New(st, logger, t.TempDir(), nil, "", "test", true, false).Routes()
+
+	c1, sum1, _ := parseHTTPDuration(t, metricsBody(t, h))
+	for i := 0; i < 3; i++ {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/health", nil))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("health = %d, want 200", rr.Code)
+		}
+	}
+	c2, sum2, _ := parseHTTPDuration(t, metricsBody(t, h))
+	// 3 次 health + 中间那次 metrics scrape 本身也计入（scrape 的响应先写出、后计数）。
+	if c2-c1 < 3 {
+		t.Errorf("_count 增量 = %g，至少应有 3 次 health 请求入桶", c2-c1)
+	}
+	if sum2 <= sum1 {
+		t.Errorf("_sum 未随请求增长：%g -> %g", sum1, sum2)
+	}
+}
+
+// TestMetricsJobsActive ROADMAP #18 指标②：在册（未终结）异步任务数。
+// 上限语义与 JobRegistry.TryCreate 相同——只数未终结任务，故任务终态后必须回落。
+func TestMetricsJobsActive(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := New(st, logger, t.TempDir(), nil, "", "test", true, false)
+	t.Cleanup(handler.Shutdown)
+	h := handler.Routes()
+
+	if v := mustMetric(t, metricsBody(t, h), "s3c_jobs_active"); v != 0 {
+		t.Fatalf("无在册任务时 s3c_jobs_active = %g, want 0", v)
+	}
+	_, cancel := context.WithCancel(context.Background())
+	job, err := handler.migrateJobs.TryCreate(2, cancel)
+	if err != nil {
+		t.Fatalf("注册测试任务: %v", err)
+	}
+	if v := mustMetric(t, metricsBody(t, h), "s3c_jobs_active"); v != 1 {
+		t.Errorf("在册 1 个任务时 s3c_jobs_active = %g, want 1", v)
+	}
+	job.Finish(service.JobResult{Migrated: 2}, service.JobStatusDone)
+	if v := mustMetric(t, metricsBody(t, h), "s3c_jobs_active"); v != 0 {
+		t.Errorf("任务进入终态后 s3c_jobs_active = %g, want 0（终态任务不占在册名额）", v)
+	}
+}
+
+// TestMetricsVolumeCapacity ROADMAP #18 指标④：卷 / 磁盘容量取自 S3C_DATA_DIR 的 statfs。
+// 未配置目录或 statfs 失败时**不输出**该序列（没有可信数据就不发序列，不用哨兵值冒充）。
+func TestMetricsVolumeCapacity(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// ① 未 SetDataDir：容量序列缺失。
+	noDir := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	noDirBody := metricsBody(t, noDir.Routes())
+	if _, ok := metricValue(t, noDirBody, "s3c_volume_size_bytes"); ok {
+		t.Errorf("未配置数据目录时不应输出 s3c_volume_size_bytes：\n%s", noDirBody)
+	}
+
+	// ② 配置真实目录：总容量 > 0 且可用 ≤ 总量。
+	okHandler := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	okHandler.SetDataDir(t.TempDir())
+	okBody := metricsBody(t, okHandler.Routes())
+	size := mustMetric(t, okBody, "s3c_volume_size_bytes")
+	free := mustMetric(t, okBody, "s3c_volume_free_bytes")
+	if size <= 0 {
+		t.Errorf("s3c_volume_size_bytes = %g, want > 0：\n%s", size, okBody)
+	}
+	if free < 0 || free > size {
+		t.Errorf("s3c_volume_free_bytes = %g，应在 [0, %g] 内", free, size)
+	}
+
+	// ③ 目录不存在：statfs 失败 → 序列缺失（而非 0）。
+	missing := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	missing.SetDataDir(filepath.Join(t.TempDir(), "does-not-exist"))
+	missingBody := metricsBody(t, missing.Routes())
+	if _, ok := metricValue(t, missingBody, "s3c_volume_size_bytes"); ok {
+		t.Errorf("statfs 失败时不应输出容量序列：\n%s", missingBody)
+	}
+}
+
+// TestMetricsStoreWriteFailures ROADMAP #18 指标①：账号库写入失败次数。
+// 只统计**真实写入失败**（落盘 / SQL 写失败，写操作已回滚），成功写入与业务性拒绝
+// （重复 ID、NotFound）不计数——否则告警会被客户端的 4xx 触发。
+func TestMetricsStoreWriteFailures(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "accounts.json")
+	st, err := store.New(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h := New(st, logger, t.TempDir(), nil, "", "test", true, false).Routes()
+
+	before := mustMetric(t, metricsBody(t, h), "s3c_store_write_failures_total")
+	if _, err := st.Create(&model.Account{Name: "ok"}); err != nil {
+		t.Fatalf("正常写入: %v", err)
+	}
+	afterOK := mustMetric(t, metricsBody(t, h), "s3c_store_write_failures_total")
+	if afterOK != before {
+		t.Errorf("成功写入后计数 %g -> %g，不应计数", before, afterOK)
+	}
+
+	// 落盘失败注入：把目标文件换成目录 → rename 失败 → 写操作回滚并计数。
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(p, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Create(&model.Account{Name: "boom"}); err == nil {
+		t.Fatal("目标路径是目录时 Create 必须失败")
+	}
+	afterFail := mustMetric(t, metricsBody(t, h), "s3c_store_write_failures_total")
+	if afterFail <= afterOK {
+		t.Errorf("写入失败后计数 %g -> %g，应递增", afterOK, afterFail)
+	}
+}
+
+// TestMetricsLastShutdownDuration ROADMAP #18 指标⑤：优雅关停耗时。
+// 关停发生在进程退出前，指标无法被进程内 scrape 捕获 → 落盘到 data/shutdown.json，
+// 下一次启动载入后作为「最近一次关停耗时」暴露（跨重启可读，口径见 OPERATIONS §3.2）。
+func TestMetricsLastShutdownDuration(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// ① 记录 → 落盘 → 新进程载入 → 指标可读。
+	dir := t.TempDir()
+	rec := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	rec.SetDataDir(dir)
+	rec.RecordShutdown(150 * time.Millisecond)
+	raw, err := os.ReadFile(filepath.Join(dir, "shutdown.json"))
+	if err != nil {
+		t.Fatalf("关停耗时未落盘: %v", err)
+	}
+	if !strings.Contains(string(raw), `"durationUs":150000`) {
+		t.Errorf("shutdown.json = %s，应记录 150000µs（150ms）", raw)
+	}
+	next := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	next.SetDataDir(dir)
+	next.LoadLastShutdown()
+	if v := mustMetric(t, metricsBody(t, next.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0.15 {
+		t.Errorf("s3c_last_shutdown_duration_seconds = %g, want 0.15", v)
+	}
+
+	// ② 无历史记录（首次启动）→ 恒为 0。
+	fresh := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	fresh.SetDataDir(t.TempDir())
+	fresh.LoadLastShutdown()
+	if v := mustMetric(t, metricsBody(t, fresh.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0 {
+		t.Errorf("无关停记录时 s3c_last_shutdown_duration_seconds = %g, want 0", v)
+	}
+
+	// ③ 未 SetDataDir：只更新内存值，不得把文件写进当前工作目录。
+	noDir := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	noDir.RecordShutdown(10 * time.Millisecond)
+	if _, err := os.Stat("shutdown.json"); !os.IsNotExist(err) {
+		t.Errorf("未配置数据目录时不应写 shutdown.json（当前工作目录残留），stat err=%v", err)
+	}
+	if v := mustMetric(t, metricsBody(t, noDir.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0.01 {
+		t.Errorf("内存态关停耗时 = %g, want 0.01", v)
+	}
+	// 同样未设置目录时载入是空操作（不会去读相对当前工作目录的文件）。
+	noDir.LoadLastShutdown()
+	if v := mustMetric(t, metricsBody(t, noDir.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0.01 {
+		t.Errorf("载入后内存值被清掉 = %g, want 0.01", v)
+	}
+
+	// ④ 文件损坏：回退 0 而不是带着半截值启动（关停耗时绝不阻断启动）。
+	corruptDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(corruptDir, "shutdown.json"), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
+	corrupt.SetDataDir(corruptDir)
+	corrupt.LoadLastShutdown()
+	if v := mustMetric(t, metricsBody(t, corrupt.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0 {
+		t.Errorf("shutdown.json 损坏时应读作 0，got %g", v)
 	}
 }

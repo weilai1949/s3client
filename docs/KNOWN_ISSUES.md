@@ -14,13 +14,16 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-09-30（**#69 已闭环并移除**：CHANGELOG 顶部新增「tag ↔ 版本段对应关系（唯一台账）」，
+> 最后更新：2026-09-30（**#70 已闭环并移除**：`NormalizeEndpoint` 幂等修复——推翻原 ➖ 决策、
+> 按登记内写死的修法（先切分 host/path，再对 host `TrimSpace`）落地，TDD 先红后绿 + 变异验证 +
+> 两目标各 10s 有界 fuzz PASS，证据见 [`FEATURES.md`](FEATURES.md) §BK。同日 **#69 已闭环并移除**：
+> CHANGELOG 顶部新增「tag ↔ 版本段对应关系（唯一台账）」，
 > 3 个时间戳 tag 定性为**同日内部快照**（打在 feat/fix 提交上、非 release 提交、当日被 rc0/rc1 取代，
 > 无独立版本段）；反向补齐 5 个「有段无 tag」的历史段登记；`[1.0.0]` 段日期按 tag 事实修正为
 > 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go` +
@@ -56,7 +59,6 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动 |
-| 70 | `NormalizeEndpoint` 对含尾随空白的输入**不幂等**（新增 fuzz 目标实测发现，非安全漏洞） | §BG 原生 fuzz（2026-09-30） | ➖ | **已决策维持现状并保留回归种子**：`NormalizeEndpoint("00  /", false)` 返回 `http://00  `（尾随空格），再次归一化得 `http://00`——根因是 `strings.TrimRight(rest, "/")` 在 host/path 切分**之前**执行，而 `TrimSpace` 只在入口做一次。**影响面**：`ValidateEndpoint` 对该输出 `url.Parse` 失败 → fail-closed；纯路径空白无实际影响；仅 `SameEndpoint` 比较可能出现外观差异。两个退化输入已作为**回归种子**写入 `apps/server/internal/s3wrap/ssrf_fuzz_test.go`（fuzz 只对非退化输入断言幂等）。若将来要修：先切分 host/path，再对 host `TrimSpace`。同轮另观察到 `NormalizeEndpoint("//0://0")` 会产出非法 scheme（`url.Parse` 视为 protocol-relative），同样不可利用，未单独立项 |
 | 71 | 仓库 slug 命名分裂：`s3clinet` 与 `s3client` 并存 | §BG（2026-09-30） | ➖ | `git remote` / [`.well-known/security.txt`](../.well-known/security.txt) / [`CITATION.cff`](../CITATION.cff) 用 `github.com/weilai1949/s3client`，而 `apps/server/go.mod` 的模块路径、[`.github/SECURITY.md`](../.github/SECURITY.md)、[`.github/ISSUE_TEMPLATE/config.yml`](../.github/ISSUE_TEMPLATE/config.yml) 等仍用 `s3clinet`；实测 `s3clinet` 301 重定向到 `s3client`，两者均可解析。**改模块路径 = 全仓 import 路径重命名**，与本次文档补强正交，故维持现状并登记 |
 
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
@@ -90,8 +92,8 @@
 > 排得进流水线；**实跑才暴露出**默认排除路径漏掉 Go/Vitest 测试约定与生成的 `coverage/` 资产，
 > 首跑 66 项 → 补齐后 10 项，逐条 triage 见 [`threat-model.md`](threat-model.md) §7。）
 > 证据见 [`FEATURES.md`](FEATURES.md) §AQ 与 [`DEVELOPMENT.md`](DEVELOPMENT.md) §3。
-> 故本表当前为：**#63 / #70 / #71 均已决策维持现状（➖）**；**产品功能缺陷仍为零**，外部阻塞见 §一 #25。
-> **#70 / #71 为 2026-09-30「AI 时代文档补强」批次新增**（见 [`FEATURES.md`](FEATURES.md) §BG）：#70 由本批新增的 fuzz 目标实测发现（不可利用，已留回归种子）；#71 为登记既有命名分裂，不是本批引入。
+> 故本表当前为：**#63 / #71 已决策维持现状（➖）**；**产品功能缺陷仍为零**，外部阻塞见 §一 #25。
+> **#70 / #71 为 2026-09-30「AI 时代文档补强」批次新增**（见 [`FEATURES.md`](FEATURES.md) §BG）：#70 由本批新增的 fuzz 目标实测发现（不可利用，已留回归种子），**已于同日闭环并移除**（推翻 ➖ 决策、修复证据见 [`FEATURES.md`](FEATURES.md) §BK）；#71 为登记既有命名分裂，不是本批引入。
 
 ## 三、分类归零凭证
 
@@ -130,7 +132,7 @@
 | #67 | **已闭环移除** | 前端可访问性三处：`applyDocumentLang()` 同步 `<html lang>` / `@media (prefers-reduced-motion: reduce)` 关闭动效 / `textarea` 纳入统一 `:focus-visible` 列表，2026-09-29 闭环（[FEATURES.md](FEATURES.md) §AP） |
 | #68 | **已闭环移除** | nginx `log_format main` 补 `rid=$http_x_request_id req=$upstream_http_x_request_id`，跨层日志可关联，2026-09-29 闭环（[FEATURES.md](FEATURES.md) §AP） |
 | #69 | **已闭环移除** | CHANGELOG 与 git tag 断裂：顶部新增「tag ↔ 版本段对应关系（唯一台账）」（3 个时间戳 tag 定性为同日内部快照、5 个「有段无 tag」历史段登记）；`[1.0.0]` 段日期按 tag 事实修正为 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go`（tag↔段双向 + Unreleased 居首 + 映射表解析口径 + 扫描阈值，TDD 先红后绿 + 变异验证）+ `scripts/release-version.sh` 硬检查（缺 `## [<version>]` 段即 exit 1），2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BE） |
-| #70 | **已决策** ➖ | 已知限制（`NormalizeEndpoint` 对含尾随空白输入不幂等；fail-closed，回归种子已入库），见 §二 |
+| #70 | **已闭环移除** | `NormalizeEndpoint` 对含尾随空白输入不幂等：原 ➖「fail-closed 维持现状」决策于 2026-09-30 推翻，按登记内写死的修法修复（先切分 host/path，再对 host `TrimSpace`、对 path 去尾部斜杠与空白，保输出不以空白结尾），TDD 先红后绿 + 变异验证（删 host `TrimSpace` → 红灯点名 `"00  /"` / `"http://host  /"` → 还原绿）+ 两目标各 10s 有界 fuzz PASS，2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BK） |
 | #71 | **已决策** ➖ | 已知既成事实（仓库 slug `s3clinet` / `s3client` 并存，301 可解析），见 §二 |
 
 ---

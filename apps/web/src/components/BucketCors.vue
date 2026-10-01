@@ -80,8 +80,10 @@ async function saveCors() {
   <div v-else>
     <div v-for="(r, i) in rules" :key="r.rowKey" class="cors-rule">
       <div class="row" style="gap:8px; align-items:center">
-        <span class="badge">{{ tf('cors.ruleN', { n: i + 1 }) }}</span>
-        <input v-model="r.id" class="mono" :placeholder="t('cors.ruleIdPh')" style="flex:1" />
+        <label class="row" style="gap:8px; align-items:center; flex:1; flex-wrap:nowrap">
+          <span class="badge">{{ tf('cors.ruleN', { n: i + 1 }) }}</span>
+          <input v-model="r.id" class="mono" :placeholder="t('cors.ruleIdPh')" style="flex:1" />
+        </label>
         <button class="btn secondary sm" @click="removeRule(i)">{{ t('common.remove') }}</button>
       </div>
       <label class="field">

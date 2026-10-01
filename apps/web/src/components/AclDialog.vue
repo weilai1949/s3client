@@ -89,6 +89,7 @@ async function copyPublicUrl() {
       <div style="margin-top:10px">
         <div class="badge">{{ tf('acl.owner', { name: aclOwner || '—' }) }}</div>
         <table v-if="aclGrants.length" class="tbl" style="margin-top:8px">
+          <caption class="sr-only">{{ t('acl.tableAria') }}</caption>
           <thead><tr><th>{{ t('acl.grantee') }}</th><th>{{ t('acl.permission') }}</th></tr></thead>
           <tbody>
             <tr v-for="(g, i) in aclGrants" :key="i">

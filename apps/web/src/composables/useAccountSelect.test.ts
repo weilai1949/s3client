@@ -24,7 +24,7 @@ function acc(id: string): Account {
     bucket: 'b1',
     pathStyle: true,
     useSSL: false,
-  }
+   createdAt: '2024-01-01T00:00:00Z', publicEndpoint: '', updatedAt: '2024-01-01T00:00:00Z'}
 }
 
 beforeEach(() => {

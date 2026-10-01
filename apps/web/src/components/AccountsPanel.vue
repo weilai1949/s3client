@@ -120,7 +120,7 @@ function startEdit(a: Account) {
   provider.value = inferProvider(a.endpoint)
   form.name = a.name
   form.endpoint = a.endpoint
-  form.publicEndpoint = a.publicEndpoint ?? ''
+  form.publicEndpoint = a.publicEndpoint
   form.region = a.region
   form.accessKey = a.accessKey
   form.secretKey = ''
@@ -229,8 +229,8 @@ watch(accountFormRequest, () => startCreate())
       <button class="btn sm" @click="startCreate">{{ t('accounts.add') }}</button>
     </div>
 
-    <div v-if="error" class="msg err" style="margin-bottom:12px">{{ error }}</div>
-    <div v-if="loadError" class="msg err" style="margin-bottom:12px">
+    <div v-if="error" class="msg err" role="alert" style="margin-bottom:12px">{{ error }}</div>
+    <div v-if="loadError" class="msg err" role="alert" style="margin-bottom:12px">
       {{ tf('accounts.loadFailed', { msg: loadError }) }}
       <button class="link" style="flex:none" @click="load">{{ t('common.retry') }}</button>
     </div>
@@ -323,6 +323,7 @@ watch(accountFormRequest, () => startCreate())
 
     <div v-if="state.accounts.length" class="tbl-wrap">
       <table class="tbl">
+        <caption class="sr-only">{{ t('accounts.tableAria') }}</caption>
         <thead>
           <tr>
             <th style="width:32px"></th>
@@ -335,7 +336,7 @@ watch(accountFormRequest, () => startCreate())
           </tr>
         </thead>
         <tbody>
-          <tr v-for="a in state.accounts" :key="a.id" :class="{ selected: a.id === state.currentAccountId }">
+          <tr v-for="a in state.accounts" :key="a.id" :class="{ selected: a.id === state.currentAccountId }" :aria-selected="a.id === state.currentAccountId">
             <td>
               <input type="radio" name="acc" :aria-label="tf('accounts.selectAria', { name: a.name })" :checked="a.id === state.currentAccountId" @change="select(a)" />
             </td>

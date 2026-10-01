@@ -1,0 +1,87 @@
+// AUTO-GENERATED —— 不要手改。用 `pnpm gen:api` 重新生成。
+// 源：docs/api/openapi.json（operationId → method / path / 路径参数）
+// 门禁：src/api/generated.gate.test.ts（产物过期即红灯）。
+
+/** 单个操作的静态契约：method 与 path 逐字来自 spec，禁止在前端手写 URL 模板。 */
+export interface Operation {
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  readonly path: string
+  /** path 模板里 `{占位符}` 的名字，顺序即模板出现顺序。 */
+  readonly params: readonly string[]
+}
+
+export const operations = {
+  changeStorageClass: { method: "POST", path: "/api/accounts/{id}/storage-class", params: ["id"] },
+  copyObject: { method: "POST", path: "/api/accounts/{id}/copy-object", params: ["id"] },
+  copyObjects: { method: "POST", path: "/api/accounts/{id}/copy-objects", params: ["id"] },
+  copyObjectsAsync: { method: "POST", path: "/api/accounts/{id}/copy-objects/async", params: ["id"] },
+  copyPrefix: { method: "POST", path: "/api/accounts/{id}/copy-prefix", params: ["id"] },
+  copyPrefixAsync: { method: "POST", path: "/api/accounts/{id}/copy-prefix/async", params: ["id"] },
+  createAccount: { method: "POST", path: "/api/accounts", params: [] },
+  createBucket: { method: "POST", path: "/api/accounts/{id}/bucket", params: ["id"] },
+  deleteAccount: { method: "DELETE", path: "/api/accounts/{id}", params: ["id"] },
+  deleteBucket: { method: "DELETE", path: "/api/accounts/{id}/bucket", params: ["id"] },
+  deleteBucketCors: { method: "DELETE", path: "/api/accounts/{id}/bucket/cors", params: ["id"] },
+  deleteBucketEncryption: { method: "DELETE", path: "/api/accounts/{id}/bucket/encryption", params: ["id"] },
+  deleteBucketPolicy: { method: "DELETE", path: "/api/accounts/{id}/bucket/policy", params: ["id"] },
+  deleteBucketTags: { method: "DELETE", path: "/api/accounts/{id}/bucket/tags", params: ["id"] },
+  deleteBucketWebsite: { method: "DELETE", path: "/api/accounts/{id}/bucket/website", params: ["id"] },
+  deleteObjectVersion: { method: "DELETE", path: "/api/accounts/{id}/version", params: ["id"] },
+  deleteObjects: { method: "POST", path: "/api/accounts/{id}/delete", params: ["id"] },
+  deletePrefix: { method: "POST", path: "/api/accounts/{id}/delete-prefix", params: ["id"] },
+  deletePrefixAsync: { method: "POST", path: "/api/accounts/{id}/delete-prefix/async", params: ["id"] },
+  downloadZip: { method: "POST", path: "/api/accounts/{id}/download-zip", params: ["id"] },
+  getAccount: { method: "GET", path: "/api/accounts/{id}", params: ["id"] },
+  getBucketCors: { method: "GET", path: "/api/accounts/{id}/bucket/cors", params: ["id"] },
+  getBucketEncryption: { method: "GET", path: "/api/accounts/{id}/bucket/encryption", params: ["id"] },
+  getBucketInfo: { method: "GET", path: "/api/accounts/{id}/bucket-info", params: ["id"] },
+  getBucketPolicy: { method: "GET", path: "/api/accounts/{id}/bucket/policy", params: ["id"] },
+  getBucketTags: { method: "GET", path: "/api/accounts/{id}/bucket/tags", params: ["id"] },
+  getBucketWebsite: { method: "GET", path: "/api/accounts/{id}/bucket/website", params: ["id"] },
+  getLifecycle: { method: "GET", path: "/api/accounts/{id}/lifecycle", params: ["id"] },
+  getObjectAcl: { method: "GET", path: "/api/accounts/{id}/object-acl", params: ["id"] },
+  getObjectTags: { method: "GET", path: "/api/accounts/{id}/object-tags", params: ["id"] },
+  headObject: { method: "GET", path: "/api/accounts/{id}/head", params: ["id"] },
+  health: { method: "GET", path: "/api/health", params: [] },
+  listAccounts: { method: "GET", path: "/api/accounts", params: [] },
+  listBuckets: { method: "GET", path: "/api/accounts/{id}/buckets", params: ["id"] },
+  listObjectVersions: { method: "GET", path: "/api/accounts/{id}/versions", params: ["id"] },
+  listObjects: { method: "GET", path: "/api/accounts/{id}/objects", params: ["id"] },
+  listTrash: { method: "GET", path: "/api/accounts/{id}/trash", params: ["id"] },
+  metrics: { method: "GET", path: "/api/metrics", params: [] },
+  migrate: { method: "POST", path: "/api/migrate", params: [] },
+  migrateAsync: { method: "POST", path: "/api/migrate/async", params: [] },
+  migrateJobCancel: { method: "POST", path: "/api/migrate/jobs/{id}/cancel", params: ["id"] },
+  migrateJobEvents: { method: "GET", path: "/api/migrate/jobs/{id}/events", params: ["id"] },
+  migrateJobStatus: { method: "GET", path: "/api/migrate/jobs/{id}", params: ["id"] },
+  migrateJobs: { method: "GET", path: "/api/migrate/jobs", params: [] },
+  migrateSync: { method: "POST", path: "/api/migrate/sync", params: [] },
+  mkdirObject: { method: "POST", path: "/api/accounts/{id}/mkdir", params: ["id"] },
+  multipartAbort: { method: "POST", path: "/api/accounts/{id}/multipart/abort", params: ["id"] },
+  multipartComplete: { method: "POST", path: "/api/accounts/{id}/multipart/complete", params: ["id"] },
+  multipartInit: { method: "POST", path: "/api/accounts/{id}/multipart/init", params: ["id"] },
+  multipartPart: { method: "POST", path: "/api/accounts/{id}/multipart/part", params: ["id"] },
+  openapi: { method: "GET", path: "/api/openapi.json", params: [] },
+  presign: { method: "POST", path: "/api/accounts/{id}/presign", params: ["id"] },
+  previewBuckets: { method: "POST", path: "/api/accounts/preview-buckets", params: [] },
+  proxyObject: { method: "GET", path: "/api/accounts/{id}/proxy", params: ["id"] },
+  purgeTrashObject: { method: "POST", path: "/api/accounts/{id}/trash/purge", params: ["id"] },
+  putBucketCors: { method: "PUT", path: "/api/accounts/{id}/bucket/cors", params: ["id"] },
+  putBucketEncryption: { method: "PUT", path: "/api/accounts/{id}/bucket/encryption", params: ["id"] },
+  putBucketPolicy: { method: "PUT", path: "/api/accounts/{id}/bucket/policy", params: ["id"] },
+  putBucketTags: { method: "PUT", path: "/api/accounts/{id}/bucket/tags", params: ["id"] },
+  putBucketVersioning: { method: "PUT", path: "/api/accounts/{id}/bucket-versioning", params: ["id"] },
+  putBucketWebsite: { method: "PUT", path: "/api/accounts/{id}/bucket/website", params: ["id"] },
+  putLifecycle: { method: "PUT", path: "/api/accounts/{id}/lifecycle", params: ["id"] },
+  putObjectAcl: { method: "PUT", path: "/api/accounts/{id}/object-acl", params: ["id"] },
+  putObjectTags: { method: "PUT", path: "/api/accounts/{id}/object-tags", params: ["id"] },
+  renameObject: { method: "POST", path: "/api/accounts/{id}/rename", params: ["id"] },
+  restoreDeleteMarker: { method: "POST", path: "/api/accounts/{id}/delete-marker/restore", params: ["id"] },
+  restoreObjectVersion: { method: "POST", path: "/api/accounts/{id}/version/restore", params: ["id"] },
+  setHeaders: { method: "POST", path: "/api/accounts/{id}/set-headers", params: ["id"] },
+  testAccount: { method: "POST", path: "/api/accounts/{id}/test", params: ["id"] },
+  updateAccount: { method: "PUT", path: "/api/accounts/{id}", params: ["id"] },
+} as const
+
+/** spec 里全部操作的标识（70 个，见 docs/api/openapi.json）。 */
+export type OperationId = keyof typeof operations

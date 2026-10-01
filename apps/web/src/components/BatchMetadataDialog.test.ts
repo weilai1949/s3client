@@ -55,7 +55,7 @@ describe('BatchMetadataDialog', () => {
     // 取消 ACL，改勾选标签（clear 是修改 → 启用）
     await w.find('[data-testid="batch-edit-acl-toggle"]').setValue(false)
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
-    const modeSel = w.find('select[aria-label="Tag mode"]')
+    const modeSel = w.find('select[aria-label="batchEdit.tagsModeLabel"]')
     await modeSel.setValue('clear')
     expect(confirmBtn(w).attributes('disabled')).toBeUndefined()
 
@@ -110,6 +110,35 @@ describe('BatchMetadataDialog', () => {
     expect(toast).toHaveBeenCalledWith('batchEdit.empty', 'err')
     expect(batchSetMetadata).not.toHaveBeenCalled()
   })
+
+  it('执行状态经 aria-live 播报区呈现（running 与 done 都在区内）', async () => {
+    let resolveFn!: (v: BatchMetaResult) => void
+    vi.mocked(batchSetMetadata).mockReturnValueOnce(
+      new Promise<BatchMetaResult>((resolve) => {
+        resolveFn = resolve
+      }),
+    )
+
+    const w = mountDialog(['k1', 'k2'])
+    await w.find('[data-testid="batch-edit-acl-toggle"]').setValue(true)
+    await confirmBtn(w).trigger('click')
+    await nextTick()
+
+    // 进行中：状态落在 aria-live="polite" 区里
+    let region = w.find('.status')
+    expect(region.exists()).toBe(true)
+    expect(region.attributes('aria-live')).toBe('polite')
+    expect(region.text()).toContain('batchEdit.running')
+
+    resolveFn({ ok: 2, failed: 0, errors: [] })
+    await flushPromises()
+    await nextTick()
+
+    // 完成：同一播报区换成结果文案（v-if 保留，屏幕阅读器读到更新）
+    region = w.find('.status')
+    expect(region.attributes('aria-live')).toBe('polite')
+    expect(region.text()).toContain('batchEdit.done')
+  })
 })
 
 describe('BatchMetadataDialog extra branches', () => {
@@ -146,7 +175,7 @@ describe('BatchMetadataDialog extra branches', () => {
     })
     const w = mountDialog(['k1', 'k2'])
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
-    const modeSel = w.find('select[aria-label="Tag mode"]')
+    const modeSel = w.find('select[aria-label="batchEdit.tagsModeLabel"]')
     await modeSel.setValue('clear')
     await confirmBtn(w).trigger('click')
     await flushPromises()
@@ -168,7 +197,7 @@ describe('BatchMetadataDialog extra branches', () => {
   it('替换模式仅有 value 无 key → tagsNeedKey 校验', async () => {
     const w = mountDialog(['k1'])
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
-    const modeSel = w.find('select[aria-label="Tag mode"]')
+    const modeSel = w.find('select[aria-label="batchEdit.tagsModeLabel"]')
     await modeSel.setValue('replace')
     const addBtn = w.findAll('button').find((b) => b.text() === '+')!
     await addBtn.trigger('click')
@@ -193,7 +222,7 @@ describe('BatchMetadataDialog extra branches', () => {
     vi.mocked(batchSetMetadata).mockImplementation(async () => new Promise((resolve) => { resolveFn = resolve }))
     const w = mountDialog(['k1'])
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
-    await w.find('select[aria-label="Tag mode"]').setValue('replace')
+    await w.find('select[aria-label="batchEdit.tagsModeLabel"]').setValue('replace')
     const addBtn = w.findAll('button').find((b) => b.text() === '+')!
     await addBtn.trigger('click')
     await addBtn.trigger('click')
@@ -237,10 +266,10 @@ describe('BatchMetadataDialog extra branches', () => {
     const w = mountDialog(['k1'])
     // 勾选 ACL → 下拉可选；改选 public-read
     await w.find('[data-testid="batch-edit-acl-toggle"]').setValue(true)
-    await w.find('select[aria-label="ACL"]').setValue('public-read')
+    await w.find('select[aria-label="batchEdit.aclLabel"]').setValue('public-read')
     // 勾选存储类切换 → 输入框可编辑
     await w.find('[data-testid="batch-edit-storage-toggle"]').setValue(true)
-    await w.find('input[aria-label="Storage class"]').setValue('GLACIER')
+    await w.find('input[aria-label="batchEdit.storageLabel"]').setValue('GLACIER')
     await confirmBtn(w).trigger('click')
     await flushPromises()
     expect(inputs[0]).toMatchObject({ acl: 'public-read', storageClass: 'GLACIER' })
@@ -316,7 +345,7 @@ describe('BatchMetadataDialog 稳定行键', () => {
   it('删除中间标签行后其余行保留原 DOM 节点（v-for 键用行 id 而非 index）', async () => {
     const w = mountDialog(['k1'])
     await w.find('[data-testid="batch-edit-tags-toggle"]').setValue(true)
-    await w.find('select[aria-label="Tag mode"]').setValue('replace')
+    await w.find('select[aria-label="batchEdit.tagsModeLabel"]').setValue('replace')
     const addBtn = w.findAll('button').find((b) => b.text() === '+')
     expect(addBtn).toBeTruthy()
     for (let n = 0; n < 3; n++) await addBtn!.trigger('click')
@@ -343,5 +372,24 @@ describe('BatchMetadataDialog 稳定行键', () => {
     // 存活行的输入值仍是原第 1、3 行（防串行）
     expect(after.map((r) => Array.from(r.querySelectorAll('input'))
       .map((i) => (i as HTMLInputElement).value))).toEqual([['env', 'prod'], ['owner', 'ops']])
+  })
+})
+
+describe('BatchMetadataDialog 可见标签', () => {
+  it('ACL / 标签模式 / 存储类型三个控件都被可见 <label> 包裹（不是只靠 aria-label）', async () => {
+    const w = mountDialog(['k1'])
+    const labelled = [
+      ['batchEdit.aclLabel', 'select'],
+      ['batchEdit.tagsModeLabel', 'select'],
+      ['batchEdit.storageLabel', 'input'],
+    ] as const
+    for (const [key, tag] of labelled) {
+      const el = w.find(`${tag}[aria-label="${key}"]`)
+      expect(el.exists(), `缺 aria-label=${key} 的 ${tag}`).toBe(true)
+      const label = el.element.closest('label')
+      expect(label, `${key} 未被 <label> 包裹（可见标签缺失）`).toBeTruthy()
+      expect((label!.textContent ?? '').trim().length).toBeGreaterThan(0)
+      expect(label!.textContent).toContain(key)
+    }
   })
 })

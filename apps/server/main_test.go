@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -331,9 +333,10 @@ func TestMainServerSubprocess(t *testing.T) {
 		t.Skip("依赖 SIGTERM")
 	}
 	addr := reserveLoopbackPort(t)
+	dataDir := t.TempDir()
 	cmd := childCmd(t, "server", map[string]string{
 		"S3C_ADDR":                  addr,
-		"S3C_DATA_DIR":              t.TempDir(),
+		"S3C_DATA_DIR":              dataDir,
 		"S3C_TOKEN":                 "unit-test-token-0123456789",
 		"S3C_STORE_DRIVER":          "json",
 		"S3C_ALLOW_PLAINTEXT_STORE": "1",
@@ -365,6 +368,23 @@ func TestMainServerSubprocess(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatal("child did not exit after SIGTERM")
+	}
+
+	// ROADMAP #18 指标⑤：优雅关停耗时必须落盘（进程退出后指标无法被 scrape，
+	// 下次启动载入后由 /api/metrics 暴露，见 handler.RecordShutdown / LoadLastShutdown）。
+	raw, err := os.ReadFile(filepath.Join(dataDir, "shutdown.json"))
+	if err != nil {
+		t.Fatalf("优雅关停后未写 shutdown.json: %v", err)
+	}
+	var rec struct {
+		DurationUs int64 `json:"durationUs"`
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatalf("shutdown.json 解析失败（%s）: %v", raw, err)
+	}
+	// 关停耗时必须为正且远小于 S3C_SHUTDOWN_TIMEOUT=5s（超时会走另一条错误路径）。
+	if rec.DurationUs <= 0 || rec.DurationUs >= 5_000_000 {
+		t.Errorf("shutdown.json durationUs = %d，应落在 (0, 5000000) 内", rec.DurationUs)
 	}
 }
 

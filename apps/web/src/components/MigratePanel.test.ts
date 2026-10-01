@@ -57,12 +57,15 @@ vi.mock('../i18n', () => ({
 const acc1: Account = {
   id: 'acc-1', name: 'acc-one', endpoint: 'http://minio:9000', region: 'r',
   accessKey: 'ak', secretSet: true, bucket: 'src-bucket', pathStyle: true, useSSL: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 const acc2: Account = { ...acc1, id: 'acc-2', name: 'acc-two', bucket: 'dst-bucket' }
 
-const objA: ObjectItem = { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false }
-const objB: ObjectItem = { key: 'b.bin', size: 20, lastModified: '2024-01-02', etag: 'e2', isDir: false }
-const objDir: ObjectItem = { key: 'dir/', size: 0, lastModified: '', etag: '', isDir: true }
+const objA: ObjectItem = { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false, storageClass: 'STANDARD' }
+const objB: ObjectItem = { key: 'b.bin', size: 20, lastModified: '2024-01-02', etag: 'e2', isDir: false, storageClass: 'STANDARD' }
+const objDir: ObjectItem = { key: 'dir/', size: 0, lastModified: '', etag: '', isDir: true, storageClass: 'STANDARD' }
 
 const ModalDialogStub = {
   name: 'ModalDialog',
@@ -92,7 +95,7 @@ const ROW = ROW_HEIGHT
 
 /** 迁移测试用对象（分页 / 分片场景批量构造）。 */
 function makeObj(key: string): ObjectItem {
-  return { key, size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false }
+  return { key, size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false, storageClass: 'STANDARD' }
 }
 
 function findButtonStartsWith(w: ReturnType<typeof mount>, prefix: string) {
@@ -799,8 +802,8 @@ describe('MigratePanel', () => {
   it('virtual 行高由 ROW_HEIGHT 绑定到行内样式（防 CSS 字面量 38/42 漂移回归）', async () => {
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: [
-        { key: 'a.dat', size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false },
-        { key: 'b.dat', size: 2, lastModified: '2024-01-01', etag: 'e', isDir: false },
+        { key: 'a.dat', size: 1, lastModified: '2024-01-01', etag: 'e', isDir: false, storageClass: 'STANDARD' },
+        { key: 'b.dat', size: 2, lastModified: '2024-01-01', etag: 'e', isDir: false, storageClass: 'STANDARD' },
       ],
       commonPrefixes: [], isTruncated: false, nextToken: '',
     })
@@ -815,7 +818,7 @@ describe('MigratePanel', () => {
   it('virtualizes long object lists and scrolls with spacer rows', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
       key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
-      etag: 'e', isDir: false,
+      etag: 'e', isDir: false, storageClass: 'STANDARD',
     }))
     vi.mocked(s3api.listObjects).mockReset()
     vi.mocked(s3api.listObjects).mockResolvedValue({
@@ -841,7 +844,7 @@ describe('MigratePanel', () => {
   it('重新列出对象后虚拟窗口回到顶部（不残留旧 scrollTop）', async () => {
     const many = Array.from({ length: 50 }, (_, i) => ({
       key: `f${String(i).padStart(2, '0')}.dat`, size: i, lastModified: '2024-01-01',
-      etag: 'e', isDir: false,
+      etag: 'e', isDir: false, storageClass: 'STANDARD',
     }))
     vi.mocked(s3api.listObjects).mockResolvedValue({
       objects: many, commonPrefixes: [], isTruncated: false, nextToken: '',

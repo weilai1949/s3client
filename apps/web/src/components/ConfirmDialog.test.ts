@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import { confirmState, settleConfirm } from '../confirm'
@@ -156,5 +156,78 @@ describe('ConfirmDialog', () => {
     expect(settleConfirm).not.toHaveBeenCalled()
     await nextTick() // flush 后 handler 弹出，避免污染后续用例
     w.unmount()
+  })
+
+  it('打开后焦点移入确认按钮，关闭后恢复到打开前的元素', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'outside'
+    document.body.appendChild(outside)
+    outside.focus()
+
+    const w = mount(ConfirmDialog, { attachTo: document.body })
+    confirmState.confirmText = 'Delete'
+    confirmState.open = true
+    await flushPromises()
+    expect(document.activeElement).toBe(bodyBtn('Delete'))
+
+    confirmState.open = false
+    await flushPromises()
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
+    w.unmount()
+  })
+
+  it('Tab 焦点陷阱：首尾回卷、中间不干预，焦点不逃出对话框', async () => {
+    const w = mount(ConfirmDialog, { attachTo: document.body })
+    confirmState.confirmText = 'Delete'
+    confirmState.open = true
+    await flushPromises()
+    const confirmBtn = bodyBtn('Delete')
+    const cancelBtn = bodyBtn('common.cancel')
+    expect(document.activeElement).toBe(confirmBtn)
+
+    // Shift+Tab 在第一个元素上 → 回卷到最后一个
+    let ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancelBtn)
+
+    // Tab 在最后一个元素上 → 回卷到第一个
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(confirmBtn)
+
+    // Tab 在第一个元素上（不带 shift）→ 透传，不回卷
+    ev = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(confirmBtn)
+
+    // Shift+Tab 在最后一个元素上 → 透传
+    cancelBtn.focus()
+    ev = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, cancelable: true })
+    window.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(cancelBtn)
+
+    confirmState.open = false
+    await flushPromises()
+    w.unmount()
+  })
+
+  it('打开后同 tick 内卸载：初始聚焦的续体遇到已置空的容器不抛错、焦点不被劫持', async () => {
+    const outside = document.createElement('button')
+    outside.textContent = 'outside'
+    document.body.appendChild(outside)
+    outside.focus()
+
+    const w = mount(ConfirmDialog, { attachTo: document.body })
+    confirmState.open = true
+    await nextTick() // 打开 watcher 已运行并挂起在 await nextTick()
+    w.unmount() // 卡片随组件卸载，模板 ref 置空
+    await flushPromises() // 续体恢复 → 走空容器守卫（无 unhandled rejection）
+    expect(document.activeElement).toBe(outside)
+    outside.remove()
   })
 })

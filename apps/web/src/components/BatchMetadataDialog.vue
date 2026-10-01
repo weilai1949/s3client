@@ -161,11 +161,14 @@ async function onConfirm() {
           {{ t('batchEdit.aclLabel') }}
         </label>
       </legend>
-      <select v-model="acl" :disabled="!applyAcl" class="full" aria-label="ACL">
-        <option value="private">private</option>
-        <option value="public-read">public-read</option>
-        <option value="public-read-write">public-read-write</option>
-      </select>
+      <label class="field">
+        {{ t('batchEdit.aclLabel') }}
+        <select v-model="acl" :disabled="!applyAcl" class="full" :aria-label="t('batchEdit.aclLabel')">
+          <option value="private">private</option>
+          <option value="public-read">public-read</option>
+          <option value="public-read-write">public-read-write</option>
+        </select>
+      </label>
     </fieldset>
 
     <fieldset>
@@ -175,11 +178,14 @@ async function onConfirm() {
           {{ t('batchEdit.tagsLabel') }}
         </label>
       </legend>
-      <select v-model="tagsMode" :disabled="!applyTags" class="full" aria-label="Tag mode">
-        <option value="none">{{ t('batchEdit.tagsNoChange') }}</option>
-        <option value="replace">替换</option>
-        <option value="clear">{{ t('batchEdit.tagsClear') }}</option>
-      </select>
+      <label class="field">
+        {{ t('batchEdit.tagsModeLabel') }}
+        <select v-model="tagsMode" :disabled="!applyTags" class="full" :aria-label="t('batchEdit.tagsModeLabel')">
+          <option value="none">{{ t('batchEdit.tagsNoChange') }}</option>
+          <option value="replace">替换</option>
+          <option value="clear">{{ t('batchEdit.tagsClear') }}</option>
+        </select>
+      </label>
       <div v-if="applyTags && tagsMode === 'replace'" style="margin-top:8px">
         <div v-for="(tg, i) in tags" :key="tg.rowKey" class="tag-row">
           <label class="sr-only" :for="'batch-tag-key-' + i">{{ t('batchEdit.tagKey') }}</label>
@@ -199,7 +205,10 @@ async function onConfirm() {
           {{ t('batchEdit.storageLabel') }}
         </label>
       </legend>
-      <input v-model="storageClass" :disabled="!applyStorage" type="text" class="full" aria-label="Storage class" />
+      <label class="field">
+        {{ t('batchEdit.storageLabel') }}
+        <input v-model="storageClass" :disabled="!applyStorage" type="text" class="full" :aria-label="t('batchEdit.storageLabel')" />
+      </label>
     </fieldset>
 
     <div v-if="running || result" class="status" aria-live="polite">

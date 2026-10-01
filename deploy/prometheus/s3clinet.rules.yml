@@ -36,6 +36,11 @@ groups:
       - record: s3clinet:s3_latency_p95:rate5m
         expr: histogram_quantile(0.95, sum(rate(s3c_s3_call_duration_seconds_bucket[5m])) by (le))
 
+      # HTTP 侧 SLI（ROADMAP #18 新增延迟直方图）：含 proxy / download / zip 等流式端点，
+      # 长尾天然存在，阈值取「建议值」而非硬 SLO（同 §4 口径）。
+      - record: s3clinet:http_latency_p95:rate5m
+        expr: histogram_quantile(0.95, sum(rate(s3c_http_request_duration_seconds_bucket[5m])) by (le))
+
   - name: s3clinet-alerts
     rules:
       - alert: S3ClinetAccountStoreDown
@@ -148,4 +153,59 @@ groups:
           summary: "Go 堆占用逼近容器内存上限"
           description: >-
             当前 {{ $value | humanize1024 }}B。注意分段上传的缓冲是有界的（64MB/段），
-            堆增长通常来自并发迁移 / ZIP 打包；查在册异步任务数（OPERATIONS.md §4.3）。
+            堆增长通常来自并发迁移 / ZIP 打包；查在册异步任务数 s3c_jobs_active（OPERATIONS.md §4.3）。
+
+      # ---- ROADMAP #18 新增：五个观测缺口补齐后的告警（2026-09-30） ----
+
+      - alert: S3ClinetStoreWriteFailures
+        # 账号库写入失败 = 落盘 / SQL 写入出错（写操作已回滚），业务性拒绝不计数。
+        # 关键价值：json / encrypted 驱动的 Ping() 恒为 nil，s3c_store_up 对它们永远是 1，
+        # 这是这两类驱动**唯一主动**的存储故障信号（磁盘满 / 只读挂载）。
+        expr: increase(s3c_store_write_failures_total[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "账号库写入失败（{{ $value }} 次 / 15 分钟）"
+          description: >-
+            账号的增删改此时全部失败。按 OPERATIONS.md R-3 排查数据目录挂载与写权限，
+            并看 s3c_volume_free_bytes 是否已逼近 0（卷写满是首要嫌疑）。
+
+      - alert: S3ClinetJobsNearCapacity
+        # 在册上限 256（service.defaultMaxJobs，只数未终结任务）：满则异步请求全部 503。
+        # 230 ≈ 上限的 90%，给「等 reap 回收终态任务」留出 10 分钟观察窗。
+        expr: s3c_jobs_active >= 230
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "在册异步任务逼近上限（{{ $value }} / 256）"
+          description: >-
+            名额占满后新的异步迁移 / 复制会被直接拒绝。先看 GET /api/migrate/jobs 里的积压项：
+            终态任务 5 分钟内由 reap 回收，running 项需等完成或人工处置（OPERATIONS.md §4.3）。
+
+      - alert: S3ClinetVolumeSpaceLow
+        # 数据卷剩余空间（ROADMAP #18）：账号库与 jobs.json 都写在该卷，写满即账号写入失败。
+        # 序列只在 statfs 可用的平台上存在；平台不支持时不发序列，本告警自然 no data
+        # （该平台按 §4.3 用 node_exporter / df 采集）。
+        expr: s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "数据卷剩余空间 < 20%"
+          description: >-
+            当前 {{ $value | humanizePercentage }}。卷写满会让账号库落盘直接失败
+            （联动 s3c_store_write_failures_total）。inode 本服务不提供，仍用宿主 node_exporter。
+
+      - alert: S3ClinetHTTPLatencyHigh
+        # HTTP p95（记录规则 s3clinet:http_latency_p95:rate5m）：含流式端点，长尾天然存在，
+        # 阈值是建议值而非硬 SLO；先按 path 分解定位，再区分「上游慢」与「本服务排队」。
+        expr: s3clinet:http_latency_p95:rate5m > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 请求延迟 p95 > 5s（持续 10 分钟）"
+          description: >-
+            当前 {{ $value }}。先排除 proxy / download / zip 这类必然长耗时的流式端点，
+            再对照上游耗时直方图（s3c_s3_call_duration_seconds_bucket）判断是否上游变慢。

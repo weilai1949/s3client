@@ -184,8 +184,8 @@ function dismissError() {
     <div class="toolbar">
       <h3 style="margin:0">{{ t('objects.title') }}</h3>
       <span class="spacer" />
-      <span class="badge" style="margin-right:2px">{{ t('objects.currentAccount') }}</span>
-      <select v-model="accSel" class="acc-select" :title="tf('objects.switchAccount', { n: state.accounts.length })">
+      <label class="badge" style="margin-right:2px" for="objects-acc-select">{{ t('objects.currentAccount') }}</label>
+      <select id="objects-acc-select" v-model="accSel" class="acc-select" :title="tf('objects.switchAccount', { n: state.accounts.length })">
         <option v-if="!state.accounts.length" value="">{{ t('objects.noAccountOption') }}</option>
         <option v-for="a in state.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
       </select>

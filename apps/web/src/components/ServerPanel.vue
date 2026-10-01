@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { api } from '../api'
+import { opPath } from '../api/http'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
 import { t, tf } from '../i18n'
@@ -108,7 +109,7 @@ async function probe(s: ServerProfile) {
     const base = (s.base || '').replace(/\/+$/, '')
     const headers: Record<string, string> = {}
     if (s.token) headers['Authorization'] = `Bearer ${s.token}`
-    const res = await fetch(base + '/api/health', { headers })
+    const res = await fetch(base + opPath('health'), { headers })
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
     let version = ''
     try {
@@ -152,7 +153,7 @@ onMounted(() => {
       <span>{{ t('server.persistent') }}</span>
     </label>
 
-    <div v-if="error" class="msg err" style="margin-bottom:12px">{{ error }}</div>
+    <div v-if="error" class="msg err" role="alert" style="margin-bottom:12px">{{ error }}</div>
 
     <!-- 服务端新增/编辑表单（弹窗） -->
     <ModalDialog
@@ -179,6 +180,7 @@ onMounted(() => {
 
     <div v-if="servers.length" class="tbl-wrap">
       <table class="tbl">
+        <caption class="sr-only">{{ t('server.tableAria') }}</caption>
         <thead>
           <tr>
             <th style="width:36px"></th>
@@ -194,6 +196,7 @@ onMounted(() => {
             v-for="s in servers"
             :key="s.id"
             :class="{ selected: s.id === activeId }"
+            :aria-selected="s.id === activeId"
           >
             <td>
               <input

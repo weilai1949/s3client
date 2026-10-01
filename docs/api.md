@@ -24,13 +24,20 @@ GET /api/health
 ```
 GET /api/metrics
 ```
-Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数、uptime、goroutine、内存、`s3c_build_info`，以及：
+Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及：
 - `s3c_store_up`：账号存储可达性（1 / 0）。store 掉线时 `/api/health` 返回 503 且本指标为 0——硬失败不降级（ADR-002），建议据此告警。
+- `s3c_store_write_failures_total`：账号库写入失败次数（落盘 / SQL 写入出错，业务拒绝不计数）——`json` / `encrypted` 驱动唯一的主动存储故障信号。
+- `s3c_volume_size_bytes` / `s3c_volume_free_bytes`：`S3C_DATA_DIR` 所在文件系统总容量与可用字节；取不到时**不输出该序列**（平台不支持 / statfs 失败）。
+- `s3c_jobs_active`：在册（未终结）异步任务数，上限 256（与 `JobRegistry` 同口径）。
+- `s3c_last_shutdown_duration_seconds`：上一次优雅关停耗时（启动时从 `data/shutdown.json` 载入；0 = 尚无记录）。
+- `s3c_http_request_duration_seconds`：HTTP 请求延迟直方图（含流式端点）；`+Inf` 桶恒等于 `s3c_http_requests_total`。
 - `s3c_ssrf_deny_private`：SSRF 生效策略（1 = 拒绝私网 / 回环 S3 端点，0 = 默认放行）。用于核对 `S3C_SSRF_DENY_PRIVATE` 是否真的生效（ADR-003）。
 - `s3c_stream_interrupted_total`：流式传输在完成前中断的次数（上游读失败 / 写超时 / 客户端断开）。
 - `s3c_s3_calls_total` / `s3c_s3_call_errors_total{code=...}` / `s3c_s3_call_duration_seconds`：S3 上游调用总数、按错误码分类的失败数、耗时直方图（非 API 错误归入 `transport`/`canceled`/`timeout`）。
 - `s3c_s3_stream_bytes_total`：经本服务从 S3 流式读出的字节数。
 - `s3c_zip_partial_failures_total` / `s3c_zip_failed_keys_total` / `s3c_zip_failed_total`：ZIP 打包部分失败次数、失败对象累计数、整体失败次数。
+
+> 全量逐字清单（含类型与建议告警用法）见 [`OPERATIONS.md`](OPERATIONS.md) §3.2——改指标时两处同改。
 
 ## 账号
 
@@ -679,7 +686,11 @@ GET /api/openapi.json
 ```
 
 OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
-前端可基于此生成 TypeScript client / Swagger UI / 契约测试。
+前端**已经**以它为源生成 TypeScript 类型与端点封装：`cd apps/web && pnpm gen:api` 从提交的
+黄金契约生成 `src/api/schema.d.ts`（类型）与 `src/api/operations.ts`（`operationId → method / path /
+路径参数`），`endpoints.ts` 的 URL 与 method 全部经 `opPath()` 取自生成物；`pnpm gen:api --check`
+（由 `src/api/generated.gate.test.ts` 在 `pnpm test` 内调用）钉住「spec 改了而忘了重新生成」。
+同一份契约也可用于 Swagger UI / 契约测试。
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
 鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 10 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
 

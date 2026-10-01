@@ -45,10 +45,13 @@ const account: Account = {
   bucket: 'b1',
   pathStyle: true,
   useSSL: false,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 
 const sampleEntries: Entry[] = [
-  { kind: 'file', key: 'a.txt', name: 'a.txt', size: 10, lastModified: '2024-01-01', object: { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false } },
+  { kind: 'file', key: 'a.txt', name: 'a.txt', size: 10, lastModified: '2024-01-01', object: { key: 'a.txt', size: 10, lastModified: '2024-01-01', etag: 'e1', isDir: false, storageClass: 'STANDARD' } },
   { kind: 'folder', key: 'dir/', name: 'dir' },
 ]
 

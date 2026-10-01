@@ -38,7 +38,8 @@
 （E6 未获取），代码层面已无剩余工作。2026-09-24 另在 §三 3.2 补录 **13 条趋势展望迭代方向**
 （#4–#16，⬜ 候选、未排期；其中 #12 供应链证明已于 2026-09-29 落地并按 §六 第 1 条移出），
 2026-09-30 再收口迁入 **#17–#18**（可访问性补强 / 观测指标补全，来源 `accessibility.md` §5.3–§5.5
-与 `OPERATIONS.md` 观测缺口）；按 §六 第 1 条的两源分工，**§三 3.2 表即这批候选的唯一来源**。
+与 `OPERATIONS.md` 观测缺口）——**两条已于同日全部落地并按 §六 第 1 条移出**（#18 见 §BL、#17 见 §BM），
+故两源迁入项当前**均已在候选池之外**；按 §六 第 1 条的两源分工，**§三 3.2 表即这批候选的唯一来源**。
 排期进入里程碑后才转 ⏳，评估为不做则转 ➖ 并由 ADR / 决策记录兜底。
 
 > 已修复内容不在此流水账：P0 / P1 逐条记录与验证证据见 [`FEATURES.md`](FEATURES.md)「H」「I」段，
@@ -50,7 +51,7 @@
 
 | 里程碑 | 主题 | 关键验收 | 依赖 |
 |---|---|---|---|
-| **v1.2+** | 长期：桌面分发、可选增强、趋势方向（§三 #4–#18 候选池） | 桌面端签名与自动更新；候选方向按需立项评估 | v1.1.0 |
+| **v1.2+** | 长期：桌面分发、可选增强、趋势方向（§三 #4–#16 候选池） | 桌面端签名与自动更新；候选方向按需立项评估 | v1.1.0 |
 | **v1.3+** | 长期：增量同步与批量能力的体验增强 | 评估用户反馈下的现有模式扩展能力 | v1.2+ |
 | **v2.0+** | 长期：死代码纪律治理 | 升级覆盖率门禁，治理残留死代码（已备选） | v1.3+ |
 
@@ -73,9 +74,10 @@
 > 2026 技术趋势评估得出）：全部 ⬜ **未排期候选池**，不是发布承诺——立项排期后状态改 ⏳ 并
 > 进入 §二 里程碑验收；评估为不做转 ➖。按 §六 第 1 条的两源分工，**本节即这批条目的唯一来源**；
 > 2026-09-24 迁入前曾以 `KNOWN_ISSUES #47`–`#59` 登记，该编号**已停用**、仅作历史映射（见表「原编号」列）。
-> **#17–#18 为 2026-09-30 收口迁入的文档内改进项**（来源 [`accessibility.md`](accessibility.md) §5.3–§5.5
-> 与 [`OPERATIONS.md`](OPERATIONS.md) 的观测缺口声明，按「不留文档内口头待办」纪律迁入）：
-> 同为 ⬜ 未排期候选，「原编号」列记 `—`。
+> **#17–#18 为 2026-09-30 收口迁入的文档内改进项**（来源 [`accessibility.md`](accessibility.md)
+> §5.3–§5.5 与 [`OPERATIONS.md`](OPERATIONS.md) 观测缺口声明，按「不留文档内口头待办」纪律迁入），
+> 「原编号」列记 `—`；**两条已于同日全部落地**并按 §六 第 1 条移出转空号（#18 证据 §BL、
+> #17 证据 §BM），故本表当前不含它们。
 
 ### 3.1 已立项 / 已决策项
 
@@ -88,7 +90,13 @@
 
 > 编号接续 3.1（§三 内全局唯一；3.1 原 #3「死代码纪律」于 2026-09-24 以前后端两道导出门禁收口移出，
 > 编号不重排故 #3 空号；#12「供应链证明」于 2026-09-29 全部落地后同样移出，#12 空号，证据见
-> [`FEATURES.md`](FEATURES.md) §AQ / §AW）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
+> [`FEATURES.md`](FEATURES.md) §AQ / §AW；#14「原生 fuzz 与性质测试」于 2026-09-30 落地后按 §六 第 3 条
+> 同样移出，#14 空号，证据见 [`FEATURES.md`](FEATURES.md) §BG、移出动作见 §BI；#19「文档可读性与
+> 流程机械化」于 2026-09-30 收口后按 §六 第 1 条同样移出，#19 空号，证据见
+> [`FEATURES.md`](FEATURES.md) §BJ；#18「可观测性补全」2026-09-30 落地后同样移出，#18 空号，
+> 证据见 [`FEATURES.md`](FEATURES.md) §BL；#17「可访问性补强与自动化扫描」2026-09-30 落地后同样移出，
+> #17 空号，证据见 [`FEATURES.md`](FEATURES.md) §BM；#10「OpenAPI → 前端类型 / 客户端代码生成」
+> 2026-10-01 落地后同样移出，#10 空号，证据见 [`FEATURES.md`](FEATURES.md) §BN）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
 > **已停用**、仅作历史映射——新建与引用一律用本表 `§三 #N`。
 > 立项时在本表把状态改 ⏳；评估为不做改 ➖ 并写决策依据（本表即唯一来源，无第二处需同步）。
 
@@ -100,20 +108,26 @@
 | 7 | FinOps：存储分析与成本洞察 | #50 | ⬜ | 已有列表 size / storageClass、批量改存储类、生命周期规则读写；按前缀 / 存储类聚合用量、给出低频 / 归档 / 生命周期建议即成成本看板（有界并发 + 100k 上限沿用 `RunBatch`），对齐 FinOps 成本优化大趋势 |
 | 8 | 大文件体验：上传断点续传 + 下载并行分段 | #51 | ⬜ | 上传侧已有 multipart 四端点与 4 路并发，缺「刷新 / 断电后恢复」——可持久化分段清单实现续传；下载侧代理已支持 Range / 416，补多段并行 GET 聚合。大文件可靠性是网盘类客户端的分水岭能力 |
 | 9 | 本地文件夹 ↔ 桶 双向同步 + PWA 离线壳 | #52 | ⬜ | `download.ts` 已用 File System Access API 流式落盘，同 API 的目录句柄 + `etag` 比对可复用为本地目录同步；PWA manifest / service worker 让 Web 端可安装离线启动（密钥仍不落地 localStorage，遵守安全基线） |
-| 10 | OpenAPI → 前端类型 / 客户端代码生成 | #53 | ⬜ | `types.ts` / `endpoints.ts` 目前手写、靠契约测试守漂移；以 `/api/openapi.json` 为源生成 TS 类型与端点封装（schema-first），生成物入 CI diff 门禁，从「测出漂移」升级为「不产生漂移」；生成器为 devDependency，不违 ADR-004 |
 | 11 | OpenTelemetry：trace 贯穿签名 / 代理 / 迁移 | #54 | ⬜ | 已有 Prometheus 指标 + `X-Request-ID` + 可选 `S3C_LOG_JSON`；接入 OTLP 导出（开关式、默认关）把请求 ID 升级为跨 presign / proxy / migrate 的 trace，配套 SLO 仪表盘。OTel 已是可观测性事实标准，与既有指标互补不替换。**2026-09-30 部分落地**：SLO 仪表盘已随本批交付（`deploy/grafana/s3clinet.dashboard.json` + `grafana_dashboard_gate_test.go`）；**OTel trace 仍未做**，本条保持 ⬜。 |
 | 13 | Token 作用域与最小权限（只读 / 前缀限定） | #56 | ⬜ | 现有多 token（`S3C_TOKEN` 逗号分隔）只有全权一种；补作用域声明（只读、限定账号 / 前缀、过期时间），高危端点按 scope 拒绝并进 OpenAPI 契约。least-privilege / 短时凭证是 API 鉴权演进主流，复用常量时间比较与既有中间件链 |
-| 14 | 原生 fuzz 与性质测试纳入门禁 | #57 | ✅ | 已达成 100% statement 覆盖，但覆盖 ≠ 输入空间探索；对 policy JSON 解析、endpoint 归一化、S3C 信封读取、key 校验等解析面加 Go `Fuzz*` 目标 + CI 有界 fuzz 轮跑，语料入库防回归。弥补覆盖率门禁对非法输入的盲区，符合持续模糊测试实践。**2026-09-30 落地**：`internal/{s3wrap,store,handler}` 的 stdlib `testing.F` 目标（端点归一化 / SSRF、`S3C2`·`S3C3` 信封、桶策略 JSON 与文件名边界）+ `.github/workflows/fuzz.yml` 有界探索（PR 只跑种子语料）；语料入库防回归。证据见 [`FEATURES.md`](FEATURES.md) §BG。 |
 | 15 | 多副本 / HA 能力评估（store 外置） | #58 | ⬜ | 现状为 `flock` 单副本（R4 已决策接受、ADR-002 fail-closed）；评估引入可外置的 store 后端（如 SQLite 共享卷 / Postgres 驱动）以支撑滚动升级与多副本。**属推翻既有决策的评估项**：先出 ADR 再动代码，结论若维持现状则转 ➖ |
 | 16 | 多平台差异化用户体验增强 | #59 | ⬜ | 体验评估计划（桌面 / 移动 / Web 协同体验）；评估产出后按结论拆分或转 ➖ |
-| 17 | 可访问性补强与自动化扫描 | — | ⬜ | 2026-09-30 自 [`accessibility.md`](accessibility.md) §5.3/§5.4 收口迁入：① 焦点陷阱从 `ModalDialog` 提取为可复用组合式并覆盖 `ConfirmDialog` / `PromptDialog` / `PreviewOverlay`；② `aria-live` 补测试断言、操作成功 / 失败统一播报；③ 表格 `caption` / 选中态语义、主要表单控件可见 `<label>`；④ 组件级 `vitest-axe` 扫描（devDependency，不违 ADR-004）——渲染态 axe 侧已落地（[`accessibility.md`](accessibility.md) §4 第 2 条 `e2e/a11y.spec.ts` 四状态 A/AA 规则集），本项只剩组件测试侧；⑤ **对比度修色收尾**：`--ok` / `--danger` 已修至 4.95 / 5.91 达标，剩余低于 AA 的组合见 [`accessibility.md`](accessibility.md) §5.5（浅色 5 行——`--muted` / `--primary` / `--placeholder` / `--brand` 渐变白字（浅端 2.37:1 最弱）；深色 3 行——`--danger` 4.25 / `--placeholder` 3.81 / 渐变白字 4.23），表值由 `apps/server/contrast_gate_test.go` 机械重算钉住；RTL 与正式审计（人工）按需另行立项 |
-| 18 | 可观测性补全：5 个缺失指标 | — | ⬜ | 2026-09-30 自 [`OPERATIONS.md`](OPERATIONS.md) 观测缺口声明收口迁入：账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、卷 / 磁盘容量、优雅关停耗时。落地时**同 PR** 同步 [`OPERATIONS.md`](OPERATIONS.md) §4 与 [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（`TestPrometheusRulesReferenceRealMetrics` 钉指标真实性）；`S3C_EXPOSE_METRICS` 默认 404、开启后匿名可读的安全口径不变 |
 
 ---
 
 ## 四、质量门禁基线
 
-任一版本发布前必须全绿（当前实测状态，2026-09-28）：
+任一版本发布前必须全绿（实测状态；**2026-10-01 复测**（#17 可访问性批次收口、#10 代码生成批次
+落地后全量重跑）：
+`gofmt -l` 干净 / `go vet` 0 告警 / `golangci-lint` **0 issues** / `go test ./...` **9/9 包** /
+`go build` OK / `make test-cover` **9/9 包 100.0%（`count==0` 零块）** / `govulncheck` **0 可达**，
+与前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` 均 exit 0 / `pnpm test`
+**76 文件 1158 例** / `pnpm test:coverage` 四指标 **100%** / `pnpm build` OK / `pnpm gen:api --check`
+**exit 0** / `pnpm e2e` **22 passed** / `cargo audit`（`--no-fetch` 用缓存 advisory DB）**0 漏洞**，
+两项真实 E2E——`make e2e-real` **3 passed**、`S3CLINET_E2E=1` **4/4 PASS** 全绿。
+**本轮无法实跑**：`pnpm audit`——所用镜像 `registry.npmmirror.com` 不提供
+`/-/npm/v1/security/audits` 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 与
+2026-09-22 实测值）：
 
 | 门禁 | 命令 | 当前状态 |
 |---|---|---|
@@ -122,16 +136,17 @@
 | Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
 | Go 测试 | `go test -race -count=1 ./...` | ✅ 9/9 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`） |
 | Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100% |
-| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁） |
+| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁。**2026-10-01 复测**：0 可达；另扫出 21 个「被 require 但代码未调用」的模块漏洞，不构成可达面） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ **1132** 例全绿（**74** 文件；2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV` → 1128；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例、改写为派发真实 keydown 的行为断言 → 1126**；**同日 §AO 补死代码门禁的合成源码口径用例 → 1127**；**同日 §AP 收口 #67 / #68，新增 `a11y_gate.test.ts` 3 例与 `i18n` 2 例 → 1132、文件数 74**） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（**宿主 `NODE_ENV` 未设**：4296 / 2932 / 1130 / 3679；**宿主 `NODE_ENV=production`**：4294 / 2932 / 1130 / 3677——差值来自 Vue dev/prod 构建各自少/多插桩的那一行，两种环境下四指标均 100%。含 `src/i18n/index.ts`。2026-09-29 §AP 复测值） |
-| 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败 |
-| E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | ✅ **17 passed / 0 skipped**（`pnpm e2e`；含 2026-09-29 新增 `screenshots.spec.ts` 的 2 例）。此前本行「当前状态」误填成 action SHA 校验结果——那是 `TestWorkflowActionsAreShaPinned` 的职责，与 E2E 通过数无关，2026-09-29 更正 |
-| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（真实后端 + RustFS + 真实产物；**`S3C_TOKEN` 开启的生产同构形态**，2026-09-24 审查 C1 验收实跑） |
-| E2E（真实 S3 协议） | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` | ✅ 4/4 PASS（真实 RustFS：分段 / 复制 / 桶属性 / 回收站） |
-| Rust 依赖审计 | `cargo audit`（两套 CI 的 desktop job + `make rust-audit`） | ✅ 0 漏洞；7 条 unmaintained/unsound 告警已 triage |
+| 前端测试 | `pnpm test` | ✅ **1158** 例全绿（**76** 文件；**2026-10-01 §BN**：#10 代码生成批次 +3 例（新增 `src/api/generated.gate.test.ts`：生成物新鲜度 + 结构自检 + `opPath` 行为），文件数 75 → 76；**2026-10-01 §BM**：可访问性批次 +23 例（焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态 1 等），文件数 74 → 75（新增 `src/a11y_axe.test.ts`）；2026-09-30 前的轨迹：2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV` → 1128；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例、改写为派发真实 keydown 的行为断言 → 1126**；**同日 §AO 补死代码门禁的合成源码口径用例 → 1127**；**同日 §AP 收口 #67 / #68，新增 `a11y_gate.test.ts` 3 例与 `i18n` 2 例 → 1132、文件数 74**） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（**2026-10-01 §BN 复测**：4327 / 2932 / 1131 / 3712，四指标均 100%（新增 `src/api/operations.ts` 被 `endpoints.ts` 全量消费，纳入统计）；此前 2026-10-01 §BM 值 4321 / 2932 / 1130 / 3706、2026-09-29 §AP 值 4296 / 2932 / 1130 / 3679（`NODE_ENV` 未设）与 4294 / 2932 / 1130 / 3677（`NODE_ENV=production`，差值来自 Vue dev/prod 构建各自少/多插桩的那一行）均 100%。含 `src/i18n/index.ts`） |
+| 前端生成物新鲜度 | `pnpm gen:api --check`（= `node scripts/gen-api.mjs --check`，由 `src/api/generated.gate.test.ts` 在 `pnpm test` 内调用） | ✅ exit 0（**2026-10-01 §BN 首次登记**）：`src/api/schema.d.ts` / `src/api/operations.ts` 与 [`api/openapi.json`](api/openapi.json) 逐字节一致；改 spec 忘了重跑 `pnpm gen:api` 即红灯 |
+| 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败。**2026-10-01 本地未能实跑**：所用镜像不提供 audit 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果；新增 devDependency `vitest-axe` 由 Dependabot / CI 覆盖 |
+| E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | **22 passed / 0 skipped**（**2026-10-01 实跑**：`pnpm e2e`，含 5 条 `a11y.spec.ts` axe 扫描与 2 条截图——本批配色 / aria 改动的渲染态验证；此前 2026-09-29 记为 17 passed，含 `screenshots.spec.ts` 的 2 例）。此前本行「当前状态」误填成 action SHA 校验结果——那是 `TestWorkflowActionsAreShaPinned` 的职责，与 E2E 通过数无关，2026-09-29 更正 |
+| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（**2026-10-01 复测**——本轮改动前端，按 AGENTS 必跑；本机 8080 被 `haproxy` 占用故用 `SERVER_PORT=8081`，脚本编排不变。真实后端 + RustFS + 真实产物、**`S3C_TOKEN` 开启的生产同构形态**；2026-09-24 审查 C1 验收实跑为上一次） |
+| E2E（真实 S3 协议） | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` | ✅ 4/4 PASS（**2026-10-01 复测**：临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000` 跑完即删；`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash` 四条全 PASS。真实 RustFS：分段 / 复制 / 桶属性 / 回收站） |
+| Rust 依赖审计 | `cargo audit`（两套 CI 的 desktop job + `make rust-audit`） | ✅ 0 漏洞；7 条 unmaintained/unsound 告警已 triage（**2026-10-01 `cargo audit --no-fetch` 复测**——`make rust-audit` 默认要从 GitHub 拉 advisory DB，本环境网络不通，改用本地缓存 DB，结论不变） |
 
 > 后端覆盖率已补齐至**每包 100%**（2026-09 删除了确实不可达的防御分支，其余缺口改用行为断言，
 > 不做 gap 测试），CI 与 `make test-cover` 以 100% 为硬阈值——直接检查 profile 中的 `count==0`

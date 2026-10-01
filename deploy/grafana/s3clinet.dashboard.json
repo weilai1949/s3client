@@ -457,20 +457,168 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 73 },
       "id": 30,
       "panels": [],
-      "title": "⑥ 异步任务 / 队列（观测缺口）",
+      "title": "⑥ 异步任务 / 队列",
       "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "异步任务 / 队列没有内置指标，只能外部采集。",
+      "description": "在册（未终结）异步任务数怎么读：上限语义、恢复语义与重启对账。",
       "gridPos": { "h": 5, "w": 24, "x": 0, "y": 74 },
       "id": 31,
       "options": {
-        "content": "**本服务不提供「在册异步任务数」指标**（OPERATIONS.md §4.3 观测缺口）——迁移 / 复制任务表在内存中（`JobRegistry`），只有 `jobs.json` 用于跨重启对账。\n\n替代做法（**建议值**）：\n\n1. 定时轮询 `GET /api/migrate/jobs` 统计非终态任务数，逼近上限 256 时告警；\n2. 进程重启看 `resets(s3c_uptime_seconds[15m]) > 0`——重启会把进行中的任务标记为 `interrupted`，需人工对账（OPERATIONS.md §5 铁律：先取证，再重启）；\n3. goroutine 数持续上升（见 ⑤）可作为间接信号，但**不能**替代任务数。",
+        "content": "**在册异步任务数**（`s3c_jobs_active`，ROADMAP #18 补齐）与 `JobRegistry` 的在册上限同口径：只数**未终结**任务，上限 256，`>= 230` 持续 10 分钟触发 `S3ClinetJobsNearCapacity`。\n\n怎么读：\n\n1. 恒为 0 而 `GET /api/migrate/jobs` 里有历史项 —— 正常：终态任务不占名额，只保留 5 分钟 / `interrupted` 7 天供对账；\n2. 进程重启看 `resets(s3c_uptime_seconds[15m]) > 0`——重启会把进行中的任务标记为 `interrupted`，需人工对账（OPERATIONS.md §5 铁律：先取证，再重启）；\n3. goroutine 数持续上升（见 ⑤）仍是泄漏的间接信号，与本指标互补。",
         "mode": "markdown"
       },
       "targets": [],
-      "title": "异步任务 / 队列：为什么没有面板",
+      "title": "异步任务 / 队列：指标怎么读",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "在册（未终结）异步任务数 s3c_jobs_active。在册上限 256（service.defaultMaxJobs）：>= 230 持续 10 分钟触发 S3ClinetJobsNearCapacity（warning）。",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 230 }, { "color": "red", "value": 256 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 79 },
+      "id": 32,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_jobs_active", "legendFormat": "active jobs", "refId": "A" }
+      ],
+      "title": "在册异步任务数（上限 256）",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "任务状态按终态 / 非终态分组的近似：s3c_jobs_active 只反映非终态数量，历史项请用 GET /api/migrate/jobs 核对（本服务不按状态拆标签，避免基数无界）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 79 },
+      "id": 33,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "max_over_time(s3c_jobs_active[1h])", "legendFormat": "peak active (1h)", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_jobs_active", "legendFormat": "active now", "refId": "B" }
+      ],
+      "title": "在册任务：当前值与 1 小时峰值",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 85 },
+      "id": 34,
+      "panels": [],
+      "title": "⑦ ROADMAP #18 补齐的观测面（HTTP 延迟 / 写入失败 / 卷容量 / 关停耗时）",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "HTTP 请求延迟 p95（含 proxy / download / zip 等流式端点，长尾天然存在）。优先取 recording rule s3clinet:http_latency_p95:rate5m（与 rules.yml 同源）；refId B 是等价原始表达式，规则未加载时仍可读。> 5s 持续 10 分钟触发 S3ClinetHTTPLatencyHigh（warning）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 86 },
+      "id": 35,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:http_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(s3c_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95（raw）", "refId": "B" }
+      ],
+      "title": "HTTP 请求延迟 p95（建议 ≤ 5s）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "账号库写入失败（落盘 / SQL 写入出错，业务性拒绝不计数）。json / encrypted 驱动的 Ping() 恒为 nil，这是它们唯一的主动存储故障信号。15 分钟内有增量即触发 S3ClinetStoreWriteFailures（critical）。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 86 },
+      "id": 36,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "increase(s3c_store_write_failures_total[15m])", "legendFormat": "write failures / 15m", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_store_write_failures_total", "legendFormat": "cumulative", "refId": "B" }
+      ],
+      "title": "账号库写入失败（增量 / 累计）",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "数据卷剩余空间占比（s3c_volume_free_bytes / s3c_volume_size_bytes）。< 20% 持续 10 分钟触发 S3ClinetVolumeSpaceLow（warning）。序列只在 statfs / GetDiskFreeSpaceExW 可用的平台上存在：平台不支持或数据目录未配置时不发序列（面板 No data，按 OPERATIONS.md §4.3 用 node_exporter / df 补齐）。",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "orange", "value": 0.2 }, { "color": "green", "value": 0.3 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 92 },
+      "id": 37,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_volume_free_bytes / s3c_volume_size_bytes", "legendFormat": "free ratio", "refId": "A" }
+      ],
+      "title": "数据卷剩余空间占比",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "S3C_DATA_DIR 所在文件系统的总容量（字节）。与剩余空间占比一起判断「快满了」还是「本来就小」。",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {},
+          "unit": "bytes",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 92 },
+      "id": 38,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_volume_size_bytes", "legendFormat": "volume size", "refId": "A" }
+      ],
+      "title": "数据卷总容量",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "最近一次优雅关停的耗时（s3c_last_shutdown_duration_seconds）。值由**上一次进程退出前**写入 data/shutdown.json、本次启动载入，故本进程自己的关停耗时要等下次启动才可见；0 = 尚无记录（首次启动或文件缺失）。与 S3C_SHUTDOWN_TIMEOUT（默认 30s）对比判断关停是否吃紧。",
+      "fieldConfig": {
+        "defaults": { "custom": {}, "unit": "s" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 92 },
+      "id": 39,
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": [ "lastNotNull" ], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_last_shutdown_duration_seconds", "legendFormat": "last shutdown", "refId": "A" }
+      ],
+      "title": "最近一次优雅关停耗时",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "本行指标的读法与「序列缺失」的含义。",
+      "gridPos": { "h": 5, "w": 24, "x": 0, "y": 98 },
+      "id": 40,
+      "options": {
+        "content": "**本行指标（ROADMAP #18 补齐的五个观测缺口）怎么读**\n\n- `s3c_http_request_duration_seconds`：HTTP 延迟直方图，`le=\"+Inf\"` 恒等于 `s3c_http_requests_total`（同一次请求同一处记录，可用于自检）；含流式端点，p50 才代表普通 API。\n- `s3c_store_write_failures_total`：只数**真实写入失败**（落盘 / SQL 错误），重复 ID、NotFound 这类业务拒绝不计数。\n- `s3c_volume_*`：数据目录所在卷的容量。**序列缺失 = 取不到数据**（平台不支持 / `S3C_DATA_DIR` 未配置 / statfs 失败），不是「容量为 0」——此时改用宿主 `node_exporter` / `df`（OPERATIONS.md §4.3）。\n- `s3c_last_shutdown_duration_seconds`：**上一次**优雅关停耗时（跨重启由 `data/shutdown.json` 载入）；本进程关停后即退出，scrape 赶不上，值要下次启动才可见。",
+        "mode": "markdown"
+      },
+      "targets": [],
+      "title": "⑦ 新增指标怎么读（含序列缺失的含义）",
       "type": "text"
     }
   ],

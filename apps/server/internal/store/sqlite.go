@@ -301,6 +301,7 @@ func (s *SQLiteStore) Create(a *model.Account) (*model.Account, error) {
 		return nil, err
 	}
 	if err := s.insertAccount(a, ord); err != nil {
+		noteWriteFailure()
 		return nil, err
 	}
 	return a.Sanitized(), nil
@@ -332,6 +333,7 @@ WHERE id=?`,
 		cur.Name, cur.Endpoint, cur.PublicEndpoint, cur.Region, cur.AccessKey, secret, cur.Bucket,
 		sqliteBool(cur.PathStyle), sqliteBool(cur.UseSSL), cur.UpdatedAt.UTC().Format(time.RFC3339Nano), id,
 	); err != nil {
+		noteWriteFailure()
 		return nil, fmt.Errorf("sqlite update: %w", err)
 	}
 	return cur.Sanitized(), nil
@@ -351,6 +353,7 @@ func (s *SQLiteStore) Delete(id string) error {
 	defer s.mu.Unlock()
 	res, err := s.db.Exec(`DELETE FROM accounts WHERE id = ?`, id)
 	if err != nil {
+		noteWriteFailure()
 		return err
 	}
 	n, _ := res.RowsAffected()

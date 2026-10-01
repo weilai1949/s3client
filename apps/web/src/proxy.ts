@@ -1,3 +1,5 @@
+import { opPath } from './api/http'
+
 /** 共享的「服务端代理 / 下载 URL」构造器（安全预览与下载统一入口）。 */
 
 /**
@@ -16,7 +18,7 @@ export function proxyUrl(
 ): string {
   const p = new URLSearchParams({ bucket, key, mode })
   if (versionId) p.set('versionId', versionId)
-  return apiBase + `/api/accounts/${accountId}/proxy?${p.toString()}`
+  return apiBase + `${opPath('proxyObject', { id: accountId })}?${p.toString()}`
 }
 
 /**

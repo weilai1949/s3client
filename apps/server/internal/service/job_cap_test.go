@@ -65,6 +65,32 @@ func TestJobRegistryTryCreateAllowsAfterTerminal(t *testing.T) {
 	}
 }
 
+// TestJobRegistryActiveCount ActiveCount 返回在册（未终结）任务数——指标
+// `s3c_jobs_active`（ROADMAP #18）的真值来源，与上限判定共用同一口径：终态任务不计。
+func TestJobRegistryActiveCount(t *testing.T) {
+	r := NewJobRegistry()
+	defer r.Stop()
+	_, cancel := context.WithCancel(context.Background())
+
+	if got := r.ActiveCount(); got != 0 {
+		t.Fatalf("空注册表 ActiveCount = %d, want 0", got)
+	}
+	first, err := r.TryCreate(1, cancel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.TryCreate(1, cancel); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.ActiveCount(); got != 2 {
+		t.Errorf("两个在册任务时 ActiveCount = %d, want 2", got)
+	}
+	first.Finish(JobResult{Migrated: 1}, JobStatusDone)
+	if got := r.ActiveCount(); got != 1 {
+		t.Errorf("一个任务进入终态后 ActiveCount = %d, want 1", got)
+	}
+}
+
 // TestJobRegistryCreateUnchanged Create 保持历史语义（不返回 error、总是给出任务），
 // 以免波及 70+ 处既有调用点。
 func TestJobRegistryCreateUnchanged(t *testing.T) {

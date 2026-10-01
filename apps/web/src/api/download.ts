@@ -1,4 +1,5 @@
-import { requestResponse } from './http'
+import { opPath, requestResponse } from './http'
+import { operations } from './operations'
 import { t } from '../i18n'
 
 const ZIP_BLOB_MAX_BYTES = 500 * 1024 * 1024 // 500MB blob 兜底上限
@@ -41,8 +42,8 @@ export async function downloadZipToDisk(
   suggestedName?: string,
 ): Promise<void> {
   const keys = body.keys
-  const path = `/api/accounts/${id}/download-zip`
-  const res = await requestResponse(path, { method: 'POST', body: JSON.stringify(body) })
+  const path = opPath('downloadZip', { id })
+  const res = await requestResponse(path, { method: operations.downloadZip.method, body: JSON.stringify(body) })
   const clHeader = res.headers.get('Content-Length')
   const contentLength = clHeader ? Number(clHeader) : NaN
   const filename =

@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { promptState, settlePrompt } from '../prompt'
+import { useFocusTrap } from '../composables/useFocusTrap'
 import { useKeydownStack } from '../composables/useKeydownStack'
 import { t } from '../i18n'
 
+const card = ref<HTMLElement>()
 const inputEl = ref<HTMLInputElement>()
+const open = computed(() => promptState.open)
+
+const { trapTab } = useFocusTrap(card, open, {
+  // 初始聚焦落在输入框（它是第一个可聚焦元素）；聚焦后全选，便于直接替换掉默认值。
+  afterOpen: () => inputEl.value?.select(),
+})
 
 function onKey(e: KeyboardEvent) {
   if (!promptState.open) return
@@ -14,27 +22,19 @@ function onKey(e: KeyboardEvent) {
   } else if (e.key === 'Enter') {
     e.preventDefault()
     settlePrompt(true)
+  } else {
+    trapTab(e)
   }
 }
 
-useKeydownStack(onKey, computed(() => promptState.open))
-
-watch(
-  () => promptState.open,
-  async (open) => {
-    if (!open) return
-    await nextTick()
-    inputEl.value?.focus()
-    inputEl.value?.select()
-  },
-)
+useKeydownStack(onKey, open)
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="modal-fade">
       <div v-if="promptState.open" class="modal-backdrop" @click.self="settlePrompt(false)">
-        <div class="modal-card" role="dialog" aria-modal="true" :aria-label="promptState.title">
+        <div ref="card" class="modal-card" role="dialog" aria-modal="true" :aria-label="promptState.title">
           <h3 class="modal-title">{{ promptState.title }}</h3>
           <label class="field">
             {{ promptState.label }}
@@ -48,7 +48,7 @@ watch(
               @keydown.enter.prevent="settlePrompt(true)"
             />
           </label>
-          <p v-if="promptState.error" class="modal-err">{{ promptState.error }}</p>
+          <p v-if="promptState.error" class="modal-err" role="alert">{{ promptState.error }}</p>
           <div class="modal-actions">
             <button class="btn sm" @click="settlePrompt(true)">{{ promptState.confirmText }}</button>
             <button class="btn secondary sm" @click="settlePrompt(false)">{{ t('common.cancel') }}</button>

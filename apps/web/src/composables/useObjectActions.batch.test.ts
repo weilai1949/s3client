@@ -68,10 +68,13 @@ const acc: Account = {
   bucket: 'b1',
   pathStyle: true,
   useSSL: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    publicEndpoint: '',
+    updatedAt: '2024-01-01T00:00:00Z',
 }
 
 function fileObj(key: string): ObjectItem {
-  return { key, size: 1, lastModified: '2024-01-01', etag: 'e1', isDir: false }
+  return { key, size: 1, lastModified: '2024-01-01', etag: 'e1', isDir: false, storageClass: 'STANDARD' }
 }
 
 function makeCtx(overrides: Partial<ObjectBrowserCtx> = {}): ObjectBrowserCtx {
