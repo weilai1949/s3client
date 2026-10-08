@@ -70,7 +70,7 @@
 
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
-| 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动 |
+| 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动。**2026-10-08 补登**：该限制此前只写在 `stream_copy.go` 注释 / 本文件 / [`OPERATIONS.md`](OPERATIONS.md) §性能表，**根 `README.md` 新增「已知限制」小节**把它推到用户可见面 |
 
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
 > 已闭环移除，证据见 [`FEATURES.md`](FEATURES.md) §AB；同日新开 **#64**（三路复审 19 条的处置清单），

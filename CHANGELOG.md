@@ -31,6 +31,17 @@
 
 ## [Unreleased]
 
+### 文档（2026-10-08 根 README 新增「已知限制」小节：跨 endpoint 迁移单对象 640GB 上限）
+
+- **新增 `README.md` §已知限制**：把 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖）
+  从「只写在代码注释 / 台账 / 运维表」推到**用户可见面**——`64MB × 10000 段 = 640GB`、超限**明确拒绝并
+  abort（不静默截断）**、不放大的内存账（512MB 容器预算，一块分段缓冲即 64MB），并链到
+  `service/stream_copy.go` 注释、5 个钉默认值 / 边界的测试与 #63 登记行；小节同时写明
+  「已知限制的唯一登记处是 `KNOWN_ISSUES.md`，本节只登用户可见的那一条」（防双源漂移）。
+- **文档同步**：`docs/KNOWN_ISSUES.md` #63 行补一句「2026-10-08 已补登根 README」（登记行自证可见性）。
+- **门禁实跑（2026-10-08）**：`cd apps/server && go test . -count=1` → 包根文档门禁（`doc_link` /
+  `doc_number` / `docs_naming` / `doc_index` 等）**ok 5.291s**。
+
 ### 变更（2026-10-08 KNOWN_ISSUES #71 闭环：仓库 slug 统一为 `github.com/weilai1949/s3client`）
 
 > 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BO**；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)

@@ -296,6 +296,11 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 
 配置见 [docs/CONFIGURATION.md](docs/CONFIGURATION.md)。
 
+## 已知限制
+
+- **跨 endpoint 迁移的单对象上限 640GB**（`64MB × 10000 段`）：跨 endpoint 的文件迁移走 `GetObject` → `PutObject` 流式转发（`service.StreamCopy`），分段号受 S3 协议 10000 段上限约束——**超限对象在段号耗尽前被明确拒绝并 abort，绝不静默截断**。不按比例放大的原因是内存账：放大分段缓冲会突破容器 512MB 内存预算（`docker-compose*.yml` 的 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。口径与内存账见 [`apps/server/internal/service/stream_copy.go`](apps/server/internal/service/stream_copy.go) 注释，登记与决策见 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖ 维持现状），两个默认值与四条边界行为由 `TestMultipartStreamCopyPartSizeIs64MB` / `TestMaxMultipartPartsIsProtocolLimit` / `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 钉住。
+- 已知限制的**唯一登记处**是 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)；本节只登用户可见的那一条，新增限制请先登记再在这里补一行。
+
 ## 安全说明
 
 - 账号 SecretKey 仅服务端存储，对外返回**脱敏**（`AccountView.secretSet`，不回传 `secretKey`）。
