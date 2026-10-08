@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/atomicfile"
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/atomicfile"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // fileCodec 是 fileStore 的落盘编解码策略：把磁盘字节还原为账号列表，

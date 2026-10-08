@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // TestObjectAcl 用假 S3 验证：读取对象 ACL（公有性/授权/公开链接）与设置 canned ACL。

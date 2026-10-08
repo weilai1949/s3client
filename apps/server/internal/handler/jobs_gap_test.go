@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // TestAsyncEndpointsReturn503AtCapacity 占满在册名额后，四个异步端点

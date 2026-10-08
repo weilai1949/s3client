@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // downloadZip 将所选对象流式打包为 ZIP 下载（不落盘、不占内存）。

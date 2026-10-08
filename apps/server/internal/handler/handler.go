@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/openapi"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/openapi"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // Handler 承载 HTTP 接口逻辑。

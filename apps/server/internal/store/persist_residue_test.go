@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // TestStorePersistsAfterTmpResidue 回归：进程在写 tmp 后 rename 前崩溃会留下残骸，

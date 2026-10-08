@@ -227,7 +227,7 @@ make e2e-real E2E_REAL_ARGS=--keep  # 跑完保留容器/后端，便于排查
 > 避免「本地跑通 ≠ CI 跑通」。复用已有 RustFS 时用
 > `RUSTFS_ENDPOINT=http://127.0.0.1:9000 bash scripts/e2e-real.sh --no-rustfs`。
 
-CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/test/build、Web typecheck/build 与 Docker 镜像构建。推送 `v*` tag（或手动 `workflow_dispatch`）时，`.github/workflows/release-desktop.yml` 会在 Windows / Linux / macOS 分别打出 `.exe`（NSIS）、`.deb`、`.dmg`，并挂到该 tag 对应的 [GitHub Release](https://github.com/weilai1949/s3clinet/releases)（Tags 页可看到 Assets）。
+CI：GitHub Actions（`.github/workflows/ci.yml`）在 push/PR 时运行 Go vet/test/build、Web typecheck/build 与 Docker 镜像构建。推送 `v*` tag（或手动 `workflow_dispatch`）时，`.github/workflows/release-desktop.yml` 会在 Windows / Linux / macOS 分别打出 `.exe`（NSIS）、`.deb`、`.dmg`，并挂到该 tag 对应的 [GitHub Release](https://github.com/weilai1949/s3client/releases)（Tags 页可看到 Assets）。
 
 同一套门禁（server / web / docker / desktop + RustFS E2E + Playwright E2E + 真实后端联调 E2E）也镜像在 [`.gitlab-ci.yml`](.gitlab-ci.yml)，供 GitLab 侧流水线使用；本地可无 GitLab 实例直接跑：
 

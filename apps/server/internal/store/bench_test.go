@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // benchAccount 构造第 i 个基准账号（字段长度贴近真实值，避免测出「空结构体特别快」的假象）。

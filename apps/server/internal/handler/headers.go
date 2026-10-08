@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // setHeaders 设置对象 HTTP 头/元数据（CopyObject REPLACE 到自己）。

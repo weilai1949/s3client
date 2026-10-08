@@ -15,7 +15,7 @@
       "title": "s3clinet 运维手册（OPERATIONS.md §4）",
       "tooltip": "SLO / 告警基线与 Runbook",
       "type": "link",
-      "url": "https://github.com/weilai1949/s3clinet/blob/main/docs/OPERATIONS.md"
+      "url": "https://github.com/weilai1949/s3client/blob/main/docs/OPERATIONS.md"
     }
   ],
   "panels": [

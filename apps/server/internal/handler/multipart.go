@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // multipartInit 初始化分段上传，返回 UploadID。

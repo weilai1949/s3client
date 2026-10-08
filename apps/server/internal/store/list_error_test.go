@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // TestSQLiteListReturnsErrorAfterClose 回归：SQLite 查询失败不得静默返回空列表

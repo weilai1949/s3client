@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // MigrateKeys 跨账号/桶迁移：同端点优先 CopyObject（EntityTooLarge 回退流式），异端点走 StreamCopy。

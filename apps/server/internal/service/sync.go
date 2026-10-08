@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // CompareMode 选择「源/目标对象视为相等」的判定方式。

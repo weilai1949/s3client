@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // MaxSinglePutBytes 为 S3 PutObject / CopyObject 真实上限。

@@ -31,6 +31,32 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-08 KNOWN_ISSUES #71 闭环：仓库 slug 统一为 `github.com/weilai1949/s3client`）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BO**；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)
+> **#71 整行移除**（编号台账改「已闭环移除」）。**推翻 2026-09-30 的 ➖「维持现状」决策**——登记时的理由
+> （改模块路径 = 全仓 import 重命名、与当批正交）没有变，变的是**成本已被量化为一次纯机械替换**。
+
+- **① 模块路径**：[`apps/server/go.mod`](apps/server/go.mod) `module github.com/weilai1949/s3clinet/apps/server`
+  → `…/s3client/apps/server`；全仓 Go import 同步改写（含门禁测试里以**字符串字面量**出现的示例 import），
+  合计 **120 个受版本控制的文件**（Go 110 + `go.mod` 1 + 非 Go 9）。
+- **② 仓库 URL**：`.github/SECURITY.md` · `.github/ISSUE_TEMPLATE/config.yml` · `.github/SUPPORT.md` ·
+  `.github/CONTRIBUTING.md` · `docs/AI_POLICY.md` · `docs/en/index.md` · `docs/api/accounts.schema.json` 的
+  `$id` · `deploy/grafana/s3clinet.dashboard.json` 面板 `url` · 根 `README.md` 的 GitHub Release 链接 ——
+  统一到与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 一致的 `s3client`。
+- **③ 范围边界（同批写死，防「怎么还有一堆 s3clinet」的误读）**：**品牌 / 运行时 / 监控命名空间不属仓库
+  slug、刻意不动**——产品名 `s3clinet`（文档标题、OpenAPI `title`、启动日志、`CITATION.cff` 标题）、
+  运行时工件 `.s3clinet.lock` / 二进制 `s3clinet-server` / 镜像 `s3clinet/server` / `container_name` /
+  Cargo 包 `s3clinet` / npm `s3clinet-web`、监控命名空间 `s3clinet:*` 记录规则 + `S3Clinet*` 告警 +
+  `deploy/{prometheus,grafana}/s3clinet.*` 文件名；本文件的 monorepo 迁移历史条目按「历史条目不改写」
+  保留旧路径时点叙述。
+- **④ 残留核对**：全仓按旧 slug `grep -rl` → 除**本条与 [`docs/FEATURES.md`](docs/FEATURES.md) §BO
+  记录「改前值」的叙述性引用**（以及本文件 monorepo 迁移历史条目）外 **0 处**，**活引用已清零**；
+  两个被 `.gitignore` 忽略的本地旧构建产物已删除，下次构建按新路径重新产出。
+- **门禁实跑（2026-10-08）**：`go vet ./... && go build ./... && go test ./... -count=1` → **9/9 包 ok**；
+  `golangci-lint run` → **0 issues**；`go test . -count=1` → **ok 4.939s**、文档写回后复跑 **ok 4.235s**（包根文档门禁）；
+  前端 `pnpm test` **76 文件 / 1158 例**、`pnpm lint` **0 告警**、`pnpm build` OK（377.34 kB / gzip 114.83 kB）。
+
 ### 变更（2026-10-08 批次交接快照 `handoff-20260930.md` 归档冻结：归档四步）
 
 > 所记批次四条目（`ROADMAP` #19 / `KNOWN_ISSUES` #70 / `ROADMAP` #18 / #17）已于 2026-10-01

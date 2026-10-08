@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // TestChangeStorageClass 用假 S3 验证：切换存储类型触发 CopyObject（携带 x-amz-storage-class）、

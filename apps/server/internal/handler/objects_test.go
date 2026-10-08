@@ -13,8 +13,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // TestHeadObject 用假 S3 验证 HeadObject 详情返回与 404 语义。

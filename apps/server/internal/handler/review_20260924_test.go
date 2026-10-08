@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // ---- R1：限速与审计必须按可信代理链「最后一段」XFF 计数（首段可被上游伪造） ----

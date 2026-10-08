@@ -25,7 +25,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // 扫描面自检阈值：低于阈值说明解析口径塌缩（例如文档被清空 / 反射拿到零字段），

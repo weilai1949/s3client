@@ -1,4 +1,4 @@
-module github.com/weilai1949/s3clinet/apps/server
+module github.com/weilai1949/s3client/apps/server
 
 go 1.26.6
 

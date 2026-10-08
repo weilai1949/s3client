@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/atomicfile"
+	"github.com/weilai1949/s3client/apps/server/internal/atomicfile"
 )
 
 // 任务状态。running 之外均为终态；interrupted 表示进程在任务运行中退出，

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // driverSpec 描述一个「文件落盘」驱动的构造方式，用于跨驱动对照测试。

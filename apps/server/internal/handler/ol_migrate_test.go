@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // olMigrateBody 组装迁移请求体。

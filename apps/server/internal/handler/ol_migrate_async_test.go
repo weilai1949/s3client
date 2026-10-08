@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // TestOlMigrateAsyncValidation 异步迁移：非法请求体 → 400。

@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 const trashXML = `<?xml version="1.0" encoding="UTF-8"?><ListVersionsResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>b</Name><IsTruncated>true</IsTruncated><NextKeyMarker>k9</NextKeyMarker><NextVersionIdMarker>d9</NextVersionIdMarker><DeleteMarker><Key>deleted1.txt</Key><VersionId>d1</VersionId><IsLatest>true</IsLatest><LastModified>2026-09-01T00:00:00.000Z</LastModified></DeleteMarker><DeleteMarker><Key>deleted2.txt</Key><VersionId>d2</VersionId><IsLatest>true</IsLatest><LastModified>2026-09-01T00:00:00.000Z</LastModified></DeleteMarker><Version><Key>alive.txt</Key><VersionId>vv1</VersionId><IsLatest>true</IsLatest><LastModified>2026-09-01T00:00:00.000Z</LastModified><Size>5</Size><ETag>&quot;e&quot;</ETag></Version></ListVersionsResult>`

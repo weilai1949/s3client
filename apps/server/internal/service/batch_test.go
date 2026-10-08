@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // newGatedFakeS3 返回一个「请求到达后阻塞等待放行」的假 S3（path-style），

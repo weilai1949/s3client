@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // migrate 跨账号迁移：源账号对象 → 目标账号/桶 + 前缀（同步）。

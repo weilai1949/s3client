@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/atomicfile"
+	"github.com/weilai1949/s3client/apps/server/internal/atomicfile"
 )
 
 // shutdownFileName 是优雅关停耗时的落盘文件名（位于 S3C_DATA_DIR 下）。

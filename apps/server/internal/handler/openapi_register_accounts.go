@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/weilai1949/s3clinet/apps/server/internal/openapi"
+	"github.com/weilai1949/s3client/apps/server/internal/openapi"
 )
 
 func registerAccounts(r *openapi.Registry) {

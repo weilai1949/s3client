@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 func (h *Handler) listBuckets(w http.ResponseWriter, r *http.Request) {

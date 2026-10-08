@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/aws/smithy-go"
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // ---- 错误码桩：实现 smithy.APIError，用于白盒直测 writeInternalErr 的映射分支 ----

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/openapi"
+	"github.com/weilai1949/s3client/apps/server/internal/openapi"
 )
 
 // openapi_examples.go —— 每个 operation 的请求 / 响应示例（登记后由 applyExamples 附加到注册表）。

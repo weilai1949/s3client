@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // sqliteRawSecret 直接读库中 secret_key 列的原始值，用于断言落盘形态。

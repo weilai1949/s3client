@@ -38,9 +38,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // 预算常量。注释里的「实测」取自 2026-09-30 的本仓库开发机（go1.26.6 linux/amd64，

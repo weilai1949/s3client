@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // setStoreKey 将 S3C_STORE_KEY 设为 key，并在测试结束时恢复原始值。

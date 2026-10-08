@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // clientCache 按账号 ID 缓存 S3 客户端；UpdatedAt 变化时自动重建。

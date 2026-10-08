@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 func newTestHandler(t *testing.T, cors []string, token string) http.Handler {

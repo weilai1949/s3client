@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // export_test.go —— 仅在 `go test` 编译本包时参与构建，不进入生产二进制。

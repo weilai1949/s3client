@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // 本文件是删除族的编排层：记账、前缀递归分片、按批删除。

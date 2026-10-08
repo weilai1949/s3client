@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // proxyObject 安全代理对象内容：

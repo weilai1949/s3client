@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // buildLegacyS3C2 手工构造一个旧格式（S3C2，Argon2 t=1）加密文件，

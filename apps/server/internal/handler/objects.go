@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 func (h *Handler) listObjects(w http.ResponseWriter, r *http.Request) {

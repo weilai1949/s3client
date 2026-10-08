@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // newJob 注册异步任务；在册任务数达上限时返回 503 并释放调用方的 ctx。

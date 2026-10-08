@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // ---- 对象 ACL（权限） ----

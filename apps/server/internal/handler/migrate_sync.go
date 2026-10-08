@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // migrateSyncRequest 增量同步请求体（与 migrate 一致 + 增量判定字段）。

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/weilai1949/s3clinet/blob/develop/docs/api/accounts.schema.json",
+  "$id": "https://github.com/weilai1949/s3client/blob/develop/docs/api/accounts.schema.json",
   "title": "s3clinet account store (accounts.json)",
   "description": "s3clinet 账号库 `accounts.json` 的**明文**形态：一个 Account 对象数组（2 空格缩进）。真值来源 `apps/server/internal/model/account.go`；由 `apps/server/repo_infra_gate_test.go` 的 `TestAccountStoreSchemaMatchesModel` 双向校验字段集与类型，改模型必须同改本文件。⚠️ 安全：`S3C_STORE_DRIVER=json` 且未设 `S3C_STORE_KEY` 时 `secretKey` 以**明文**落盘（服务端默认拒绝启动，除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`，仅限本地联调）；设置 `S3C_STORE_KEY` 后整个文件为 S3C3 加密信封（**不是** JSON，本 schema 不适用），字节布局见 docs/compatibility.md §4。",
   "type": "array",

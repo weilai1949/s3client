@@ -1,6 +1,6 @@
 package handler
 
-import "github.com/weilai1949/s3clinet/apps/server/internal/service"
+import "github.com/weilai1949/s3client/apps/server/internal/service"
 
 type migrateRequest struct {
 	SourceAccountID string   `json:"sourceAccountId"`

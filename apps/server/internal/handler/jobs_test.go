@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // TestJobsListEndpoint 验证 GET /api/migrate/jobs 返回任务清单（含未完成/中断任务）。

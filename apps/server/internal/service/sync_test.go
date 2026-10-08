@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // fakeS3 构造支持 ListObjectsV2 + PutObject + CopyObject 的最小 fake S3。

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // isNoSuchBucketSetting 判断是否为「该桶配置尚未创建」的错误码（用于 GET 时返回空配置）。

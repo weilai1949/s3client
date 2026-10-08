@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // 流式响应（proxy / download-zip / migrate）并发与写超时保护。

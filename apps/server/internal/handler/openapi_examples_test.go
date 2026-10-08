@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/openapi"
+	"github.com/weilai1949/s3client/apps/server/internal/openapi"
 )
 
 // TestApplyExamplesPanicsOnBadConfig 断言错误配置 panic 且带可定位信息。

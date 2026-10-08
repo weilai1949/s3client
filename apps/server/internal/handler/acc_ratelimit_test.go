@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // TestAccRateLimiterAllowBranches 白盒覆盖 ipLimiter.allow 的：新桶 / 回满上限 / 饿死拒绝。

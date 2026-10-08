@@ -32,7 +32,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // updateOpenAPISpec 控制是否用运行时规范重写提交版文件（黄金文件模式）。

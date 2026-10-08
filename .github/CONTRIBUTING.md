@@ -51,8 +51,8 @@ Cargo.lock（仅本包）/ README / docs（api·DEPLOYMENT·ROADMAP·FEATURES·*
 
 | 场景 | 渠道 |
 |---|---|
-| 缺陷报告 | [新建 Bug Issue](https://github.com/weilai1949/s3clinet/issues/new?template=bug_report.md)（附版本 / 部署方式 / 复现步骤） |
-| 功能建议 | [新建 Feature Issue](https://github.com/weilai1949/s3clinet/issues/new?template=feature_request.md) |
+| 缺陷报告 | [新建 Bug Issue](https://github.com/weilai1949/s3client/issues/new?template=bug_report.md)（附版本 / 部署方式 / 复现步骤） |
+| 功能建议 | [新建 Feature Issue](https://github.com/weilai1949/s3client/issues/new?template=feature_request.md) |
 | 安全漏洞 | **不要开 public issue**——走 [SECURITY.md](SECURITY.md) 的私有漏洞报告渠道 |
 | 行为准则投诉 | 见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) §执行；同样走私密渠道给维护者 |
 | 维护者 | [@weilai1949](https://github.com/weilai1949) |

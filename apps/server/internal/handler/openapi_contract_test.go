@@ -29,7 +29,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // apiRouteCount 是 routes.go 中 mux.HandleFunc 注册的 API 路由总数。

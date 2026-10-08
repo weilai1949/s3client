@@ -5,7 +5,7 @@ import (
 	"path"
 	"sync"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // BatchResult 批量复制/迁移汇总。

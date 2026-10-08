@@ -837,7 +837,7 @@ func TestUsesDeadTestOnly(t *testing.T) { DeadTestOnly() }
 		// 跨包限定引用：LiveFunc 活。
 		"internal/service/svc.go": []byte(`package service
 
-import "github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+import "github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 
 func use() { s3wrap.LiveFunc() }
 `),
@@ -886,7 +886,7 @@ func Dup() int { return 3 }
 `),
 		"delta/a.go": []byte(`package delta
 
-import "github.com/weilai1949/s3clinet/apps/server/gamma"
+import "github.com/weilai1949/s3client/apps/server/gamma"
 
 func use() int { return gamma.Dup() }
 `),

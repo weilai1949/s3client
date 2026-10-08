@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/config"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/config"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // TestParseLevel 日志级别解析：全部分支表驱动。

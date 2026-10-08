@@ -47,4 +47,4 @@
 1. **生产必须启用鉴权**：`S3C_TOKEN`（`openssl rand -hex 32`）
 2. **生产推荐 `encrypted` 存储驱动**：`S3C_STORE_DRIVER=encrypted` + `S3C_STORE_KEY`（整库加密）。`json` / `sqlite` 配同一个 key 时也会加密落盘（`sqlite` 加密 `secret_key` 列，其余列仍为明文），而**无 key 时进程拒绝启动**——`S3C_ALLOW_PLAINTEXT_STORE=1` 仅限本地联调（详见 [threat-model.md](../docs/threat-model.md) 边界 C）
 3. **经反向代理 + TLS 对外暴露**，并配置 HSTS（见 [deploy/nginx/README.md](../deploy/nginx/README.md)）
-4. 定期升级到最新版本，跟随 [dependabot](https://github.com/weilai1949/s3clinet/security/dependabot) 与 CI 的 Trivy / govulncheck 门禁
+4. 定期升级到最新版本，跟随 [dependabot](https://github.com/weilai1949/s3client/security/dependabot) 与 CI 的 Trivy / govulncheck 门禁

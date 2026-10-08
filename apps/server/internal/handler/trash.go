@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // listTrash 回收站：返回桶内一页删除标记（ListObjectVersions 过滤为删除标记），带分页游标。

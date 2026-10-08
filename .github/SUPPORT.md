@@ -11,11 +11,11 @@
 
 | 场景 | 渠道 | 链接 |
 |---|---|---|
-| 缺陷（可复现的 bug） | 新建 Bug Issue | [新建 Bug Issue](https://github.com/weilai1949/s3clinet/issues/new?template=bug_report.md) |
-| 功能建议 | 新建 Feature Issue | [新建 Feature Issue](https://github.com/weilai1949/s3clinet/issues/new?template=feature_request.md) |
+| 缺陷（可复现的 bug） | 新建 Bug Issue | [新建 Bug Issue](https://github.com/weilai1949/s3client/issues/new?template=bug_report.md) |
+| 功能建议 | 新建 Feature Issue | [新建 Feature Issue](https://github.com/weilai1949/s3client/issues/new?template=feature_request.md) |
 | 安全问题（漏洞 / 加固绕过） | **走私密渠道，勿开 public issue**——GitHub 私有漏洞报告 | [SECURITY.md](SECURITY.md) §报告漏洞 |
 | 行为准则投诉 | **私密**——按执行渠道私信维护者，勿开 public issue | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) §执行 |
-| 使用提问（怎么配 / 怎么用） | 公开 Issue（用 Feature Issue 模板或普通 issue 描述即可；**当前没有** Discussions / 论坛 / 群组等其它讨论区） | [新建 Issue](https://github.com/weilai1949/s3clinet/issues/new/choose) |
+| 使用提问（怎么配 / 怎么用） | 公开 Issue（用 Feature Issue 模板或普通 issue 描述即可；**当前没有** Discussions / 论坛 / 群组等其它讨论区） | [新建 Issue](https://github.com/weilai1949/s3client/issues/new/choose) |
 | 开发流程 / 门禁 / 提交规范问题 | 先读文档，仍不清楚再开 Issue | [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`docs/DEVELOPMENT.md`](../docs/DEVELOPMENT.md) |
 | AI 辅助 / 代理权限问题 | 见仓库级政策 | [`docs/AI_POLICY.md`](../docs/AI_POLICY.md) |
 
@@ -39,8 +39,8 @@
    [`docs/ROADMAP.md`](../docs/ROADMAP.md) §三——那里的候选池条目**是方向不是承诺**（⬜ 未排期），
    已有条目请直接评论原条目而不是另开。
 5. **搜既有 issue / PR**：用关键字（错误文案、端点名、S3 服务商名）搜
-   [Issues](https://github.com/weilai1949/s3clinet/issues) 与
-   [Pull Requests](https://github.com/weilai1949/s3clinet/pulls)，确认没有重复。
+   [Issues](https://github.com/weilai1949/s3client/issues) 与
+   [Pull Requests](https://github.com/weilai1949/s3client/pulls)，确认没有重复。
 6. **错误码先查对照表**：[`docs/errors.md`](../docs/errors.md)（S3 错误 → HTTP 状态映射）与
    [`docs/api.md`](../docs/api.md)（通用码 `400` / `401` / `404` / `500`）。
 7. **启动就失败**：多半命中 [`docs/CONFIGURATION.md`](../docs/CONFIGURATION.md) §3「启动期硬失败清单」

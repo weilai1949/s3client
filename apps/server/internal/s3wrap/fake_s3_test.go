@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // fakeAccount 构造一个指向指定 endpoint 的账号（path-style、固定密钥），与 e2e 账号形态一致。

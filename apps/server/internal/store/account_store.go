@@ -3,7 +3,7 @@ package store
 import (
 	"errors"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // ErrNotFound 表示指定 id 的账号不存在。

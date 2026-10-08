@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/config"
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/config"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // repoRoot 返回仓库根目录（apps/server -> apps -> 仓库根）。

@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/model"
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 // auditNewAccount 起假 S3 + 建账号，返回账号 id；fake 按 copy-source / method 分流。

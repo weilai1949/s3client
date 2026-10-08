@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // ---- 多端点 fake S3：支持 GET/PUT/COPY/multipart 全套 + 注入失败 ----

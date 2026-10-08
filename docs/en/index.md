@@ -296,7 +296,7 @@ CI: GitHub Actions ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 Web typecheck/build and Docker image build on push/PR. Pushing a `v*` tag (or manual `workflow_dispatch`)
 triggers [`.github/workflows/release-desktop.yml`](../../.github/workflows/release-desktop.yml) which
 builds `.exe` (NSIS) / `.deb` / `.dmg` on Windows / Linux / macOS and attaches them to the
-[GitHub Release](https://github.com/weilai1949/s3clinet/releases) for that tag.
+[GitHub Release](https://github.com/weilai1949/s3client/releases) for that tag.
 
 The same gate set (server / web / docker / desktop + RustFS E2E + Playwright E2E + real integration E2E)
 is mirrored in [`.gitlab-ci.yml`](../../.gitlab-ci.yml); run it locally without a GitLab instance:

@@ -26,7 +26,7 @@
 | 项 | 值 |
 |---|---|
 | 项目 | S3 Client（`s3clinet`）— S3 兼容对象存储客户端（Web + Tauri 桌面，B/S 无 IPC） |
-| 仓库 | <https://github.com/weilai1949/s3clinet> |
+| 仓库 | <https://github.com/weilai1949/s3client> |
 | 主开发分支 | `develop`；稳定发布分支 `main`（见 [CONTRIBUTING.md](../.github/CONTRIBUTING.md)） |
 | 当前版本 | `v1.0.0`（之后日常发版用 `v1.0.0-YYYYMMDDHHmmss`） |
 | 许可证 | MIT |
@@ -222,7 +222,7 @@ Human sponsor: @<维护者>
 
 | 场景 | 渠道 |
 |---|---|
-| 一般问题 / 缺陷 / 功能建议 | [GitHub Issues](https://github.com/weilai1949/s3clinet/issues)（用仓库 Issue 模板） |
+| 一般问题 / 缺陷 / 功能建议 | [GitHub Issues](https://github.com/weilai1949/s3client/issues)（用仓库 Issue 模板） |
 | 安全漏洞 | [SECURITY.md](../.github/SECURITY.md) 的私有漏洞报告（**勿开 public issue**） |
 | 行为准则投诉 | [CODE_OF_CONDUCT.md](../.github/CODE_OF_CONDUCT.md) |
 | 开发流程 / 门禁问题 | [CONTRIBUTING.md](../.github/CONTRIBUTING.md) · [DEVELOPMENT.md](DEVELOPMENT.md) |

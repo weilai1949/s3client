@@ -14,11 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/config"
-	"github.com/weilai1949/s3clinet/apps/server/internal/handler"
-	"github.com/weilai1949/s3clinet/apps/server/internal/s3wrap"
-	"github.com/weilai1949/s3clinet/apps/server/internal/service"
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/config"
+	"github.com/weilai1949/s3client/apps/server/internal/handler"
+	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // version 由构建时注入（ldflags -X main.version=...）；缺省与发版号对齐，便于本地 go run/build。

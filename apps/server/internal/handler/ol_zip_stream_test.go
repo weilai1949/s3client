@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/weilai1949/s3clinet/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
 // TestOlZipValidation 打包接口：404 / 非法 JSON / 缺桶 / 超过 1000 keys。
