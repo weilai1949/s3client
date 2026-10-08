@@ -31,6 +31,29 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-08 批次交接快照 `handoff-20260930.md` 归档冻结：归档四步）
+
+> 所记批次四条目（`ROADMAP` #19 / `KNOWN_ISSUES` #70 / `ROADMAP` #18 / #17）已于 2026-10-01
+> 全部收口（快照 §2 表），故按其自身生命周期规则与 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4
+> 归档条款执行冻结——**归档 = 不删除、不回写、不改写历史结论**，正文数字与结论零改动。
+
+- **① `git mv`**：`docs/handoff-20260930.md` → [`docs/archive/handoff-20260930.md`](docs/archive/handoff-20260930.md)
+  （保留重命名历史），仅在头部**追加**一行「归档冻结（2026-10-08）」状态行（与 `assessment.md` /
+  `review-2026-09-19.md` 归档先例同款：附加状态、非回写）。
+- **② 引用收敛**：报告自身 15 条出链按新位置改相对路径（`ROADMAP.md` / `KNOWN_ISSUES.md` /
+  `FEATURES.md` / `DEVELOPMENT.md` / `accessibility.md` / `README.md` → `../…`、`../CHANGELOG.md` /
+  `../AGENTS.md` → `../../…`、`archive/index.md` → `index.md`）；`docs/README.md` 的「接手中断的进行中
+  批次」行并入相邻的「找冻结的历史快照」行；三处命名清单摘除——[`AGENTS.md`](AGENTS.md)、
+  [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 命名段、[`llms.txt`](llms.txt) 改为只保留
+  「时点性批次交接快照同用小写、收口后归档」的规则本身（不再登记活文件名）。
+- **③ 索引与登记表**：[`docs/archive/index.md`](docs/archive/index.md) 归档清单补一行、「已归档 5 份」
+  → **6 份**、新增「批次交接快照收口后同 PR 冻结」触发规则（首例即本件）；`docs/DEVELOPMENT.md` §4
+  文档登记表该行改为**冻结件**（`不复审——归档 = 冻结`，`2026-10-08（归档登记）`）并补归档触发规则一句。
+- **豁免口径**（沿用 `assessment.md` 归档先例）：`archive/index.md`「原路径」列、`CHANGELOG` 本条与
+  快照正文里的时点性旧路径叙述**不改写**——它们是历史记录，不是活链接。
+- **门禁实跑（2026-10-08）**：`cd apps/server && go test . -count=1` **ok（4.669s）**（含
+  `doc_index` / `doc_link` / `docs_naming` / `doc_review` / `doc_number` / `llms_size` 等包根文档门禁）。
+
 ### 变更（2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成：schema-first + 生成物新鲜度门禁）
 
 > 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BN**；`docs/ROADMAP.md` §三 3.2 **#10 已移出**
