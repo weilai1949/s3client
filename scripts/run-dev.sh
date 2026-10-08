@@ -22,7 +22,7 @@ start_server() {
   graceful_stop server "$(shutdown_timeout)"
   cd "$ROOT/apps/server"
   go mod tidy
-  go build -o s3clinet-server .
+  go build -o s3client-server .
   if (( USE_NGINX )); then
     export S3C_ADDR=127.0.0.1:8081
   else
@@ -30,7 +30,7 @@ start_server() {
   fi
   # shellcheck disable=SC1091
   [[ -f .env ]] && set -a && source .env && set +a
-  ./s3clinet-server >>"$RUN_DIR/server.log" 2>&1 &
+  ./s3client-server >>"$RUN_DIR/server.log" 2>&1 &
   write_pid server $!
   wait_http "http://127.0.0.1:${S3C_ADDR##*:}/api/health" 30
   echo "[server] 已启动 pid=$(read_pid server) addr=$S3C_ADDR"

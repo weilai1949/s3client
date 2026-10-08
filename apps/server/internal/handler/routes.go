@@ -46,6 +46,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{id}/multipart/part", h.multipartPart)
 	mux.HandleFunc("POST /api/accounts/{id}/multipart/complete", h.multipartComplete)
 	mux.HandleFunc("POST /api/accounts/{id}/multipart/abort", h.multipartAbort)
+	mux.HandleFunc("GET /api/accounts/{id}/multipart/parts", h.multipartParts)
 	mux.HandleFunc("GET /api/accounts/{id}/object-acl", h.getObjectAcl)
 	mux.HandleFunc("PUT /api/accounts/{id}/object-acl", h.putObjectAcl)
 	mux.HandleFunc("GET /api/accounts/{id}/object-tags", h.getObjectTags)

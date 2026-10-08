@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegistry_Roundtrip(t *testing.T) {
-	r := New("s3clinet API", "1.0.0-test")
+	r := New("s3client API", "1.0.0-test")
 	r.AddServer(Server{URL: "/"})
 	r.Operation("GET", "/api/health", Op{
 		Tags:        []string{"system"},
@@ -282,7 +282,7 @@ func responseJSONSchema(t *testing.T, resp map[string]any) map[string]any {
 // 端点级 $ref 解析到的共享响应是无 schema 空壳，契约 SSOT 失效。
 // 断言走「序列化 → 解析 JSON → 沿 $ref 解析到真实 schema」的完整消费路径，不检查 Go 结构体。
 func TestComponentsResponsesKeepSchema(t *testing.T) {
-	r := New("s3clinet API", "1.0.0-test")
+	r := New("s3client API", "1.0.0-test")
 	r.Operation("GET", "/api/x", Op{
 		Summary:   "x",
 		Responses: map[string]Response{"404": {Ref: "#/components/responses/NotFound"}},

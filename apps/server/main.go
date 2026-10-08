@@ -19,6 +19,7 @@ import (
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 	"github.com/weilai1949/s3client/apps/server/internal/service"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 // version 由构建时注入（ldflags -X main.version=...）；缺省与发版号对齐，便于本地 go run/build。
@@ -91,6 +92,9 @@ func runServer(ctx context.Context) int {
 
 	h := handler.New(st, logger, cfg.StaticDir, cfg.CORSOrigins, cfg.Token, version, cfg.ExposeMetrics, cfg.ExposeOpenAPI)
 	h.SetCSPConnectSrc(cfg.CSPConnectSrc)
+	// Token 作用域（S3C_TOKEN_SCOPES）：按 token 限定只读 / 桶前缀 / 账号 / 过期；
+	// 未登记的 token 保持全权（向后兼容）。必须在 Routes() 前设置。
+	h.SetTokenScopes(cfg.ScopeFor)
 	// 仅信任显式配置的反向代理 IP 的 X-Forwarded-For（默认不信任，防直连伪造绕过限速）。
 	h.SetTrustedProxies(cfg.TrustedProxies)
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
@@ -101,9 +105,21 @@ func runServer(ctx context.Context) int {
 	h.SetDataDir(cfg.DataDir)
 	h.LoadLastShutdown()
 
+	// OTel tracing（可选）：S3C_OTEL_ENDPOINT 为空即禁用，Middleware 原样透传、零开销。
+	// Endpoint / 采样比例非法时 fail-closed 拒绝启动（与其余配置同口径）。
+	tracer, err := tracing.New(tracing.Config{
+		Endpoint:    cfg.OTelEndpoint,
+		ServiceName: cfg.OTelServiceName,
+		SampleRatio: cfg.OTelSampleRatio,
+	})
+	if err != nil {
+		logger.Error("init tracing", "err", err)
+		return 1
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           h.Routes(),
+		Handler:           tracer.Middleware(h.Routes()),
 		ReadHeaderTimeout: 15 * time.Second,
 		// 仅限制读取请求体阶段，抵御慢速请求体攻击；不设 WriteTimeout，
 		// 避免截断大文件（proxy / download-zip）的流式输出。
@@ -120,7 +136,7 @@ func runServer(ctx context.Context) int {
 	// 建立 happens-before，无需额外同步。
 	serveErrCh := make(chan error, 1)
 	go func() {
-		logger.Info("s3clinet server",
+		logger.Info("s3client server",
 			"version", version,
 			"addr", cfg.Addr,
 			"dataDir", cfg.DataDir,
@@ -130,6 +146,7 @@ func runServer(ctx context.Context) int {
 			"cors", corsSummary(cfg.CORSOrigins),
 			"region", cfg.Region,
 			"ssrfDenyPrivate", cfg.SSRFDenyPrivate,
+			"tracing", tracer.Enabled(),
 		)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "err", err)
@@ -150,6 +167,11 @@ func runServer(ctx context.Context) int {
 	_ = srv.Shutdown(shutdownCtx) // ctx 超时在生产不可达；shutting down 流程已写 INFO。
 	// 落盘后进程即退出，/api/metrics 无法再 scrape 本次值 —— 指标由下次启动载入暴露。
 	h.RecordShutdown(time.Since(shutdownStart))
+	// tracing 收尾：关闭后台导出并刷出剩余 span（有界等待）。导出失败已在包内记日志，
+	// 此处丢弃 Close 错误不会吞掉对外可见的失败信息。
+	traceCtx, cancelTrace := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelTrace()
+	_ = tracer.Close(traceCtx)
 	logger.Info("shutdown complete")
 	// goroutine 已记录过 "server error"；此处只决定退出码，不重复刷日志。
 	select {

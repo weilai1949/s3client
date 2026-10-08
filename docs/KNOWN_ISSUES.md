@@ -1,4 +1,4 @@
-# s3clinet 已知问题（Known Issues）
+# s3client 已知问题（Known Issues）
 
 > 本文件是**缺陷 / 外部阻塞 / 技术债**的**唯一来源**，只收录**尚未闭环**的项。
 > **功能候选与版本规划不在本文件**——见 [`ROADMAP.md`](ROADMAP.md) §三（战略层唯一来源）；
@@ -20,17 +20,21 @@
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-08（**#71 已闭环并移除**：仓库 slug 统一为
-> `github.com/weilai1949/s3client`——`apps/server/go.mod` 模块路径 + 全仓 Go import +
-> 全部仓库 URL（`.github/SECURITY.md` / `ISSUE_TEMPLATE/config.yml` / `SUPPORT.md` /
+> 最后更新：2026-10-08（**#71 已闭环并移除**，同日分两批完成，**推翻原 ➖「维持现状」决策**）：
+> **① 仓库 slug 统一**——`github.com/weilai1949/s3clinet` → `…/s3client`（`apps/server/go.mod` 模块路径 +
+> 全仓 Go import + 全部仓库 URL：`.github/SECURITY.md` / `ISSUE_TEMPLATE/config.yml` / `SUPPORT.md` /
 > `CONTRIBUTING.md` / `AI_POLICY.md` / `docs/en/index.md` / `accounts.schema.json` `$id` /
-> Grafana 面板链接 / 根 `README.md` Release 链接）一次性对齐 `git remote` / `security.txt` /
-> `CITATION.cff` 既有取值，**推翻原 ➖「维持现状」决策**，闭环证据见 [`FEATURES.md`](FEATURES.md) **§BO**。
-> **范围边界（同批写死）**：品牌 / 运行时 / 监控命名空间**不在仓库 slug 范围、保持不变**——
-> 产品名 `s3clinet`（文档标题、OpenAPI `title`）、`.s3clinet.lock`、二进制 `s3clinet-server`、
-> 镜像 `s3clinet/server` 与 `container_name`、Cargo/npm 包名、记录规则 `s3clinet:*` 与告警
-> `S3Clinet*`、`deploy/{prometheus,grafana}/s3clinet.*` 文件名；`CHANGELOG.md` 历史条目里的
-> 旧模块路径按「历史条目不改写」保留时点叙述。）
+> Grafana 面板链接 / 根 `README.md` Release 链接），对齐 `git remote` / `.well-known/security.txt` /
+> `CITATION.cff` 既有取值，证据见 [`FEATURES.md`](FEATURES.md) **§BO**；
+> **② 产品名统一（同日第二批）**——品牌 / 运行时 / 监控命名空间**一并**改为 `s3client`：文档与英文快照标题、
+> OpenAPI `title: "s3client API"`（已重生成 `openapi.json` 与前端 `schema.d.ts`）、启动日志 `msg="s3client server"`、
+> 单写者锁文件 `.s3client.lock`（原 `.s3clinet.lock`，**行为变更**）、二进制 `s3client-server`、镜像与
+> `container_name` `s3client/server` 系、Cargo 包与 Tauri `productName` / `identifier`、npm `s3client-web` /
+> `s3client-desktop`、E2E 环境变量 `S3CLIENT_E2E` / `S3CLIENT_{ENDPOINT,ACCESS_KEY,SECRET_KEY}`、
+> 记录规则 `s3client:*` 与告警 `S3Client*`、`deploy/{prometheus,grafana}/s3client.*` 与
+> `deploy/nginx/conf.d/s3client-*.conf` 文件名，证据见 [`FEATURES.md`](FEATURES.md) **§BP**。
+> **仍保留旧写法的只有两处（历史不回写）**：`CHANGELOG.md` 历史条目（**只修正**指向改名文件的路径链接，
+> 叙述里的旧名照旧）与 `docs/archive/` 冻结件。
 >
 > 上一轮更新：2026-09-30（**#70 已闭环并移除**：`NormalizeEndpoint` 幂等修复——推翻原 ➖ 决策、
 > 按登记内写死的修法（先切分 host/path，再对 host `TrimSpace`）落地，TDD 先红后绿 + 变异验证 +
@@ -144,7 +148,7 @@
 | #68 | **已闭环移除** | nginx `log_format main` 补 `rid=$http_x_request_id req=$upstream_http_x_request_id`，跨层日志可关联，2026-09-29 闭环（[FEATURES.md](FEATURES.md) §AP） |
 | #69 | **已闭环移除** | CHANGELOG 与 git tag 断裂：顶部新增「tag ↔ 版本段对应关系（唯一台账）」（3 个时间戳 tag 定性为同日内部快照、5 个「有段无 tag」历史段登记）；`[1.0.0]` 段日期按 tag 事实修正为 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go`（tag↔段双向 + Unreleased 居首 + 映射表解析口径 + 扫描阈值，TDD 先红后绿 + 变异验证）+ `scripts/release-version.sh` 硬检查（缺 `## [<version>]` 段即 exit 1），2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BE） |
 | #70 | **已闭环移除** | `NormalizeEndpoint` 对含尾随空白输入不幂等：原 ➖「fail-closed 维持现状」决策于 2026-09-30 推翻，按登记内写死的修法修复（先切分 host/path，再对 host `TrimSpace`、对 path 去尾部斜杠与空白，保输出不以空白结尾），TDD 先红后绿 + 变异验证（删 host `TrimSpace` → 红灯点名 `"00  /"` / `"http://host  /"` → 还原绿）+ 两目标各 10s 有界 fuzz PASS，2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BK） |
-| #71 | **已闭环移除** | 仓库 slug `s3clinet` / `s3client` 并存：2026-10-08 **推翻原 ➖「维持现状」决策**，统一为 `github.com/weilai1949/s3client`（`apps/server/go.mod` 模块路径 + 全仓 Go import + 全部仓库 URL），与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 既有取值对齐；**品牌 / 运行时 / 监控命名空间刻意不在范围内**（产品名 `s3clinet`、`.s3clinet.lock`、二进制 `s3clinet-server`、镜像 `s3clinet/server`、记录规则 `s3clinet:*` / 告警 `S3Clinet*`、`deploy/*/s3clinet.*` 文件名），边界写死在 §二 头部 2026-10-08 段；证据见 [FEATURES.md](FEATURES.md) §BO |
+| #71 | **已闭环移除** | 仓库 slug `s3clinet` / `s3client` 并存：2026-10-08 **推翻原 ➖「维持现状」决策**，同日分两批统一——**① slug**（`go.mod` 模块路径 + 全仓 Go import + 全部仓库 URL → `github.com/weilai1949/s3client`，与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 对齐）见 [FEATURES.md](FEATURES.md) §BO；**② 产品名**（品牌 / 运行时 / 监控命名空间的全部旧写法 → `s3client` 系，含 `.s3client.lock` 锁文件名等**行为变更面**）见同文件 §BP。仅 `CHANGELOG.md` 历史条目（只修路径链接）与 `docs/archive/` 冻结件保留旧写法 |
 
 ---
 

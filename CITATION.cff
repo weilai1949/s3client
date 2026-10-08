@@ -1,6 +1,6 @@
 cff-version: 1.2.0
-message: "If you use S3 Client (s3clinet) in your work, please cite it using the metadata below."
-title: "S3 Client (s3clinet)"
+message: "If you use S3 Client (s3client) in your work, please cite it using the metadata below."
+title: "S3 Client (s3client)"
 type: software
 version: "1.0.0"
 abstract: >-

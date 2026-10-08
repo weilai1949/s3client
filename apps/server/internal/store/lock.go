@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// AcquireDataDirLock 对数据目录加**单写者锁**：同一 DataDir 同时只允许一个 s3clinet 进程。
+// AcquireDataDirLock 对数据目录加**单写者锁**：同一 DataDir 同时只允许一个 s3client 进程。
 //
 // 决定依据（docs/ROADMAP.md §5.1 R4）：store 是文件型的（json / sqlite），JobRegistry 在内存中，
 // 单 token 模型没有租约或选主；两个副本共享同一数据卷会静默互相覆盖写入、重复执行迁移任务。

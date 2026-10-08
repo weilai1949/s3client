@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-s3clinet 提供 Web 端与 Tauri 2 桌面端。桌面端有两条技术路线：
+s3client 提供 Web 端与 Tauri 2 桌面端。桌面端有两条技术路线：
 
 1. **传统 Tauri**：Rust 侧定义 command + IPC（invoke），前端通过 `@tauri-apps/api` 调用本地能力。
 2. **B/S 无 IPC**：桌面壳仅加载前端，前端与本地 Go 后端（或任意远程后端）全走 HTTP。
@@ -27,7 +27,7 @@ capabilities 为空权限集，前端通过 HTTP 访问后端（本地 `http://1
 ### 传统 Tauri IPC（Rust command + invoke）
 - Pros：可访问系统能力（文件系统、托盘等）。
 - Cons：Web 与桌面功能分叉（前端需维护 IPC 分支）；Rust 侧新增攻击面与审计负担。
-- Rejected：s3clinet 的功能 100% 是 S3 操作，全部由 HTTP API 承载，无需系统级能力。
+- Rejected：s3client 的功能 100% 是 S3 操作，全部由 HTTP API 承载，无需系统级能力。
 
 ## Consequences
 

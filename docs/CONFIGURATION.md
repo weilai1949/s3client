@@ -43,10 +43,11 @@
 |---|---|---|---|
 | `S3C_ENV_FILE` | 空 | 路径 | 显式指定 `.env` 路径；设置后为唯一来源，且路径不存在 / 不可读时**拒绝启动** |
 | `S3C_ADDR` | `127.0.0.1:8080` | `host:port` | 监听地址。回环更安全；需远程访问改 `0.0.0.0:8080`，此时**必须**同时设 `S3C_TOKEN` |
-| `S3C_DATA_DIR` | `./data` | 目录路径 | 数据目录：`accounts.json` / `accounts.db` / `accounts.json.enc`，任务清单 `jobs.json`，上次关停耗时 `shutdown.json`，以及单写者锁文件 `.s3clinet.lock` |
+| `S3C_DATA_DIR` | `./data` | 目录路径 | 数据目录：`accounts.json` / `accounts.db` / `accounts.json.enc`，任务清单 `jobs.json`，上次关停耗时 `shutdown.json`，以及单写者锁文件 `.s3client.lock` |
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
 | `S3C_TOKEN` | 空 | ≥ 16 字符；逗号分隔可多值 | 非空时所有 `/api/*` 需 `Authorization: Bearer <token>`（`/api/health`、`/api/metrics` 豁免）。非回环监听时**必填**。多 token 轮换时按**最短者**判定长度；删掉旧值即吊销。生成：`openssl rand -hex 32` |
+| `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（ROADMAP §三 #13）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号）、`expiresAt`（RFC3339，过期返回 401）。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
 | `S3C_CORS_ORIGINS` | 空 | 逗号分隔 Origin 列表 | CORS 白名单。留空 = 仅同源 + `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（含 `tauri` 自定义协议）。`*` 可行但不推荐 |
 | `S3C_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` | 日志级别 |
 | `S3C_LOG_JSON` | 关 | 布尔 | 开 = `slog` JSON 输出（容器 / 生产更易采集）。compose 已默认注入 `1`，设 `0` 可退回纯文本 |
@@ -59,6 +60,9 @@
 | `S3C_CSP_CONNECT_SRC` | `'self' http://127.0.0.1:* http://localhost:*` | CSP `connect-src` 值 | 前端可连接的后端白名单。默认仅同源 + 本地 Tauri 后端；**多后端 / 远程后端需显式放宽**，否则浏览器按 CSP 拦截 |
 | `S3C_TRUSTED_PROXIES` | 空 | 逗号分隔 IP | 可信反向代理 IP。**仅**这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速；直连部署应保持留空 |
 | `S3C_SSRF_DENY_PRIVATE` | 关 | 布尔 | 开 = 连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](decisions/0003-ssrf-private-allow.md) |
+| `S3C_OTEL_ENDPOINT` | 空 | http(s) URL | OTLP/HTTP 采集端基址，导出到 `POST {Endpoint}/v1/traces`（OTLP JSON）。**留空 = 关闭 tracing**（默认，零开销：中间件原样透传、不注入响应头、不导出）；非 http(s) / 无法解析时**拒绝启动**。见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md) |
+| `S3C_OTEL_SAMPLE_RATIO` | `1` | 浮点，**[0,1]** | 新建 trace 的采样比例。入站 `traceparent` 的采样位被继承（为 1 时即使本值为 `0` 也采样；为 0 时不重新采样）；非数字 / `NaN` / 越界**拒绝启动** |
+| `S3C_OTEL_SERVICE_NAME` | `s3client` | 字符串 | OTLP resource attribute `service.name`（导出报文里的后端服务标识），用于采集端区分实例来源 |
 
 ## 3. 启动期硬失败（fail-closed）清单
 
@@ -70,15 +74,18 @@
 | `S3C_SHUTDOWN_TIMEOUT` 非整数 / `< 1` / `> 3600` | 防止优雅关停窗口被静默清零 |
 | `S3C_STORE_DRIVER` 不在 `json` / `sqlite` / `encrypted` 内 | 防止未知值被当 `json` 绕过明文闸 |
 | `S3C_TOKEN` 非空但最短 token < 16 字符 | 短口令易被暴力猜测 |
+| `S3C_TOKEN_SCOPES` 非法（JSON 语法 / 未知字段 / 末尾多余数据 / token 不在 `S3C_TOKEN` 列表内 / `prefixes`、`accounts` 元素为空 / `expiresAt` 不可解析为 RFC3339） | 防止作用域配置静默失效或被整段忽略（否则运维以为已限权、实际仍是全权） |
 | `S3C_ADDR` 非回环且 `S3C_TOKEN` 为空 | 防止账号管理 API 无鉴权暴露 |
 | `S3C_STORE_KEY` 非空但 < 16 字符 | 落盘加密口令过短会被暴力破解 |
 | `S3C_STORE_DRIVER` 为 `json` / `sqlite` 且 `S3C_STORE_KEY` 为空且未开 `S3C_ALLOW_PLAINTEXT_STORE` | 防止 `secretKey` 明文落盘 |
-| `S3C_DATA_DIR` 已被另一实例加锁（`.s3clinet.lock`） | 文件型存储 + 内存任务表只支持单实例 |
+| `S3C_DATA_DIR` 已被另一实例加锁（`.s3client.lock`） | 文件型存储 + 内存任务表只支持单实例 |
+| `S3C_OTEL_ENDPOINT` 非 http(s) / 无法解析 | 防止采集端配置错误被静默当成「tracing 已按预期开启」 |
+| `S3C_OTEL_SAMPLE_RATIO` 非数字 / `NaN` / 不在 `[0,1]` | 防止采样比例被静默回退为默认 1（全量采样）而压垮采集端 |
 
 ## 4. 安全默认值摘要
 
 回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标与契约端点默认隐藏 +
-CSP `connect-src` 收窄 + 不信任 `X-Forwarded-For`。
+CSP `connect-src` 收窄 + 不信任 `X-Forwarded-For` + 可选 token 作用域（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号 / 过期，未登记 token 保持全权）。
 
 生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + `encrypted`，无内置 RustFS）。
 威胁模型与边界见 [threat-model.md](threat-model.md)。

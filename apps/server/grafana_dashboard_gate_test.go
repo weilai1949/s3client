@@ -1,9 +1,9 @@
 package main
 
-// grafana_dashboard_gate_test.go —— `deploy/grafana/s3clinet.dashboard.json` 的源码门禁。
+// grafana_dashboard_gate_test.go —— `deploy/grafana/s3client.dashboard.json` 的源码门禁。
 //
 // 背景（2026-09-30）：OPERATIONS.md §4 此前明说「未提供 SLO 仪表盘」，SLI/SLO 只以表格与
-// `deploy/prometheus/s3clinet.rules.yml` 的记录规则存在。补上仪表盘后，它与规则文件一样属于
+// `deploy/prometheus/s3client.rules.yml` 的记录规则存在。补上仪表盘后，它与规则文件一样属于
 // **可直接进生产** 的配置：面板表达式里的指标名 / `code` 取值 / 记录规则名都是契约，写错一个
 // 字母 Grafana **不会报错**，只会让面板永远空白（或让 recording rule 永远 no data），
 // 而全部 Go 门禁照样全绿。本文件把这几类契约变成红灯。
@@ -13,7 +13,7 @@ package main
 //   - 面板引用的每个 `s3c_*` 指标都真实存在于**发射点**（引号紧邻 `s3c_` 的正则口径，
 //     与 `TestPrometheusRulesReferenceRealMetrics` 相同——只在注释里出现的名字不算）；
 //   - 每个 `code` 取值都在 `s3wrap` 的错误码白名单（或 errorClass 的非 API 分类）内；
-//   - 面板引用的每个 `s3clinet:*` 记录规则都真实存在于 `deploy/prometheus/s3clinet.rules.yml`
+//   - 面板引用的每个 `s3client:*` 记录规则都真实存在于 `deploy/prometheus/s3client.rules.yml`
 //     ——保证「仪表盘与规则文件同源」不是口头约定。
 //
 // 刻意不做（盲区，避免后来者误判覆盖面）：
@@ -38,7 +38,7 @@ import (
 )
 
 // grafanaDashboardRel 是仪表盘 JSON 相对仓库根的路径。
-const grafanaDashboardRel = "deploy/grafana/s3clinet.dashboard.json"
+const grafanaDashboardRel = "deploy/grafana/s3client.dashboard.json"
 
 // grafanaDatasourceVarRef 是面板数据源必须引用的 templating 变量（Grafana 约定形态）。
 const grafanaDatasourceVarRef = "${DS_PROMETHEUS}"
@@ -124,8 +124,8 @@ func grafanaPanelExprs(d grafanaDashboard) []string {
 // grafanaMetricRe 从 PromQL 表达式中提取 `s3c_*` 指标名（词法级）。
 var grafanaMetricRe = regexp.MustCompile(`\bs3c_[a-z0-9_]+`)
 
-// grafanaRecordingRuleRe 提取 `s3clinet:*` 记录规则名（rules.yml 的命名空间）。
-var grafanaRecordingRuleRe = regexp.MustCompile(`\bs3clinet:[a-z0-9_:]+`)
+// grafanaRecordingRuleRe 提取 `s3client:*` 记录规则名（rules.yml 的命名空间）。
+var grafanaRecordingRuleRe = regexp.MustCompile(`\bs3client:[a-z0-9_:]+`)
 
 // promRecordRuleRe 匹配 rules.yml 里的 `record: <name>`。
 var promRecordRuleRe = regexp.MustCompile(`(?m)^[ \t]*-[ \t]*record:[ \t]*(\S+)[ \t]*$`)
@@ -295,14 +295,14 @@ func TestGrafanaDashboardCodesAreInS3wrapWhitelist(t *testing.T) {
 	t.Logf("%s 的 %d 个 code 取值均在白名单 / errorClass 分类内", grafanaDashboardRel, checked)
 }
 
-// TestGrafanaDashboardUsesRecordingRulesFromPrometheusRules：面板引用的每个 `s3clinet:*`
-// 记录规则都必须在 `deploy/prometheus/s3clinet.rules.yml` 里真实定义，且三条 SLI 记录规则
+// TestGrafanaDashboardUsesRecordingRulesFromPrometheusRules：面板引用的每个 `s3client:*`
+// 记录规则都必须在 `deploy/prometheus/s3client.rules.yml` 里真实定义，且三条 SLI 记录规则
 // 都被仪表盘引用。
 //
 // 为什么需要它：仪表盘与本仓库分发的记录规则是同一份 SLI 的两个消费面（OPERATIONS.md §4）。
 // 规则改名而仪表盘不改 → 面板静默无数据；仪表盘少引一条 → 该 SLI 在盘上没有视图。
 func TestGrafanaDashboardUsesRecordingRulesFromPrometheusRules(t *testing.T) {
-	const rulesRel = "deploy/prometheus/s3clinet.rules.yml"
+	const rulesRel = "deploy/prometheus/s3client.rules.yml"
 	rules := readRepoFile(t, rulesRel)
 	defined := map[string]bool{}
 	for _, m := range promRecordRuleRe.FindAllStringSubmatch(rules, -1) {

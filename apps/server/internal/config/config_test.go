@@ -173,3 +173,67 @@ func TestLoadDotEnvFile(t *testing.T) {
 		t.Errorf("S3C_TOKEN = %q, want real-env (env wins)", got)
 	}
 }
+
+// TestFromEnvOTelDefaults OTel tracing 默认关闭：Endpoint 空、采样比例 1、服务名 s3client。
+func TestFromEnvOTelDefaults(t *testing.T) {
+	t.Setenv("S3C_OTEL_ENDPOINT", "")
+	t.Setenv("S3C_OTEL_SAMPLE_RATIO", "")
+	t.Setenv("S3C_OTEL_SERVICE_NAME", "")
+	// 隔离宿主环境：Validate 只看 OTel 之外的既有闸门是否通过。
+	t.Setenv("S3C_TOKEN", "")
+	t.Setenv("S3C_ADDR", "127.0.0.1:8080")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	cfg := FromEnv()
+	if cfg.OTelEndpoint != "" {
+		t.Errorf("OTelEndpoint = %q, want empty（默认关闭）", cfg.OTelEndpoint)
+	}
+	if cfg.OTelSampleRatio != 1 {
+		t.Errorf("OTelSampleRatio = %v, want 1", cfg.OTelSampleRatio)
+	}
+	if cfg.OTelServiceName != "s3client" {
+		t.Errorf("OTelServiceName = %q, want s3client", cfg.OTelServiceName)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+// TestFromEnvOTelOverrides 三个 OTel 变量可覆盖；采样比例接受 [0,1] 闭区间的合法值。
+func TestFromEnvOTelOverrides(t *testing.T) {
+	t.Setenv("S3C_OTEL_ENDPOINT", "http://collector:4318")
+	t.Setenv("S3C_OTEL_SERVICE_NAME", "s3client-prod")
+	t.Setenv("S3C_TOKEN", "")
+	t.Setenv("S3C_ADDR", "127.0.0.1:8080")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	for _, c := range []struct {
+		in   string
+		want float64
+	}{{"0", 0}, {"0.25", 0.25}, {"1", 1}} {
+		t.Setenv("S3C_OTEL_SAMPLE_RATIO", c.in)
+		cfg := FromEnv()
+		if cfg.OTelEndpoint != "http://collector:4318" {
+			t.Errorf("OTelEndpoint = %q, want http://collector:4318", cfg.OTelEndpoint)
+		}
+		if cfg.OTelServiceName != "s3client-prod" {
+			t.Errorf("OTelServiceName = %q, want s3client-prod", cfg.OTelServiceName)
+		}
+		if cfg.OTelSampleRatio != c.want {
+			t.Errorf("S3C_OTEL_SAMPLE_RATIO=%q: OTelSampleRatio = %v, want %v", c.in, cfg.OTelSampleRatio, c.want)
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("S3C_OTEL_SAMPLE_RATIO=%q: Validate() = %v, want nil", c.in, err)
+		}
+	}
+}
+
+// TestFromEnvOTelSampleRatioInvalid 非法采样比例走既有 envErr → Validate 拒绝启动，
+// 不静默回退默认值（否则运维会以为配置已生效）。
+func TestFromEnvOTelSampleRatioInvalid(t *testing.T) {
+	for _, v := range []string{"abc", "1.5", "-0.1", "NaN", "Inf"} {
+		t.Setenv("S3C_OTEL_SAMPLE_RATIO", v)
+		cfg := FromEnv()
+		if err := cfg.Validate(); !errors.Is(err, ErrInvalidEnvValue) {
+			t.Errorf("S3C_OTEL_SAMPLE_RATIO=%q: Validate() = %v, want ErrInvalidEnvValue", v, err)
+		}
+	}
+}

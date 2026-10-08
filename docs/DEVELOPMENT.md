@@ -16,7 +16,7 @@
 | 层 | 位置 | 运行方式 | 目的 |
 |----|------|----------|------|
 | **单元 / 行为测试** | `apps/server/internal/.../*_test.go` | `cd apps/server && go test ./...` | 用 `httptest.NewServer` 的**假 S3** 验证 handler 层逻辑（路由、参数校验、正/反例、错误码映射） |
-| **真实对端 E2E** | `apps/server/internal/s3wrap/e2e_test.go` | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v` | 验证最硬核路径：**SigV4 签名 / 预签名直传 / 分段 Multipart 组装 / 跨 bucket 复制 / 标签 / 版本控制**。默认指向本地 RustFS |
+| **真实对端 E2E** | `apps/server/internal/s3wrap/e2e_test.go` | `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v` | 验证最硬核路径：**SigV4 签名 / 预签名直传 / 分段 Multipart 组装 / 跨 bucket 复制 / 标签 / 版本控制**。默认指向本地 RustFS |
 | **真实联调浏览器 E2E** | `apps/web/e2e-real/real-backend.spec.ts` | `make e2e-real` | 真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器，**不 mock `/api`**：账号落库、建桶列桶、**浏览器直传**（预签名 PUT 跨源）。mock 版 `apps/web/e2e/*.spec.ts` 覆盖不到的结合部 |
 | **前端类型 + 构建** | `web` | `cd apps/web && pnpm build`（含 `vue-tsc --noEmit`） | 类型安全与可构建性；UI 改动同时保留手测/截图证据 |
 
@@ -27,7 +27,7 @@
 
 ### 真实 RustFS 联调
 - 需要时用 `docker compose up -d rustfs`（默认 `rustfsadmin/rustfsadmin`，S3 API 9000、控制台 9001）。
-- E2E 测试用 `S3CLINET_E2E=1` 门控，普通 `go test ./...` 不会执行，CI 因此不受影响。
+- E2E 测试用 `S3CLIENT_E2E=1` 门控，普通 `go test ./...` 不会执行，CI 因此不受影响。
 
 ### 真实后端 + RustFS 浏览器联调（历史任务 #37，已闭环）
 - #37 已于 2026-09-22 闭环并从 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 移除，归档证据见 [`FEATURES.md`](FEATURES.md) §V；当前待办以 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题）与 [`ROADMAP.md`](ROADMAP.md)（方向）为准。
@@ -57,7 +57,7 @@ cd apps/server && go vet ./... && go test ./...   # 后端
 cd apps/server && go build ./...                   # 后端可构建
 cd apps/web && pnpm test && pnpm build             # 前端单测 + 类型检查 + 构建
 # 涉及签名/直传/分段/复制/标签/版本时，额外跑真实 RustFS E2E
-cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+cd apps/server && S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
 # 涉及前端 / 后端接口 / 直传时，额外跑「真实后端 + 真实 RustFS + 真实产物」浏览器联调
 # （docker 自动起一份 RustFS，跑完自动清理；不 mock /api）
 make e2e-real
@@ -118,7 +118,7 @@ make rust-audit
 > 示例字段须过 schema 形状校验，且 [`api.md`](api.md) 的 curl 示例覆盖全部 tag）、
 > `data_model_gate_test.go`（[`data-model.md`](data-model.md) ⇔ 反射 `model.Account` + `store.Open` 的 switch 驱动名）、
 > `contrast_gate_test.go`（[`accessibility.md`](accessibility.md) §5.5 表值与计数 ⇔ `styles.css` token 重算）、
-> `grafana_dashboard_gate_test.go`（[`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)
+> `grafana_dashboard_gate_test.go`（[`../deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json)
 > 的指标 / `code` / recording rule 必须真实存在）、`bench_budget_test.go`（PresignPut / 加密写 / 账号写 O(n)
 > 的分配与耗时预算）、`security_txt_gate_test.go`（[`../.well-known/security.txt`](../.well-known/security.txt)
 > 必填字段 + `Expires` 未过期）、`en_docs_gate_test.go`（[`en/README.md`](en/README.md) 每篇须声明中文
@@ -240,7 +240,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 接口与请求/响应字段 | [`api.md`](api.md) + `apps/server/internal/handler/openapi_register_*.go`（并跑契约测试）+ **重新生成 [`api/openapi.json`](api/openapi.json)**（见下行） |
 | 提交版 OpenAPI 规范 | [`api/openapi.json`](api/openapi.json)——改 handler / 注册表后必须 `go test ./internal/handler/ -run TestCommittedOpenAPISpecMatchesRuntime -update-openapi-spec` 重新生成，否则门禁红灯 |
 | 运维 / 告警 / 备份恢复 / 容量 / 事故响应 / 事故复盘 | [`OPERATIONS.md`](OPERATIONS.md) + [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md)（复盘格式；填写完成的记录按下方「归档」条冻结进 `archive/`） |
-| 告警阈值 / SLI 表达式 / 指标名 / `code` 标签取值 | [`OPERATIONS.md`](OPERATIONS.md) §4 **与** [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（**必须同改**；规则文件由 `TestPrometheusRulesReferenceRealMetrics` 校验指标与错误码真实存在） |
+| 告警阈值 / SLI 表达式 / 指标名 / `code` 标签取值 | [`OPERATIONS.md`](OPERATIONS.md) §4 **与** [`../deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml)（**必须同改**；规则文件由 `TestPrometheusRulesReferenceRealMetrics` 校验指标与错误码真实存在） |
 | 账号存储格式（`model.Account` 字段增删改） | [`api/accounts.schema.json`](api/accounts.schema.json)（由 `TestAccountStoreSchemaMatchesModel` 反射比对，漂移即红灯）+ [`compatibility.md`](compatibility.md) §4（S3C2 / S3C3 信封字节布局）+ [`data-model.md`](data-model.md)（汇总地图；与代码不一致时按其 §0 回退权威来源） |
 | 性能特征 / 热路径 / 新增基准 | [`PERFORMANCE.md`](PERFORMANCE.md) + 对应包的 `bench_test.go` |
 | 用户可见的操作方式 / 界面用法 / 快捷键 | [`user-guide.md`](user-guide.md) + [`README.md`](../README.md)（界面改动需重新生成截图：`cd apps/web && pnpm build && pnpm exec playwright test screenshots.spec.ts`，产物落在 [`images/`](images/)） |
@@ -252,7 +252,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 文档命名 / 存放位置 / 归档 / 导航 | 本文件 §4 + [`README.md`](README.md)（docs 导航 SSOT）+ [`../README.md`](../README.md)「文档」段 + [`../llms.txt`](../llms.txt) + [`archive/index.md`](archive/index.md) |
 | **文档登记表（owner / 复审周期 / 最后复审）** | 本文件 §4 下方「文档登记表」——**新增 / 改名 / 归档任何文档时同 PR 登记一行** |
 | 数据模型 / 存储格式（字段 / 驱动 / 信封） | [`data-model.md`](data-model.md)（**地图**；冲突时按其 §0 回退到 schema / ADR / 代码权威来源） |
-| 告警 / SLI 仪表盘（Grafana） | [`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)（与 [`OPERATIONS.md`](OPERATIONS.md) §4 **和** `deploy/prometheus/s3clinet.rules.yml` 同改；指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 校验） |
+| 告警 / SLI 仪表盘（Grafana） | [`../deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json)（与 [`OPERATIONS.md`](OPERATIONS.md) §4 **和** `deploy/prometheus/s3client.rules.yml` 同改；指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 校验） |
 | 性能预算 / 热路径 | [`PERFORMANCE.md`](PERFORMANCE.md) §4 + `apps/server/bench_budget_test.go`（改预算须同改两处；原始基准见 [`.github/workflows/perf.yml`](../.github/workflows/perf.yml)） |
 | 漏洞披露渠道 / `security.txt` | [`../.well-known/security.txt`](../.well-known/security.txt)（`Expires` 到期前必须续期，门禁 `security_txt_gate_test.go`）+ [`../.github/SECURITY.md`](../.github/SECURITY.md) |
 | 原生 fuzz 目标与语料 | `apps/server/internal/*/*_fuzz_test.go` + 本文件 §2（新增解析面须同补 fuzz 目标；语料入库防回归） |

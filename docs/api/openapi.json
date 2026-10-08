@@ -277,15 +277,16 @@
     },
     "securitySchemes": {
       "bearerAuth": {
+        "description": "S3C_TOKEN 中的 Bearer token。可通过 S3C_TOKEN_SCOPES 为单个 token 限定 readonly / prefixes（桶或桶内键前缀）/ accounts / expiresAt；越权请求返回 403，过期 token 返回 401。未在 S3C_TOKEN_SCOPES 中登记的 token 为全权。",
         "scheme": "bearer",
         "type": "http"
       }
     }
   },
   "info": {
-    "title": "s3clinet API",
+    "title": "s3client API",
     "version": "v1.0.0",
-    "description": "s3clinet 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约，所有响应均 JSON（除 /api/health 等纯状态端点）。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
+    "description": "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约，所有响应均 JSON（除 /api/health 等纯状态端点）。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -3293,6 +3294,112 @@
         ]
       }
     },
+    "/api/accounts/{id}/multipart/parts": {
+      "get": {
+        "operationId": "multipartParts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "multipartInit 返回的 UploadID；失效时返回错误，前端据此重新 init",
+            "in": "query",
+            "name": "uploadId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "parts": [
+                    {
+                      "partNumber": 1,
+                      "etag": "e1",
+                      "size": 10485760,
+                      "lastModified": "2026-10-08T05:00:00Z"
+                    },
+                    {
+                      "partNumber": 2,
+                      "etag": "e2",
+                      "size": 5,
+                      "lastModified": "2026-10-08T05:01:00Z"
+                    }
+                  ]
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "etag": {
+                            "type": "string"
+                          },
+                          "lastModified": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "partNumber": {
+                            "type": "integer"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "format": "int64"
+                          }
+                        },
+                        "required": [
+                          "etag",
+                          "lastModified",
+                          "partNumber",
+                          "size"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "parts"
+                  ]
+                }
+              }
+            },
+            "description": "已上传分段清单（服务端真实值）"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "缺 key/uploadId 或 bucket"
+          }
+        },
+        "summary": "列已上传分段（断点续传对齐）",
+        "tags": [
+          "multipart"
+        ]
+      }
+    },
     "/api/accounts/{id}/object-acl": {
       "get": {
         "operationId": "getObjectAcl",
@@ -5354,7 +5461,7 @@
                 "example": {
                   "openapi": "3.0.3",
                   "info": {
-                    "title": "s3clinet API",
+                    "title": "s3client API",
                     "version": "v1.0.0"
                   }
                 },

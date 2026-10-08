@@ -1,4 +1,4 @@
-# S3 Client (s3clinet)
+# S3 Client (s3client)
 
 > S3 兼容对象存储客户端工具，使用 AWS Signature V4 签名。提供 Web 端与 Tauri 2 桌面端
 > （B/S 架构，无 Tauri IPC，前后端全走 HTTP）。后端 Go（AWS SDK for Go v2），前端 Vue 3 + Vite + TS。
@@ -19,7 +19,7 @@
 ```bash
 cd apps/server && go vet ./... && go test ./... && go build ./...
 cd apps/web && pnpm lint && pnpm typecheck && pnpm test && pnpm build
-cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v   # 签名/直传/分段/复制/标签/版本
+cd apps/server && S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v   # 签名/直传/分段/复制/标签/版本
 make e2e-real                                                                   # 真实后端+真实 RustFS+真实浏览器
 make test-all                                                                   # 后端 + 前端单测
 ```
@@ -57,7 +57,7 @@ make test-all                                                                   
 - [docs/ROADMAP.md](docs/ROADMAP.md)：版本规划与里程碑
 - [docs/threat-model.md](docs/threat-model.md)：威胁模型与安全边界
 - [.well-known/security.txt](.well-known/security.txt)：**机器可读漏洞披露入口**（RFC 9116；`Expires` 到期由 `security_txt_gate_test.go` 强制续期）
-- [deploy/grafana/s3clinet.dashboard.json](deploy/grafana/s3clinet.dashboard.json)：SLO / SLI Grafana 仪表盘（指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 守住）
+- [deploy/grafana/s3client.dashboard.json](deploy/grafana/s3client.dashboard.json)：SLO / SLI Grafana 仪表盘（指标 / `code` / recording rule 真实性由 `grafana_dashboard_gate_test.go` 守住）
 - [scripts/evals/golden-tasks.yaml](scripts/evals/golden-tasks.yaml)：AI 评测**黄金任务集**机器可读规格（与 [docs/AGENT_EVALS.md](docs/AGENT_EVALS.md) 同源校验）
 - [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md)：**自动生成的第三方依赖与许可证清单**——Go 43 模块 / Rust 428 crates / npm 1 包；由 `scripts/gen-third-party-licenses.sh` 生成，覆盖门禁 `TestThirdPartyLicensesAreComplete`；§5.3 另含「消费者如何验证镜像与桌面产物」的命令
 - [docs/decisions/index.md](docs/decisions/index.md)：架构决策记录（ADR，12 篇）——architecture.md §7 取舍表每行必须有决策链接（apps/server/adr_coverage_gate_test.go 守住）
@@ -81,7 +81,7 @@ docs/          文档（命名二分，与 AGENTS.md / docs/DEVELOPMENT.md §4 �
                `errors.md` `threat-model.md` `user-guide.md` `compatibility.md` `glossary.md` `i18n.md`
                `accessibility.md`（时点性批次交接快照同用小写，收口后归档入 `archive/`）；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
                `decisions/`（ADR）· `archive/`（冻结归档）
-deploy/        nginx 反代配置 + prometheus/s3clinet.rules.yml（告警规则，对应 OPERATIONS §4） + grafana/（SLO 仪表盘 JSON）
+deploy/        nginx 反代配置 + prometheus/s3client.rules.yml（告警规则，对应 OPERATIONS §4） + grafana/（SLO 仪表盘 JSON）
 scripts/       开发、发版、E2E 脚本 + evals/（AI 黄金任务集与 runner）
 ```
 

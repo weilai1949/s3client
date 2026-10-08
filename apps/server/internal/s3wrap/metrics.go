@@ -184,7 +184,7 @@ func errorClass(err error) string {
 // metricsMiddleware 包住每次 S3 调用，记录调用数、耗时与错误分类。
 type metricsMiddleware struct{}
 
-func (m *metricsMiddleware) ID() string { return "s3clinet:metrics" }
+func (m *metricsMiddleware) ID() string { return "s3client:metrics" }
 
 func (m *metricsMiddleware) HandleFinalize(
 	ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler,

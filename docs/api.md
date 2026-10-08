@@ -2,11 +2,13 @@
 
 后端默认监听 `127.0.0.1:8080`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
 
+> **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：可为单个 token 声明 `readonly` / `prefixes` / `accounts` / `expiresAt`（字段缺省即不限制）。`readonly` 下仅放行 GET / HEAD，其余方法（含能铸造写 URL 的预签名 `POST`）一律 `403`；`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`）下请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 越界返回 `403`，桶级操作需该桶的整桶授权；`accounts` 下路径 `{id}` 越界返回 `403`；`expiresAt` 过期返回 `401`。**未在 `S3C_TOKEN_SCOPES` 中登记的 token 保持全权**（向后兼容）。越权写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body`），过期写 `auth.denied`（`reason=token_expired`）；审计与响应均**不含 token 明文**。配置格式与 fail-closed 规则见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+
 > **`/api/metrics` 有意不受 `S3C_TOKEN` 保护**：即使配置了 token，只要设置 `S3C_EXPOSE_METRICS=1`，`GET /api/metrics` 无需 `Authorization` 头即返回 200（`withAuth` 只豁免 `/api/health` 与 `/api/metrics`，见 `middleware.go`）。这是为了让内网 Prometheus 直接 scrape 而无需分发 token；代价是该端点一旦暴露即**匿名可读**（含版本、存储可达性、S3 上游调用统计等运行信息）。因此**不要**把开启 metrics 的实例直接暴露到公网，应仅在内网 / 反向代理鉴权之后放行。
 所有响应带 `X-Request-ID`（客户端可传入，否则服务端生成）；访问日志字段 `req` 与之对应。
 
 错误格式：`{"error": "..."}`  
-通用码：`400`（请求错误）、`401`（未鉴权）、`404`（未找到）、`500`（服务端错误）。  
+通用码：`400`（请求错误）、`401`（未鉴权 / token 过期）、`403`（token 作用域越权 / Origin 不允许）、`404`（未找到）、`500`（服务端错误）。  
 S3 错误码与用户消息对照见 [`docs/errors.md`](./errors.md)。
 
 ## 健康检查
@@ -564,6 +566,15 @@ POST /api/accounts/{id}/multipart/abort
 ```
 `partNumber` 范围 1–10000；`parts` 需按段号对应各自 `etag`；失败时应调用 `abort` 清理。
 
+续传前对齐服务端真实清单（只读；刷新 / 断电 / 重选同一文件后，前端据此跳过已上传段、只补缺段）：
+```
+GET /api/accounts/{id}/multipart/parts?bucket=B&key=big.bin&uploadId=UPLOAD123
+```
+```json
+200 {"parts":[{"partNumber":1,"etag":"e1","size":10485760,"lastModified":"2026-10-08T05:00:00Z"}]}
+```
+`bucket` 可选（缺省回退账号默认桶）；`key` / `uploadId` 必填（缺失 400）。`uploadId` 已失效或清单为空时前端重新 `init`，不以上传方本地记录为准。
+
 ### 删除对象（批量）
 ```
 POST /api/accounts/{id}/delete
@@ -685,7 +696,7 @@ POST /api/migrate/sync
 GET /api/openapi.json
 ```
 
-OpenAPI 3.0 规范，作为 70 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
+OpenAPI 3.0 规范，作为 71 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
 前端**已经**以它为源生成 TypeScript 类型与端点封装：`cd apps/web && pnpm gen:api` 从提交的
 黄金契约生成 `src/api/schema.d.ts`（类型）与 `src/api/operations.ts`（`operationId → method / path /
 路径参数`），`endpoints.ts` 的 URL 与 method 全部经 `opPath()` 取自生成物；`pnpm gen:api --check`
@@ -842,7 +853,7 @@ curl -sS -X GET "$BASE/api/openapi.json" \
   -H "Authorization: Bearer $S3C_TOKEN"
 ```
 ```json
-200 {"openapi":"3.0.3","info":{"title":"s3clinet API","version":"v1.0.0"}}
+200 {"openapi":"3.0.3","info":{"title":"s3client API","version":"v1.0.0"}}
 ```
 
 ## 静态资源

@@ -60,10 +60,10 @@ jobs:
       - name: E2E test
         working-directory: apps/server
         env:
-          S3CLINET_E2E: "1"
-          S3CLINET_ENDPOINT: http://127.0.0.1:9000
-          S3CLINET_ACCESS_KEY: rustfsadmin
-          S3CLINET_SECRET_KEY: rustfsadmin
+          S3CLIENT_E2E: "1"
+          S3CLIENT_ENDPOINT: http://127.0.0.1:9000
+          S3CLIENT_ACCESS_KEY: rustfsadmin
+          S3CLIENT_SECRET_KEY: rustfsadmin
         run: go test ./internal/s3wrap/ -run 'TestE2E' -v -count=1
 
       - name: Stop RustFS

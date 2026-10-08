@@ -1,4 +1,5 @@
 import { opPath } from './api/http'
+import { downloadObjectToDisk, PARALLEL_DOWNLOAD_MIN_BYTES } from './api/download'
 
 /** 共享的「服务端代理 / 下载 URL」构造器（安全预览与下载统一入口）。 */
 
@@ -60,11 +61,19 @@ export async function fetchProxyBlob(req: ProxyRequest): Promise<Blob> {
 /**
  * 经代理下载对象为附件：带 Bearer 取回字节 → objectURL → 触发保存 → 释放 URL。
  * 失败抛错且不产生任何落盘动作（错误体绝不当文件保存），由调用方转成错误提示。
+ *
+ * `sizeBytes` 已知且达到并行阈值时改走有界并发 Range 分段（`api/download.ts`，ADR-009），
+ * 服务端不支持 Range / 返回非 206 时内部自动回退本单流路径。
  */
 export async function downloadProxyObject(
   req: Omit<ProxyRequest, 'mode' | 'signal'>,
   filename: string,
+  sizeBytes?: number,
 ): Promise<void> {
+  if (sizeBytes !== undefined && sizeBytes >= PARALLEL_DOWNLOAD_MIN_BYTES) {
+    await downloadObjectToDisk({ ...req, size: sizeBytes, filename })
+    return
+  }
   const blob = await fetchProxyBlob({ ...req, mode: 'download' })
   const url = URL.createObjectURL(blob)
   try {

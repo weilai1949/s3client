@@ -34,7 +34,7 @@ gcl-docker:
 # 不在每次启动时跑 `go mod tidy`，避免依赖被无意识升级导致开发与 CI 漂移；
 # 依赖更新请显式执行 `make tidy`。
 server:
-	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server . && ./s3clinet-server
+	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3client-server . && ./s3client-server
 
 # 显式同步依赖（开发者升级依赖或 PR 触发 CI 前的统一入口）
 tidy:
@@ -42,7 +42,7 @@ tidy:
 
 # 构建 Go 二进制（注入版本号）
 server-build:
-	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3clinet-server .
+	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3client-server .
 
 # Web 前端开发
 web:
@@ -130,7 +130,7 @@ install-hooks:
 
 # 构建 Docker 镜像（注入版本号）
 docker:
-	docker build -f apps/server/Dockerfile -t s3clinet/server:$(VERSION) --build-arg VERSION=$(VERSION) .
+	docker build -f apps/server/Dockerfile -t s3client/server:$(VERSION) --build-arg VERSION=$(VERSION) .
 
 # 一键构建全部
 all: server-build web-build

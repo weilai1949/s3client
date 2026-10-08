@@ -53,7 +53,7 @@ func TestApplyExamplesPanicsOnBadConfig(t *testing.T) {
 					t.Errorf("panic = %q，期望包含 %q", msg, tc.wantSub)
 				}
 			}()
-			applyExamples(openapi.New("s3clinet API", "vtest"))
+			applyExamples(openapi.New("s3client API", "vtest"))
 		})
 	}
 }

@@ -12,7 +12,7 @@
       "keepTime": false,
       "tags": [],
       "targetBlank": true,
-      "title": "s3clinet 运维手册（OPERATIONS.md §4）",
+      "title": "s3client 运维手册（OPERATIONS.md §4）",
       "tooltip": "SLO / 告警基线与 Runbook",
       "type": "link",
       "url": "https://github.com/weilai1949/s3client/blob/main/docs/OPERATIONS.md"
@@ -24,12 +24,12 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "panels": [],
-      "title": "① SLI（与 deploy/prometheus/s3clinet.rules.yml 的记录规则同源）",
+      "title": "① SLI（与 deploy/prometheus/s3client.rules.yml 的记录规则同源）",
       "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "SLO 目标 ≤ 0.5%（OPERATIONS.md §4.1）。优先取 recording rule s3clinet:http_5xx_ratio:rate5m（rules.yml 与本面板同源）；refId B 是等价原始表达式，规则未加载时仍可读。",
+      "description": "SLO 目标 ≤ 0.5%（OPERATIONS.md §4.1）。优先取 recording rule s3client:http_5xx_ratio:rate5m（rules.yml 与本面板同源）；refId B 是等价原始表达式，规则未加载时仍可读。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "percentunit" },
         "overrides": []
@@ -38,7 +38,7 @@
       "id": 2,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:http_5xx_ratio:rate5m", "legendFormat": "5xx ratio（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3client:http_5xx_ratio:rate5m", "legendFormat": "5xx ratio（recording rule）", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_http_responses_total{class=\"5xx\"}[5m])) / sum(rate(s3c_http_requests_total[5m]))", "legendFormat": "5xx ratio（raw）", "refId": "B" }
       ],
       "title": "服务端 5xx 比例（SLO ≤ 0.5%）",
@@ -87,7 +87,7 @@
       "id": 5,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:s3_error_ratio:rate5m", "legendFormat": "upstream error ratio（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3client:s3_error_ratio:rate5m", "legendFormat": "upstream error ratio（recording rule）", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(rate(s3c_s3_call_errors_total[5m])) / sum(rate(s3c_s3_calls_total[5m]))", "legendFormat": "upstream error ratio（raw）", "refId": "B" }
       ],
       "title": "上游 S3 错误率（SLO ≤ 1%）",
@@ -104,7 +104,7 @@
       "id": 6,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:s3_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3client:s3_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(s3c_s3_call_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95（raw）", "refId": "B" }
       ],
       "title": "上游 S3 延迟 p95（SLO ≤ 2s）",
@@ -136,7 +136,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "1 = store 可达，0 = 不可达。== 0 持续 1 分钟触发 S3ClinetAccountStoreDown（critical）。",
+      "description": "1 = store 可达，0 = 不可达。== 0 持续 1 分钟触发 S3ClientAccountStoreDown（critical）。",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -227,7 +227,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "凭据 / 权限错误：15 分钟内有增量即 S3ClinetCredentialErrors（critical）。",
+      "description": "凭据 / 权限错误：15 分钟内有增量即 S3ClientCredentialErrors（critical）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "ops" },
         "overrides": []
@@ -243,7 +243,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "上游限流 / 过载：15 分钟内 > 5 次触发 S3ClinetUpstreamThrottling（warning）。",
+      "description": "上游限流 / 过载：15 分钟内 > 5 次触发 S3ClientUpstreamThrottling（warning）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "ops" },
         "overrides": []
@@ -259,7 +259,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "连接层不可达（DNS / TLS / 出网策略）：15 分钟内有增量即 S3ClinetUpstreamUnreachable（critical）。",
+      "description": "连接层不可达（DNS / TLS / 出网策略）：15 分钟内有增量即 S3ClientUpstreamUnreachable（critical）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "ops" },
         "overrides": []
@@ -299,7 +299,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "流式传输在完成前中断的次数（客户端主动断开不计入）。15 分钟内有增量即 S3ClinetStreamInterrupted（warning）。",
+      "description": "流式传输在完成前中断的次数（客户端主动断开不计入）。15 分钟内有增量即 S3ClientStreamInterrupted（warning）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "short" },
         "overrides": []
@@ -354,7 +354,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "进程运行秒数。出现下降沿（resets）即视为重启，触发 S3ClinetProcessRestarted（warning）。",
+      "description": "进程运行秒数。出现下降沿（resets）即视为重启，触发 S3ClientProcessRestarted（warning）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "s" },
         "overrides": []
@@ -370,7 +370,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Go 堆占用。s3c_go_memstats_alloc_bytes > 410MiB（容器 512M 上限的 80%）持续 10 分钟触发 S3ClinetMemoryNearLimit。",
+      "description": "Go 堆占用。s3c_go_memstats_alloc_bytes > 410MiB（容器 512M 上限的 80%）持续 10 分钟触发 S3ClientMemoryNearLimit。",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -466,7 +466,7 @@
       "gridPos": { "h": 5, "w": 24, "x": 0, "y": 74 },
       "id": 31,
       "options": {
-        "content": "**在册异步任务数**（`s3c_jobs_active`，ROADMAP #18 补齐）与 `JobRegistry` 的在册上限同口径：只数**未终结**任务，上限 256，`>= 230` 持续 10 分钟触发 `S3ClinetJobsNearCapacity`。\n\n怎么读：\n\n1. 恒为 0 而 `GET /api/migrate/jobs` 里有历史项 —— 正常：终态任务不占名额，只保留 5 分钟 / `interrupted` 7 天供对账；\n2. 进程重启看 `resets(s3c_uptime_seconds[15m]) > 0`——重启会把进行中的任务标记为 `interrupted`，需人工对账（OPERATIONS.md §5 铁律：先取证，再重启）；\n3. goroutine 数持续上升（见 ⑤）仍是泄漏的间接信号，与本指标互补。",
+        "content": "**在册异步任务数**（`s3c_jobs_active`，ROADMAP #18 补齐）与 `JobRegistry` 的在册上限同口径：只数**未终结**任务，上限 256，`>= 230` 持续 10 分钟触发 `S3ClientJobsNearCapacity`。\n\n怎么读：\n\n1. 恒为 0 而 `GET /api/migrate/jobs` 里有历史项 —— 正常：终态任务不占名额，只保留 5 分钟 / `interrupted` 7 天供对账；\n2. 进程重启看 `resets(s3c_uptime_seconds[15m]) > 0`——重启会把进行中的任务标记为 `interrupted`，需人工对账（OPERATIONS.md §5 铁律：先取证，再重启）；\n3. goroutine 数持续上升（见 ⑤）仍是泄漏的间接信号，与本指标互补。",
         "mode": "markdown"
       },
       "targets": [],
@@ -475,7 +475,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "在册（未终结）异步任务数 s3c_jobs_active。在册上限 256（service.defaultMaxJobs）：>= 230 持续 10 分钟触发 S3ClinetJobsNearCapacity（warning）。",
+      "description": "在册（未终结）异步任务数 s3c_jobs_active。在册上限 256（service.defaultMaxJobs）：>= 230 持续 10 分钟触发 S3ClientJobsNearCapacity（warning）。",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -520,7 +520,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "HTTP 请求延迟 p95（含 proxy / download / zip 等流式端点，长尾天然存在）。优先取 recording rule s3clinet:http_latency_p95:rate5m（与 rules.yml 同源）；refId B 是等价原始表达式，规则未加载时仍可读。> 5s 持续 10 分钟触发 S3ClinetHTTPLatencyHigh（warning）。",
+      "description": "HTTP 请求延迟 p95（含 proxy / download / zip 等流式端点，长尾天然存在）。优先取 recording rule s3client:http_latency_p95:rate5m（与 rules.yml 同源）；refId B 是等价原始表达式，规则未加载时仍可读。> 5s 持续 10 分钟触发 S3ClientHTTPLatencyHigh（warning）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "s" },
         "overrides": []
@@ -529,7 +529,7 @@
       "id": 35,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3clinet:http_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3client:http_latency_p95:rate5m", "legendFormat": "p95（recording rule）", "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "histogram_quantile(0.95, sum(rate(s3c_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95（raw）", "refId": "B" }
       ],
       "title": "HTTP 请求延迟 p95（建议 ≤ 5s）",
@@ -537,7 +537,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "账号库写入失败（落盘 / SQL 写入出错，业务性拒绝不计数）。json / encrypted 驱动的 Ping() 恒为 nil，这是它们唯一的主动存储故障信号。15 分钟内有增量即触发 S3ClinetStoreWriteFailures（critical）。",
+      "description": "账号库写入失败（落盘 / SQL 写入出错，业务性拒绝不计数）。json / encrypted 驱动的 Ping() 恒为 nil，这是它们唯一的主动存储故障信号。15 分钟内有增量即触发 S3ClientStoreWriteFailures（critical）。",
       "fieldConfig": {
         "defaults": { "custom": {}, "unit": "short" },
         "overrides": []
@@ -554,7 +554,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "数据卷剩余空间占比（s3c_volume_free_bytes / s3c_volume_size_bytes）。< 20% 持续 10 分钟触发 S3ClinetVolumeSpaceLow（warning）。序列只在 statfs / GetDiskFreeSpaceExW 可用的平台上存在：平台不支持或数据目录未配置时不发序列（面板 No data，按 OPERATIONS.md §4.3 用 node_exporter / df 补齐）。",
+      "description": "数据卷剩余空间占比（s3c_volume_free_bytes / s3c_volume_size_bytes）。< 20% 持续 10 分钟触发 S3ClientVolumeSpaceLow（warning）。序列只在 statfs / GetDiskFreeSpaceExW 可用的平台上存在：平台不支持或数据目录未配置时不发序列（面板 No data，按 OPERATIONS.md §4.3 用 node_exporter / df 补齐）。",
       "fieldConfig": {
         "defaults": {
           "custom": {},
@@ -624,7 +624,7 @@
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": [ "s3clinet", "slo", "prometheus" ],
+  "tags": [ "s3client", "slo", "prometheus" ],
   "templating": {
     "list": [
       {
@@ -646,8 +646,8 @@
   "time": { "from": "now-6h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "s3clinet — SLO / 运维概览",
-  "uid": "s3clinet-slo",
+  "title": "s3client — SLO / 运维概览",
+  "uid": "s3client-slo",
   "version": 1,
   "weekStart": ""
 }

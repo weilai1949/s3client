@@ -1,5 +1,6 @@
 import { s3api, directUpload } from './api'
 import { t, tf } from './i18n'
+import { clearResume, loadResume, saveResume } from './multipartResume'
 
 /** 上传目标（账号 + 桶 + key）。 */
 export interface UploadTarget {
@@ -147,33 +148,81 @@ async function multipartUpload(
   onProgress?: (pct: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const init = await s3api.multipartInit(target.accId, {
-    bucket: target.bucket,
-    key: target.key,
-    contentType: file.type || undefined,
-  })
-  if (signal?.aborted) {
-    s3api.multipartAbort(target.accId, { bucket: target.bucket, key: target.key, uploadId: init.uploadId }).catch(() => {})
-    throw new DOMException('Aborted', 'AbortError')
-  }
-  const uploadId = init.uploadId
   const totalParts = calcMultipartParts(file.size)
-  const parts: { partNumber: number; etag: string }[] = new Array(totalParts)
+  const parts: UploadedPart[] = new Array(totalParts)
+  let uploadId = ''
   let doneBytes = 0
   let aborted = false
+  /** 已向服务端发起过 abort（幂等）：会话只在拿到 uploadId 后才能真正清理。 */
+  let sessionAborted = false
   const abort = () => {
-    if (aborted) return
     aborted = true
-    s3api.multipartAbort(target.accId, { bucket: target.bucket, key: target.key, uploadId }).catch(() => {})
+    clearResume(file)
+    if (!sessionAborted && uploadId) {
+      sessionAborted = true
+      s3api.multipartAbort(target.accId, { bucket: target.bucket, key: target.key, uploadId }).catch(() => {})
+    }
   }
   signal?.addEventListener('abort', abort, { once: true })
 
   try {
+    // 1) 断点续传：本地记录只是候选，能否复用由服务端 ListParts 清单决定。
+    const saved = loadResume(file)
+    if (saved) {
+      if (saved.accId === target.accId && saved.key === target.key && saved.bucket === target.bucket) {
+        try {
+          const server = await s3api.multipartParts(target.accId, {
+            bucket: target.bucket,
+            key: target.key,
+            uploadId: saved.uploadId,
+          })
+          if (server.parts.length > 0) {
+            // 服务端真实清单为准：只采纳落在本文件段号范围内的分段。
+            uploadId = saved.uploadId
+            for (const p of server.parts) {
+              if (p.partNumber >= 1 && p.partNumber <= totalParts) {
+                parts[p.partNumber - 1] = { partNumber: p.partNumber, etag: p.etag }
+              }
+            }
+            doneBytes = countDoneBytes(file.size, parts)
+            onProgress?.(Math.min(100, Math.round((doneBytes / file.size) * 100)))
+          } else {
+            // 服务端清单为空 = 旧会话没有可复用分段：清理后走全新 init。
+            s3api.multipartAbort(target.accId, { bucket: target.bucket, key: target.key, uploadId: saved.uploadId }).catch(() => {})
+            clearResume(file)
+          }
+        } catch {
+          // uploadId 失效（NoSuchUpload）/ 服务端不可达：清掉本地记录，干净地重新 init。
+          clearResume(file)
+        }
+      } else {
+        // 同文件指纹但目标账号 / 桶 / key 已变：旧记录不可复用。
+        clearResume(file)
+      }
+    }
+    // 2) 无可复用会话则 init，并落一条续传记录（供刷新 / 断电后对齐）。
+    if (!uploadId) {
+      const init = await s3api.multipartInit(target.accId, {
+        bucket: target.bucket,
+        key: target.key,
+        contentType: file.type || undefined,
+      })
+      uploadId = init.uploadId
+      saveResume(file, { accId: target.accId, key: target.key, bucket: target.bucket, uploadId, parts: [] })
+    }
+    if (signal?.aborted || aborted) {
+      // 中止若发生在 init 期间，abort 监听还拿不到 uploadId；这里补一次会话清理（幂等）。
+      abort()
+      throw new DOMException('Aborted', 'AbortError')
+    }
+
     let idx = 0
     const worker = async () => {
       while (idx < totalParts) {
         if (signal?.aborted || aborted) throw new DOMException('Aborted', 'AbortError')
         const n = idx++ + 1
+        // 服务端清单已确认的段直接跳过：只补缺段。
+        if (parts[n - 1]) continue
         const start = (n - 1) * PART_SIZE
         const end = Math.min(start + PART_SIZE, file.size)
         const blob = file.slice(start, end)
@@ -187,8 +236,8 @@ async function multipartUpload(
           })
           if (signal?.aborted || aborted) throw new DOMException('Aborted', 'AbortError')
           return putPartReturnEtag(presign.url, blob, (p) => {
-            const partBytes = Math.round((p / 100) * blob.size)
-            const overall = Math.min(100, Math.round(((doneBytes + partBytes) / file.size) * 100))
+            const partLoaded = Math.round((p / 100) * blob.size)
+            const overall = Math.min(100, Math.round(((doneBytes + partLoaded) / file.size) * 100))
             onProgress?.(overall)
           }, signal)
         }, PART_RETRY_DELAYS_MS, signal)
@@ -197,6 +246,14 @@ async function multipartUpload(
         }
         parts[n - 1] = { partNumber: n, etag }
         doneBytes += blob.size
+        // 每段完成即更新续传记录：刷新 / 断电后从该点继续。
+        saveResume(file, {
+          accId: target.accId,
+          key: target.key,
+          bucket: target.bucket,
+          uploadId,
+          parts: parts.filter(isUploadedPart),
+        })
         onProgress?.(Math.min(100, Math.round((doneBytes / file.size) * 100)))
       }
     }
@@ -208,6 +265,7 @@ async function multipartUpload(
       uploadId,
       parts,
     })
+    clearResume(file)
     onProgress?.(100)
   } catch (e) {
     if (!isAbortError(e)) abort()
@@ -215,4 +273,27 @@ async function multipartUpload(
   } finally {
     signal?.removeEventListener('abort', abort)
   }
+}
+
+/** 已完成分段（服务端清单 / 本地 PUT 回执统一形状）。 */
+type UploadedPart = { partNumber: number; etag: string }
+
+/** 过滤稀疏分段数组中的空位（`new Array(n)` 的空洞会被 filter 跳过）。 */
+function isUploadedPart(p: UploadedPart | undefined): p is UploadedPart {
+  return p !== undefined
+}
+
+/** 第 n 段的字节数（续传进度按本地文件大小折算已确认段）。 */
+function partBytes(fileSize: number, partNumber: number): number {
+  const start = (partNumber - 1) * PART_SIZE
+  return Math.min(start + PART_SIZE, fileSize) - start
+}
+
+/** 统计分段数组中已确认段的总字节数（用于续传起始进度）。 */
+function countDoneBytes(fileSize: number, parts: (UploadedPart | undefined)[]): number {
+  let total = 0
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i]) total += partBytes(fileSize, i + 1)
+  }
+  return total
 }

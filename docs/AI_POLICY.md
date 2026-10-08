@@ -25,7 +25,7 @@
 
 | 项 | 值 |
 |---|---|
-| 项目 | S3 Client（`s3clinet`）— S3 兼容对象存储客户端（Web + Tauri 桌面，B/S 无 IPC） |
+| 项目 | S3 Client（`s3client`）— S3 兼容对象存储客户端（Web + Tauri 桌面，B/S 无 IPC） |
 | 仓库 | <https://github.com/weilai1949/s3client> |
 | 主开发分支 | `develop`；稳定发布分支 `main`（见 [CONTRIBUTING.md](../.github/CONTRIBUTING.md)） |
 | 当前版本 | `v1.0.0`（之后日常发版用 `v1.0.0-YYYYMMDDHHmmss`） |
@@ -174,7 +174,7 @@ AI 使用披露：
 - [ ] 无死代码 / 无未使用变量；没有用 `_ = x`、`//nolint` 之类手段「消音」
 - [ ] `cd apps/server && go vet ./... && go test ./... && go build ./...` 全绿
 - [ ] `cd apps/web && pnpm lint && pnpm typecheck && pnpm test && pnpm build` 全绿
-- [ ] 涉及签名 / 直传 / 分段 / 复制 / 标签 / 版本控制时跑了 `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`
+- [ ] 涉及签名 / 直传 / 分段 / 复制 / 标签 / 版本控制时跑了 `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`
 - [ ] 涉及前端 / 后端接口 / 预签名直传时跑了 `make e2e-real`
 - [ ] 文档已按 [DEVELOPMENT.md](DEVELOPMENT.md) §4 同步；`CHANGELOG.md` 的 `[Unreleased]` 已更新
 - [ ] 公共 API 变更已同步 `openapi_register_*.go` + [api.md](api.md) 并跑契约测试

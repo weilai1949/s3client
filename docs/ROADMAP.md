@@ -1,6 +1,6 @@
-# s3clinet 路线图（Roadmap）
+# s3client 路线图（Roadmap）
 
-> 本文件只描述 s3clinet 的**版本规划与优先级**（战略层）：每个里程碑的目标、验收标准与**尚未完成**的条目。
+> 本文件只描述 s3client 的**版本规划与优先级**（战略层）：每个里程碑的目标、验收标准与**尚未完成**的条目。
 > 已实现 / 已修复的内容不在此流水账，见 [`docs/FEATURES.md`](FEATURES.md)；
 > 逐条待办自 2026-09-24 起**分两处维护、互不重复**：**问题**（缺陷 / 外部阻塞 / 技术债）的唯一来源为
 > [`docs/KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**功能候选与版本级规划**（本文件 §三）的唯一来源为本文件本身；
@@ -31,7 +31,7 @@
 ## 一、当前定位
 
 **产品形态**：S3 兼容对象存储客户端，Web 端 + Tauri 2 桌面端（B/S 架构、无 IPC、全 HTTP）；Go 后端
-（AWS SDK for Go v2）+ Vue 3 / Vite / TS 前端，70 个 `/api/*` 端点、OpenAPI 3.0.3 自动生成。
+（AWS SDK for Go v2）+ Vue 3 / Vite / TS 前端，71 个 `/api/*` 端点、OpenAPI 3.0.3 自动生成。
 
 **结论**：**P0 与 P1 均已清零**，`v1.0.0` 已打 tag；`v1.0.0-rc1` → `v1.0.0` → `v1.0.x` → `v1.1.0`
 四个里程碑均已收口。已立项的未完成项只有长期性质的第 1 条：**桌面端分发与签名**——外部凭证阻塞
@@ -77,7 +77,9 @@
 > **#17–#18 为 2026-09-30 收口迁入的文档内改进项**（来源 [`accessibility.md`](accessibility.md)
 > §5.3–§5.5 与 [`OPERATIONS.md`](OPERATIONS.md) 观测缺口声明，按「不留文档内口头待办」纪律迁入），
 > 「原编号」列记 `—`；**两条已于同日全部落地**并按 §六 第 1 条移出转空号（#18 证据 §BL、
-> #17 证据 §BM），故本表当前不含它们。
+> #17 证据 §BM），故本表当前不含它们。**2026-10-08 三项落地后移出**：#8「大文件体验」/ #11「OpenTelemetry：
+> trace 贯穿签名 / 代理 / 迁移」/ #13「Token 作用域与最小权限」——证据见 [`FEATURES.md`](FEATURES.md)
+> §BQ / §BR / §BS，编号转空号（不重排，见 §3.2 前言）。
 
 ### 3.1 已立项 / 已决策项
 
@@ -96,20 +98,20 @@
 > [`FEATURES.md`](FEATURES.md) §BJ；#18「可观测性补全」2026-09-30 落地后同样移出，#18 空号，
 > 证据见 [`FEATURES.md`](FEATURES.md) §BL；#17「可访问性补强与自动化扫描」2026-09-30 落地后同样移出，
 > #17 空号，证据见 [`FEATURES.md`](FEATURES.md) §BM；#10「OpenAPI → 前端类型 / 客户端代码生成」
-> 2026-10-01 落地后同样移出，#10 空号，证据见 [`FEATURES.md`](FEATURES.md) §BN）；「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
+> 2026-10-01 落地后同样移出，#10 空号，证据见 [`FEATURES.md`](FEATURES.md) §BN；#8「大文件体验」/
+> #11「OpenTelemetry：trace 贯穿签名 / 代理 / 迁移」/ #13「Token 作用域与最小权限」于 2026-10-08
+> 落地后按 §六 第 1 条同样移出，#8 / #11 / #13 空号，证据见 [`FEATURES.md`](FEATURES.md) §BQ / §BR / §BS）；
+> 「原编号」列为 2026-09-24 迁入前在 `KNOWN_ISSUES.md` 的编号，
 > **已停用**、仅作历史映射——新建与引用一律用本表 `§三 #N`。
 > 立项时在本表把状态改 ⏳；评估为不做改 ➖ 并写决策依据（本表即唯一来源，无第二处需同步）。
 
 | # | 方向 | 原编号 | 状态 | 现有代码可承接点 + 趋势依据 |
 |---|---|---|---|---|
-| 4 | MCP Server：把对象存储能力开放给 AI 代理 | #47 | ⬜ | 已有 70 端点 OpenAPI 3.0.3 全量契约 + `handler → service → s3wrap` 分层，工具面可由契约派生并复用既有鉴权 / 限速 / SSRF 防护；MCP 已是 AI 客户端接入外部工具的事实标准，只读工具可先行、写工具复用 Bearer 与危险操作二次确认 |
+| 4 | MCP Server：把对象存储能力开放给 AI 代理 | #47 | ⬜ | 已有 71 端点 OpenAPI 3.0.3 全量契约 + `handler → service → s3wrap` 分层，工具面可由契约派生并复用既有鉴权 / 限速 / SSRF 防护；MCP 已是 AI 客户端接入外部工具的事实标准，只读工具可先行、写工具复用 Bearer 与危险操作二次确认 |
 | 5 | S3 新协议特性：条件写 / 端到端校验和 / Object Lock | #48 | ⬜ | 已有 CopyObject 复制链、`etag` 比对与版本控制；条件写（If-Match / If-None-Match）防并发覆盖、CRC64 全对象校验和、Object Lock / 合规保留是近两年 S3 API 演进主线，经 `s3wrap` 唯一边界接入并按厂商支持度降级（扩 E8 兼容矩阵） |
 | 6 | 计划任务与持续同步（增量同步 → 定时备份） | #49 | ⬜ | `migrate/sync` 三模式 + `JobRegistry` 落盘 / 重启恢复 / SSE 进度已是任务框架；补 cron 式计划即可把一次性迁移升级为「桶 → 桶定时备份」，落盘策略沿用 `job_persist.go`，符合 2026 数据保护 / 可持续备份趋势 |
 | 7 | FinOps：存储分析与成本洞察 | #50 | ⬜ | 已有列表 size / storageClass、批量改存储类、生命周期规则读写；按前缀 / 存储类聚合用量、给出低频 / 归档 / 生命周期建议即成成本看板（有界并发 + 100k 上限沿用 `RunBatch`），对齐 FinOps 成本优化大趋势 |
-| 8 | 大文件体验：上传断点续传 + 下载并行分段 | #51 | ⬜ | 上传侧已有 multipart 四端点与 4 路并发，缺「刷新 / 断电后恢复」——可持久化分段清单实现续传；下载侧代理已支持 Range / 416，补多段并行 GET 聚合。大文件可靠性是网盘类客户端的分水岭能力 |
 | 9 | 本地文件夹 ↔ 桶 双向同步 + PWA 离线壳 | #52 | ⬜ | `download.ts` 已用 File System Access API 流式落盘，同 API 的目录句柄 + `etag` 比对可复用为本地目录同步；PWA manifest / service worker 让 Web 端可安装离线启动（密钥仍不落地 localStorage，遵守安全基线） |
-| 11 | OpenTelemetry：trace 贯穿签名 / 代理 / 迁移 | #54 | ⬜ | 已有 Prometheus 指标 + `X-Request-ID` + 可选 `S3C_LOG_JSON`；接入 OTLP 导出（开关式、默认关）把请求 ID 升级为跨 presign / proxy / migrate 的 trace，配套 SLO 仪表盘。OTel 已是可观测性事实标准，与既有指标互补不替换。**2026-09-30 部分落地**：SLO 仪表盘已随本批交付（`deploy/grafana/s3clinet.dashboard.json` + `grafana_dashboard_gate_test.go`）；**OTel trace 仍未做**，本条保持 ⬜。 |
-| 13 | Token 作用域与最小权限（只读 / 前缀限定） | #56 | ⬜ | 现有多 token（`S3C_TOKEN` 逗号分隔）只有全权一种；补作用域声明（只读、限定账号 / 前缀、过期时间），高危端点按 scope 拒绝并进 OpenAPI 契约。least-privilege / 短时凭证是 API 鉴权演进主流，复用常量时间比较与既有中间件链 |
 | 15 | 多副本 / HA 能力评估（store 外置） | #58 | ⬜ | 现状为 `flock` 单副本（R4 已决策接受、ADR-002 fail-closed）；评估引入可外置的 store 后端（如 SQLite 共享卷 / Postgres 驱动）以支撑滚动升级与多副本。**属推翻既有决策的评估项**：先出 ADR 再动代码，结论若维持现状则转 ➖ |
 | 16 | 多平台差异化用户体验增强 | #59 | ⬜ | 体验评估计划（桌面 / 移动 / Web 协同体验）；评估产出后按结论拆分或转 ➖ |
 
@@ -117,14 +119,14 @@
 
 ## 四、质量门禁基线
 
-任一版本发布前必须全绿（实测状态；**2026-10-01 复测**（#17 可访问性批次收口、#10 代码生成批次
-落地后全量重跑）：
-`gofmt -l` 干净 / `go vet` 0 告警 / `golangci-lint` **0 issues** / `go test ./...` **9/9 包** /
-`go build` OK / `make test-cover` **9/9 包 100.0%（`count==0` 零块）** / `govulncheck` **0 可达**，
+任一版本发布前必须全绿（实测状态；**2026-10-08 复测**（ROADMAP #8 / #11 / #13 三路并行落地后全量重跑；
+本轮新增 `internal/tracing`，后端包数 9 → 10）：
+`gofmt -l` 干净 / `go vet` 0 告警 / `golangci-lint` **0 issues** / `go test ./...` **10/10 包** /
+`go build` OK / `make test-cover` **10/10 包 100.0%（`count==0` 零块）** / `govulncheck` **0 可达**，
 与前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` 均 exit 0 / `pnpm test`
-**76 文件 1158 例** / `pnpm test:coverage` 四指标 **100%** / `pnpm build` OK / `pnpm gen:api --check`
+**78 文件 1189 例** / `pnpm test:coverage` 四指标 **100%** / `pnpm build` OK / `pnpm gen:api --check`
 **exit 0** / `pnpm e2e` **22 passed** / `cargo audit`（`--no-fetch` 用缓存 advisory DB）**0 漏洞**，
-两项真实 E2E——`make e2e-real` **3 passed**、`S3CLINET_E2E=1` **4/4 PASS** 全绿。
+两项真实 E2E——`make e2e-real` **3 passed**、`S3CLIENT_E2E=1` **4/4 PASS** 全绿。
 **本轮无法实跑**：`pnpm audit`——所用镜像 `registry.npmmirror.com` 不提供
 `/-/npm/v1/security/audits` 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 与
 2026-09-22 实测值）：
@@ -134,18 +136,18 @@
 | Go 格式 | `gofmt -l .`（`apps/server/`） | ✅ 干净 |
 | Go 静态检查 | `go vet ./...` | ✅ 0 告警 |
 | Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
-| Go 测试 | `go test -race -count=1 ./...` | ✅ 9/9 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`） |
+| Go 测试 | `go test -race -count=1 ./...` | ✅ 10/10 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`；**2026-10-08 §BR** 再增至 10 包，新增 `internal/tracing`） |
 | Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100% |
-| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁。**2026-10-01 复测**：0 可达；另扫出 21 个「被 require 但代码未调用」的模块漏洞，不构成可达面） |
+| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁。**2026-10-08 复测**：0 可达；另扫出 21 个「被 require 但代码未调用」的模块漏洞，不构成可达面。此前 **2026-10-01 复测**同结论） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
-| 前端测试 | `pnpm test` | ✅ **1158** 例全绿（**76** 文件；**2026-10-01 §BN**：#10 代码生成批次 +3 例（新增 `src/api/generated.gate.test.ts`：生成物新鲜度 + 结构自检 + `opPath` 行为），文件数 75 → 76；**2026-10-01 §BM**：可访问性批次 +23 例（焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态 1 等），文件数 74 → 75（新增 `src/a11y_axe.test.ts`）；2026-09-30 前的轨迹：2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV` → 1128；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例、改写为派发真实 keydown 的行为断言 → 1126**；**同日 §AO 补死代码门禁的合成源码口径用例 → 1127**；**同日 §AP 收口 #67 / #68，新增 `a11y_gate.test.ts` 3 例与 `i18n` 2 例 → 1132、文件数 74**） |
-| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（**2026-10-01 §BN 复测**：4327 / 2932 / 1131 / 3712，四指标均 100%（新增 `src/api/operations.ts` 被 `endpoints.ts` 全量消费，纳入统计）；此前 2026-10-01 §BM 值 4321 / 2932 / 1130 / 3706、2026-09-29 §AP 值 4296 / 2932 / 1130 / 3679（`NODE_ENV` 未设）与 4294 / 2932 / 1130 / 3677（`NODE_ENV=production`，差值来自 Vue dev/prod 构建各自少/多插桩的那一行）均 100%。含 `src/i18n/index.ts`） |
+| 前端测试 | `pnpm test` | ✅ **1189** 例全绿（**78** 文件；**2026-10-08 §BQ**：大文件批次新增 `src/multipartResume.test.ts` 与 `src/api/download.test.ts`、扩充 `upload.test.ts` / `proxy.test.ts` / `api.gaps.test.ts`，文件数 76 → 78、例数 1158 → 1189；**2026-10-01 §BN**：#10 代码生成批次 +3 例（新增 `src/api/generated.gate.test.ts`：生成物新鲜度 + 结构自检 + `opPath` 行为），文件数 75 → 76；**2026-10-01 §BM**：可访问性批次 +23 例（焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态 1 等），文件数 74 → 75（新增 `src/a11y_axe.test.ts`）；2026-09-30 前的轨迹：2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV` → 1128；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例、改写为派发真实 keydown 的行为断言 → 1126**；**同日 §AO 补死代码门禁的合成源码口径用例 → 1127**；**同日 §AP 收口 #67 / #68，新增 `a11y_gate.test.ts` 3 例与 `i18n` 2 例 → 1132、文件数 74**） |
+| 前端覆盖率 | `pnpm test:coverage`（statements / branches / functions / lines） | ✅ 100%（**2026-10-08 §BQ 复测**：4481 / 3007 / 1151 / 3853，四指标均 100%；此前 **2026-10-01 §BN 复测**：4327 / 2932 / 1131 / 3712，四指标均 100%（新增 `src/api/operations.ts` 被 `endpoints.ts` 全量消费，纳入统计）；此前 2026-10-01 §BM 值 4321 / 2932 / 1130 / 3706、2026-09-29 §AP 值 4296 / 2932 / 1130 / 3679（`NODE_ENV` 未设）与 4294 / 2932 / 1130 / 3677（`NODE_ENV=production`，差值来自 Vue dev/prod 构建各自少/多插桩的那一行）均 100%。含 `src/i18n/index.ts`） |
 | 前端生成物新鲜度 | `pnpm gen:api --check`（= `node scripts/gen-api.mjs --check`，由 `src/api/generated.gate.test.ts` 在 `pnpm test` 内调用） | ✅ exit 0（**2026-10-01 §BN 首次登记**）：`src/api/schema.d.ts` / `src/api/operations.ts` 与 [`api/openapi.json`](api/openapi.json) 逐字节一致；改 spec 忘了重跑 `pnpm gen:api` 即红灯 |
 | 依赖审计 | `pnpm audit` / Trivy | ✅ npm 0 漏洞；镜像 CRITICAL/HIGH 硬失败。**2026-10-01 本地未能实跑**：所用镜像不提供 audit 端点（`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 结果；新增 devDependency `vitest-axe` 由 Dependabot / CI 覆盖 |
-| E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | **22 passed / 0 skipped**（**2026-10-01 实跑**：`pnpm e2e`，含 5 条 `a11y.spec.ts` axe 扫描与 2 条截图——本批配色 / aria 改动的渲染态验证；此前 2026-09-29 记为 17 passed，含 `screenshots.spec.ts` 的 2 例）。此前本行「当前状态」误填成 action SHA 校验结果——那是 `TestWorkflowActionsAreShaPinned` 的职责，与 E2E 通过数无关，2026-09-29 更正 |
-| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（**2026-10-01 复测**——本轮改动前端，按 AGENTS 必跑；本机 8080 被 `haproxy` 占用故用 `SERVER_PORT=8081`，脚本编排不变。真实后端 + RustFS + 真实产物、**`S3C_TOKEN` 开启的生产同构形态**；2026-09-24 审查 C1 验收实跑为上一次） |
-| E2E（真实 S3 协议） | `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` | ✅ 4/4 PASS（**2026-10-01 复测**：临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000` 跑完即删；`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash` 四条全 PASS。真实 RustFS：分段 / 复制 / 桶属性 / 回收站） |
+| E2E（mock 版） | Playwright（`e2e.yml` + `e2e-playwright.yml`） | **22 passed / 0 skipped**（**2026-10-08 复测**：`pnpm e2e`，含 5 条 `a11y.spec.ts` axe 扫描与 2 条截图——#8 前端改动的渲染态回归；此前 **2026-10-01 实跑**：`pnpm e2e`，含 5 条 `a11y.spec.ts` axe 扫描与 2 条截图——本批配色 / aria 改动的渲染态验证；此前 2026-09-29 记为 17 passed，含 `screenshots.spec.ts` 的 2 例）。此前本行「当前状态」误填成 action SHA 校验结果——那是 `TestWorkflowActionsAreShaPinned` 的职责，与 E2E 通过数无关，2026-09-29 更正 |
+| E2E（真实联调） | `make e2e-real`（`e2e-real.yml` + GitLab `e2e-real` job，共用 `scripts/e2e-real.sh`） | ✅ 3 passed / 0 skipped（**2026-10-08 复测**——#8 / #11 / #13 改动前端与接口，按 AGENTS 必跑；本机 8080 被 `haproxy` 占用故用 `SERVER_PORT=8081`，脚本编排不变。真实后端 + RustFS + 真实产物、**`S3C_TOKEN` 开启的生产同构形态**；**2026-10-01 复测**为上一次） |
+| E2E（真实 S3 协议） | `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` | ✅ 4/4 PASS（**2026-10-08 复测**：临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000` 跑完即删；`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash` 四条全 PASS——#8 的分段链改动按 AGENTS 必跑。真实 RustFS：分段 / 复制 / 桶属性 / 回收站。**2026-10-01 复测**为上一次） |
 | Rust 依赖审计 | `cargo audit`（两套 CI 的 desktop job + `make rust-audit`） | ✅ 0 漏洞；7 条 unmaintained/unsound 告警已 triage（**2026-10-01 `cargo audit --no-fetch` 复测**——`make rust-audit` 默认要从 GitHub 拉 advisory DB，本环境网络不通，改用本地缓存 DB，结论不变） |
 
 > 后端覆盖率已补齐至**每包 100%**（2026-09 删除了确实不可达的防御分支，其余缺口改用行为断言，

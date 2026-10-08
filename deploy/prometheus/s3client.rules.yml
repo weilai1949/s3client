@@ -1,4 +1,4 @@
-# s3clinet 的 Prometheus 规则文件——[`docs/OPERATIONS.md`](../../docs/OPERATIONS.md) §4 的**可执行形态**。
+# s3client 的 Prometheus 规则文件——[`docs/OPERATIONS.md`](../../docs/OPERATIONS.md) §4 的**可执行形态**。
 #
 # 为什么仓库要带这份文件：§4 此前只有**表格**，落地要靠运维自己抄表达式。而表达式里的
 # 指标名与 `code` 标签取值都是**契约**——抄错一个字母，告警永远不触发却没人知道
@@ -9,7 +9,7 @@
 #
 # 用法：挂进 Prometheus 的 `rule_files`，例如
 #   rule_files:
-#     - /etc/prometheus/rules/s3clinet.rules.yml
+#     - /etc/prometheus/rules/s3client.rules.yml
 #
 # ⚠️ **阈值是建议值，未在代码或 CI 中强制**（同 OPERATIONS.md §4 的口径），按实际部署调整。
 # ⚠️ 本服务**单实例**（`flock` 单写者锁，见 ADR-002）：以下全部只反映本机，**不含**上游 S3 的可用性
@@ -19,31 +19,31 @@
 # 只应经内网 / 反向代理鉴权后抓取（见 OPERATIONS.md §3）。
 
 groups:
-  - name: s3clinet-recording
+  - name: s3client-recording
     # 记录规则：把 OPERATIONS.md §4.1 的 SLI 固化成**单一表达式**，告警与仪表盘共用，
     # 避免同一 SLI 在两处各写一份而漂移。
     rules:
-      - record: s3clinet:http_5xx_ratio:rate5m
+      - record: s3client:http_5xx_ratio:rate5m
         expr: |
           sum(rate(s3c_http_responses_total{class="5xx"}[5m]))
             / sum(rate(s3c_http_requests_total[5m]))
 
-      - record: s3clinet:s3_error_ratio:rate5m
+      - record: s3client:s3_error_ratio:rate5m
         expr: |
           sum(rate(s3c_s3_call_errors_total[5m]))
             / sum(rate(s3c_s3_calls_total[5m]))
 
-      - record: s3clinet:s3_latency_p95:rate5m
+      - record: s3client:s3_latency_p95:rate5m
         expr: histogram_quantile(0.95, sum(rate(s3c_s3_call_duration_seconds_bucket[5m])) by (le))
 
       # HTTP 侧 SLI（ROADMAP #18 新增延迟直方图）：含 proxy / download / zip 等流式端点，
       # 长尾天然存在，阈值取「建议值」而非硬 SLO（同 §4 口径）。
-      - record: s3clinet:http_latency_p95:rate5m
+      - record: s3client:http_latency_p95:rate5m
         expr: histogram_quantile(0.95, sum(rate(s3c_http_request_duration_seconds_bucket[5m])) by (le))
 
-  - name: s3clinet-alerts
+  - name: s3client-alerts
     rules:
-      - alert: S3ClinetAccountStoreDown
+      - alert: S3ClientAccountStoreDown
         # 硬失败设计：存储不可用时服务不降级只读，所有写操作都在被拒绝（ADR-002）。
         # ⚠️ 只有 `sqlite` 驱动能实时反映——`json` / `encrypted` 的 `Ping()` 恒为 nil，
         #    这两种驱动下本告警**不会**因存储故障触发（见 OPERATIONS.md §3.1 与 R-3）。
@@ -52,24 +52,24 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "s3clinet 账号存储不可达（s3c_store_up == 0）"
+          summary: "s3client 账号存储不可达（s3c_store_up == 0）"
           description: >-
             /api/health 会同时返回 503。按 OPERATIONS.md §3.1 的处置顺序排查：
             数据目录挂载与写权限（目录 0700 / 文件 0600）、卷是否写满；恢复后无需重启。
 
-      - alert: S3ClinetHigh5xxRatio
+      - alert: S3ClientHigh5xxRatio
         # 与 SLO（≤ 0.5%）留一倍缓冲，避免抖动误报（OPERATIONS.md §4.2）。
-        expr: s3clinet:http_5xx_ratio:rate5m > 0.01
+        expr: s3client:http_5xx_ratio:rate5m > 0.01
         for: 10m
         labels:
           severity: warning
         annotations:
-          summary: "s3clinet 5xx 比例 > 1%（持续 10 分钟）"
+          summary: "s3client 5xx 比例 > 1%（持续 10 分钟）"
           description: >-
             当前值 {{ $value | humanizePercentage }}，SLO 目标 ≤ 0.5%。
             先看 server 日志的 msg="handler error" 与 s3c_s3_call_errors_total 的错误码分布。
 
-      - alert: S3ClinetCredentialErrors
+      - alert: S3ClientCredentialErrors
         # 账号密钥 / 桶策略漂移：不修则相关账号**全部**不可用，故立即告警。
         # 三个码都在 s3wrap 白名单内，不会被折叠成 other。
         expr: >-
@@ -82,7 +82,7 @@ groups:
             15 分钟内有 {{ $value }} 次凭据 / 权限错误。检查该账号的 AccessKey / SecretKey
             是否被轮换、以及桶策略是否变更；上游时钟偏移也会导致 SignatureDoesNotMatch。
 
-      - alert: S3ClinetUpstreamThrottling
+      - alert: S3ClientUpstreamThrottling
         # 上游按量限流：继续加压会放大失败，应先降并发。
         expr: >-
           increase(s3c_s3_call_errors_total{code=~"SlowDown|ServiceUnavailable|RequestTimeout"}[15m]) > 5
@@ -93,7 +93,7 @@ groups:
           description: >-
             15 分钟内 {{ $value }} 次。降低前端直传与迁移的并发，或联系对象存储方提升配额。
 
-      - alert: S3ClinetUpstreamUnreachable
+      - alert: S3ClientUpstreamUnreachable
         # 区分「S3 业务错误码」与「连接层不可达」：后者是网络 / DNS / 证书问题。
         # transport 由 errorClass 对非 API 错误（非取消、非超时）产生。
         expr: increase(s3c_s3_call_errors_total{code="transport"}[15m]) > 0
@@ -105,7 +105,7 @@ groups:
             15 分钟内 {{ $value }} 次连接层失败。检查 endpoint 可达性、DNS、TLS 证书与
             出网策略（S3C_SSRF_DENY_PRIVATE=1 时会拒绝私网 / 回环端点）。
 
-      - alert: S3ClinetStreamInterrupted
+      - alert: S3ClientStreamInterrupted
         # 客户端主动断开不计入该计数器，故有增量即真实中断（上游读失败 / 写超时）。
         expr: increase(s3c_stream_interrupted_total[15m]) > 0
         for: 0m
@@ -117,7 +117,7 @@ groups:
             大文件下载 / 迁移被上游读失败或写超时打断。查 OPERATIONS.md R-6；
             同时确认 nginx 侧仍是 proxy_buffering off + proxy_read_timeout 3600s。
 
-      - alert: S3ClinetZipPartialFailures
+      - alert: S3ClientZipPartialFailures
         # ZIP 打包质量：部分失败意味着导出的压缩包**缺对象**，用户拿到的是不完整备份。
         expr: >-
           increase(s3c_zip_partial_failures_total[1h]) > 0
@@ -130,19 +130,19 @@ groups:
             响应里的 failedKeys 会列出失败对象。查 OPERATIONS.md R-6；
             s3c_zip_failed_keys_total 给出累计失败对象数。
 
-      - alert: S3ClinetProcessRestarted
+      - alert: S3ClientProcessRestarted
         # 指标为进程级、重启清零：uptime 出现下降沿即视为重启。
         # 非计划重启需查因（OOM / panic / 被编排系统驱逐），故立即告警。
         expr: resets(s3c_uptime_seconds[15m]) > 0
         labels:
           severity: warning
         annotations:
-          summary: "s3clinet 进程在 15 分钟内重启过"
+          summary: "s3client 进程在 15 分钟内重启过"
           description: >-
             重启会把进行中的异步任务标记为 interrupted 并要求人工对账（OPERATIONS.md §5 铁律：
             先取证再重启）。查容器退出码与 dmesg 中的 OOM 记录。
 
-      - alert: S3ClinetMemoryNearLimit
+      - alert: S3ClientMemoryNearLimit
         # 410MB ≈ compose 为 server 设置的 512M 上限的 80%（docker-compose*.yml 的
         # deploy.resources.limits.memory）。自定义部署请按自己的上限调整本阈值。
         expr: s3c_go_memstats_alloc_bytes > 410 * 1024 * 1024
@@ -157,7 +157,7 @@ groups:
 
       # ---- ROADMAP #18 新增：五个观测缺口补齐后的告警（2026-09-30） ----
 
-      - alert: S3ClinetStoreWriteFailures
+      - alert: S3ClientStoreWriteFailures
         # 账号库写入失败 = 落盘 / SQL 写入出错（写操作已回滚），业务性拒绝不计数。
         # 关键价值：json / encrypted 驱动的 Ping() 恒为 nil，s3c_store_up 对它们永远是 1，
         # 这是这两类驱动**唯一主动**的存储故障信号（磁盘满 / 只读挂载）。
@@ -170,7 +170,7 @@ groups:
             账号的增删改此时全部失败。按 OPERATIONS.md R-3 排查数据目录挂载与写权限，
             并看 s3c_volume_free_bytes 是否已逼近 0（卷写满是首要嫌疑）。
 
-      - alert: S3ClinetJobsNearCapacity
+      - alert: S3ClientJobsNearCapacity
         # 在册上限 256（service.defaultMaxJobs，只数未终结任务）：满则异步请求全部 503。
         # 230 ≈ 上限的 90%，给「等 reap 回收终态任务」留出 10 分钟观察窗。
         expr: s3c_jobs_active >= 230
@@ -183,7 +183,7 @@ groups:
             名额占满后新的异步迁移 / 复制会被直接拒绝。先看 GET /api/migrate/jobs 里的积压项：
             终态任务 5 分钟内由 reap 回收，running 项需等完成或人工处置（OPERATIONS.md §4.3）。
 
-      - alert: S3ClinetVolumeSpaceLow
+      - alert: S3ClientVolumeSpaceLow
         # 数据卷剩余空间（ROADMAP #18）：账号库与 jobs.json 都写在该卷，写满即账号写入失败。
         # 序列只在 statfs 可用的平台上存在；平台不支持时不发序列，本告警自然 no data
         # （该平台按 §4.3 用 node_exporter / df 采集）。
@@ -197,10 +197,10 @@ groups:
             当前 {{ $value | humanizePercentage }}。卷写满会让账号库落盘直接失败
             （联动 s3c_store_write_failures_total）。inode 本服务不提供，仍用宿主 node_exporter。
 
-      - alert: S3ClinetHTTPLatencyHigh
-        # HTTP p95（记录规则 s3clinet:http_latency_p95:rate5m）：含流式端点，长尾天然存在，
+      - alert: S3ClientHTTPLatencyHigh
+        # HTTP p95（记录规则 s3client:http_latency_p95:rate5m）：含流式端点，长尾天然存在，
         # 阈值是建议值而非硬 SLO；先按 path 分解定位，再区分「上游慢」与「本服务排队」。
-        expr: s3clinet:http_latency_p95:rate5m > 5
+        expr: s3client:http_latency_p95:rate5m > 5
         for: 10m
         labels:
           severity: warning

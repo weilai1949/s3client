@@ -6,6 +6,7 @@ import (
 
 	"github.com/weilai1949/s3client/apps/server/internal/service"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 // migrateSyncRequest 增量同步请求体（与 migrate 一致 + 增量判定字段）。
@@ -36,6 +37,8 @@ type migrateSyncResponse struct {
 // syncHandler 同步迁移（按 ETag / size+mtime 比对，仅复制差异对象）。
 // 该端点为 P1/P2 路线「增量同步」的基础实现；后续可加 SSE 异步进度。
 func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, endSpan := tracing.Start(r.Context(), "migrate")
+	defer endSpan()
 	var req migrateSyncRequest
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeBadJSON(w, err)
@@ -91,7 +94,7 @@ func (h *Handler) syncHandler(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "mode must be etag, size_mtime or always")
 		return
 	}
-	out, err := service.SyncKeys(r.Context(), srcClient, dstClient, srcBucket, req.SourcePrefix, targetBucket, req.TargetPrefix, mode, 4, nil)
+	out, err := service.SyncKeys(ctx, srcClient, dstClient, srcBucket, req.SourcePrefix, targetBucket, req.TargetPrefix, mode, 4, nil)
 	if err != nil {
 		// 列举失败必须让用户看见：源端 403/5xx 回 200 {scanned:0} 会被读成「无事可做」（review §B5）。
 		h.writeInternalErr(w, err, "sync list failed")

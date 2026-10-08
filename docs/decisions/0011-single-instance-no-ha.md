@@ -19,7 +19,7 @@ Accepted
 现状（2026-09-30 回读核实）：
 
 - [`apps/server/internal/store/lock.go`](../../apps/server/internal/store/lock.go)：
-  `AcquireDataDirLock` 对 `S3C_DATA_DIR` 加 `flock`（`.s3clinet.lock`），第二实例**启动即
+  `AcquireDataDirLock` 对 `S3C_DATA_DIR` 加 `flock`（`.s3client.lock`），第二实例**启动即
   失败**；锁由内核在进程退出（含 panic / SIGKILL）时释放，无陈旧锁文件；非 unix 平台
   **no-op**（`lock_other.go`），单副本约束仍靠部署方式保证。
 - [`OPERATIONS.md`](../OPERATIONS.md) §7.2「为什么没有 HA 路径」明确六条约束与结论：

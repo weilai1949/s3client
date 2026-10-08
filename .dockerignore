@@ -51,7 +51,7 @@ apps/web/coverage
 
 # ---- 服务端本地产物 ----
 apps/server/data
-apps/server/s3clinet-server
+apps/server/s3client-server
 
 # ---- 桌面端生成物 ----
 apps/desktop/src-tauri/gen

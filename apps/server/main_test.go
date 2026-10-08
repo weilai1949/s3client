@@ -579,3 +579,18 @@ func TestRunServerShortTokenRejects(t *testing.T) {
 		t.Fatalf("runServer(short token) = %d, want 1 (硬失败)", code)
 	}
 }
+
+// TestRunServerTracingInitFails S3C_OTEL_ENDPOINT 非 http(s) → tracing.New 失败 → 退出码 1。
+// 配置层不校验 endpoint 形态，接线层必须 fail-closed，而非静默降级为「tracing 关闭」。
+func TestRunServerTracingInitFails(t *testing.T) {
+	addr := reserveLoopbackPort(t)
+	t.Setenv("S3C_ADDR", addr)
+	t.Setenv("S3C_TOKEN", "unit-test-token-0123456789")
+	t.Setenv("S3C_DATA_DIR", t.TempDir())
+	t.Setenv("S3C_STORE_DRIVER", "json")
+	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
+	t.Setenv("S3C_OTEL_ENDPOINT", "ftp://collector:4318")
+	if code := runServer(context.Background()); code != 1 {
+		t.Fatalf("runServer(bad OTel endpoint) = %d, want 1", code)
+	}
+}

@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-s3clinet 允许用户配置任意 S3 兼容 endpoint（MinIO、RustFS、局域网对象存储、云服务商）。SSRF 防护需要平衡：
+s3client 允许用户配置任意 S3 兼容 endpoint（MinIO、RustFS、局域网对象存储、云服务商）。SSRF 防护需要平衡：
 
 1. **安全**：禁止服务器访问云元数据（IMDS）与恶意内部地址。
 2. **可用性**：自托管 S3（MinIO/RustFS/内网）是主场景，不能整体封锁私网/回环。

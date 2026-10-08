@@ -265,8 +265,8 @@ func TestPerfGateAndDocsAreWired(t *testing.T) {
 
 	// 文档同步（docs/DEVELOPMENT.md §4）：仪表盘路径必须能被运维找到；性能门禁的命令必须可复现。
 	ops := readRepoFile(t, filepath.Join("docs", "OPERATIONS.md"))
-	if !strings.Contains(ops, "deploy/grafana/s3clinet.dashboard.json") {
-		t.Error("docs/OPERATIONS.md 未登记仪表盘路径 deploy/grafana/s3clinet.dashboard.json" +
+	if !strings.Contains(ops, "deploy/grafana/s3client.dashboard.json") {
+		t.Error("docs/OPERATIONS.md 未登记仪表盘路径 deploy/grafana/s3client.dashboard.json" +
 			"——运维无法发现随仓库分发的 dashboard")
 	}
 	perfDoc := readRepoFile(t, filepath.Join("docs", "PERFORMANCE.md"))

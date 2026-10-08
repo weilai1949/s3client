@@ -133,7 +133,7 @@
 | 缺陷 / 技术债 / 外部阻塞 |  | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（唯一来源） |
 | 已修复能力与证据 |  | [`FEATURES.md`](FEATURES.md) |
 | 发版记录 |  | [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` |
-| Runbook / SLO / 告警阈值 |  | [`OPERATIONS.md`](OPERATIONS.md) §4 / §5 **与** [`deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)（**必须同改**，规则受 `TestPrometheusRulesReferenceRealMetrics` 校验） |
+| Runbook / SLO / 告警阈值 |  | [`OPERATIONS.md`](OPERATIONS.md) §4 / §5 **与** [`deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml)（**必须同改**，规则受 `TestPrometheusRulesReferenceRealMetrics` 校验） |
 | 安全边界 / 已接受风险 |  | [`threat-model.md`](threat-model.md) |
 | 用户可见行为 / 排障 |  | [`user-guide.md`](user-guide.md) |
 | 本复盘存档 | 是 | `docs/archive/incident-YYYYMMDD-<短名>.md` + [`archive/index.md`](archive/index.md) 登记一行 |

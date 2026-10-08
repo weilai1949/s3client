@@ -626,8 +626,8 @@ func TestRealE2EUsesSharedScript(t *testing.T) {
 		}
 	}
 	// 脚本不能写死单一后端地址：CI 用 service 别名，本地用回环。
-	if strings.Contains(script, "S3CLINET_ENDPOINT=http://127.0.0.1:9000") {
-		t.Error("scripts/e2e-real.sh 写死了 S3CLINET_ENDPOINT：应经 RUSTFS_ENDPOINT 变量支持外部对端（#37）")
+	if strings.Contains(script, "S3CLIENT_ENDPOINT=http://127.0.0.1:9000") {
+		t.Error("scripts/e2e-real.sh 写死了 S3CLIENT_ENDPOINT：应经 RUSTFS_ENDPOINT 变量支持外部对端（#37）")
 	}
 }
 
@@ -850,7 +850,7 @@ var emittedMetricRe = regexp.MustCompile(`"s3c_[a-z0-9_]+`)
 // promCodeValueRe 匹配规则文件里 `code="X"` 与 `code=~"X|Y"` 的取值。
 var promCodeValueRe = regexp.MustCompile(`code\s*=~?\s*"([^"]+)"`)
 
-// TestPrometheusRulesReferenceRealMetrics（P1 运维）：`deploy/prometheus/s3clinet.rules.yml`
+// TestPrometheusRulesReferenceRealMetrics（P1 运维）：`deploy/prometheus/s3client.rules.yml`
 // 引用的指标名与 `code` 取值必须与实现一致。
 //
 // 为什么需要它：告警表达式里的名字是**契约**。写错一个字母 Prometheus **不会报错**，只会让该
@@ -864,7 +864,7 @@ var promCodeValueRe = regexp.MustCompile(`code\s*=~?\s*"([^"]+)"`)
 //   - 指标集取自 `internal/handler/metrics.go` 与 `main.go` 的**发射点**（引号紧邻 `s3c_`），
 //     不含只在注释里出现的名字——注释里提到而实际不发射，属于该被拦下的情况。
 func TestPrometheusRulesReferenceRealMetrics(t *testing.T) {
-	const rulesRel = "deploy/prometheus/s3clinet.rules.yml"
+	const rulesRel = "deploy/prometheus/s3client.rules.yml"
 	rules := readRepoFile(t, rulesRel)
 
 	// ① 实际发射的指标名集合。

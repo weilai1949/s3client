@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 // proxyObject 安全代理对象内容：
@@ -17,6 +18,8 @@ import (
 //   - mode=inline：透传 Content-Type 流式转发（图片/PDF/媒体预览），支持 Range
 //   - mode=text：读取前 maxBytes 字节并强制 text/plain + nosniff（文本预览，杜绝 HTML 注入）
 func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
+	ctx, endSpan := tracing.Start(r.Context(), "proxy")
+	defer endSpan()
 	client, acc, ok := h.accountClient(w, r)
 	if !ok {
 		return
@@ -55,7 +58,7 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		// versionID 必须透传：历史版本的文本预览此前恒查当前版本（review R5）。
-		out, err := client.GetObjectStream(r.Context(), bucket, key, versionID, "")
+		out, err := client.GetObjectStream(ctx, bucket, key, versionID, "")
 		if err != nil {
 			h.proxyErr(w, err)
 			return
@@ -90,7 +93,7 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 
 	case "inline", "download":
 		rng := r.Header.Get("Range")
-		out, err := client.GetObjectStream(r.Context(), bucket, key, versionID, rng)
+		out, err := client.GetObjectStream(ctx, bucket, key, versionID, rng)
 		if err != nil {
 			h.proxyErr(w, err)
 			return
@@ -126,7 +129,7 @@ func (h *Handler) proxyObject(w http.ResponseWriter, r *http.Request) {
 		}
 		// 响应头已发出，无法再改状态码；此处只能记录失败以免静默（#20）。
 		n, err := copyStream(w, r, out.Body)
-		h.recordStreamOutcome(r.Context(), bucket, key, n, err)
+		h.recordStreamOutcome(ctx, bucket, key, n, err)
 
 	default:
 		h.writeErr(w, http.StatusBadRequest, "invalid mode (download|inline|text)")

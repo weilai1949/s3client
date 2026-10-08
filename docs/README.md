@@ -73,13 +73,13 @@
 |---|---|---|
 | API 契约 | [`api/openapi.json`](api/openapi.json) | golden 比对（`TestCommittedOpenAPISpecMatchesRuntime`）+ 鉴权表达（`openapi_auth_test.go`） |
 | 账号库格式 | [`api/accounts.schema.json`](api/accounts.schema.json) | 反射比对 `model.Account`（`TestAccountStoreSchemaMatchesModel`） |
-| 告警规则 | [`../deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`） |
+| 告警规则 | [`../deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`） |
 | 供应链评分 / PR 依赖审查 | [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml) · [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | 全 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住；口径见 [`threat-model.md`](threat-model.md) §5.5 |
 | 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`）+ 超大文档体量预警（`llms_size_gate_test.go`：目标 >200 KB 必须就地标 `⚠️ 超大`） |
 | 代理硬约束 | [`../AGENTS.md`](../AGENTS.md) | 本页 + `AGENTS.md` 命名约定两处同步 |
 
 | 漏洞披露（机器可读） | [`../.well-known/security.txt`](../.well-known/security.txt) | RFC 9116 必填字段 + `Expires` 未过期（`security_txt_gate_test.go`） |
-| SLI 仪表盘 | [`../deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json) | 指标 / `code` / recording rule 真实性（`grafana_dashboard_gate_test.go`） |
+| SLI 仪表盘 | [`../deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json) | 指标 / `code` / recording rule 真实性（`grafana_dashboard_gate_test.go`） |
 | AI 评测黄金任务集 | [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) | 与 [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致（`agent_evals_gate_test.go`） |
 | 性能预算 | [`../apps/server/bench_budget_test.go`](../apps/server/bench_budget_test.go) | 分配确定性断言 + 时间兜底（`bench_budget_test.go`）；数字解读见 [`PERFORMANCE.md`](PERFORMANCE.md) §4 |
 

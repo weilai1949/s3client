@@ -17,15 +17,15 @@ import (
 )
 
 func e2eSkip(t *testing.T) {
-	if os.Getenv("S3CLINET_E2E") != "1" {
-		t.Skip("set S3CLINET_E2E=1 to run end-to-end RustFS validation")
+	if os.Getenv("S3CLIENT_E2E") != "1" {
+		t.Skip("set S3CLIENT_E2E=1 to run end-to-end RustFS validation")
 	}
 }
 
 func e2eAccount(name string) (*model.Account, string) {
-	endpoint := getenv("S3CLINET_ENDPOINT", "http://127.0.0.1:9000")
-	ak := getenv("S3CLINET_ACCESS_KEY", "rustfsadmin")
-	sk := getenv("S3CLINET_SECRET_KEY", "rustfsadmin")
+	endpoint := getenv("S3CLIENT_ENDPOINT", "http://127.0.0.1:9000")
+	ak := getenv("S3CLIENT_ACCESS_KEY", "rustfsadmin")
+	sk := getenv("S3CLIENT_SECRET_KEY", "rustfsadmin")
 	return &model.Account{
 		Name: name, Endpoint: endpoint, Region: "us-east-1",
 		AccessKey: ak, SecretKey: sk, Bucket: "", PathStyle: true,
@@ -33,12 +33,12 @@ func e2eAccount(name string) (*model.Account, string) {
 }
 
 // TestE2ERustFS 针对真实 S3 端点做端到端联调（默认指向本地 RustFS）。
-// 仅当环境变量 S3CLINET_E2E=1 时运行，否则跳过（普通 go test ./... 不受影响）。
+// 仅当环境变量 S3CLIENT_E2E=1 时运行，否则跳过（普通 go test ./... 不受影响）。
 // 用配置：
 //
-//	S3CLINET_ENDPOINT    （默认 http://127.0.0.1:9000）
-//	S3CLINET_ACCESS_KEY  （默认 rustfsadmin）
-//	S3CLINET_SECRET_KEY  （默认 rustfsadmin）
+//	S3CLIENT_ENDPOINT    （默认 http://127.0.0.1:9000）
+//	S3CLIENT_ACCESS_KEY  （默认 rustfsadmin）
+//	S3CLIENT_SECRET_KEY  （默认 rustfsadmin）
 func TestE2ERustFS(t *testing.T) {
 	e2eSkip(t)
 	acc, endpoint := e2eAccount("e2e")
@@ -63,7 +63,7 @@ func TestE2ERustFS(t *testing.T) {
 	}
 
 	// 2) PutObject / GetObject / HeadObject
-	txt := "hello s3clinet e2e"
+	txt := "hello s3client e2e"
 	if err := c.PutObject(ctx, bucket, "hello.txt", strings.NewReader(txt), "", nil); err != nil {
 		t.Fatalf("put object: %v", err)
 	}

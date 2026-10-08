@@ -31,6 +31,92 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-08 ROADMAP §三 3.2 #8 / #11 / #13 三路并行落地：大文件续传 + 并行分段 / 零依赖 OTLP trace / Token 作用域）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BQ**（#8）/ **§BR**（#11）/ **§BS**（#13）；
+> [`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2 三行**整行移出**（#8 / #11 / #13 转空号，编号不重排）。
+> 三条设计口径在开工前由人类拍板：**零新增依赖**自研 OTLP（不引 `opentelemetry-go`）、新增 **1 个**
+> 只读 `ListParts` 端点、作用域用独立 env `S3C_TOKEN_SCOPES`（`S3C_TOKEN` 语义不变）。
+> `apps/server/go.mod` 的 `require` 段**零变化**（无新增直接 / 传递依赖），故许可证清单无需重生成。
+
+- **① 大文件体验（#8，原 `KNOWN_ISSUES` #51）**：新增只读端点
+  `GET /api/accounts/{id}/multipart/parts`（`bucket` / `key` / `uploadId` → `{"parts":[…]}`，缺参 400；
+  **端点总数 70 → 71**）与 [`s3wrap`](apps/server/internal/s3wrap/multipart.go) `ListParts`（自有 DTO，
+  AWS SDK 类型不外泄，自动翻页）。前端 [`multipartResume.ts`](apps/web/src/multipartResume.ts) 以
+  `文件名 + 大小 + 修改时间` 指纹在 localStorage 记录 uploadId 与已完成分段（**零凭证**，上限 20 条），
+  刷新 / 重选同一文件时先与服务端真实清单对齐、只补缺段，会话失效则干净重 init；
+  [`api/download.ts`](apps/web/src/api/download.ts) 对已知 size ≥16MB 的对象走 **4 路 × 4MB Range GET**
+  （有界并发，ADR-009），逐段校验 206 + 字节数 + `Content-Range` 后按序聚合落盘，服务端忽略 Range /
+  大小未知 / 小文件自动回退单流——失败即报错，**不落损坏文件**。
+- **② 零依赖 OTLP tracing（#11，原 `KNOWN_ISSUES` #54）**：新包
+  [`internal/tracing`](apps/server/internal/tracing/) 用标准库实现 W3C `traceparent` 解析 / 生成 +
+  OTLP/HTTP JSON `POST {Endpoint}/v1/traces`（`resourceSpans→scopeSpans→spans`；有界队列 512 / 批 64 /
+  1s ticker / `Close` 刷出；导出失败与队列满只 WARN，绝不影响请求）。[`main.go`](apps/server/main.go)
+  用中间件包住全部路由，`presign` / `proxy` / `migrate`（含 sync / async）打子 span 并以既有
+  `X-Request-ID` 关联（span 属性 `request.id`）。**默认关闭**（`S3C_OTEL_ENDPOINT` 为空即零开销）；
+  新增 `S3C_OTEL_SAMPLE_RATIO`（默认 1，仅 [0,1]，非法**拒绝启动**）与 `S3C_OTEL_SERVICE_NAME`
+  （默认 `s3client`）。决策与替代方案见 [ADR-013](docs/decisions/0013-zero-dep-otlp-tracing.md)。
+- **③ Token 作用域与最小权限（#13，原 `KNOWN_ISSUES` #56）**：新增独立 env `S3C_TOKEN_SCOPES`
+  （JSON：token → `{readonly, prefixes, accounts, expiresAt}`，严格解析 `DisallowUnknownFields`），
+  `S3C_TOKEN` 语义不变、**未登记 token 仍为全权**。`readonly` 仅放行 GET / HEAD（预签名 POST 能铸造
+  写 URL，同样 403）；`prefixes` 对 query 与 JSON body 的桶 / 键**各自**校验（桶级操作需整桶授权，
+  无法判定即 fail-closed）；`accounts` 限路径 `{id}`；`expiresAt` 过期 401。越权写审计
+  `auth.scope_denied`（reason 分类，**不含 token 明文**）并返回 403；非法配置（未知字段 / 未登记
+  token / 空元素 / 坏时间 / `prefixes` 以 `/` 开头）启动即失败。OpenAPI `bearerAuth` 补作用域语义。
+- **门禁实跑（2026-10-08，全部本机实跑）**：`gofmt -l` 干净 / `go vet ./...` 0 告警 /
+  `golangci-lint run` **0 issues** / `make test-cover` **10/10 包 100.0%**（profile `count==0` 零块；
+  新增 `internal/tracing` 为第 10 包）/ `go build ./...` OK / 包根文档门禁 `go test . -count=1`
+  **ok 5.182s**；`docs/api/openapi.json` 重生成（70 → **71** operations）+ `pnpm gen:api` 重生成两份
+  前端产物（`--check` 口径由 `generated.gate.test.ts` 守住）；前端 `pnpm test` **78 文件 / 1189 例**、
+  `pnpm test:coverage` 四指标 **100%**（4481 / 3007 / 1151 / 3853）、`pnpm build` OK
+  （**381.41 kB / gzip 116.15 kB**，CSS 32.40 kB）、`pnpm lint` 0 告警、`pnpm typecheck:e2e` exit 0；
+  真实对端三条：`S3CLIENT_E2E=1 … -run TestE2E` **4/4 PASS**、`make e2e-real` **3 passed**、
+  `pnpm e2e` **22 passed**。
+- **文档同步**：[`docs/FEATURES.md`](docs/FEATURES.md) 新增 **§BQ** / **§BR** / **§BS**（头部摘要 +
+  目录行同步）；[`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2 三行移出 + 空号注记 + §四 基线按本轮复测刷新；
+  `docs/CONFIGURATION.md`（4 个新 env）、`docs/api.md`（新端点 + 鉴权 / 403 语义）、`docs/OPERATIONS.md`
+  §3.4（trace 开启与失败模式）、`docs/architecture.md` 与 `docs/en/architecture.md`、`docs/threat-model.md`
+  （最小权限段）、`docs/user-guide.md`（续传与并发下载）、`docs/decisions/0013-*.md` + `index.md`、
+  `apps/server/.env.example`；端点计数 70 → 71 四处联动（`README.md` / `docs/en/index.md` /
+  `docs/ROADMAP.md` / `docs/FEATURES.md`，由 `doc_number_gate_test.go` + `en_docs_gate_test.go` 守住）。
+
+### 变更（2026-10-08 KNOWN_ISSUES #71 第二批：产品名 `s3clinet` → `s3client` 全量统一）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BP**；上接同日 **§BO**（仓库 slug 统一）。§BO 当时把
+> 品牌 / 运行时 / 监控命名空间列为「刻意不动」的**范围边界**，本批按要求**把该边界一并取消**——
+> `KNOWN_ISSUES` #71 的闭环口径由「只统一 slug」扩为「slug + 产品名一次到底」。
+
+- **① 文本与配置**：`s3clinet` / `S3Clinet` / `S3CLINET` → `s3client` / `S3Client` / `S3CLIENT`，**86 个受版本
+  控制的文件、358 处**（`.md` 37 / `.go` 18 / `.yml` 8 / `.json` 6 / `.conf` 6 / `.sh` 5 …，含根 `AGENTS.md`、
+  `llms.txt`、`CITATION.cff`、两份 `.env.example`、`Makefile`、`.gitlab-ci.yml` 与 4 个 GitHub workflow）。
+- **② 文件改名 5 个（`git mv` 保留历史）**：`deploy/prometheus/s3clinet.rules.yml` → `s3client.rules.yml`、
+  `deploy/grafana/s3clinet.dashboard.json` → `s3client.dashboard.json`、`deploy/nginx/conf.d/s3clinet-{tls.example,docker,local}.conf`
+  → `s3client-*`；全仓引用同批改（含 `grafana_dashboard_gate_test.go` 的路径常量与记录规则正则、
+  `repo_infra_gate_test.go` 的 `rulesRel`）。
+- **③ 运行时与产物（含行为变更）**：单写者锁文件 `.s3clinet.lock` → **`.s3client.lock`**（旧锁文件在数据目录里
+  只是空文件、锁由内核持有，残留无影响）；启动日志 `msg="s3clinet server"` → `s3client server`；二进制
+  `s3client-server`（Dockerfile `ENTRYPOINT` / compose / `scripts/*.sh`）；镜像与 `container_name` 的
+  `s3client/server` 系；Cargo 包 `s3client` + Tauri `productName` / `identifier`；npm `s3client-web` /
+  `s3client-desktop`；E2E 环境变量 `S3CLIENT_E2E` / `S3CLIENT_{ENDPOINT,ACCESS_KEY,SECRET_KEY}`
+  （脚本 / 测试 / 文档 / 根 `AGENTS.md` 同批改）。
+- **④ 契约与生成物**：`info.title` `s3clinet API` → `s3client API`（`description` 同步）→
+  `go test ./internal/handler/ -run TestCommittedOpenAPISpecMatchesRuntime -update-openapi-spec` 重生成
+  [`docs/api/openapi.json`](docs/api/openapi.json) → `pnpm gen:api` 重生成 `schema.d.ts` / `operations.ts`
+  （`pnpm gen:api --check` **exit 0**）。
+- **⑤ 监控命名空间**：记录规则 `s3clinet:*` → `s3client:*`、告警 `S3Clinet*` → `S3Client*`；
+  `docs/OPERATIONS.md` §4 告警表 / SLI 表与 `docs/README.md` / `docs/DEVELOPMENT.md` 的文件引用同步。
+- **⑥ 豁免（历史不回写）**：**本文件历史条目**只修正指向改名文件的**路径链接**（10 处），叙述里的旧名照旧；
+  `docs/archive/` 冻结件整份不动。故全仓仍可见旧写法的位置**仅这两类**。
+- **门禁实跑（2026-10-08，与同日 ROADMAP #8 / #11 / #13 批次同树实测）**：`go vet ./...` **0 告警**、
+  `go build ./...` OK、`go test -race -count=1 -coverprofile=coverage.out ./...` **10/10 包 100.0%**
+  （profile `count==0` 零块；同批新增 `internal/tracing`，故后端包数 9 → 10）、`golangci-lint run` **0 issues**、
+  包根文档门禁 `go test . -count=1` **ok 4.198s**；前端 `pnpm test` **78 文件 / 1189 例** 全绿、
+  `pnpm lint` **0 告警**、`pnpm gen:api --check` **exit 0**、`pnpm build` OK（**381.41 kB / gzip 116.15 kB**）。
+
+- **文档同步**：[`docs/FEATURES.md`](docs/FEATURES.md) 新增 **§BP**（头部摘要 + 目录行同步，§BO ③ 标注
+  「同日已被 §BP 取代」）；[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 头部 2026-10-08 段改写为
+  「同日两批」并把 #71 台账行同步为两批口径。
+
 ### 文档（2026-10-08 根 README 新增「已知限制」小节：跨 endpoint 迁移单对象 640GB 上限）
 
 - **新增 `README.md` §已知限制**：把 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖）
@@ -53,10 +139,10 @@
   合计 **120 个受版本控制的文件**（Go 110 + `go.mod` 1 + 非 Go 9）。
 - **② 仓库 URL**：`.github/SECURITY.md` · `.github/ISSUE_TEMPLATE/config.yml` · `.github/SUPPORT.md` ·
   `.github/CONTRIBUTING.md` · `docs/AI_POLICY.md` · `docs/en/index.md` · `docs/api/accounts.schema.json` 的
-  `$id` · `deploy/grafana/s3clinet.dashboard.json` 面板 `url` · 根 `README.md` 的 GitHub Release 链接 ——
+  `$id` · `deploy/grafana/s3client.dashboard.json` 面板 `url` · 根 `README.md` 的 GitHub Release 链接 ——
   统一到与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 一致的 `s3client`。
-- **③ 范围边界（同批写死，防「怎么还有一堆 s3clinet」的误读）**：**品牌 / 运行时 / 监控命名空间不属仓库
-  slug、刻意不动**——产品名 `s3clinet`（文档标题、OpenAPI `title`、启动日志、`CITATION.cff` 标题）、
+- **③ 范围边界（本批写死；⚠️ 同日下方「第二批」已把该边界取消、品牌一并统一）**：**品牌 / 运行时 /
+  监控命名空间不属仓库 slug、本批刻意不动**——产品名 `s3clinet`（文档标题、OpenAPI `title`、启动日志、`CITATION.cff` 标题）、
   运行时工件 `.s3clinet.lock` / 二进制 `s3clinet-server` / 镜像 `s3clinet/server` / `container_name` /
   Cargo 包 `s3clinet` / npm `s3clinet-web`、监控命名空间 `s3clinet:*` 记录规则 + `S3Clinet*` 告警 +
   `deploy/{prometheus,grafana}/s3clinet.*` 文件名；本文件的 monorepo 迁移历史条目按「历史条目不改写」
@@ -210,10 +296,10 @@
   包级 `writeFailures` + `WriteFailureCount()`，`filestore.go` `persistLocked` 与 `sqlite.go` 三处
   写失败分支各记一次；`service/job.go` 新增 `JobRegistry.ActiveCount()`；`main.go` 接线
   `SetDataDir` / `LoadLastShutdown` 并在 `srv.Shutdown` 返回后 `RecordShutdown`。
-- **告警与仪表盘**：[`deploy/prometheus/s3clinet.rules.yml`](deploy/prometheus/s3clinet.rules.yml)
+- **告警与仪表盘**：[`deploy/prometheus/s3client.rules.yml`](deploy/prometheus/s3client.rules.yml)
   新增记录规则 `s3clinet:http_latency_p95:rate5m` 与 4 条告警（`S3ClinetStoreWriteFailures` /
   `S3ClinetJobsNearCapacity` / `S3ClinetVolumeSpaceLow` / `S3ClinetHTTPLatencyHigh`）；
-  [`deploy/grafana/s3clinet.dashboard.json`](deploy/grafana/s3clinet.dashboard.json) 行⑥由「没有面板」
+  [`deploy/grafana/s3client.dashboard.json`](deploy/grafana/s3client.dashboard.json) 行⑥由「没有面板」
   改写为真面板 + 新行⑦，面板 31 → 40（两道既有门禁 `TestPrometheusRulesReferenceRealMetrics` /
   `TestGrafanaDashboardReferencesRealMetrics` 同步钉住「规则与面板引用的指标必须真实发射」）。
 - **测试（先红后绿）**：`metrics_test.go` +5 用例与助手、`TestMetricsEndpointExposed` 指标名清单扩至
@@ -348,7 +434,7 @@
   `sqlite` / `encrypted` 三驱动、`S3C2`/`S3C3` 信封字节布局、原子写与权限、fail-closed 与单写者约束；
   §0 明确「非 SSOT，冲突时回退 schema / ADR / 代码」；门禁 `apps/server/data_model_gate_test.go`
   （反射 `model.Account` + 解析 `store.Open` 的 switch 驱动名）。
-- **可观测性**：新增 [`deploy/grafana/s3clinet.dashboard.json`](deploy/grafana/s3clinet.dashboard.json)
+- **可观测性**：新增 [`deploy/grafana/s3client.dashboard.json`](deploy/grafana/s3client.dashboard.json)
   （31 面板，覆盖 3 条 recording rule 与 §4.1 的 SLI），门禁 `apps/server/grafana_dashboard_gate_test.go`
   校验指标 / `code` / recording rule 真实存在；[`docs/OPERATIONS.md`](docs/OPERATIONS.md) §4 由
   「未提供仪表盘」改为落地路径与导入步骤，并新增 §6.5 密钥轮换 Runbook。
@@ -749,7 +835,7 @@
   `v4.1.2` → `6f9f1778…`。门禁 `TestCosignSigningIsWiredAndConsistentlyPinned`。
 - **P1 · 运维**：OPERATIONS.md §4 有 SLO 与告警**表格**，但自述「仓库未提供告警规则文件」——
   落地要靠运维手抄表达式，而**抄错一个字母 Prometheus 不报错，告警只是永不触发**。新增
-  [`deploy/prometheus/s3clinet.rules.yml`](deploy/prometheus/s3clinet.rules.yml)：3 条 recording rule
+  [`deploy/prometheus/s3client.rules.yml`](deploy/prometheus/s3client.rules.yml)：3 条 recording rule
   （把 §4.1 的 SLI 固化，告警与仪表盘共用同一表达式）+ 9 条 alerting rule（与 §4.2 逐行对应）。
   门禁 `TestPrometheusRulesReferenceRealMetrics` 校验「引用的指标真实存在于发射点」且
   「`code` 取值在 `s3wrap` 白名单内」（白名单外的码会被折叠成 `other`，表达式即永不命中）。
@@ -1781,7 +1867,7 @@
 - **预签名失败不再被静默吞掉**：`presign`（get/put/post）与 `multipart/part` 三处原为 `u, _ := client.PresignXxx(...)`，失败时返回 `200 {"url":""}`——调用方拿到空 URL 却看到成功状态。预签名并非不可能失败：AWS SDK 在取凭证、输入序列化等阶段都会报错（实测空 key、context 取消均可触发）。现统一经 `writePresignResult` 处理，失败返回 500 `failed to create presigned url`，并新增源码级门禁 `TestPresignErrorsNotSwallowed` 防止该写法复发（已回退验证门禁会失败）。
 - **流式传输中断不再无痕**：`copyStream` 原以 `_, _ = io.Copy(...)` 丢弃返回值，大文件下载被上游读失败或写超时打断时，日志与指标里都没有任何记录。现返回 `(int64, error)`，由 `recordStreamOutcome` 分流：真实中断记 Warn 并累加新指标 `s3c_stream_interrupted_total`；客户端主动断开（用户取消/关页面）仅记 Debug、不计入指标，避免污染告警。
 - **异步任务加上限**：`JobRegistry` 新增在册任务上限（256 个未终结任务），超限时异步端点返回 503 `too many running jobs; retry later`，避免短时间内大量请求持续堆积 goroutine、SSE 订阅与落盘条目。上限只统计未终结任务，因此恢复出的 `interrupted` 历史任务不会永久占满名额。`Create` 保持原签名以不波及 70+ 处调用点，新增 `TryCreate` 供需要感知容量的路径使用。
-- **TLS 站点补齐 HSTS 与 Permissions-Policy**：`deploy/nginx/conf.d/s3clinet-tls.example.conf` 增加 `Strict-Transport-Security`（180 天，暂不带 preload）与 `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort）。这两项只能由 TLS 终止层表达，后端已有的 CSP 等头无法替代。
+- **TLS 站点补齐 HSTS 与 Permissions-Policy**：`deploy/nginx/conf.d/s3client-tls.example.conf` 增加 `Strict-Transport-Security`（180 天，暂不带 preload）与 `Permissions-Policy`（关闭定位/麦克风/摄像头/支付/USB/interest-cohort）。这两项只能由 TLS 终止层表达，后端已有的 CSP 等头无法替代。
 
 ### P2 加固修复（续）
 - **清理后端死代码**：删除 `ctxReader`（与 `ctxCancelReader` 职责重复且零生产引用）、`batchItemError`（生产零引用；该格式串实际在 `service/batch.go` 内联）、`Client.S3()`（导出但零生产调用，E2E 清理逻辑改用包装层已有的 `DeleteObjectVersion`/`DeleteObject`）。核验后**保留** `isNoSuchBucketSetting`——它有 5 处生产调用，todolist 将其列为死代码属描述有误。当时覆盖率为 99.6%（该轮之后门禁已提升至 100%，见上方「测试与质量门禁」）。

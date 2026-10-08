@@ -511,6 +511,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/multipart/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列已上传分段（断点续传对齐） */
+        get: operations["multipartParts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}/object-acl": {
         parameters: {
             query?: never;
@@ -3193,6 +3210,71 @@ export interface operations {
             };
         };
     };
+    multipartParts: {
+        parameters: {
+            query: {
+                /** @description 桶名；账号有默认桶时可省略 */
+                bucket?: components["parameters"]["Bucket"];
+                key: string;
+                /** @description multipartInit 返回的 UploadID；失效时返回错误，前端据此重新 init */
+                uploadId: string;
+            };
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已上传分段清单（服务端真实值） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "parts": [
+                     *         {
+                     *           "partNumber": 1,
+                     *           "etag": "e1",
+                     *           "size": 10485760,
+                     *           "lastModified": "2026-10-08T05:00:00Z"
+                     *         },
+                     *         {
+                     *           "partNumber": 2,
+                     *           "etag": "e2",
+                     *           "size": 5,
+                     *           "lastModified": "2026-10-08T05:01:00Z"
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": {
+                        parts: {
+                            etag: string;
+                            /** Format: date-time */
+                            lastModified: string;
+                            partNumber: number;
+                            /** Format: int64 */
+                            size: number;
+                        }[];
+                    };
+                };
+            };
+            /** @description 缺 key/uploadId 或 bucket */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getObjectAcl: {
         parameters: {
             query: {
@@ -4508,7 +4590,7 @@ export interface operations {
                      * @example {
                      *       "openapi": "3.0.3",
                      *       "info": {
-                     *         "title": "s3clinet API",
+                     *         "title": "s3client API",
                      *         "version": "v1.0.0"
                      *       }
                      *     }

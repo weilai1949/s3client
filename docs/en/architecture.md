@@ -5,12 +5,12 @@
 > disagree, the Chinese original wins.
 > **Source revision**: `a984df7` (2026-09-29), translated from the working tree on 2026-09-30.
 
-> This document describes the overall architecture of s3clinet and its key design decisions. Architecture
+> This document describes the overall architecture of s3client and its key design decisions. Architecture
 > Decision Records (ADRs) live in [`docs/decisions/`](../decisions/index.md).
 
 ## 1. Overall architecture
 
-s3clinet uses a **B/S (Browser/Server) architecture + Tauri 2 desktop shell (no IPC)**:
+s3client uses a **B/S (Browser/Server) architecture + Tauri 2 desktop shell (no IPC)**:
 
 ```
 ┌─────────────────────────────┐
@@ -76,11 +76,12 @@ apps/server/internal/model      domain model (Account / AccountView)
 | SSRF protection | `s3wrap/ssrf.go` | Double validation at creation + dial time (blocks IMDS/link-local, redirects, proxies); `S3C_SSRF_DENY_PRIVATE=1` also rejects private/loopback; rationale in [ADR-003](../decisions/0003-ssrf-private-allow.md) |
 | Presigning | `s3wrap/presign.go` | v4 signed URL; `expiresIn` ≤ 0 takes the default **1h**, > 24h is clamped to **24h** (the S3 protocol ceiling is 7 days; the console deliberately tightens it), **no 1h floor**; rationale in [ADR-007](../decisions/0007-presign-direct-upload.md) |
 | Atomic write | `internal/atomicfile/atomicfile.go` (call sites `store/filestore.go`, `service/job_persist.go`) | temp file + rename + 0600; on write failure the in-memory state rolls back; rationale in [ADR-006](../decisions/0006-store-drivers-atomic-write.md) |
-| Single-writer lock | `store/lock.go` | `flock` on `DataDir` (`.s3clinet.lock`); a second instance fails to start; no-op on non-unix; rationale in [ADR-006](../decisions/0006-store-drivers-atomic-write.md) / [ADR-011](../decisions/0011-single-instance-no-ha.md) |
+| Single-writer lock | `store/lock.go` | `flock` on `DataDir` (`.s3client.lock`); a second instance fails to start; no-op on non-unix; rationale in [ADR-006](../decisions/0006-store-drivers-atomic-write.md) / [ADR-011](../decisions/0011-single-instance-no-ha.md) |
 | Job-list persistence | `service/job_persist.go` | same atomic-write strategy, but kept self-contained in the `service` package: `service→store` would invert the layering; rationale in [ADR-005](../decisions/0005-sse-async-jobs.md) |
 | Streaming concurrency limit | `handler/stream.go` | global cap of 32 concurrent streams + rolling 5min idle write timeout; rationale in [ADR-009](../decisions/0009-bounded-concurrency.md) |
 | Bounded batch concurrency | `service/batch.go` | `RunBatch` uses an unbuffered result channel, memory O(workers); rationale in [ADR-009](../decisions/0009-bounded-concurrency.md) |
 | Async jobs | `service/job.go` + `job_persist.go` | JobRegistry + SSE progress + TTL reap; the job list can optionally be persisted (`JobPersister`); on startup non-terminal jobs are marked `interrupted` and reconciled; rationale in [ADR-005](../decisions/0005-sse-async-jobs.md) |
+| OTel tracing | `internal/tracing/` | minimal tracer with zero third-party deps: W3C `traceparent` parse/generate + OTLP/HTTP JSON export (bounded queue + background batching, failures are log-only); `S3C_OTEL_ENDPOINT` empty by default = disabled; rationale in [ADR-0013](../decisions/0013-zero-dep-otlp-tracing.md) |
 
 ## 3. Frontend architecture
 
@@ -149,3 +150,4 @@ All configuration is injected through environment variables (`S3C_*`), with `.en
 | Server-side streaming ZIP packaging | Nothing lands on the server disk; bounded memory ([ADR-010](../decisions/0010-zip-streaming.md)) |
 | Single-instance deployment, no HA | File-based storage + in-memory job table + single token; multiple replicas need external state and leader election ([ADR-011](../decisions/0011-single-instance-no-ha.md)) |
 | REST contract without a version prefix | Breaking changes are buffered by release cadence ([ADR-012](../decisions/0012-rest-no-version-prefix.md)) |
+| Self-built OTel tracing with zero third-party deps, disabled by default | Minimize the dependency budget and supply chain (standard library only, direct OTLP/HTTP JSON); enabled only when `S3C_OTEL_ENDPOINT` is non-empty ([ADR-0013](../decisions/0013-zero-dep-otlp-tracing.md)) |

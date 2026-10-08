@@ -8,16 +8,19 @@ import (
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 	"github.com/weilai1949/s3client/apps/server/internal/service"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 // migrate 跨账号迁移：源账号对象 → 目标账号/桶 + 前缀（同步）。
 func (h *Handler) migrate(w http.ResponseWriter, r *http.Request) {
+	ctx, endSpan := tracing.Start(r.Context(), "migrate")
+	defer endSpan()
 	req, src, dst, srcClient, dstClient, srcBucket, targetBucket, ok := h.parseMigrateRequest(w, r)
 	if !ok {
 		return
 	}
 	sameEP := service.SameEndpoint(src.Endpoint, src.Region, src.UseSSL, dst.Endpoint, dst.Region, dst.UseSSL)
-	out := service.MigrateKeys(r.Context(), srcClient, dstClient, srcBucket, targetBucket, req.SourceKeys, req.TargetPrefix, sameEP, 4, nil)
+	out := service.MigrateKeys(ctx, srcClient, dstClient, srcBucket, targetBucket, req.SourceKeys, req.TargetPrefix, sameEP, 4, nil)
 	h.writeJSON(w, http.StatusOK, migrateBatchJSON(out))
 }
 

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/weilai1949/s3client/blob/develop/docs/api/accounts.schema.json",
-  "title": "s3clinet account store (accounts.json)",
-  "description": "s3clinet 账号库 `accounts.json` 的**明文**形态：一个 Account 对象数组（2 空格缩进）。真值来源 `apps/server/internal/model/account.go`；由 `apps/server/repo_infra_gate_test.go` 的 `TestAccountStoreSchemaMatchesModel` 双向校验字段集与类型，改模型必须同改本文件。⚠️ 安全：`S3C_STORE_DRIVER=json` 且未设 `S3C_STORE_KEY` 时 `secretKey` 以**明文**落盘（服务端默认拒绝启动，除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`，仅限本地联调）；设置 `S3C_STORE_KEY` 后整个文件为 S3C3 加密信封（**不是** JSON，本 schema 不适用），字节布局见 docs/compatibility.md §4。",
+  "title": "s3client account store (accounts.json)",
+  "description": "s3client 账号库 `accounts.json` 的**明文**形态：一个 Account 对象数组（2 空格缩进）。真值来源 `apps/server/internal/model/account.go`；由 `apps/server/repo_infra_gate_test.go` 的 `TestAccountStoreSchemaMatchesModel` 双向校验字段集与类型，改模型必须同改本文件。⚠️ 安全：`S3C_STORE_DRIVER=json` 且未设 `S3C_STORE_KEY` 时 `secretKey` 以**明文**落盘（服务端默认拒绝启动，除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`，仅限本地联调）；设置 `S3C_STORE_KEY` 后整个文件为 S3C3 加密信封（**不是** JSON，本 schema 不适用），字节布局见 docs/compatibility.md §4。",
   "type": "array",
   "items": { "$ref": "#/$defs/account" },
   "$defs": {
     "account": {
       "type": "object",
-      "description": "一条 S3 兼容对象存储账号。字段全部**无 omitempty**，因此 s3clinet 写出的文件里 12 个字段恒存在（缺失即视为文件被外部改动）。",
+      "description": "一条 S3 兼容对象存储账号。字段全部**无 omitempty**，因此 s3client 写出的文件里 12 个字段恒存在（缺失即视为文件被外部改动）。",
       "additionalProperties": false,
       "required": [
         "id",

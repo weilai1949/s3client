@@ -20,4 +20,4 @@
   改 `docs/CONFIGURATION.md` + `apps/server/.env.example`（另有其它包直读环境变量的历史例外，
   见 `config_doc_gate_test.go` 头注释）。
 - **真实 S3 对端 E2E**（签名 / 预签名 / 分段 / 复制 / 标签 / 版本控制改动必须跑）：
-  `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E -v`。
+  `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E -v`。

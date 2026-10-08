@@ -21,7 +21,7 @@
 #   scripts/e2e-real.sh --skip-build     # 复用已有 apps/web/dist 与后端二进制
 #
 # 环境变量：RUSTFS_ENDPOINT（--no-rustfs 时必填）/ RUSTFS_PORT / SERVER_PORT /
-#          RUSTFS_IMAGE / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY / S3C_TOKEN（可覆盖）。
+#          RUSTFS_IMAGE / S3CLIENT_ACCESS_KEY / S3CLIENT_SECRET_KEY / S3C_TOKEN（可覆盖）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -60,7 +60,7 @@ SERVER_ORIGIN="http://127.0.0.1:${SERVER_PORT}"
 # ≥16，否则后端 config.Validate 拒绝启动（health 探测会随之失败并打印 server.log）。
 S3C_TOKEN="${S3C_TOKEN:-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')}"
 
-CONTAINER="s3clinet-e2e-rustfs"
+CONTAINER="s3client-e2e-rustfs"
 WORK_DIR="$ROOT/.run/e2e-real"
 SERVER_PID=""
 
@@ -144,10 +144,10 @@ if (( ! SKIP_BUILD )); then
   log "构建前端真实产物（pnpm build）"
   (cd "$ROOT/apps/web" && pnpm install --frozen-lockfile >/dev/null && pnpm build >/dev/null)
   log "构建 Go 后端"
-  (cd "$ROOT/apps/server" && go build -o "$WORK_DIR/s3clinet-server" .)
+  (cd "$ROOT/apps/server" && go build -o "$WORK_DIR/s3client-server" .)
 fi
 [[ -f "$ROOT/apps/web/dist/index.html" ]] || die "缺少 apps/web/dist/index.html（去掉 --skip-build 重新构建）"
-[[ -x "$WORK_DIR/s3clinet-server" ]] || die "缺少后端二进制 $WORK_DIR/s3clinet-server（去掉 --skip-build 重新构建）"
+[[ -x "$WORK_DIR/s3client-server" ]] || die "缺少后端二进制 $WORK_DIR/s3client-server（去掉 --skip-build 重新构建）"
 
 # 浏览器：幂等（已缓存则秒过）。修掉「新克隆下 make e2e-real 直接失败」的 UX 缺口；
 # 系统依赖（--with-deps 需要 root/apt）由 CI 的 before_script 负责。
@@ -170,7 +170,7 @@ log "启动真实 Go 后端（$SERVER_ORIGIN，静态目录 apps/web/dist，S3C_
   S3C_STORE_DRIVER=json \
   S3C_ALLOW_PLAINTEXT_STORE=1 \
   S3C_LOG_LEVEL=warn \
-  "$WORK_DIR/s3clinet-server" >"$WORK_DIR/server.log" 2>&1 &
+  "$WORK_DIR/s3client-server" >"$WORK_DIR/server.log" 2>&1 &
   echo $! >"$WORK_DIR/server.pid"
 )
 SERVER_PID="$(cat "$WORK_DIR/server.pid")"
@@ -187,9 +187,9 @@ log "运行 Playwright 真实联调（不 mock /api）"
   cd "$ROOT/apps/web"
   PLAYWRIGHT_BASE_URL="$SERVER_ORIGIN" \
   S3C_TOKEN="$S3C_TOKEN" \
-  S3CLINET_ENDPOINT="$RUSTFS_ENDPOINT" \
-  S3CLINET_ACCESS_KEY="$RUSTFS_ACCESS_KEY" \
-  S3CLINET_SECRET_KEY="$RUSTFS_SECRET_KEY" \
+  S3CLIENT_ENDPOINT="$RUSTFS_ENDPOINT" \
+  S3CLIENT_ACCESS_KEY="$RUSTFS_ACCESS_KEY" \
+  S3CLIENT_SECRET_KEY="$RUSTFS_SECRET_KEY" \
   pnpm e2e:real
 )
 log "真实联调冒烟通过"

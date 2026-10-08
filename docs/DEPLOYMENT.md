@@ -53,14 +53,14 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 > **单实例约束**：账号存储是文件型的（`json` / `sqlite`），异步任务表在内存中，因此服务启动时对
-> `S3C_DATA_DIR` 加 `flock` 单写者锁（`.s3clinet.lock`）。同一数据卷起第二个实例会立即失败并报
+> `S3C_DATA_DIR` 加 `flock` 单写者锁（`.s3client.lock`）。同一数据卷起第二个实例会立即失败并报
 > `data dir … is already in use`——不要为同一 `/data` 卷编排多副本；水平扩容需先替换外部存储（未立项）。
 
 ### 2.3 生产 + TLS（nginx 终止 TLS）
 
 ```bash
 mkdir -p certs
-cp deploy/nginx/conf.d/s3clinet-tls.example.conf deploy/nginx/conf.d/s3clinet-tls.conf
+cp deploy/nginx/conf.d/s3client-tls.example.conf deploy/nginx/conf.d/s3client-tls.conf
 # 编辑证书路径 / 域名 / 补 HSTS 头（见 deploy/nginx/README.md）
 docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 ```
@@ -132,4 +132,4 @@ curl http://127.0.0.1:8080/api/health
 
 - Docker：`docker compose down && docker compose -f docker-compose.prod.yml up -d`（镜像 tag 指回旧版本）。
 - 数据：账号存储（`accounts.json` / `accounts.db` / `accounts.json.enc`）挂载于 `/data` 卷，回滚前先备份；
-  同目录的 `.s3clinet.lock` 只是 flock 锁文件，不需要备份（进程退出即释放）。
+  同目录的 `.s3client.lock` 只是 flock 锁文件，不需要备份（进程退出即释放）。

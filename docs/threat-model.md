@@ -1,6 +1,6 @@
 # 安全设计
 
-> 本文档描述 s3clinet 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
+> 本文档描述 s3client 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
 > 最后更新：2026-09-30。
 
@@ -17,7 +17,18 @@
 | **R**epudiation 抵赖 | 安全审计日志（`handler/audit.go`）：401（malformed/bad_token）/ 账号 CRUD / 桶策略设置与清除 / 对象删除与前缀删除 / **移动与重命名**（同步批量 `copy-objects` + `deleteSource`、异步批量、`rename` 复制后删源）/ **版本永久删除**（`DELETE /version`，带 `versionId`）/ 回收站清空 / 限速命中，带固定事件名与操作者 IP；另有通用 access log | ✅ 已缓解（原 todo #17 闭环见 [FEATURES.md](FEATURES.md) §M；2026-09-28 补齐三处破坏性操作覆盖见 §AE） |
 | **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey | ✅ 已缓解 |
 | **D**oS 拒绝服务 | IP 令牌桶 120/min、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503 | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
-| **E**levation 提权 | 单 token 模型无角色；token 轮换支持 | ✅ 已缓解 |
+| **E**levation 提权 | 默认单 token 全权模型；**可选最小权限作用域**（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号白名单 / 过期）按 token 收敛爆炸半径；token 轮换支持 | ✅ 已缓解（越权 403 + 审计 `auth.scope_denied`；未登记 token 保持全权，见下方「最小权限」） |
+
+**最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：`S3C_TOKEN` 支持逗号分隔多 token，但历史上每个 token 都是全权。现可选用独立 env `S3C_TOKEN_SCOPES`（JSON：token → `{readonly, prefixes, accounts, expiresAt}`）为单个 token 声明最小权限：
+
+- `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
+- `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；
+- `accounts`：仅允许路径 `{id}` 命中的账号；
+- `expiresAt`：过期后 401（审计 `reason=token_expired`）。
+
+未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+
+> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）与账号列表不受其约束；需要更细粒度授权时应在账号侧用 S3 策略收敛。
 
 ### 边界 B：预签名 URL 直传
 
@@ -88,6 +99,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 回环绑定 `127.0.0.1:8080` | `config.go` `FromEnv`（`S3C_ADDR` 默认值） |
 | 非回环监听强制 `S3C_TOKEN`（否则拒绝启动） | `config.go` `Validate`（`ErrTokenRequiredNonLoopback`） |
 | token 最短 16 字符 | `config.go` `MinTokenLength` |
+| 可选 token 作用域（`S3C_TOKEN_SCOPES` 非法即拒绝启动；未登记 token 保持全权） | `config.go` `parseTokenScopes` / `validateTokenScopes`、`handler/scope.go` |
 | `json`/`sqlite` 无 `S3C_STORE_KEY` 时拒绝启动（需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行） | `config.go` `Validate` |
 | `/api/metrics` 与 `/api/openapi.json` 默认 404 | `middleware.go` `withMetricsGate` / `withOpenAPIGate` |
 | `/api/metrics` 开启后**不受 token 保护**（有意为内网 scrape；匿名可读，勿直接暴露公网） | `middleware.go` `withAuth` 豁免 |
@@ -96,7 +108,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | SSRF 私网 / 回环默认放行（`S3C_SSRF_DENY_PRIVATE` 默认关闭，可显式收紧，见 ADR-003） | `config.go` `FromEnv`、`s3wrap/ssrf.go` |
 | CORS 白名单仅 localhost/127.0.0.1/tauri + 跨域 403 硬阻断 | `middleware.go` `corsAllowedOrigin` / `withCORS` |
 | 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP | `middleware.go` `withSecurityHeaders` |
-| TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3clinet-tls.example.conf` |
+| TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3client-tls.example.conf` |
 | 容器非 root（`USER app`）、HEALTHCHECK、内存上限 | `apps/server/Dockerfile`、compose |
 | ReadHeaderTimeout 15s（防慢速请求头攻击） | `main.go` `runServer`（`http.Server` 字面量） |
 
@@ -294,7 +306,7 @@ make gcl GCL_JOBS=semgrep-sast     # 产物 gl-sast-report.json（已在 .gitign
 | 2–4 | High | `api/http.ts` ×2、`api/jobs.ts` ×1 | SSRF | **设计使然**：`fetch(getBase() + path)` 的 `getBase()` 是**用户自己配置的后端地址**——「多后端」就是这个产品的功能。请求由**用户自己的浏览器**发往**用户自己指定的服务器**，不构成服务端 SSRF；服务端侧的出站校验另见「边界 D」与 `s3wrap/ssrf.go` |
 | 5–7 | Medium | `handler/trash.go`、`handler/metadata.go`、`handler/objects.go` | Integer overflow | **误报**：三处都是 `int32(n)`，而 **紧邻上一行**就是范围守卫 `n > 0 && n <= 1000`，不可能溢出。该规则不做区间追踪，看不到前置 guard |
 | 8 | Medium | `internal/store/open.go`（`ensureDataDirPerm`） | Incorrect permission assignment | **误报（且方向相反）**：`os.Chmod(dir, 0o700)` 是**主动加固**——`os.MkdirAll` 的 mode 只在新建时生效，预建目录（Docker volume / systemd StateDirectory）常为 0755，故此处收紧到属主独占 |
-| 9 | Medium | `internal/store/lock_unix.go` | Path Traversal | **误报**：拼接的是**常量**文件名 `.s3clinet.lock`，目录来自 `S3C_DATA_DIR`（运维配置，非用户输入） |
+| 9 | Medium | `internal/store/lock_unix.go` | Path Traversal | **误报**：拼接的是**常量**文件名 `.s3client.lock`，目录来自 `S3C_DATA_DIR`（运维配置，非用户输入） |
 | 10 | Medium | `api/storage.ts`（`newId`） | Weak PRNG | **可接受**：主路径是 `crypto.randomUUID()`（CSPRNG），`Math.random()` 仅在**前者不可用**时兜底；且该 id 是本地服务器条目的标识，**不是密钥**（token 另存 `s3c.token.<id>`，且匿名可写的 localStorage 早已是失陷前提） |
 
 **为什么不做规则级抑制**：`.gitlab/sast-ruleset.toml` 与 `SAST_RULESET_GIT_REFERENCE` 属

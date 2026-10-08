@@ -62,7 +62,7 @@ GET /api/health        # 免鉴权（withAuth 显式豁免），响应恒带 X-R
 - **探测粒度按驱动不同（易误判，务必知悉）**：`sqlite` 驱动的 `Ping` 是真实的 `db.Ping()`；`json` / `encrypted`
   驱动的 `Ping` **恒返回 nil**（`apps/server/internal/store/filestore.go`）——因此后两种驱动下，磁盘写满 / 只读挂载
   **不会**让 `/api/health` 变 503，会以写请求 500 的形式暴露（见 §5 R-3）。
-- 容器 `HEALTHCHECK` 走 `s3clinet-server -healthcheck` 子命令（GET `http://<S3C_ADDR host>:<port>/api/health`，3 秒超时，200 → 0），
+- 容器 `HEALTHCHECK` 走 `s3client-server -healthcheck` 子命令（GET `http://<S3C_ADDR host>:<port>/api/health`，3 秒超时，200 → 0），
   间隔 30s / 超时 5s / 重试 3 次 / start-period 5s；compose 的 nginx 依赖 `condition: service_healthy`。
 - 恢复后**无需重启**：下一次探测成功即回到 200（[`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1）。
 - `/api/health` 是**免鉴权**端点（Docker 探针需要），`version` 暴露属已接受项（[`threat-model.md`](threat-model.md) §6.2）。
@@ -142,7 +142,7 @@ curl -sS http://127.0.0.1:8080/api/metrics | grep -E '^s3c_(store_up|ssrf_deny_p
 |---|---|---|
 | 级别 | `S3C_LOG_LEVEL` = `debug` / `info` / `warn` / `error`，默认 `info` | [`CONFIGURATION.md`](CONFIGURATION.md) |
 | 格式 | `S3C_LOG_JSON=1` → `slog` JSON（容器 / 生产推荐，compose 默认注入 `1`）；否则纯文本 | `main.go` |
-| 启动日志 | `msg="s3clinet server"` + `version` / `addr` / `dataDir` / `store` / `staticDir` / `auth` / `cors` / `region` / `ssrfDenyPrivate` | `main.go` |
+| 启动日志 | `msg="s3client server"` + `version` / `addr` / `dataDir` / `store` / `staticDir` / `auth` / `cors` / `region` / `ssrfDenyPrivate` / `tracing` | `main.go` |
 | 关停日志 | `msg="shutting down..."` → `msg="shutdown complete"`；两者间隔即实际关停耗时（同一耗时也落盘为 `s3c_last_shutdown_duration_seconds`，见 §3.2） | `main.go` |
 | 访问日志 | `msg="http"` + `method` / `path` / `status` / `dur` / `req` | `middleware.go` |
 | 审计日志 | `msg="audit"` + `audit`（事件名）/ `ip` / `method` / `path`（+ 事件附加字段，如账号 id、bucket） | `handler/audit.go` |
@@ -180,20 +180,46 @@ docker compose logs --since 15m server | grep '"req":"<上面拿到的 id>"'
 tail -f .run/server.log
 ```
 
+### 3.4 OTel tracing（可选，默认关闭）
+
+| 项 | 行为 |
+|---|---|
+| 开启 | 设 `S3C_OTEL_ENDPOINT=http://<collector>:4318`（标准 OTLP/HTTP 端口，导出 `POST {Endpoint}/v1/traces`） |
+| 关闭（默认） | `S3C_OTEL_ENDPOINT` 留空：中间件原样透传、不注入响应头、不导出，零开销 |
+| 采样 | `S3C_OTEL_SAMPLE_RATIO`（默认 `1`）只决定**新建 trace**；入站 `traceparent` 的采样位被继承（`01` 即使 ratio=0 也采样，`00` 不导出，不做尾部采样） |
+| 服务标识 | `S3C_OTEL_SERVICE_NAME`（默认 `s3client`）写入 resource attribute `service.name` |
+| 导出内容 | W3C `traceparent`（解析请求头 / 回写响应头）+ 每请求一个 server span；`presign` / `proxy` / `migrate`（含 `/api/migrate/sync` 与 `/api/migrate/async`）子 span。server span 带 `http.request.method` / `url.path` / `http.response.status_code` / `request.id`（即 §3.3 的 `X-Request-ID`，同一请求两处同值） |
+
+**采集端期望**：标准 OTLP/HTTP JSON 接收端（如 otel-collector 的 `otlp` receiver——默认同时监听
+gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC）。`traceId` / `spanId` 为小写
+十六进制；时间戳与 int64 属性按 OTLP/JSON 约定编码为十进制字符串；`kind` 按 OTLP/JSON 约定用整数。
+导出报文仅覆盖本服务实际产出的字段子集（无 events / links / status / 自定义 resource 属性）。
+
+**失败模式**（一律「只记日志、不影响请求」）：
+
+- 网络失败 / 采集端非 2xx：WARN `tracing: OTLP 导出失败` 或 `tracing: OTLP 采集端返回非 2xx`，请求照常返回。
+- 有界队列满（默认 512 个待导出 span）：丢弃新 span 并 WARN `tracing: span 队列已满，丢弃 span`（`droppedTotal` 累计）；**不阻塞请求路径**。
+- 序列化 / 构造请求失败：WARN 后跳过该批（正常配置下不可达，属防御分支）。
+- 关停：SIGTERM 后 `Close` 刷出剩余 span 并等待后台导出结束（最多 5s），随后进程退出；采集端恰在此窗口不可用时，最后一批 span 可能丢失。
+
+**跨层定位**：响应头 `traceparent`（`00-<traceId>-<spanId>-<flags>`）里的 `traceId` 与子 span 一致，
+配合 §3.3 的 `req=<X-Request-ID>`（即 span 属性 `request.id`），可把一次请求在采集端与日志之间对齐。
+依赖预算与取舍见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md)。
+
 ## 4. SLO / 告警基线
 
 > ⚠️ **本节为建议基线，尚未在代码或 CI 中强制**——按实际部署调整后再落地。
-> **可执行形态**：[`deploy/prometheus/s3clinet.rules.yml`](../deploy/prometheus/s3clinet.rules.yml)
+> **可执行形态**：[`deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml)
 > （2026-09-29 新增）把下面的 SLI 记录规则与全部告警规则落成 Prometheus 规则文件，挂进
 > `rule_files` 即可用。它与本节**必须同改**：该文件由
 > `repo_infra_gate_test.go` 的 `TestPrometheusRulesReferenceRealMetrics` 机械校验
 > ——引用的每个 `s3c_*` 指标必须真实存在于发射点、每个 `code` 取值必须在 `s3wrap` 白名单内
 > （白名单外的码会被折叠成 `other`，写进表达式即**永不命中**且 Prometheus 不报错）。
-> **SLO 仪表盘已随仓库分发**：[`deploy/grafana/s3clinet.dashboard.json`](../deploy/grafana/s3clinet.dashboard.json)
+> **SLO 仪表盘已随仓库分发**：[`deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json)
 > （2026-09-30 新增）。Grafana → **Dashboards → New → Import** → 上传该 JSON → 数据源选你的 Prometheus 即可；
-> 盘上的 `s3clinet:*` 记录规则与本节表格同源（**本节与 rules.yml 必须同改**），面板在规则未加载时也各有等价的原始表达式。
+> 盘上的 `s3client:*` 记录规则与本节表格同源（**本节与 rules.yml 必须同改**），面板在规则未加载时也各有等价的原始表达式。
 > 该 JSON 由 `grafana_dashboard_gate_test.go` 机械校验：引用的每个指标 / `code` 取值 / 记录规则名都必须真实存在。
-> 仍**未提供**的是 OpenTelemetry trace（候选见 [`ROADMAP.md`](ROADMAP.md) §三 3.2 #11）；告警规则本身已随仓库分发。
+> **OTel trace 已于 2026-10-08 落地**（§3.4；`S3C_OTEL_ENDPOINT` 默认空 = 关闭，见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md)）；告警规则本身已随仓库分发。
 
 ### 4.1 建议 SLI / SLO
 
@@ -229,15 +255,15 @@ tail -f .run/server.log
 | 账号库写入失败 | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
 | 在册任务逼近上限 | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
 | 数据卷剩余空间 | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
-| HTTP 延迟升高 | `s3clinet:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
+| HTTP 延迟升高 | `s3client:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
 
 ### 4.3 必须靠外部采集的观测面（本服务不提供指标）
 
 | 关注点 | 现状 | 建议做法（**建议值**） |
 |---|---|---|
-| 数据卷 **inode**（容量本身已内置 `s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30） | 仍无内置指标 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；卷字节使用率直接用 §4.2 的 S3ClinetVolumeSpaceLow |
+| 数据卷 **inode**（容量本身已内置 `s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30） | 仍无内置指标 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；卷字节使用率直接用 §4.2 的 S3ClientVolumeSpaceLow |
 | 数据卷容量（**仅在序列缺失的平台**：Linux / macOS / FreeBSD / Windows 之外） | 该平台 `volumeUsage` 无免依赖实现 → 不发序列 | 宿主 `node_exporter` / `df -h` 采集，卷使用率 > 80% 告警 |
-| 账号库可写性（`json` / `encrypted`） | **主动探针仍无**（`Ping` 恒 nil）；但**写入失败已内置计数** `s3c_store_write_failures_total`（事后信号，2026-09-30） | 用 §4.2 的 S3ClinetStoreWriteFailures（critical）+ 5xx 比例 + `msg="handler error"` 日志三者交叉确认（R-3） |
+| 账号库可写性（`json` / `encrypted`） | **主动探针仍无**（`Ping` 恒 nil）；但**写入失败已内置计数** `s3c_store_write_failures_total`（事后信号，2026-09-30） | 用 §4.2 的 S3ClientStoreWriteFailures（critical）+ 5xx 比例 + `msg="handler error"` 日志三者交叉确认（R-3） |
 | 跨服务 trace | 未接入（[`ROADMAP.md`](ROADMAP.md) §三 3.2 #11 ⬜） | 现阶段用 `X-Request-ID` + nginx 日志关联 |
 
 > 2026-09-30 起，本表原有的「数据卷**容量** / 在册异步任务数 / 优雅关停耗时」三项已由内置指标补齐
@@ -270,7 +296,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 1. `curl` 状态码 503 且 `store.error == "store unavailable"`；
 2. `s3c_store_up 0`（需 `S3C_EXPOSE_METRICS=1`）；
 3. `S3C_LOG_LEVEL=debug` 时日志出现 `msg="health store ping"` + `err`（**根因只有这里能看到**）；
-4. 容器 `docker inspect --format '{{.State.Health.Status}}' s3clinet-server` = `unhealthy`。
+4. 容器 `docker inspect --format '{{.State.Health.Status}}' s3client-server` = `unhealthy`。
 
 **处置步骤**：
 1. **先确认驱动**：只有 `sqlite` 驱动的探测是真实 IO（`db.Ping`）。若本实例是 `json` / `encrypted` 却出现
@@ -285,18 +311,18 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 **何时升级**：503 持续 > 10 分钟且伴随卷满 / 库文件损坏；或重启后 `msg="init store"` 仍失败 → 进入 §6 恢复流程，
 并按 §9 记录事件（涉及数据丢失时按 P0/P1 处理）。
 
-### R-2 数据目录锁冲突（`.s3clinet.lock`，第二个实例启动失败）
+### R-2 数据目录锁冲突（`.s3client.lock`，第二个实例启动失败）
 
-**症状**：第二个实例启动即失败，日志 `msg="data dir lock"` + `err="data dir <路径> is already in use by another s3clinet instance: ..."`，
+**症状**：第二个实例启动即失败，日志 `msg="data dir lock"` + `err="data dir <路径> is already in use by another s3client instance: ..."`，
 进程退出码 1；容器部署下表现为新副本反复重启。
 
 **判据**：
 1. 上述日志（unix 平台由 `flock(LOCK_EX|LOCK_NB)` 触发，**立刻失败**而非等待）；
-2. `ls -l "$S3C_DATA_DIR/.s3clinet.lock"` 存在（unix；非 unix 平台**不创建也不检查**该文件）；
+2. `ls -l "$S3C_DATA_DIR/.s3client.lock"` 存在（unix；非 unix 平台**不创建也不检查**该文件）；
 3. 同一 `S3C_DATA_DIR` 上确有另一个进程在运行（`docker compose ps`、宿主进程列表）。
 
 **处置步骤**：
-1. 找出并停掉多余实例。注意 compose 固定了 `container_name: s3clinet-server`，`--scale server=2` 本身也会因
+1. 找出并停掉多余实例。注意 compose 固定了 `container_name: s3client-server`，`--scale server=2` 本身也会因
    容器名冲突失败。
 2. **不要通过删除锁文件来「解锁」**：锁由内核持有，与文件是否存在无关；删除文件不会释放锁。
 3. **残留锁文件无害**：进程退出（含 panic / `SIGKILL`）时内核自动释放，新实例重新 `flock` 即成功，无需清理。
@@ -540,7 +566,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | `accounts.db-wal` / `accounts.db-shm` | `sqlite`（WAL 模式） | ✅ 必须（与主库**同批**） | 侧车含尚未 checkpoint 的页；只拷 `.db` 可能丢掉最近写入 |
 | `jobs.json` | 有过异步任务时 | ⚠️ 可选 | 异步任务清单（含 `interrupted` 对账证据，保留 7 天）；丢失只影响重启后的对账视图，不影响账号数据 |
 | `shutdown.json` | 至少完成过一次优雅关停 | ⚠️ 可选 | 上次关停耗时（`{"durationUs":...}`），供 `s3c_last_shutdown_duration_seconds` 在下次启动读入；丢失只让该指标回落 0，不影响服务 |
-| `.s3clinet.lock` | unix 且进程运行过 | ❌ **不需要** | `flock` 锁文件，内容无意义；锁由内核在进程退出时释放，残留文件不影响下次启动 |
+| `.s3client.lock` | unix 且进程运行过 | ❌ **不需要** | `flock` 锁文件，内容无意义；锁由内核在进程退出时释放，残留文件不影响下次启动 |
 | `accounts.json.tmp` 等 `*.tmp` | 写盘中途崩溃时可能残留 | ❌ 不需要 | 原子写临时残骸；下次写盘会先清理，不影响读取 |
 
 **另需单独保管**：`.env`（或部署平台的环境变量）里的 `S3C_TOKEN` 与 `S3C_STORE_KEY`——它们**不在数据目录内**，
@@ -586,7 +612,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
    - `S3C_STORE_DRIVER` 必须与备份的驱动一致（`json` → `accounts.json`；`encrypted` → `accounts.json.enc`；
      `sqlite` → `accounts.db`）；驱动不匹配会打开**另一个文件**（甚至新建空库），表现为「账号全没了」；
    - `S3C_STORE_KEY` 必须是**建库时的那一个**。
-6. **启动并观察启动日志**：应看到 `msg="s3clinet server"`（无 `配置校验失败` / `init store` 错误）。
+6. **启动并观察启动日志**：应看到 `msg="s3client server"`（无 `配置校验失败` / `init store` 错误）。
 
 ### 6.4 恢复后验证
 
@@ -719,7 +745,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | 升级前 | 确认数据格式兼容性：加密格式 `S3C3`，**兼容读取旧 `S3C2` 库**（升级路径存在，但降级回旧版本不一定能读新格式） | [`threat-model.md`](threat-model.md) 边界 C |
 | 升级中 | 停机窗口内替换镜像 / 二进制（prod compose 镜像 tag 由 `S3C_IMAGE_TAG` 控制）；容器宽限期见 R-9 | [`docker-compose.prod.yml`](../docker-compose.prod.yml) |
 | 升级后 | `/api/health` 200；`s3c_build_info{version=...}` 与预期 tag 一致；抽查一次流式下载与一次写操作 | §3.1、§3.2 |
-| 回滚 | `docker compose down` → 用旧 tag `up -d`；**回滚前先备份 `/data`**（旧版本可能读不了新格式）；`.s3clinet.lock` 不需要备份 | [`DEPLOYMENT.md`](DEPLOYMENT.md) §7 |
+| 回滚 | `docker compose down` → 用旧 tag `up -d`；**回滚前先备份 `/data`**（旧版本可能读不了新格式）；`.s3client.lock` 不需要备份 | [`DEPLOYMENT.md`](DEPLOYMENT.md) §7 |
 | 桌面端 | 产物未签名（Windows SmartScreen / macOS 未公证）、**无自动更新通道**，用户需手动升级 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25、[`ROADMAP.md`](ROADMAP.md) §五 5.1 R5 |
 
 ## 9. 事故响应
@@ -773,7 +799,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 | 约束 | 表现 | 依据 |
 |---|---|---|
-| `flock` 单写者锁（`.s3clinet.lock`） | 同一 `S3C_DATA_DIR` 的第二个实例**启动即失败** | `store/lock.go`、R-2 |
+| `flock` 单写者锁（`.s3client.lock`） | 同一 `S3C_DATA_DIR` 的第二个实例**启动即失败** | `store/lock.go`、R-2 |
 | 非 unix 平台锁为 no-op | Windows 上不创建 / 不检查锁文件，两个实例可同时写同一目录 | `store/lock_other.go`、[`ROADMAP.md`](ROADMAP.md) §五 5.1 R4 |
 | 异步任务表在内存 | 多副本无法共享任务状态；重启后 `running` → `interrupted` | `service/job.go` |
 | 单 token，无租约 / 选主 | 无法安全地让两个实例同时对外服务 | `config.go` |
@@ -806,7 +832,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 | 关注点 | 说明 | 建议做法 |
 |---|---|---|
-| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；**inode 仍需宿主采集** | 字节剩余 < 20% 告警（§4.2 S3ClinetVolumeSpaceLow）；inode > 80% 告警（§4.3） |
+| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；**inode 仍需宿主采集** | 字节剩余 < 20% 告警（§4.2 S3ClientVolumeSpaceLow）；inode > 80% 告警（§4.3） |
 | 账号库写放大 | `json` / `encrypted` **每次写盘重写整个文件**（全量快照 + 原子替换）；`sqlite` 为行级更新 | 账号数达到数百时优先 `sqlite`（**建议**，代码未设阈值） |
 | `jobs.json` 增长 | 受 TTL 控制（30 分钟 / 7 天），但大批量任务期间会持续写入 | 无需清理；异常增长按 R-8 排查 |
 | 日志占用 | 由 compose 的 json-file 轮转限制硬上限；本机 `.run/*.log` **不轮转** | 本机部署建议外部 `logrotate`（**建议**） |

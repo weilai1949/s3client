@@ -290,7 +290,7 @@ func TestRegisterMiddlewares(t *testing.T) {
 		t.Fatalf("registerMiddlewares: %v", err)
 	}
 	ids := stack.List()
-	if !containsStr(ids, "s3clinet:unsigned-payload") || !containsStr(ids, "s3clinet:metrics") {
+	if !containsStr(ids, "s3client:unsigned-payload") || !containsStr(ids, "s3client:metrics") {
 		t.Fatalf("middlewares not registered: %v", ids)
 	}
 	// 再次注册不应报错（同 ID 中间件可重复加入，列表中出现两次）。

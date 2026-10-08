@@ -216,6 +216,8 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
         },
         // key 以 '/' 结尾时 pop() 返回 ''，需用 || 兜底（?? 拦不住空串）
         o.key.split('/').pop() || 'object',
+        // 已知大小的大对象走有界并发 Range 分段（ADR-009）；小对象 / 未知大小走单流。
+        o.size,
       )
     } catch (err) {
       const msg = toErrorMessage(err)

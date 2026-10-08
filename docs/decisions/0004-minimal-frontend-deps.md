@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-s3clinet 前端（Vue 3 + Vite + TS）需要状态管理、路由、HTTP 客户端、国际化、主题等常见能力。生态惯例是引入 Pinia、vue-router、axios、vue-i18n 等库。
+s3client 前端（Vue 3 + Vite + TS）需要状态管理、路由、HTTP 客户端、国际化、主题等常见能力。生态惯例是引入 Pinia、vue-router、axios、vue-i18n 等库。
 
 ## Decision
 

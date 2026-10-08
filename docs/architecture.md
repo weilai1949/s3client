@@ -1,11 +1,11 @@
 # 架构设计
 
-> 本文档描述 s3clinet 的整体架构与关键设计决策。架构决策记录（ADR）见
+> 本文档描述 s3client 的整体架构与关键设计决策。架构决策记录（ADR）见
 > [`docs/decisions/`](decisions/index.md)。
 
 ## 1. 总体架构
 
-s3clinet 采用 **B/S（Browser/Server）架构 + Tauri 2 桌面壳（无 IPC）**：
+s3client 采用 **B/S（Browser/Server）架构 + Tauri 2 桌面壳（无 IPC）**：
 
 ```
 ┌─────────────────────────────┐
@@ -66,11 +66,12 @@ apps/server/internal/model        领域模型（Account / AccountView）
 | SSRF 防护 | `s3wrap/ssrf.go` | 创建时 + 拨号期双重校验（禁 IMDS/链路本地、禁重定向、禁代理）；`S3C_SSRF_DENY_PRIVATE=1` 可连私网/回环一并拒绝；取舍见 [ADR-003](decisions/0003-ssrf-private-allow.md) |
 | 预签名 | `s3wrap/presign.go` | v4 签名 URL；`expiresIn` ≤0 取默认 **1h**、>24h 钳到 **24h**（S3 协议上限 7 天，控制台收紧），**无 1h 下限**；取舍见 [ADR-007](decisions/0007-presign-direct-upload.md) |
 | 原子写 | `internal/atomicfile/atomicfile.go`（调用点 `store/filestore.go`、`service/job_persist.go`） | 临时文件 + rename + 0600；写失败回滚内存；取舍见 [ADR-006](decisions/0006-store-drivers-atomic-write.md) |
-| 单写者锁 | `store/lock.go` | `flock` 锁 `DataDir`（`.s3clinet.lock`），第二实例启动即失败；非 unix 为 no-op；取舍见 [ADR-006](decisions/0006-store-drivers-atomic-write.md) / [ADR-011](decisions/0011-single-instance-no-ha.md) |
+| 单写者锁 | `store/lock.go` | `flock` 锁 `DataDir`（`.s3client.lock`），第二实例启动即失败；非 unix 为 no-op；取舍见 [ADR-006](decisions/0006-store-drivers-atomic-write.md) / [ADR-011](decisions/0011-single-instance-no-ha.md) |
 | 任务清单落盘 | `service/job_persist.go` | 同上原子写策略，但自包含于 `service` 包：`service→store` 会形成分层倒置；取舍见 [ADR-005](decisions/0005-sse-async-jobs.md) |
 | 流式限并发 | `handler/stream.go` | 全局 32 并发 + 滚动空闲写超时 5min；取舍见 [ADR-009](decisions/0009-bounded-concurrency.md) |
 | 批量有界并发 | `service/batch.go` | `RunBatch` 无缓冲结果通道，内存 O(workers)；取舍见 [ADR-009](decisions/0009-bounded-concurrency.md) |
 | 异步任务 | `service/job.go` + `job_persist.go` | JobRegistry + SSE 进度 + TTL reap；任务清单可选落盘（`JobPersister`），启动时把非终态任务标记 `interrupted` 并对账；取舍见 [ADR-005](decisions/0005-sse-async-jobs.md) |
+| OTel tracing | `internal/tracing/` | 零第三方依赖的最小 tracer：W3C `traceparent` 解析 / 生成 + OTLP/HTTP JSON 导出（有界队列 + 后台批量，失败只记日志）；`S3C_OTEL_ENDPOINT` 默认空 = 关闭；取舍见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md) |
 
 ## 3. 前端架构
 
@@ -167,3 +168,4 @@ sequenceDiagram
 | ZIP 服务端流式打包 | 不在服务端落盘、内存有界（[ADR-010](decisions/0010-zip-streaming.md)） |
 | 单实例部署、无 HA | 文件型存储 + 内存任务表 + 单 token，多副本需外置状态与选主（[ADR-011](decisions/0011-single-instance-no-ha.md)） |
 | REST 契约无版本前缀 | 破坏性变更靠发布节奏缓冲（[ADR-012](decisions/0012-rest-no-version-prefix.md)） |
+| OTel tracing 零第三方依赖自研、默认关闭 | 依赖预算与供应链最小化（复用标准库直连 OTLP/HTTP JSON），只在 `S3C_OTEL_ENDPOINT` 非空时启用（[ADR-0013](decisions/0013-zero-dep-otlp-tracing.md)） |

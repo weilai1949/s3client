@@ -209,6 +209,18 @@ describe('api gaps: s3api bucket 可选参数', () => {
     expect(urls.length).toBe(5)
     for (const u of urls) expect(u).not.toContain('bucket=')
   })
+
+  it('multipartParts：path id 编码、key/uploadId 必带、bucket 可选', async () => {
+    const { s3api } = await import('./api')
+    await s3api.multipartParts('id/1', { key: 'dir/a b.bin', uploadId: 'U 1' })
+    await s3api.multipartParts('id2', { bucket: 'bkt', key: 'k', uploadId: 'U2' })
+    const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
+    expect(urls[0]).toContain('/api/accounts/id%2F1/multipart/parts?')
+    expect(urls[0]).toContain('key=dir%2Fa+b.bin')
+    expect(urls[0]).toContain('uploadId=U+1')
+    expect(urls[0]).not.toContain('bucket=')
+    expect(urls[1]).toContain('bucket=bkt')
+  })
 })
 
 // ── api.ts 覆盖率补全：requestResponse 错误体与 downloadZipToDisk catch ──────

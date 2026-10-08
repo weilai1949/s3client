@@ -137,7 +137,7 @@ const unsignedPayload = "UNSIGNED-PAYLOAD"
 
 type unsignedPayloadSetter struct{}
 
-func (m *unsignedPayloadSetter) ID() string { return "s3clinet:unsigned-payload" }
+func (m *unsignedPayloadSetter) ID() string { return "s3client:unsigned-payload" }
 
 func (m *unsignedPayloadSetter) HandleFinalize(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
 	ctx = v4.SetPayloadHash(ctx, unsignedPayload)

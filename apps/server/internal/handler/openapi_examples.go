@@ -338,6 +338,11 @@ var apiExamples = map[string]openapi.OpExample{
 			"200": ex(`{"aborted":true}`),
 		},
 	},
+	"GET /api/accounts/{id}/multipart/parts": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"parts":[{"partNumber":1,"etag":"e1","size":10485760,"lastModified":"2026-10-08T05:00:00Z"},{"partNumber":2,"etag":"e2","size":5,"lastModified":"2026-10-08T05:01:00Z"}]}`),
+		},
+	},
 
 	// ---- versions ----
 	"GET /api/accounts/{id}/versions": {
@@ -431,7 +436,7 @@ var apiExamples = map[string]openapi.OpExample{
 	},
 	"GET /api/openapi.json": {
 		Responses: map[string]json.RawMessage{
-			"200": ex(`{"openapi":"3.0.3","info":{"title":"s3clinet API","version":"v1.0.0"}}`),
+			"200": ex(`{"openapi":"3.0.3","info":{"title":"s3client API","version":"v1.0.0"}}`),
 		},
 	},
 }

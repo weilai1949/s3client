@@ -1,4 +1,4 @@
-# S3 Client (s3clinet)
+# S3 Client (s3client)
 
 S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提供 **Web 端** 与 **Tauri 2 桌面端**；桌面端采用 **B/S 架构**，不使用 Tauri IPC，前后端全部通过 HTTP 通信。
 
@@ -89,7 +89,7 @@ docker-compose.yml   一键起 server + RustFS
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080`（此时**必须**设 `S3C_TOKEN`） |
-| `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3clinet.lock`） |
+| `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3client.lock`） |
 | `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换 |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
 | `S3C_STORE_KEY` | 空 | 落盘加密口令（至少 16 字符）；`encrypted` 模式必填，`json`/`sqlite` 设置后启用加密。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
@@ -116,11 +116,11 @@ docker compose up -d --build
 docker compose -f docker-compose.prod.yml up -d --build
 
 # 仅运行服务端（外部 S3）
-docker build -f apps/server/Dockerfile -t s3clinet/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
-docker run -d --name s3clinet -p 127.0.0.1:8080:8080 \
+docker build -f apps/server/Dockerfile -t s3client/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
+docker run -d --name s3client -p 127.0.0.1:8080:8080 \
   -e S3C_TOKEN="$(openssl rand -hex 32)" \
   -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
-  -v s3c-data:/data s3clinet/server:v1.0.0
+  -v s3c-data:/data s3client/server:v1.0.0
 ```
 
 > 本地仅联调、明确接受明文落盘时，可 `S3C_ALLOW_PLAINTEXT_STORE=1` 绕过存储密钥硬失败（进程会打 WARN）。
@@ -129,7 +129,7 @@ docker run -d --name s3clinet -p 127.0.0.1:8080:8080 \
 
 访问：Web `http://127.0.0.1:8080`（经 **nginx**，`worker_processes 1` 反向代理 Go 后端）；RustFS 控制台 `http://127.0.0.1:9001`（凭据见 `.env` 中 `RUSTFS_*`，勿用默认口令上生产）。
 
-TLS 终止示例见 `deploy/nginx/conf.d/s3clinet-tls.example.conf`。
+TLS 终止示例见 `deploy/nginx/conf.d/s3client-tls.example.conf`。
 
 **优雅重启**
 
@@ -148,7 +148,7 @@ make stop && make status
 **镜像特性**
 - 非 root 用户 `app` 运行；`/data` 已授权，账号数据持久化到卷。
 - **单实例**：文件型存储 + 内存任务表只支持单副本，启动时对数据目录加 `flock` 单写者锁；同一 `/data` 卷起第二个实例会直接启动失败（水平扩容需先换外部存储）。
-- `HEALTHCHECK` 通过 `/s3clinet-server -healthcheck` 自检 `/api/health`。
+- `HEALTHCHECK` 通过 `/s3client-server -healthcheck` 自检 `/api/health`。
 - 配置通过 `S3C_*` 环境变量注入（见上表）；中文 `.env.example` 见 `apps/server/.env.example`。
 - 构建参数 `GOPROXY` / `NPM_REGISTRY` 可覆盖，便于国内网络。
 
@@ -163,7 +163,7 @@ make stop && make status
 
 | S3 服务 | 在 CORS 规则中暴露 `ETag` | 本项目自动化覆盖 |
 |---|---|---|
-| RustFS（内置 compose / 真对端 E2E / 真实联调 E2E） | 是 | ✅ `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E`、`make e2e-real` |
+| RustFS（内置 compose / 真对端 E2E / 真实联调 E2E） | 是 | ✅ `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E`、`make e2e-real` |
 | MinIO（自托管常用） | 是 | 手动 |
 | AWS S3 | 是（`ExposeHeaders: ETag`） | 手动 |
 | 阿里云 OSS / 腾讯云 COS 等兼容实现 | 是（CORS 规则「暴露 Headers」填 `ETag`） | 手动 |
@@ -211,8 +211,8 @@ cd apps/web && pnpm typecheck     # 前端类型检查（vue-tsc）
 真实 RustFS 端到端联调（`s3wrap` E2E，默认指向本地 RustFS，验证建桶/预签名直传/分段上传/复制/标签/版本控制）：
 
 ```bash
-cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
-# 可选环境变量：S3CLINET_ENDPOINT / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY
+cd apps/server && S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+# 可选环境变量：S3CLIENT_ENDPOINT / S3CLIENT_ACCESS_KEY / S3CLIENT_SECRET_KEY
 ```
 
 真实联调浏览器冒烟（KNOWN_ISSUES #37）——真实 Go 后端 + 真实 RustFS + 真实构建产物，**不 mock `/api`**；
@@ -251,7 +251,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 **用法（产品是什么 / 怎么用）**
 
 - [用户手册](docs/user-guide.md) — 首次配置 / 上传下载 / 对象与桶操作 / 版本与回收站 / 快捷键 / FAQ / 排障
-- [REST API 参考](docs/api.md) — 70 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [REST API 参考](docs/api.md) — 71 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
 - [OpenAPI 规范文件](docs/api/openapi.json) — 机器可读契约（**不跑服务也能读**；Swagger UI / 代码生成 / AI 代理可直接消费）
 - [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
 - [兼容性与客户端支持矩阵](docs/compatibility.md) — 版本命名 / 支持窗口 / API 演进承诺 / 存储格式兼容 / 弃用规则 / 浏览器与桌面 OS 支持矩阵（§6.2）
@@ -268,7 +268,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [安全设计](docs/threat-model.md) — 威胁模型与安全边界；漏洞报告见 [SECURITY.md](.github/SECURITY.md)
 - [第三方许可证清单](docs/THIRD_PARTY_LICENSES.md) — **自动生成**的依赖与许可证清单（产物核验命令见威胁模型 §5.3）
 - [性能基线](docs/PERFORMANCE.md) — 热路径基准与解读（含加密写入与 O(n) 写入的取舍）
-- [Grafana SLO 仪表盘](deploy/grafana/s3clinet.dashboard.json) — 与 `deploy/prometheus/s3clinet.rules.yml` 同源的告警 / SLI 面板
+- [Grafana SLO 仪表盘](deploy/grafana/s3client.dashboard.json) — 与 `deploy/prometheus/s3client.rules.yml` 同源的告警 / SLI 面板
 - [漏洞披露（机器可读）](.well-known/security.txt) — RFC 9116；人类可读策略见 [SECURITY.md](.github/SECURITY.md)
 
 **贡献与治理**

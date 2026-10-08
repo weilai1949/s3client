@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weilai1949/s3client/apps/server/internal/config"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/openapi"
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
@@ -21,15 +22,16 @@ type Handler struct {
 	store          store.AccountStore
 	log            *slog.Logger
 	staticDir      string
-	corsOrigins    []string      // CORS 白名单；空 = 仅同源 + localhost/tauri
-	tokens         []string      // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
-	version        string        // 服务端版本号（ldflags 注入），用于 /api/health 上报
-	exposeMetrics  bool          // 是否暴露 /api/metrics（默认 false：404 假装不存在）
-	exposeOpenAPI  bool          // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
-	cspConnectSrc  string        // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
-	trustedProxies []string      // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
-	dataDir        string        // 数据目录（S3C_DATA_DIR）；卷容量 statfs 目标 + 关停耗时落盘处
-	lastShutdown   time.Duration // 最近一次优雅关停耗时（跨重启由 shutdown.json 载入）
+	corsOrigins    []string                               // CORS 白名单；空 = 仅同源 + localhost/tauri
+	tokens         []string                               // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
+	tokenScopes    func(string) (config.TokenScope, bool) // S3C_TOKEN_SCOPES 查询（nil = 全权）
+	version        string                                 // 服务端版本号（ldflags 注入），用于 /api/health 上报
+	exposeMetrics  bool                                   // 是否暴露 /api/metrics（默认 false：404 假装不存在）
+	exposeOpenAPI  bool                                   // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
+	cspConnectSrc  string                                 // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
+	trustedProxies []string                               // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
+	dataDir        string                                 // 数据目录（S3C_DATA_DIR）；卷容量 statfs 目标 + 关停耗时落盘处
+	lastShutdown   time.Duration                          // 最近一次优雅关停耗时（跨重启由 shutdown.json 载入）
 	clients        *clientCache
 	migrateJobs    *service.JobRegistry
 	limiter        *ipLimiter
@@ -40,7 +42,7 @@ type Handler struct {
 // exposeMetrics=false 时 /api/metrics 一律 404；exposeOpenAPI=false 时 /api/openapi.json 一律 404，
 // 均避免公网暴露运行指标 / API 契约信息。cspConnectSrc 默认仅同源 + 本地 Tauri 后端。
 func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins []string, token, version string, exposeMetrics, exposeOpenAPI bool) *Handler {
-	reg := openapi.New("s3clinet API", version)
+	reg := openapi.New("s3client API", version)
 	registerOpenAPI(reg, version)
 	return &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,

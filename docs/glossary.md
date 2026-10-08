@@ -1,6 +1,6 @@
 # 术语表（Glossary）
 
-> 本文件统一 s3clinet 仓库里的两套词汇：**A. S3 / 对象存储领域术语**（产品面向的外部概念）
+> 本文件统一 s3client 仓库里的两套词汇：**A. S3 / 对象存储领域术语**（产品面向的外部概念）
 > 与 **B. 本项目自造词 / 内部术语**（代码、测试、门禁与文档里反复出现、但外部无标准定义的叫法）。
 > 收录原则：**只收真能在本仓库代码或文档里找到依据的词**，并在条目里点名出现位置；
 > 找不到依据的一律不收，宁少勿编。S3 语义细节以 [`api.md`](api.md) 为准，
@@ -65,7 +65,7 @@
 | **覆盖率门禁（100% 且查 `count==0`）** | 后端**不比较百分比**而是直接检查 profile 里是否存在 `count==0` 的语句块——`total` 只有 1 位小数，99.96% 会被四舍五入显示成 100.0% 而漏过回退；前端用四指标阈值 100% | [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 的块引用；`apps/web/vite.config.ts` 的 `thresholds`；[`ROADMAP.md`](ROADMAP.md) |
 | **gap 测试** | 为**凑覆盖率**而写、与实现耦合、并不验证外部行为的测试。本仓库把它列为 Red Flag：遇到确实不可达的分支，正确做法是**删死代码**，而不是写 gap 测试把它「测活」 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 块引用、§6 Red Flags；[`AI_POLICY.md`](AI_POLICY.md) §9「覆盖率门禁红灯」处置 |
 | **假 S3（模式）** | handler 层测试里用 `httptest.NewServer` 起的最小 S3 替身：按 query（`acl` / `tagging` / `versions` / `location` / `versioning`）与方法分发标准 XML，并可返回特定错误码验证容错 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §2「假 S3 模式」 |
-| **真实对端 E2E** | 不 mock、连真实 S3 兼容实现的测试层：`S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`（默认指向本地 RustFS），普通 `go test ./...` 不会执行 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §2 / §3 |
+| **真实对端 E2E** | 不 mock、连真实 S3 兼容实现的测试层：`S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`（默认指向本地 RustFS），普通 `go test ./...` 不会执行 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §2 / §3 |
 | **真实联调（`make e2e-real`）** | 真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器，**不 mock `/api`**；编排唯一来源是 `scripts/e2e-real.sh`，两套 CI 与本地共用 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §2 / §3；`scripts/e2e-real.sh` |
 | **真值来源（SSOT）** | 「某个事实只有一处权威定义」：配置项以 [`CONFIGURATION.md`](CONFIGURATION.md) 为 SSOT；md 正文的「N 个 `/api/*` 端点」以 `routes.go` 的注册数为唯一真值 | [`CONFIGURATION.md`](CONFIGURATION.md) 标题块；[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 |
 | **文档同步门禁** | 「改完代码必须同 PR 更新对应文档，否则视为改动未完成」的对照表机制（改动类型 → 必须同步的文档） | [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 |

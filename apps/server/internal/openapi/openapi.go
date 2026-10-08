@@ -7,7 +7,7 @@
 //
 // 使用：
 //
-//	api := openapi.New("s3clinet API", "1.0.0")
+//	api := openapi.New("s3client API", "1.0.0")
 //	api.Operation("GET", "/api/health", openapi.Op{Summary: "...", ...}).
 //	    Response("200", openapi.Res{JSON: openapi.Object()})
 //	spec, _ := api.MarshalJSON()
@@ -519,6 +519,9 @@ func defaultSecurity() map[string]any {
 		"bearerAuth": map[string]any{
 			"type":   "http",
 			"scheme": "bearer",
+			// 作用域语义（ROADMAP §三 #13）：S3C_TOKEN_SCOPES 可为单个 token 限定
+			// 只读 / 桶前缀 / 账号 / 过期时间。越权返回 403，token 过期返回 401。
+			"description": "S3C_TOKEN 中的 Bearer token。可通过 S3C_TOKEN_SCOPES 为单个 token 限定 readonly / prefixes（桶或桶内键前缀）/ accounts / expiresAt；越权请求返回 403，过期 token 返回 401。未在 S3C_TOKEN_SCOPES 中登记的 token 为全权。",
 		},
 	}
 }

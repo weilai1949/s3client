@@ -61,6 +61,7 @@ export const operations = {
   multipartComplete: { method: "POST", path: "/api/accounts/{id}/multipart/complete", params: ["id"] },
   multipartInit: { method: "POST", path: "/api/accounts/{id}/multipart/init", params: ["id"] },
   multipartPart: { method: "POST", path: "/api/accounts/{id}/multipart/part", params: ["id"] },
+  multipartParts: { method: "GET", path: "/api/accounts/{id}/multipart/parts", params: ["id"] },
   openapi: { method: "GET", path: "/api/openapi.json", params: [] },
   presign: { method: "POST", path: "/api/accounts/{id}/presign", params: ["id"] },
   previewBuckets: { method: "POST", path: "/api/accounts/preview-buckets", params: [] },
@@ -83,5 +84,5 @@ export const operations = {
   updateAccount: { method: "PUT", path: "/api/accounts/{id}", params: ["id"] },
 } as const
 
-/** spec 里全部操作的标识（70 个，见 docs/api/openapi.json）。 */
+/** spec 里全部操作的标识（71 个，见 docs/api/openapi.json）。 */
 export type OperationId = keyof typeof operations

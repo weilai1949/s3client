@@ -50,6 +50,7 @@ export const commonMessages: MessageBundle = {
     'locale.zh': '中文',
     'locale.en': 'EN',
     'api.zipTooLarge': 'ZIP 过大，当前浏览器不支持流式保存。请改用支持“另存为”的浏览器，或减少所选文件数量后再试。',
+    'api.downloadPartMismatch': '分段下载的数据长度或范围与服务端不一致，已取消保存（不落盘损坏文件）。',
   },
   'en-US': {
     'nav.data': 'Data',
@@ -99,5 +100,6 @@ export const commonMessages: MessageBundle = {
     'locale.zh': '中文',
     'locale.en': 'EN',
     'api.zipTooLarge': 'ZIP is too large for in-memory save. Use a browser with Save As streaming, or select fewer files.',
+    'api.downloadPartMismatch': 'A ranged download part did not match the requested length or range; save cancelled to avoid a corrupt file.',
   },
 }

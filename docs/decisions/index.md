@@ -1,6 +1,6 @@
 # 架构决策记录（ADR）
 
-> 本目录记录 s3clinet 的关键架构决策（Architecture Decision Records），说明「为什么这么做」以及
+> 本目录记录 s3client 的关键架构决策（Architecture Decision Records），说明「为什么这么做」以及
 > 考虑过的替代方案。
 >
 > **格式**：轻量 ADR，H2 章节固定为 `Status` / `Date` / `Context` / `Decision` /
@@ -26,6 +26,7 @@
 | [ADR-010](0010-zip-streaming.md) | ZIP 服务端流式打包（不落盘 + 客户端流式落盘 / blob 兜底） | Accepted（已采纳） | 2026-09-18（回溯） | — |
 | [ADR-011](0011-single-instance-no-ha.md) | 单实例部署、无 HA 路径 | Accepted（已采纳） | 2026-09-19（回溯） | — |
 | [ADR-012](0012-rest-no-version-prefix.md) | REST 契约无版本前缀，破坏性变更靠发布节奏缓冲 | Accepted（已采纳） | 2026-09-18（回溯） | — |
+| [ADR-0013](0013-zero-dep-otlp-tracing.md) | 零第三方依赖自研 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关闭） | Accepted（已采纳） | 2026-10-08 | — |
 
 > 「日期（决策）」是决策成立的时间；`（回溯）` 表示该日期是事后补记，决策自项目初版沿用。
 > 「最新更新」列指向篇内 `## Update（…）` 小节——本列的每一条都必须在对应 ADR 里真实存在

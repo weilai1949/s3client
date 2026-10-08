@@ -68,6 +68,23 @@ func registerMultipart(r *openapi.Registry) {
 			"aborted": openapi.Bool(),
 		})}},
 	})
+	r.Operation("GET", "/api/accounts/{id}/multipart/parts", openapi.Op{
+		Tags: []string{"multipart"}, Summary: "列已上传分段（断点续传对齐）", OperationID: "multipartParts",
+		Params: []openapi.Param{
+			acctIDParam(),
+			refParam("Bucket"),
+			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
+			openapi.Param{Name: "uploadId", In: "query", Required: true, Schema: openapi.Str(), Description: "multipartInit 返回的 UploadID；失效时返回错误，前端据此重新 init"},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "已上传分段清单（服务端真实值）", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"parts": openapi.Arr(openapi.BuildObj(map[string]*openapi.Schema{
+				"partNumber":   openapi.Int(),
+				"etag":         openapi.Str(),
+				"size":         openapi.Int64(),
+				"lastModified": openapi.Str("date-time"),
+			}, "partNumber", "etag", "size", "lastModified")),
+		}, "parts")}, "400": {Description: "缺 key/uploadId 或 bucket", JSON: refSchema("Error")}},
+	})
 }
 
 // ---- Versions ----

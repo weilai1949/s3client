@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# s3clinet 进程管理：PID 文件、优雅停止（SIGTERM / SIGQUIT）、等待退出。
+# s3client 进程管理：PID 文件、优雅停止（SIGTERM / SIGQUIT）、等待退出。
 set -euo pipefail
 
 # 本文件在 scripts/lib/，仓库根为上两级。
@@ -27,7 +27,7 @@ is_running() {
 # 进程命令行中应出现的关键字）。新增受管进程时在此登记。
 expected_process_pattern() {
   case "$1" in
-    server)  echo "s3clinet-server" ;;
+    server)  echo "s3client-server" ;;
     web)     echo "vite" ;;
     nginx)   echo "nginx" ;;
     desktop) echo "tauri" ;;

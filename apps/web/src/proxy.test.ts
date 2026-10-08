@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { downloadProxyObject, fetchProxy, fetchProxyBlob, proxyUrl } from './proxy'
+import { PARALLEL_DOWNLOAD_MIN_BYTES } from './api/download'
 
 const fetchMock = vi.fn()
 vi.stubGlobal('fetch', fetchMock)
@@ -107,5 +108,29 @@ describe('downloadProxyObject', () => {
     await expect(downloadProxyObject({ ...baseReq, token: 'x' }, 'a.txt')).rejects.toThrow('401 Unauthorized')
     expect(createSpy).not.toHaveBeenCalled()
     expect(saved).toEqual([])
+  })
+
+  it('已知大小达到阈值 → 委托有界并发 Range 分段（ADR-009）', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const h = init.headers as Record<string, string>
+      const m = /bytes=(\d+)-(\d+)/.exec(h.Range ?? '')!
+      const start = Number(m[1])
+      const end = Number(m[2])
+      return {
+        ok: true,
+        status: 206,
+        statusText: 'Partial Content',
+        headers: new Map([['Content-Range', `bytes ${start}-${end}/${PARALLEL_DOWNLOAD_MIN_BYTES}`]]),
+        blob: async () => new Blob([new Uint8Array(end - start + 1)]),
+      }
+    })
+    await downloadProxyObject({ ...baseReq, token: 'tok' }, 'big.bin', PARALLEL_DOWNLOAD_MIN_BYTES)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1)
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer tok',
+      Range: expect.stringContaining('bytes='),
+    })
+    expect(saved).toEqual([{ href: 'blob:mock-url', download: 'big.bin' }])
   })
 })

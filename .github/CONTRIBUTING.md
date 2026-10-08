@@ -1,6 +1,6 @@
 # 贡献指南（Contributing）
 
-感谢你愿意为 s3clinet 贡献！本仓库包含 Go 后端、Vue 前端与 Tauri 桌面壳。参与即表示你同意
+感谢你愿意为 s3client 贡献！本仓库包含 Go 后端、Vue 前端与 Tauri 桌面壳。参与即表示你同意
 [行为准则](CODE_OF_CONDUCT.md)；发现安全问题请走 [安全策略](SECURITY.md) 的私有渠道，不要开 public issue。
 
 ## 开发规范速览

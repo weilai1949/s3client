@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# s3clinet 优雅重启：server / web / desktop / nginx / docker / all
+# s3client 优雅重启：server / web / desktop / nginx / docker / all
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,14 +32,14 @@ restart_server() {
   t="$(shutdown_timeout)"
   graceful_stop server "$t"
   cd "$ROOT/apps/server"
-  if [[ ! -x ./s3clinet-server ]]; then
+  if [[ ! -x ./s3client-server ]]; then
     go mod tidy
-    go build -o s3clinet-server .
+    go build -o s3client-server .
   fi
   # shellcheck disable=SC1091
   [[ -f .env ]] && set -a && source .env && set +a
   export S3C_ADDR="${S3C_ADDR:-127.0.0.1:8080}"
-  ./s3clinet-server >>"$RUN_DIR/server.log" 2>&1 &
+  ./s3client-server >>"$RUN_DIR/server.log" 2>&1 &
   write_pid server $!
   wait_http "http://127.0.0.1:${S3C_ADDR##*:}/api/health" 30
   echo "[server] 已优雅重启 pid=$(read_pid server)"

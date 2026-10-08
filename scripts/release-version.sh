@@ -39,10 +39,10 @@ sed -i "s/var version = \"$OLD_DISPLAY_RE\"/var version = \"$DISPLAY\"/" apps/se
 sed -i "s/^ARG VERSION=.*/ARG VERSION=$DISPLAY/" apps/server/Dockerfile
 
 # openapi.go 包注释里的示例版本串
-sed -i "s|openapi.New(\"s3clinet API\", \"$OLD_MACHINE_RE\")|openapi.New(\"s3clinet API\", \"$MACHINE\")|" apps/server/internal/openapi/openapi.go
+sed -i "s|openapi.New(\"s3client API\", \"$OLD_MACHINE_RE\")|openapi.New(\"s3client API\", \"$MACHINE\")|" apps/server/internal/openapi/openapi.go
 
 # docker-compose image tag
-sed -i "s|image: s3clinet/server:$OLD_DISPLAY_RE|image: s3clinet/server:$DISPLAY|" docker-compose.yml
+sed -i "s|image: s3client/server:$OLD_DISPLAY_RE|image: s3client/server:$DISPLAY|" docker-compose.yml
 sed -i "s|S3C_IMAGE_TAG:-$OLD_DISPLAY_RE}|S3C_IMAGE_TAG:-$DISPLAY}|" docker-compose.prod.yml
 
 # npm / cargo machine semver
@@ -52,11 +52,11 @@ done
 sed -i "s/^version = \"[^\"]*\"/version = \"$MACHINE\"/" apps/desktop/src-tauri/Cargo.toml
 sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$MACHINE\"/" apps/desktop/src-tauri/tauri.conf.json
 
-# Cargo.lock：只改本包（name = "s3clinet"）的 version，绝不能全局替换——锁文件里有 400+ 个
+# Cargo.lock：只改本包（name = "s3client"）的 version，绝不能全局替换——锁文件里有 400+ 个
 # 依赖包的 version 行，全局替换会把整个依赖树版本改坏。
 if [[ -f apps/desktop/src-tauri/Cargo.lock ]]; then
   awk -v ver="$MACHINE" '
-    /^name = "s3clinet"$/ { in_self = 1; print; next }
+    /^name = "s3client"$/ { in_self = 1; print; next }
     in_self && /^version = "/ { sub(/^version = "[^"]*"/, "version = \"" ver "\""); in_self = 0 }
     { print }
   ' apps/desktop/src-tauri/Cargo.lock > apps/desktop/src-tauri/Cargo.lock.tmp \
@@ -64,7 +64,7 @@ if [[ -f apps/desktop/src-tauri/Cargo.lock ]]; then
 fi
 
 # README docker 镜像 tag + 当前版本
-sed -i "s|s3clinet/server:$OLD_DISPLAY_RE|s3clinet/server:$DISPLAY|g" README.md
+sed -i "s|s3client/server:$OLD_DISPLAY_RE|s3client/server:$DISPLAY|g" README.md
 sed -i "s/当前版本 \`$OLD_DISPLAY_RE\`/当前版本 \`$DISPLAY\`/" README.md
 
 # docs：健康检查示例（api.md）、部署文档、路线图当前版本、FEATURES 页脚

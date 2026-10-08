@@ -9,6 +9,7 @@ import (
 
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 func (h *Handler) listObjects(w http.ResponseWriter, r *http.Request) {
@@ -377,6 +378,8 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 
 // presign 生成 v4 签名 URL（get/put/post）。
 func (h *Handler) presign(w http.ResponseWriter, r *http.Request) {
+	_, endSpan := tracing.Start(r.Context(), "presign")
+	defer endSpan()
 	client, acc, ok := h.accountClient(w, r)
 	if !ok {
 		return

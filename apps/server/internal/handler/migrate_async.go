@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/weilai1949/s3client/apps/server/internal/service"
+	"github.com/weilai1949/s3client/apps/server/internal/tracing"
 )
 
 const (
@@ -20,14 +21,19 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// 子 span 以请求上下文为父（关联同一条 trace）；异步任务本身必须用
+	// context.Background() 派生，否则请求返回时 r.Context() 被取消会中断任务。
+	_, endSpan := tracing.Start(r.Context(), "migrate")
 	ctx, cancel := context.WithTimeout(context.Background(), migrateJobTimeout)
 	job, ok := h.newJob(w, len(req.SourceKeys), cancel)
 	if !ok {
+		endSpan()
 		return
 	}
 	sameEP := service.SameEndpoint(src.Endpoint, src.Region, src.UseSSL, dst.Endpoint, dst.Region, dst.UseSSL)
 	go func() {
 		defer cancel()
+		defer endSpan()
 		out := service.MigrateKeys(ctx, srcClient, dstClient, srcBucket, targetBucket, req.SourceKeys, req.TargetPrefix, sameEP, 4, func(p service.Progress) {
 			job.Emit(service.ProgressFrom(p))
 		})

@@ -32,7 +32,7 @@ ENV GOPROXY=$GOPROXY
 COPY apps/server/go.mod apps/server/go.sum ./
 RUN go mod download
 COPY apps/server/ .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/s3clinet-server .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/s3client-server .
 
 ###### 运行时 ######
 # 关键修复：debian:bookworm-slim 体积大、glibc + openssl 漏洞面广（Trivy 反复告警）。
@@ -52,7 +52,7 @@ RUN apk add --no-cache ca-certificates wget \
  && adduser -u 1000 -S -G app -h /home/app app \
  && mkdir -p /data /web/dist \
  && chown -R app:app /data /web/dist
-COPY --from=build /out/s3clinet-server /s3clinet-server
+COPY --from=build /out/s3client-server /s3client-server
 COPY --from=web /web/dist /web/dist
 ENV S3C_ADDR=0.0.0.0:8080 \
     S3C_STATIC_DIR=/web/dist \
@@ -64,4 +64,4 @@ USER app
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -q -O- http://127.0.0.1:8080/api/health >/dev/null 2>&1 || exit 1
-ENTRYPOINT ["/s3clinet-server"]
+ENTRYPOINT ["/s3client-server"]

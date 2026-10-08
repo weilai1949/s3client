@@ -132,7 +132,7 @@ var (
 
 // rustCratesFromLock 解析 Cargo.lock 里的**第三方** crate（name, version）。
 //
-// 刻意跳过没有 `source` 的条目：那是本工作区的 path 依赖（`s3clinet` 自身），不是第三方组件——
+// 刻意跳过没有 `source` 的条目：那是本工作区的 path 依赖（`s3client` 自身），不是第三方组件——
 // 首版门禁把它当成第三方并要求出现在清单里，是**门禁自身的口径 bug**（已由本函数修正）。
 func rustCratesFromLock(t *testing.T, root string) [][2]string {
 	t.Helper()

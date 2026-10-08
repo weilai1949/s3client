@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-s3clinet 的账号存储（json / sqlite / encrypted）是配置的单一事实来源。当存储不可用（磁盘故障、权限错误、加密密钥丢失）时，服务如何表现？
+s3client 的账号存储（json / sqlite / encrypted）是配置的单一事实来源。当存储不可用（磁盘故障、权限错误、加密密钥丢失）时，服务如何表现？
 
 方案对比：
 

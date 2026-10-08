@@ -37,9 +37,9 @@ gl-secret-detection-report.json
 # cargo 的 registry 缓存（桌面端构建时生成于仓库根）
 .cargo/
 
-# ---- s3clinet ----
+# ---- s3client ----
 # Go server（`data/` 与 `node_modules/`、`dist/` 已由上方通用规则覆盖，不再重复列出）
-apps/server/s3clinet-server
+apps/server/s3client-server
 
 # 本地演示/截图产物
 .shots/

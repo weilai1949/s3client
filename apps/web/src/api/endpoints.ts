@@ -168,6 +168,22 @@ export const s3api = {
   multipartAbort: (id: string, body: { bucket?: string; key: string; uploadId: string }) =>
     request<{ aborted: boolean }>(opPath('multipartAbort', { id }), { method: operations.multipartAbort.method, body: JSON.stringify(body) }),
   /**
+   * 列出服务端真实已上传分段（断点续传对齐，ROADMAP §三 #8）。
+   *
+   * 路径暂以字面量拼接：`operations.ts` 由 `pnpm gen:api` 生成，本端点的 operationId
+   * 要等 Lead 重新生成后才进入 `OperationId` 联合类型；生成后此处可改为
+   * `opPath('multipartParts', { id })`。路径与 `docs/api/openapi.json` 一致。
+   */
+  multipartParts: (id: string, q: { bucket?: string; key: string; uploadId: string }) => {
+    const qs = new URLSearchParams()
+    qs.set('key', q.key)
+    qs.set('uploadId', q.uploadId)
+    if (q.bucket) qs.set('bucket', q.bucket)
+    return request<{ parts: { partNumber: number; etag: string; size: number; lastModified: string }[] }>(
+      `/api/accounts/${encodeURIComponent(id)}/multipart/parts?${qs.toString()}`,
+    )
+  },
+  /**
    * 批量删除：响应为 `{deleted, failed, lastError?}`——`deleted` 只计真正删成功的 key
    * （S3 对逐 key 失败仍返回 200，被拒的计入 `failed`）。超过 1000 个 key 的请求会被
    * 服务端 400 拒绝，调用方必须按 `DELETE_MAX_KEYS_PER_REQUEST` 分片（见 src/limits.ts）。

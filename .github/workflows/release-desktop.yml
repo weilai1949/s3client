@@ -129,7 +129,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: ${{ steps.meta.outputs.tag }}
-          releaseName: s3clinet ${{ steps.meta.outputs.tag }}
+          releaseName: s3client ${{ steps.meta.outputs.tag }}
           releaseBody: |
             Desktop installers for **${{ steps.meta.outputs.tag }}**.
 

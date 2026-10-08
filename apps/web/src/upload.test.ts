@@ -7,12 +7,14 @@ vi.mock('./api', () => ({
     multipartPart: vi.fn(),
     multipartComplete: vi.fn(),
     multipartAbort: vi.fn(),
+    multipartParts: vi.fn(),
   },
   directUpload: vi.fn(),
 }))
 
 import { MULTIPART_THRESHOLD, PART_RETRY_DELAYS_MS, calcMultipartParts, withRetries, uploadObject } from './upload'
 import { s3api, directUpload } from './api'
+import { fileFingerprint, RESUME_STORAGE_KEY } from './multipartResume'
 
 // Auto-fire mock XHR: send() completes immediately (default 'load'), tests can
 // pre-configure the next instance via nextXHRConfig (status/error/etag).
@@ -70,6 +72,21 @@ function createMockXHR() {
   return inst
 }
 
+
+// happy-dom 默认不提供 localStorage；用 Map 替身补齐（续传记录持久化用，同 api.transfer.test.ts）。
+class MemStorage implements Storage {
+  private m = new Map<string, string>()
+  get length(): number { return this.m.size }
+  clear() { this.m.clear() }
+  key(i: number): string | null { return [...this.m.keys()][i] ?? null }
+  getItem(k: string): string | null { return this.m.get(k) ?? null }
+  setItem(k: string, v: string) { this.m.set(k, String(v)) }
+  removeItem(k: string) { this.m.delete(k) }
+}
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, 'localStorage', { value: new MemStorage(), configurable: true, writable: true })
+})
 
 /** 100MB+ 代理文件（避免真实分配大内存）。 */
 function largeFile(): File {
@@ -203,6 +220,7 @@ describe('uploadObject', () => {
   beforeEach(() => {
     XHR_INSTANCES.length = 0
     nextXHRConfig = () => {}
+    localStorage.clear()
     vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof s3api.multipartAbort>>)
     vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
   })
@@ -399,6 +417,7 @@ describe('upload final branches', () => {
     vi.clearAllMocks()
     XHR_INSTANCES.length = 0
     nextXHRConfig = () => {}
+    localStorage.clear()
     vi.mocked(s3api.multipartAbort).mockResolvedValue(undefined as unknown as Awaited<ReturnType<typeof s3api.multipartAbort>>)
     vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
   })
@@ -486,5 +505,116 @@ describe('upload final branches', () => {
     expect(s3api.multipartComplete).not.toHaveBeenCalled()
     // 第二次 abort() 被幂等守卫拦截：multipartAbort 只被调用一次
     await vi.waitFor(() => expect(s3api.multipartAbort).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('multipart resume', () => {
+  beforeEach(() => {
+    XHR_INSTANCES.length = 0
+    nextXHRConfig = () => {}
+    localStorage.clear()
+    vi.mocked(s3api.multipartInit).mockReset()
+    vi.mocked(s3api.multipartPart).mockReset()
+    vi.mocked(s3api.multipartComplete).mockReset()
+    vi.mocked(s3api.multipartAbort).mockReset()
+    vi.mocked(s3api.multipartParts).mockReset()
+    mockMultipartParts()
+    vi.stubGlobal('XMLHttpRequest', vi.fn(createMockXHR))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  /** 写入一条续传记录（与 upload.ts 的指纹口径一致）。 */
+  function seedResume(
+    file: File,
+    parts: { partNumber: number; etag: string }[],
+    overrides: Partial<{ accId: string; key: string; bucket?: string; uploadId: string }> = {},
+  ) {
+    const record = { accId: 'acc1', key: 'k.bin', bucket: 'b', uploadId: 'resume-1', parts, ...overrides }
+    localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify({ [fileFingerprint(file)]: record }))
+  }
+
+  it('切齐服务端清单：跳过已上传段、忽略越界段号，只补缺段后 complete 并清除记录', async () => {
+    const file = largeFile()
+    seedResume(file, [{ partNumber: 1, etag: 'local-stale' }])
+    vi.mocked(s3api.multipartParts).mockResolvedValue({
+      parts: [
+        { partNumber: 1, etag: 'server-e1', size: 10 * 1024 * 1024, lastModified: '2026-10-08T05:00:00Z' },
+        { partNumber: 99, etag: 'out-of-range', size: 1, lastModified: '2026-10-08T05:00:00Z' },
+      ],
+    })
+    const onProgress = vi.fn()
+    await uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.bin' }, onProgress)
+    expect(s3api.multipartParts).toHaveBeenCalledWith('acc1', { bucket: 'b', key: 'k.bin', uploadId: 'resume-1' })
+    expect(s3api.multipartInit).not.toHaveBeenCalled()
+    expect(XHR_INSTANCES.length).toBe(9) // 10 段中第 1 段已由服务端确认
+    const sent = vi.mocked(s3api.multipartComplete).mock.calls[0][1]
+    expect(sent.parts).toHaveLength(10)
+    expect(sent.parts[0]).toEqual({ partNumber: 1, etag: 'server-e1' })
+    expect(onProgress).toHaveBeenCalledWith(10)
+    expect(localStorage.getItem(RESUME_STORAGE_KEY)).toBe('{}')
+  })
+
+  it('全部分段已在服务端：零分段 PUT 直接 complete', async () => {
+    const file = largeFile()
+    const all = Array.from({ length: 10 }, (_, i) => ({ partNumber: i + 1, etag: `e${i + 1}` }))
+    seedResume(file, all)
+    vi.mocked(s3api.multipartParts).mockResolvedValue({
+      parts: all.map((p) => ({ ...p, size: 10 * 1024 * 1024, lastModified: '2026-10-08T05:00:00Z' })),
+    })
+    await uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.bin' })
+    expect(XHR_INSTANCES.length).toBe(0)
+    expect(s3api.multipartPart).not.toHaveBeenCalled()
+    expect(s3api.multipartComplete).toHaveBeenCalled()
+  })
+
+  it('服务端清单为空：中止旧会话并重新 init（abort 请求失败也不影响）', async () => {
+    const file = largeFile()
+    seedResume(file, [{ partNumber: 1, etag: 'stale' }])
+    vi.mocked(s3api.multipartParts).mockResolvedValue({ parts: [] })
+    vi.mocked(s3api.multipartAbort).mockRejectedValue(new Error('abort failed'))
+    await uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.bin' })
+    expect(s3api.multipartAbort).toHaveBeenCalledWith('acc1', { bucket: 'b', key: 'k.bin', uploadId: 'resume-1' })
+    expect(s3api.multipartInit).toHaveBeenCalledTimes(1)
+    expect(s3api.multipartComplete).toHaveBeenCalled()
+    expect(XHR_INSTANCES.length).toBe(10)
+  })
+
+  it('uploadId 失效（清单查询抛错）：清记录并干净地重新 init，不 abort 不存在的会话', async () => {
+    const file = largeFile()
+    seedResume(file, [{ partNumber: 1, etag: 'stale' }])
+    vi.mocked(s3api.multipartParts).mockRejectedValue(new Error('404 NoSuchUpload'))
+    await uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.bin' })
+    expect(s3api.multipartInit).toHaveBeenCalledTimes(1)
+    expect(s3api.multipartAbort).not.toHaveBeenCalled()
+    expect(s3api.multipartComplete).toHaveBeenCalled()
+  })
+
+  it('记录目标不一致（key 变化）：不查询服务端清单，直接重新 init', async () => {
+    const file = largeFile()
+    seedResume(file, [{ partNumber: 1, etag: 'stale' }])
+    await uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'other.bin' })
+    expect(s3api.multipartParts).not.toHaveBeenCalled()
+    expect(s3api.multipartInit).toHaveBeenCalledTimes(1)
+  })
+
+  it('init 期间 signal 中止：监听先拿不到 uploadId，init 后补一次 abort 清理', async () => {
+    const file = largeFile()
+    mockMultipartParts()
+    let release!: (v: { uploadId: string; key: string; bucket: string }) => void
+    vi.mocked(s3api.multipartInit).mockImplementation(
+      () => new Promise((resolve) => { release = resolve }),
+    )
+    const ctrl = new AbortController()
+    const p = uploadObject(file, { accId: 'acc1', bucket: 'b', key: 'k.bin' }, undefined, ctrl.signal)
+    await vi.waitFor(() => expect(s3api.multipartInit).toHaveBeenCalled())
+    ctrl.abort() // 此刻 uploadId 尚为空：监听无法清理会话
+    release({ uploadId: 'up-late', key: 'k.bin', bucket: 'b' })
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+    expect(s3api.multipartAbort).toHaveBeenCalledTimes(1)
+    expect(s3api.multipartAbort).toHaveBeenCalledWith('acc1', { bucket: 'b', key: 'k.bin', uploadId: 'up-late' })
   })
 })

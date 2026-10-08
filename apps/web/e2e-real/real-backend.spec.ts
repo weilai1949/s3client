@@ -32,9 +32,9 @@ import { randomUUID } from 'node:crypto'
 /** 后端地址（页面与 /api 同源）。 */
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8080'
 /** 真实 S3（RustFS）端点：后端用它签名，浏览器用它直传，二者都必须可达。 */
-const S3_ENDPOINT = process.env.S3CLINET_ENDPOINT || 'http://127.0.0.1:9000'
-const ACCESS_KEY = process.env.S3CLINET_ACCESS_KEY || 'rustfsadmin'
-const SECRET_KEY = process.env.S3CLINET_SECRET_KEY || 'rustfsadmin'
+const S3_ENDPOINT = process.env.S3CLIENT_ENDPOINT || 'http://127.0.0.1:9000'
+const ACCESS_KEY = process.env.S3CLIENT_ACCESS_KEY || 'rustfsadmin'
+const SECRET_KEY = process.env.S3CLIENT_SECRET_KEY || 'rustfsadmin'
 /**
  * `/api/*` 鉴权 token（`scripts/e2e-real.sh` 生成后注入环境变量）。
  * 为空 = 后端未开鉴权（本地直接 `pnpm e2e:real` 打无 token 后端的兼容路径），

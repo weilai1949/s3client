@@ -1,4 +1,4 @@
-# s3clinet · GitLab CI
+# s3client · GitLab CI
 #
 # 与 GitHub Actions **同门禁、同命令**，逐项对应关系：
 #
@@ -289,7 +289,7 @@ docker:
   timeout: 30 minutes
   image: docker:29-cli
   variables:
-    IMAGE_TAG: "s3clinet/server:ci"
+    IMAGE_TAG: "s3client/server:ci"
     # R4：Trivy DB 落在 CI 缓存目录，跨 job 复用；配合 script 里的重试与 --skip-db-update。
     TRIVY_CACHE_DIR: "$CI_PROJECT_DIR/.trivy-cache"
   cache:
@@ -443,10 +443,10 @@ rustfs-e2e:
     # 端口 9000 访问（实测 gitlab-ci-local 会把 service 放进同一 docker network 并注册
     # 别名，`rustfs:9000` 可达，而 `127.0.0.1:9000` **不可达**——不要改成回环地址）。
     RUSTFS_WAIT_HOST: "rustfs"
-    S3CLINET_E2E: "1"
-    S3CLINET_ENDPOINT: "http://rustfs:9000"
-    S3CLINET_ACCESS_KEY: rustfsadmin
-    S3CLINET_SECRET_KEY: rustfsadmin
+    S3CLIENT_E2E: "1"
+    S3CLIENT_ENDPOINT: "http://rustfs:9000"
+    S3CLIENT_ACCESS_KEY: rustfsadmin
+    S3CLIENT_SECRET_KEY: rustfsadmin
   script:
     # Wait for RustFS：照搬 GitHub 的「轮询 /health 最多 40 次 × 2s」。
     # 不依赖 service 的 healthcheck：rustfs 镜像本身没有 HEALTHCHECK（已确认），
@@ -565,8 +565,8 @@ e2e-real:
     PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
     # 脚本 --no-rustfs：复用上面的 service（容器内回环不可达，必须走别名）。
     RUSTFS_ENDPOINT: "http://rustfs:9000"
-    S3CLINET_ACCESS_KEY: rustfsadmin
-    S3CLINET_SECRET_KEY: rustfsadmin
+    S3CLIENT_ACCESS_KEY: rustfsadmin
+    S3CLIENT_SECRET_KEY: rustfsadmin
   cache:
     key:
       files:

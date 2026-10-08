@@ -101,7 +101,7 @@ func TestSharedHTTPClientIsSingleton(t *testing.T) {
 // TestUnsignedPayloadMiddlewareInjectsHash 中间件行为：给下游签名器注入 UNSIGNED-PAYLOAD 并透传请求。
 func TestUnsignedPayloadMiddlewareInjectsHash(t *testing.T) {
 	m := &unsignedPayloadSetter{}
-	if got := m.ID(); got != "s3clinet:unsigned-payload" {
+	if got := m.ID(); got != "s3client:unsigned-payload" {
 		t.Fatalf("middleware id = %q", got)
 	}
 	seenHash := ""

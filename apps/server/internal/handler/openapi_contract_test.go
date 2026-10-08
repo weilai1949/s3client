@@ -33,9 +33,9 @@ import (
 )
 
 // apiRouteCount 是 routes.go 中 mux.HandleFunc 注册的 API 路由总数。
-// 口径：70 = 69 条业务/系统端点 + GET /api/openapi.json 自指；
+// 口径：71 = 70 条业务/系统端点 + GET /api/openapi.json 自指；
 // SPA fallback 用 mux.Handle("/", ...) 注册，属于前端资源而非 /api 契约，不计入。
-const apiRouteCount = 70
+const apiRouteCount = 71
 
 // ---- 夹具 ----
 

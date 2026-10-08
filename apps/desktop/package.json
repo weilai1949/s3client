@@ -1,5 +1,5 @@
 {
-  "name": "s3clinet-desktop",
+  "name": "s3client-desktop",
   "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@9.15.0",

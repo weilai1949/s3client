@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -130,23 +131,27 @@ func loadDotEnv() error {
 
 // Config 汇总服务端配置。所有项均可通过环境变量覆盖，并内置安全默认值。
 type Config struct {
-	Addr                string   // 监听地址，默认回环 127.0.0.1:8080（更安全）
-	DataDir             string   // 数据目录，存放账号持久化文件
-	StaticDir           string   // Web 静态资源目录
-	Region              string   // 账号缺省 region
-	Token               string   // 可选 API 鉴权 token；非空则要求 Bearer
-	CORSOrigins         []string // CORS 白名单；空 = 仅同源 + localhost/tauri
-	LogLevel            string   // debug|info|warn|error
-	LogJSON             bool     // true = slog JSON（容器/生产更易采集）
-	StoreDriver         string   // json|sqlite|encrypted，账号存储后端（FromEnv 归一化为小写）
-	StoreKey            string   // encrypted 模式必填；Argon2id+盐派生（仅 S3C2）
-	AllowPlaintextStore bool     // true = 显式允许 json/sqlite 无 StoreKey 明文落盘（S3C_ALLOW_PLAINTEXT_STORE=1，仅本地）
-	ShutdownTimeoutSec  int      // SIGTERM 后等待活跃连接结束的最长时间（秒）
-	ExposeMetrics       bool     // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
-	ExposeOpenAPI       bool     // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
-	CSPConnectSrc       string   // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
-	TrustedProxies      []string // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
-	SSRFDenyPrivate     bool     // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
+	Addr                string                // 监听地址，默认回环 127.0.0.1:8080（更安全）
+	DataDir             string                // 数据目录，存放账号持久化文件
+	StaticDir           string                // Web 静态资源目录
+	Region              string                // 账号缺省 region
+	Token               string                // 可选 API 鉴权 token；非空则要求 Bearer
+	TokenScopes         map[string]TokenScope // S3C_TOKEN_SCOPES：按 token 声明最小权限（未登记 = 全权）
+	CORSOrigins         []string              // CORS 白名单；空 = 仅同源 + localhost/tauri
+	LogLevel            string                // debug|info|warn|error
+	LogJSON             bool                  // true = slog JSON（容器/生产更易采集）
+	StoreDriver         string                // json|sqlite|encrypted，账号存储后端（FromEnv 归一化为小写）
+	StoreKey            string                // encrypted 模式必填；Argon2id+盐派生（仅 S3C2）
+	AllowPlaintextStore bool                  // true = 显式允许 json/sqlite 无 StoreKey 明文落盘（S3C_ALLOW_PLAINTEXT_STORE=1，仅本地）
+	ShutdownTimeoutSec  int                   // SIGTERM 后等待活跃连接结束的最长时间（秒）
+	ExposeMetrics       bool                  // true = 暴露 /api/metrics（Prometheus 文本）；默认 false，避免公网信息泄露
+	ExposeOpenAPI       bool                  // true = 暴露 /api/openapi.json（API 契约）；默认 false，避免公网泄露端点信息
+	CSPConnectSrc       string                // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
+	TrustedProxies      []string              // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
+	SSRFDenyPrivate     bool                  // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
+	OTelEndpoint        string                // OTLP/HTTP 采集端基址；空 = 关闭 tracing（默认）
+	OTelSampleRatio     float64               // 新建 trace 采样比例，取值 [0,1]（默认 1）
+	OTelServiceName     string                // OTLP resource attribute service.name（默认 s3client）
 
 	// envErr 记录 FromEnv 阶段的环境变量解析失败（见 envOrInt）。FromEnv 无错误返回值、
 	// main 只接「FromEnv → Validate → 失败即退出码 1」这条既有链路，故错误在此暂存、
@@ -178,15 +183,40 @@ func envOrInt(key string, def int) (int, error) {
 	return n, nil
 }
 
+// envOrFloat 解析 [0,1] 区间的浮点环境变量（OTel 采样比例）：未设置（空串）取默认值；
+// 非数字 / NaN / 越界返回错误，不静默回退（否则运维会以为采样比例已生效）。
+func envOrFloat(key string, def float64) (float64, error) {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def, nil
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s=%q 不是合法数字", ErrInvalidEnvValue, key, v)
+	}
+	if math.IsNaN(f) || f < 0 || f > 1 {
+		return 0, fmt.Errorf("%w: %s=%q 必须在 [0,1] 区间", ErrInvalidEnvValue, key, v)
+	}
+	return f, nil
+}
+
 // FromEnv 从环境变量构建配置；启动时按 envFileCandidates 加载 .env（真实环境变量优先）。
 // 显式 S3C_ENV_FILE 不可读、或数值型环境变量解析失败，都记入 Config.envErr
 // 由 Validate 首查上抛使启动失败——**不静默回退默认值**。
 func FromEnv() Config {
 	loadErr := loadDotEnv()
 	shutdownTimeout, secErr := envOrInt("S3C_SHUTDOWN_TIMEOUT", 30)
+	tokenScopes, scopeErr := parseTokenScopes(os.Getenv("S3C_TOKEN_SCOPES"))
+	otelSampleRatio, ratioErr := envOrFloat("S3C_OTEL_SAMPLE_RATIO", 1)
 	envErr := loadErr
 	if envErr == nil {
 		envErr = secErr
+	}
+	if envErr == nil {
+		envErr = scopeErr
+	}
+	if envErr == nil {
+		envErr = ratioErr
 	}
 	return Config{
 		Addr:                envOr("S3C_ADDR", "127.0.0.1:8080"),
@@ -194,6 +224,7 @@ func FromEnv() Config {
 		StaticDir:           envOr("S3C_STATIC_DIR", "../web/dist"),
 		Region:              envOr("S3C_REGION", "us-east-1"),
 		Token:               os.Getenv("S3C_TOKEN"),
+		TokenScopes:         tokenScopes,
 		CORSOrigins:         splitList(envOr("S3C_CORS_ORIGINS", "")),
 		LogLevel:            envOr("S3C_LOG_LEVEL", "info"),
 		LogJSON:             envTruthy("S3C_LOG_JSON"),
@@ -206,6 +237,9 @@ func FromEnv() Config {
 		CSPConnectSrc:       envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
 		TrustedProxies:      splitList(envOr("S3C_TRUSTED_PROXIES", "")),
 		SSRFDenyPrivate:     envTruthy("S3C_SSRF_DENY_PRIVATE"),
+		OTelEndpoint:        envOr("S3C_OTEL_ENDPOINT", ""),
+		OTelSampleRatio:     otelSampleRatio,
+		OTelServiceName:     envOr("S3C_OTEL_SERVICE_NAME", "s3client"),
 		envErr:              envErr,
 	}
 }
@@ -258,6 +292,11 @@ func IsLoopbackAddr(addr string) bool {
 func (c Config) Validate() error {
 	if c.envErr != nil {
 		return c.envErr
+	}
+	// S3C_TOKEN_SCOPES 与 S3C_TOKEN 的交叉约束：登记的 token 必须是 S3C_TOKEN 成员，
+	// prefixes / accounts 元素非空，否则 fail-closed（防「以为限制了、其实全权」）。
+	if err := validateTokenScopes(c.Token, c.TokenScopes); err != nil {
+		return err
 	}
 	// S3C_SHUTDOWN_TIMEOUT 必须有上界，否则 time.Duration(n) * time.Second 溢出为负时长
 	// → 优雅关停被静默跳过（错误被丢弃、退出码仍 0），在途流式下载被硬切断。

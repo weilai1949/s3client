@@ -1,4 +1,4 @@
-# S3 Client (s3clinet)
+# S3 Client (s3client)
 
 > **English | 中文**：本页是根 [`README.md`](../../README.md) 的**英文翻译快照**。
 > **中文 README 是单一事实来源（SSOT）**——本页只翻译现有事实，数字与命令与中文版逐字一致；
@@ -128,7 +128,7 @@ variables always win over files.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `S3C_ADDR` | `127.0.0.1:8080` | Listen address; loopback is safer. Remote access needs `0.0.0.0:8080` (then **`S3C_TOKEN` is required**) |
-| `S3C_DATA_DIR` | `./data` | Data directory (account store + single-writer lock file `.s3clinet.lock`) |
+| `S3C_DATA_DIR` | `./data` | Data directory (account store + single-writer lock file `.s3client.lock`) |
 | `S3C_TOKEN` | empty | When set, all `/api/*` require `Authorization: Bearer <token>`; **required on non-loopback binds** (suggest `openssl rand -hex 32`, min 16 chars); comma-separated for token rotation |
 | `S3C_STORE_DRIVER` | `json` | Account store: `json` / `sqlite` / `encrypted` |
 | `S3C_STORE_KEY` | empty | At-rest encryption passphrase (min 16 chars); required for `encrypted`, enables encryption for `json`/`sqlite`. **With `json`/`sqlite` and no `S3C_STORE_KEY` the process refuses to start** (unless explicit `S3C_ALLOW_PLAINTEXT_STORE=1`) |
@@ -160,11 +160,11 @@ docker compose up -d --build
 docker compose -f docker-compose.prod.yml up -d --build
 
 # Server only (external S3)
-docker build -f apps/server/Dockerfile -t s3clinet/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
-docker run -d --name s3clinet -p 127.0.0.1:8080:8080 \
+docker build -f apps/server/Dockerfile -t s3client/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
+docker run -d --name s3client -p 127.0.0.1:8080:8080 \
   -e S3C_TOKEN="$(openssl rand -hex 32)" \
   -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
-  -v s3c-data:/data s3clinet/server:v1.0.0
+  -v s3c-data:/data s3client/server:v1.0.0
 ```
 
 > Local testing only — when you explicitly accept plaintext storage, `S3C_ALLOW_PLAINTEXT_STORE=1` bypasses
@@ -177,7 +177,7 @@ Access: Web `http://127.0.0.1:8080` (via **nginx**, `worker_processes 1` reverse
 RustFS console `http://127.0.0.1:9001` (credentials from `RUSTFS_*` in `.env` — do not ship default
 passwords to production).
 
-TLS termination example: `deploy/nginx/conf.d/s3clinet-tls.example.conf`.
+TLS termination example: `deploy/nginx/conf.d/s3client-tls.example.conf`.
 
 **Graceful restart**
 
@@ -199,7 +199,7 @@ make stop && make status
 - **Single instance**: file-based storage + in-memory job table support a single replica only; startup
   takes an `flock` single-writer lock on the data directory; a second instance on the same `/data` volume
   fails to start (horizontal scaling requires external storage first).
-- `HEALTHCHECK` runs `/s3clinet-server -healthcheck` which probes `/api/health`.
+- `HEALTHCHECK` runs `/s3client-server -healthcheck` which probes `/api/health`.
 - Configuration via `S3C_*` environment variables (see table above); Chinese `.env.example`:
   `apps/server/.env.example`.
 - Build args `GOPROXY` / `NPM_REGISTRY` can be overridden (handy for mainland-China networks).
@@ -220,7 +220,7 @@ ETag exposure per S3 implementation (a hard prerequisite for multipart assembly)
 
 | S3 service | Exposes `ETag` in CORS rules | Automated coverage in this project |
 |---|---|---|
-| RustFS (bundled compose / real-peer E2E / real integration E2E) | yes | ✅ `S3CLINET_E2E=1 go test ./internal/s3wrap/ -run TestE2E`, `make e2e-real` |
+| RustFS (bundled compose / real-peer E2E / real integration E2E) | yes | ✅ `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E`, `make e2e-real` |
 | MinIO (common self-host) | yes | manual |
 | AWS S3 | yes (`ExposeHeaders: ETag`) | manual |
 | Aliyun OSS / Tencent COS and other compatible implementations | yes (CORS rule "Expose Headers" → `ETag`) | manual |
@@ -275,8 +275,8 @@ Real RustFS end-to-end (`s3wrap` E2E, defaults to local RustFS; verifies bucket 
 upload / multipart / copy / tagging / versioning):
 
 ```bash
-cd apps/server && S3CLINET_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
-# Optional env vars: S3CLINET_ENDPOINT / S3CLINET_ACCESS_KEY / S3CLINET_SECRET_KEY
+cd apps/server && S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v
+# Optional env vars: S3CLIENT_ENDPOINT / S3CLIENT_ACCESS_KEY / S3CLIENT_SECRET_KEY
 ```
 
 Real browser integration smoke (KNOWN_ISSUES #37) — real Go backend + real RustFS + real build output,
@@ -330,7 +330,7 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
 | English docs landing page (this directory) | [`README.md`](README.md) |
 | Architecture & key design decisions (English) | [`architecture.md`](architecture.md) |
 | User guide (UI / shortcuts / FAQ / privacy) | [`user-guide.md`](../user-guide.md) |
-| REST API reference (70 `/api/*` endpoints) | [`api.md`](../api.md) |
+| REST API reference (71 `/api/*` endpoints) | [`api.md`](../api.md) |
 | Machine-readable API contract | [`api/openapi.json`](../api/openapi.json) |
 | Account store format schema | [`api/accounts.schema.json`](../api/accounts.schema.json) |
 | Error → HTTP mapping | [`errors.md`](../errors.md) |

@@ -243,6 +243,10 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 		}
 		for _, t := range h.tokens {
 			if secureCompare(cred, t) {
+				// 常量时间比较命中后，再按该 token 的 S3C_TOKEN_SCOPES 声明判定最小权限。
+				if !h.authorize(w, r, t) {
+					return
+				}
 				next.ServeHTTP(w, r)
 				return
 			}
