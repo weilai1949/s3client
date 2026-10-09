@@ -73,6 +73,14 @@ func (h *Handler) headObject(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "head object failed")
 		return
 	}
+	// checksums：服务端存储的端到端校验和（无 / 厂商不支持 → null，见 s3wrap.Checksums）。
+	var checksums any
+	if cs := out.Checksums; cs != nil {
+		checksums = map[string]any{
+			"crc64nvme": cs.CRC64NVME, "crc32c": cs.CRC32C,
+			"sha256": cs.SHA256, "sha1": cs.SHA1, "type": cs.Type,
+		}
+	}
 	h.writeJSON(w, http.StatusOK, map[string]any{
 		"key":          key,
 		"size":         out.Size,
@@ -81,6 +89,7 @@ func (h *Handler) headObject(w http.ResponseWriter, r *http.Request) {
 		"contentType":  out.ContentType,
 		"storageClass": out.StorageClass,
 		"metadata":     out.Metadata,
+		"checksums":    checksums,
 	})
 }
 
@@ -151,8 +160,10 @@ func (h *Handler) mkdirObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Bucket string `json:"bucket"`
-		Key    string `json:"key"`
+		Bucket      string `json:"bucket"`
+		Key         string `json:"key"`
+		IfMatch     string `json:"ifMatch"`
+		IfNoneMatch string `json:"ifNoneMatch"`
 	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeBadJSON(w, err)
@@ -162,12 +173,17 @@ func (h *Handler) mkdirObject(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "key is required")
 		return
 	}
+	if msg := validateConditions(req.IfMatch, req.IfNoneMatch); msg != "" {
+		h.writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
 	bucket := req.Bucket
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
 	key := strings.TrimRight(req.Key, "/") + "/"
-	if err := client.PutObject(r.Context(), bucket, key, nil, "", nil); err != nil {
+	cond := s3wrap.Conditions{IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch}
+	if err := client.PutObjectCond(r.Context(), bucket, key, nil, "", nil, cond); err != nil {
 		h.writeInternalErr(w, err, "create folder failed")
 		return
 	}
@@ -385,11 +401,13 @@ func (h *Handler) presign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Method    string `json:"method"`
-		Key       string `json:"key"`
-		Bucket    string `json:"bucket"`
-		VersionID string `json:"versionId"`
-		ExpiresIn int64  `json:"expiresIn"`
+		Method      string `json:"method"`
+		Key         string `json:"key"`
+		Bucket      string `json:"bucket"`
+		VersionID   string `json:"versionId"`
+		ExpiresIn   int64  `json:"expiresIn"`
+		IfMatch     string `json:"ifMatch"`
+		IfNoneMatch string `json:"ifNoneMatch"`
 	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeBadJSON(w, err)
@@ -416,7 +434,13 @@ func (h *Handler) presign(w http.ResponseWriter, r *http.Request) {
 		expires = maxExpires
 	}
 
-	switch strings.ToLower(req.Method) {
+	method := strings.ToLower(req.Method)
+	// 条件写只作用于 PUT（get/post 无「目标对象条件」语义）；显式拒绝而非静默忽略。
+	if (req.IfMatch != "" || req.IfNoneMatch != "") && method != "put" {
+		h.writeErr(w, http.StatusBadRequest, "conditional write is only supported for method put")
+		return
+	}
+	switch method {
 	case "get":
 		u, err := client.PresignGetVersion(r.Context(), bucket, req.Key, req.VersionID, expires)
 		h.writePresignResult(w, err, map[string]any{"method": "get", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
@@ -431,8 +455,19 @@ func (h *Handler) presign(w http.ResponseWriter, r *http.Request) {
 		}
 		h.writePresignResult(w, err, body)
 	case "put":
-		u, err := client.PresignPut(r.Context(), bucket, req.Key, expires)
-		h.writePresignResult(w, err, map[string]any{"method": "put", "bucket": bucket, "key": req.Key, "url": u, "expiresIn": int64(expires.Seconds())})
+		if msg := validateConditions(req.IfMatch, req.IfNoneMatch); msg != "" {
+			h.writeErr(w, http.StatusBadRequest, msg)
+			return
+		}
+		cond := s3wrap.Conditions{IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch}
+		// 失败时 res 为非 nil 空结果（URL 空、headers 回显仍在），err 交由 writePresignResult
+		// 统一回 500——与 get/post 分支同形，无须单独的错误分支。
+		res, err := client.PresignPut(r.Context(), bucket, req.Key, expires, cond)
+		// headers 回显：条件头不在 URL 里，浏览器直传必须随 PUT 原样携带（S3 服务端求值）。
+		h.writePresignResult(w, err, map[string]any{
+			"method": "put", "bucket": bucket, "key": req.Key,
+			"url": res.URL, "expiresIn": int64(expires.Seconds()), "headers": res.Headers,
+		})
 	default:
 		h.writeErr(w, http.StatusBadRequest, "invalid method (get|put|post)")
 	}

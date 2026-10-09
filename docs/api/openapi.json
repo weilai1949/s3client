@@ -1366,6 +1366,179 @@
         ]
       }
     },
+    "/api/accounts/{id}/bucket/object-lock": {
+      "get": {
+        "operationId": "getObjectLock",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "enabled": true,
+                  "defaultRetentionMode": "GOVERNANCE",
+                  "defaultRetentionDays": 30,
+                  "defaultRetentionYears": 0
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "defaultRetentionDays": {
+                      "type": "integer"
+                    },
+                    "defaultRetentionMode": {
+                      "type": "string",
+                      "description": "GOVERNANCE | COMPLIANCE（未配置默认保留时为空串）"
+                    },
+                    "defaultRetentionYears": {
+                      "type": "integer"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未启用 Object Lock 时 enabled=false"
+          }
+        },
+        "summary": "桶 Object Lock 配置",
+        "tags": [
+          "bucket-settings"
+        ]
+      },
+      "put": {
+        "operationId": "putObjectLock",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "defaultRetentionMode": "GOVERNANCE",
+                "defaultRetentionDays": 30,
+                "defaultRetentionYears": 0
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "defaultRetentionDays": {
+                    "type": "integer",
+                    "description": "与 defaultRetentionYears 二选一；必须 ≥1"
+                  },
+                  "defaultRetentionMode": {
+                    "type": "string",
+                    "enum": [
+                      "GOVERNANCE",
+                      "COMPLIANCE"
+                    ]
+                  },
+                  "defaultRetentionYears": {
+                    "type": "integer",
+                    "description": "与 defaultRetentionDays 二选一；必须 ≥1"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "defaultRetentionMode"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "enabled": true,
+                  "defaultRetentionMode": "GOVERNANCE",
+                  "defaultRetentionDays": 30,
+                  "defaultRetentionYears": 0
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "defaultRetentionDays": {
+                      "type": "integer"
+                    },
+                    "defaultRetentionMode": {
+                      "type": "string",
+                      "description": "GOVERNANCE | COMPLIANCE（未配置默认保留时为空串）"
+                    },
+                    "defaultRetentionYears": {
+                      "type": "integer"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "输入非法 / 桶未启用 Object Lock"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "桶未在创建时启用 Object Lock（InvalidBucketState）"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "厂商未实现 Object Lock（NotImplemented）"
+          }
+        },
+        "summary": "设置桶默认保留策略（桶须创建时启用 Object Lock）",
+        "tags": [
+          "bucket-settings"
+        ]
+      }
+    },
     "/api/accounts/{id}/bucket/policy": {
       "delete": {
         "operationId": "deleteBucketPolicy",
@@ -1924,6 +2097,27 @@
                   "bucket": {
                     "type": "string"
                   },
+                  "checksumAlgorithm": {
+                    "type": "string",
+                    "description": "可选；非空时服务端计算并存储全对象校验和（供 verify-checksum 端到端比对）",
+                    "enum": [
+                      "CRC64NVME",
+                      "SHA256",
+                      "CRC32C",
+                      "SHA1"
+                    ]
+                  },
+                  "ifMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当**目标**对象当前 ETag 匹配时写入"
+                  },
+                  "ifNoneMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当**目标**对象不存在时写入",
+                    "enum": [
+                      "*"
+                    ]
+                  },
                   "key": {
                     "type": "string"
                   },
@@ -1967,6 +2161,26 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "条件字段非法"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "条件不满足（PreconditionFailed）"
           }
         },
         "summary": "单文件复制（不删源）",
@@ -2727,6 +2941,29 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "checksums": {
+                      "type": "object",
+                      "description": "服务端存储的校验和；无校验和或厂商不支持时为 null",
+                      "properties": {
+                        "crc32c": {
+                          "type": "string"
+                        },
+                        "crc64nvme": {
+                          "type": "string"
+                        },
+                        "sha1": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "FULL_OBJECT | COMPOSITE_*（分段合成，不可全对象比对）"
+                        }
+                      },
+                      "nullable": true
+                    },
                     "contentType": {
                       "type": "string"
                     },
@@ -2931,6 +3168,17 @@
                   "bucket": {
                     "type": "string"
                   },
+                  "ifMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当目标对象当前 ETag 匹配时写入"
+                  },
+                  "ifNoneMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当目标对象不存在时写入（防并发覆盖）",
+                    "enum": [
+                      "*"
+                    ]
+                  },
                   "key": {
                     "type": "string"
                   }
@@ -2966,6 +3214,16 @@
               }
             },
             "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "key/条件字段非法"
           }
         },
         "summary": "新建空文件夹（PUT 空对象）",
@@ -3552,6 +3810,378 @@
         ]
       }
     },
+    "/api/accounts/{id}/object-legal-hold": {
+      "get": {
+        "operationId": "getObjectLegalHold",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "可选；读取指定版本的法定保留",
+            "in": "query",
+            "name": "versionId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "versionId": "",
+                  "status": "ON"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "未设置 → status=OFF"
+          }
+        },
+        "summary": "对象法定保留状态",
+        "tags": [
+          "object-meta"
+        ]
+      },
+      "put": {
+        "operationId": "putObjectLegalHold",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "versionId": "",
+                "status": "ON"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ON",
+                      "OFF"
+                    ]
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "status"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "versionId": "",
+                  "status": "ON"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "拒绝（含越权）"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "对象被锁定"
+          }
+        },
+        "summary": "设置对象法定保留（ON/OFF）",
+        "tags": [
+          "object-meta"
+        ]
+      }
+    },
+    "/api/accounts/{id}/object-retention": {
+      "get": {
+        "operationId": "getObjectRetention",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "description": "",
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "可选；读取指定版本的保留期",
+            "in": "query",
+            "name": "versionId",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "versionId": "",
+                  "configured": true,
+                  "mode": "COMPLIANCE",
+                  "retainUntilDate": "2030-01-02T03:04:05Z"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "description": "GOVERNANCE | COMPLIANCE（configured=false 时为空串）"
+                    },
+                    "retainUntilDate": {
+                      "type": "string",
+                      "description": "RFC3339 到期时间（configured=false 时为空串）"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "无保留期（或桶未启用 Object Lock）时 configured=false"
+          }
+        },
+        "summary": "对象保留期（Object Lock）",
+        "tags": [
+          "object-meta"
+        ]
+      },
+      "put": {
+        "operationId": "putObjectRetention",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "versionId": "",
+                "mode": "GOVERNANCE",
+                "retainUntilDate": "2031-02-03T04:05:06Z"
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "GOVERNANCE",
+                      "COMPLIANCE"
+                    ]
+                  },
+                  "retainUntilDate": {
+                    "type": "string",
+                    "description": "RFC3339（如 2031-02-03T04:05:06Z），必须是未来时刻"
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key",
+                  "mode",
+                  "retainUntilDate"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "versionId": "",
+                  "configured": true,
+                  "mode": "GOVERNANCE",
+                  "retainUntilDate": "2031-02-03T04:05:06Z"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "mode": {
+                      "type": "string"
+                    },
+                    "retainUntilDate": {
+                      "type": "string"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "输入非法 / 保留期违规"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "GOVERNANCE 保留期内的拒绝（含越权）"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "对象被 COMPLIANCE 锁定（ObjectLocked）"
+          }
+        },
+        "summary": "设置对象保留期（Object Lock）",
+        "tags": [
+          "object-meta"
+        ]
+      }
+    },
     "/api/accounts/{id}/object-tags": {
       "get": {
         "operationId": "getObjectTags",
@@ -3818,6 +4448,17 @@
                   "expiresIn": {
                     "type": "integer"
                   },
+                  "ifMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当目标对象当前 ETag 匹配时写入（仅 method=put）"
+                  },
+                  "ifNoneMatch": {
+                    "type": "string",
+                    "description": "可选；条件写：仅当目标对象不存在时写入（仅 method=put）",
+                    "enum": [
+                      "*"
+                    ]
+                  },
                   "key": {
                     "type": "string"
                   },
@@ -3866,6 +4507,10 @@
                       "type": "object",
                       "description": "仅 method=post：multipart 表单字段"
                     },
+                    "headers": {
+                      "type": "object",
+                      "description": "仅 method=put：随 PUT 必须携带的请求头（条件写回显；无条件时为空对象）"
+                    },
                     "key": {
                       "type": "string"
                     },
@@ -3879,7 +4524,7 @@
                 }
               }
             },
-            "description": "get/put 含 url/expiresIn；post 额外含 fields"
+            "description": "get/put 含 url/expiresIn；post 额外含 fields；put 含 headers（条件头回显）"
           },
           "400": {
             "content": {
@@ -3889,7 +4534,7 @@
                 }
               }
             },
-            "description": "method/expiresIn 非法"
+            "description": "method/expiresIn/条件字段非法"
           }
         },
         "summary": "生成预签名 URL",
@@ -4201,6 +4846,245 @@
         ]
       }
     },
+    "/api/accounts/{id}/storage-report": {
+      "get": {
+        "operationId": "storageReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          },
+          {
+            "$ref": "#/components/parameters/Bucket"
+          },
+          {
+            "$ref": "#/components/parameters/Prefix"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "prefix": "",
+                  "objectCount": 6,
+                  "totalSize": 32212254720,
+                  "truncated": false,
+                  "monthlyCost": 0.53,
+                  "prefixGroupCount": 3,
+                  "byStorageClass": [
+                    {
+                      "storageClass": "STANDARD",
+                      "count": 3,
+                      "size": 17179869184,
+                      "monthlyCost": 0.368
+                    },
+                    {
+                      "storageClass": "STANDARD_IA",
+                      "count": 1,
+                      "size": 8589934592,
+                      "monthlyCost": 0.1
+                    },
+                    {
+                      "storageClass": "GLACIER_IR",
+                      "count": 1,
+                      "size": 4294967296,
+                      "monthlyCost": 0.016
+                    },
+                    {
+                      "storageClass": "VENDOR_X",
+                      "count": 1,
+                      "size": 2147483648,
+                      "monthlyCost": 0.046
+                    }
+                  ],
+                  "byPrefix": [
+                    {
+                      "prefix": "photos/",
+                      "count": 3,
+                      "size": 17179869184
+                    },
+                    {
+                      "prefix": "logs/",
+                      "count": 1,
+                      "size": 8589934592
+                    },
+                    {
+                      "prefix": "",
+                      "count": 2,
+                      "size": 6442450944
+                    }
+                  ],
+                  "recommendations": [
+                    {
+                      "kind": "infrequent",
+                      "fromStorageClass": "STANDARD",
+                      "toStorageClass": "STANDARD_IA",
+                      "count": 1,
+                      "size": 5368709120,
+                      "estimatedMonthlySaving": 0.0525
+                    },
+                    {
+                      "kind": "archive",
+                      "fromStorageClass": "STANDARD",
+                      "toStorageClass": "GLACIER_IR",
+                      "count": 1,
+                      "size": 10737418240,
+                      "estimatedMonthlySaving": 0.19
+                    },
+                    {
+                      "kind": "archive",
+                      "fromStorageClass": "STANDARD_IA",
+                      "toStorageClass": "GLACIER_IR",
+                      "count": 1,
+                      "size": 8589934592,
+                      "estimatedMonthlySaving": 0.068
+                    }
+                  ]
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "byPrefix": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "prefix": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "format": "int64"
+                          }
+                        },
+                        "required": [
+                          "count",
+                          "prefix",
+                          "size"
+                        ]
+                      }
+                    },
+                    "byStorageClass": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "monthlyCost": {
+                            "type": "number"
+                          },
+                          "size": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "storageClass": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "count",
+                          "monthlyCost",
+                          "size",
+                          "storageClass"
+                        ]
+                      }
+                    },
+                    "monthlyCost": {
+                      "type": "number"
+                    },
+                    "objectCount": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "prefix": {
+                      "type": "string"
+                    },
+                    "prefixGroupCount": {
+                      "type": "integer"
+                    },
+                    "recommendations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "estimatedMonthlySaving": {
+                            "type": "number"
+                          },
+                          "fromStorageClass": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "infrequent",
+                              "archive"
+                            ]
+                          },
+                          "size": {
+                            "type": "integer",
+                            "format": "int64"
+                          },
+                          "toStorageClass": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "count",
+                          "estimatedMonthlySaving",
+                          "fromStorageClass",
+                          "kind",
+                          "size",
+                          "toStorageClass"
+                        ]
+                      }
+                    },
+                    "totalSize": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "bucket",
+                    "byPrefix",
+                    "byStorageClass",
+                    "monthlyCost",
+                    "objectCount",
+                    "prefix",
+                    "prefixGroupCount",
+                    "recommendations",
+                    "totalSize",
+                    "truncated"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "summary": "存储分析与成本洞察（按存储类 / 前缀聚合）",
+        "tags": [
+          "objects"
+        ]
+      }
+    },
     "/api/accounts/{id}/test": {
       "post": {
         "operationId": "testAccount",
@@ -4408,6 +5292,110 @@
         "summary": "彻底清除某 key 的全部版本+标记",
         "tags": [
           "trash"
+        ]
+      }
+    },
+    "/api/accounts/{id}/verify-checksum": {
+      "post": {
+        "operationId": "verifyChecksum",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AccountID"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "bucket": "my-bucket",
+                "key": "docs/a.txt",
+                "versionId": ""
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bucket": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "versionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "bucket",
+                  "key"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "bucket": "my-bucket",
+                  "key": "docs/a.txt",
+                  "versionId": "",
+                  "method": "crc64nvme",
+                  "local": "N4bktbEKNg8=",
+                  "remote": "N4bktbEKNg8=",
+                  "match": true
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "bucket": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "local": {
+                      "type": "string",
+                      "description": "本地全量重算值（校验和为大端 base64；etag-md5 为小写 hex）"
+                    },
+                    "match": {
+                      "type": "boolean"
+                    },
+                    "method": {
+                      "type": "string",
+                      "description": "crc64nvme | crc32c | sha256 | sha1 | etag-md5 | none"
+                    },
+                    "remote": {
+                      "type": "string",
+                      "description": "存储端值（method=none 时为空）"
+                    },
+                    "versionId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "method=none 表示无可验证来源（厂商未存校验和 / 分段合成 / 非单段 ETag），match=false"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "key 缺失或请求体非法"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "summary": "端到端校验和验证（本地重算与存储端比对）",
+        "tags": [
+          "objects"
         ]
       }
     },
@@ -5478,6 +6466,642 @@
           "system"
         ]
       }
+    },
+    "/api/schedules": {
+      "get": {
+        "operationId": "listSchedules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "schedules": [
+                    {
+                      "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                      "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                      "sourceBucket": "src-bucket",
+                      "sourcePrefix": "data/",
+                      "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                      "targetBucket": "dst-bucket",
+                      "targetPrefix": "backup/",
+                      "mode": "etag",
+                      "cron": "0 2 * * *",
+                      "enabled": true,
+                      "createdAt": "2026-10-08T10:00:00Z",
+                      "nextRunAt": "2026-10-09T02:00:00Z",
+                      "lastRunAt": "2026-10-08T02:00:00Z",
+                      "lastJobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                      "lastError": ""
+                    }
+                  ]
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "cron": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "lastError": {
+                            "type": "string"
+                          },
+                          "lastJobId": {
+                            "type": "string"
+                          },
+                          "lastRunAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "etag",
+                              "size_mtime",
+                              "always"
+                            ]
+                          },
+                          "nextRunAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "sourceAccountId": {
+                            "type": "string"
+                          },
+                          "sourceBucket": {
+                            "type": "string"
+                          },
+                          "sourcePrefix": {
+                            "type": "string"
+                          },
+                          "targetAccountId": {
+                            "type": "string"
+                          },
+                          "targetBucket": {
+                            "type": "string"
+                          },
+                          "targetPrefix": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "createdAt",
+                          "cron",
+                          "enabled",
+                          "id",
+                          "mode",
+                          "nextRunAt",
+                          "sourceAccountId",
+                          "sourceBucket",
+                          "targetAccountId",
+                          "targetBucket"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "description": "计划数组（空清单为 []）"
+          }
+        },
+        "summary": "计划任务清单（最新在前）",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "post": {
+        "operationId": "createSchedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                "sourceBucket": "src-bucket",
+                "sourcePrefix": "data/",
+                "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                "targetBucket": "dst-bucket",
+                "targetPrefix": "backup/",
+                "mode": "etag",
+                "cron": "0 2 * * *",
+                "enabled": true
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cron": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "etag",
+                      "size_mtime",
+                      "always"
+                    ]
+                  },
+                  "sourceAccountId": {
+                    "type": "string"
+                  },
+                  "sourceBucket": {
+                    "type": "string"
+                  },
+                  "sourcePrefix": {
+                    "type": "string"
+                  },
+                  "targetAccountId": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cron",
+                  "sourceAccountId",
+                  "targetAccountId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "schedule": {
+                    "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                    "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                    "sourceBucket": "src-bucket",
+                    "sourcePrefix": "data/",
+                    "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                    "targetBucket": "dst-bucket",
+                    "targetPrefix": "backup/",
+                    "mode": "etag",
+                    "cron": "0 2 * * *",
+                    "enabled": true,
+                    "createdAt": "2026-10-08T10:00:00Z",
+                    "nextRunAt": "2026-10-09T02:00:00Z"
+                  }
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedule": {
+                      "type": "object",
+                      "properties": {
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cron": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "lastError": {
+                          "type": "string"
+                        },
+                        "lastJobId": {
+                          "type": "string"
+                        },
+                        "lastRunAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "etag",
+                            "size_mtime",
+                            "always"
+                          ]
+                        },
+                        "nextRunAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "sourceAccountId": {
+                          "type": "string"
+                        },
+                        "sourceBucket": {
+                          "type": "string"
+                        },
+                        "sourcePrefix": {
+                          "type": "string"
+                        },
+                        "targetAccountId": {
+                          "type": "string"
+                        },
+                        "targetBucket": {
+                          "type": "string"
+                        },
+                        "targetPrefix": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "cron",
+                        "enabled",
+                        "id",
+                        "mode",
+                        "nextRunAt",
+                        "sourceAccountId",
+                        "sourceBucket",
+                        "targetAccountId",
+                        "targetBucket"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "description": "已创建并完成首次排期"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "字段缺失 / cron 非法或永不触发 / mode 非法 / 桶不可解析 / 账号配置无效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "引用的账号不存在"
+          }
+        },
+        "summary": "创建计划（cron 定时增量同步）",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/schedules/{id}": {
+      "delete": {
+        "operationId": "deleteSchedule",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "deleted": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "回显被删计划 id"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "计划不存在"
+          }
+        },
+        "summary": "删除计划（冻结的计划一并移除）",
+        "tags": [
+          "schedules"
+        ]
+      },
+      "put": {
+        "operationId": "updateSchedule",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                "sourceBucket": "src-bucket",
+                "sourcePrefix": "data/",
+                "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                "targetBucket": "dst-bucket",
+                "targetPrefix": "backup/",
+                "mode": "size_mtime",
+                "cron": "30 3 * * *",
+                "enabled": false
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cron": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "etag",
+                      "size_mtime",
+                      "always"
+                    ]
+                  },
+                  "sourceAccountId": {
+                    "type": "string"
+                  },
+                  "sourceBucket": {
+                    "type": "string"
+                  },
+                  "sourcePrefix": {
+                    "type": "string"
+                  },
+                  "targetAccountId": {
+                    "type": "string"
+                  },
+                  "targetBucket": {
+                    "type": "string"
+                  },
+                  "targetPrefix": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "cron",
+                  "sourceAccountId",
+                  "targetAccountId"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "schedule": {
+                    "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                    "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                    "sourceBucket": "src-bucket",
+                    "sourcePrefix": "data/",
+                    "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                    "targetBucket": "dst-bucket",
+                    "targetPrefix": "backup/",
+                    "mode": "size_mtime",
+                    "cron": "30 3 * * *",
+                    "enabled": false,
+                    "createdAt": "2026-10-08T10:00:00Z",
+                    "nextRunAt": "2026-10-09T03:30:00Z"
+                  }
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "schedule": {
+                      "type": "object",
+                      "properties": {
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "cron": {
+                          "type": "string"
+                        },
+                        "enabled": {
+                          "type": "boolean"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "lastError": {
+                          "type": "string"
+                        },
+                        "lastJobId": {
+                          "type": "string"
+                        },
+                        "lastRunAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "etag",
+                            "size_mtime",
+                            "always"
+                          ]
+                        },
+                        "nextRunAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "sourceAccountId": {
+                          "type": "string"
+                        },
+                        "sourceBucket": {
+                          "type": "string"
+                        },
+                        "sourcePrefix": {
+                          "type": "string"
+                        },
+                        "targetAccountId": {
+                          "type": "string"
+                        },
+                        "targetBucket": {
+                          "type": "string"
+                        },
+                        "targetPrefix": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "createdAt",
+                        "cron",
+                        "enabled",
+                        "id",
+                        "mode",
+                        "nextRunAt",
+                        "sourceAccountId",
+                        "sourceBucket",
+                        "targetAccountId",
+                        "targetBucket"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "description": "更新后的计划（cron 变更则重算排期）"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "字段缺失 / cron 或 mode 非法 / 账号配置无效"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "计划或引用的账号不存在"
+          }
+        },
+        "summary": "整体替换计划（保留 id/createdAt/运行态）",
+        "tags": [
+          "schedules"
+        ]
+      }
+    },
+    "/api/schedules/{id}/run": {
+      "post": {
+        "operationId": "runScheduleNow",
+        "parameters": [
+          {
+            "description": "",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                  "scheduleId": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"
+                },
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "scheduleId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "description": "异步任务已创建"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "引用的账号配置已损坏（缺密钥等）"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "计划或引用的账号不存在"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "上一轮执行尚未结束（不叠加）"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "在册任务已满，稍后重试"
+          }
+        },
+        "summary": "立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}）",
+        "tags": [
+          "schedules"
+        ]
+      }
     }
   },
   "security": [
@@ -5527,6 +7151,10 @@
     {
       "name": "migrate",
       "description": "跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）"
+    },
+    {
+      "name": "schedules",
+      "description": "计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）"
     },
     {
       "name": "system",

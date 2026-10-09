@@ -90,7 +90,7 @@ apps/web/src/
   api/               API client (module directory split by responsibility, see below)
     storage.ts         browser credentials / multi-server profile storage (bottom of the dependency graph)
     http.ts            transport layer: base + Bearer + JSON + error normalization
-    endpoints.ts       domain endpoint wrappers (the `s3api` object, 59 methods; not the same unit as the backend's 70 `/api/*` endpoints)
+    endpoints.ts       domain endpoint wrappers (the `s3api` object, 60 methods; not the same unit as the backend's 72 `/api/*` endpoints)
     jobs.ts            async-job SSE subscription + post-EOF status re-read fallback
     download.ts        ZIP streaming to disk (File System Access API + blob fallback)
     upload.ts          presigned direct upload (XHR, provides upload progress)

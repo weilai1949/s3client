@@ -156,7 +156,7 @@
 「在 CORS 规则中暴露 `ETag`」与「本项目自动化覆盖」（RustFS 有真对端 E2E 与真实联调 E2E，其余为手动）。
 本文件**不复制该表**，避免两处漂移。
 
-这里只强调三条与兼容性直接相关的事实：
+这里只强调四条与兼容性直接相关的事实：
 
 1. **单文件直传（< 100MB）不依赖 `ETag` 暴露**；**分段直传（≥ 100MB）依赖**——需从每段 PUT 响应的
    `ETag` 头读取指纹才能完成组装（Bucket 的 CORS 规则需含 `ExposeHeader: ETag`）。
@@ -164,6 +164,15 @@
    「未读取到 ETag」并 `abort` 清理已上传分段。
 3. **端点可达性是部署侧的兼容前提**：预签名直传的 S3 端点必须能被**浏览器**解析（容器化 S3 场景见
    [`../README.md`](../README.md) 的提示与 [`DEPLOYMENT.md`](DEPLOYMENT.md)）。
+4. **新协议特性（#5：条件写 / 端到端校验和 / Object Lock）按厂商支持度降级**：读侧能力缺失一律
+   降级为显式空值（`checksums:null` / `method:"none"` / `enabled=false` / `configured=false` /
+   `status="OFF"`）且不报错；写侧按错误码映射（412 / 409 / 400 / 501，见 [`errors.md`](errors.md)）。
+   **RustFS 1.0.0-rc.3 实测（2026-10-08）**：条件写（含预签名 `If-None-Match` 条件头——条件头参与
+   签名、必须原样回传）、CRC64NVME / SHA256 / CRC32C 校验和读写、Object Lock 配置 / 保留期 /
+   法定保留 API 均可用，且 **GOVERNANCE 保留期内的版本删除被真实强制**（403 `AccessDenied`）；
+   差异点：保留期一经设置**不可修改**（再 PUT → 405 `MethodNotAllowed`，含缩短 / 延长 / bypass）、
+   GOVERNANCE→COMPLIANCE 保留升级被拒（`AccessDenied`）——属厂商行为差异（E8 口径），
+   以 AWS S3 官方语义为准的行为不在 RustFS 上断言（真 E2E 只断言协议交互与降级形态）。
 
 厂商差异属外部服务行为（[`ROADMAP.md`](ROADMAP.md) §5.2 **E8**：状态「⚠️ 因厂商而异」）；本项目只保证
 自身的要求已文档化 + 对 RustFS 有自动化真对端覆盖，**不承诺**对所有厂商 / 所有区域做过实测。

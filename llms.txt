@@ -44,7 +44,7 @@ make test-all                                                                   
 - [docs/POSTMORTEM_TEMPLATE.md](docs/POSTMORTEM_TEMPLATE.md)：事故复盘模板——§9.3 取证 / 时间线 / 根因 / 行动项 / 文档同步（**空模板**，填写后归档进 `docs/archive/`；首份已填写实例：`docs/archive/incident-20260916-presign-empty-url.md`）
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md)：性能基线与热路径解读（加密写入 30ms/64MiB、账号写入 O(n)、预签名 33µs）
 - [docs/api.md](docs/api.md)：REST API 参考（与 OpenAPI 注册表一致）
-- [docs/api/openapi.json](docs/api/openapi.json)：**机器可读 API 契约**——不跑服务即可读取，适合代码生成 / 契约 diff / 工具消费
+- [docs/api/openapi.json](docs/api/openapi.json)：**机器可读 API 契约**——不跑服务即可读取，适合代码生成 / 契约 diff / 工具消费；**⚠️ 超大**（>200 KB）——按 `paths` / `components` 键定位单个端点与 schema，勿整篇读入
 - [docs/api/accounts.schema.json](docs/api/accounts.schema.json)：**机器可读账号库格式**（JSON Schema 2020-12）——校验 / 生成 `accounts.json`，由反射门禁与 `model.Account` 双向对齐
 - [docs/errors.md](docs/errors.md)：S3 错误 → HTTP 状态映射
 - [docs/user-guide.md](docs/user-guide.md)：用户手册——界面操作、快捷键、FAQ、排障

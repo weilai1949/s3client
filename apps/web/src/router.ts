@@ -1,8 +1,8 @@
 /** Tab 键与 URL hash 深链接（无需 vue-router 依赖）。 */
-export type TabKey = 'accounts' | 'objects' | 'upload' | 'migrate' | 'buckets' | 'trash' | 'server'
+export type TabKey = 'accounts' | 'objects' | 'upload' | 'migrate' | 'buckets' | 'trash' | 'server' | 'finops'
 
 const VALID_TABS = new Set<TabKey>([
-  'accounts', 'objects', 'upload', 'migrate', 'buckets', 'trash', 'server',
+  'accounts', 'objects', 'upload', 'migrate', 'buckets', 'trash', 'server', 'finops',
 ])
 
 const HASH_PREFIX = '#/'

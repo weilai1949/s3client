@@ -572,6 +572,8 @@ var reflectiveMethodNames = map[string]bool{
 	"String":        true, // fmt.Stringer
 	"Read":          true, // io.Reader——由 io.Copy / io.ReadAll 等经接口消费（stream.go / zip.go 实证）
 	"Unwrap":        true, // http.ResponseController 穿透连接、errors.Unwrap 解错误链，均按接口断言调用
+	"Reset":         true, // hash.Hash——哈希器实现经 io.Writer 接口交给 io.Copy，stdlib 按接口调用（s3wrap/crc64nvme.go 实证）
+	"BlockSize":     true, // hash.Hash——同上，接口契约方法（实现方零显式调用点属合法形态）
 }
 
 // findUnusedExportedProdSymbols 在给定的「相对路径 → 源码」集合里，找出**生产代码**
@@ -819,6 +821,10 @@ func (StdlibFace) Read(p []byte) (int, error)  { return 0, nil }
 
 func (StdlibFace) Unwrap() error               { return nil }
 
+func (StdlibFace) Reset()                      {}
+
+func (StdlibFace) BlockSize() int              { return 1 }
+
 func (StdlibFace) String() string              { return "" }
 
 func (StdlibFace) MarshalText() ([]byte, error) { return nil, nil }
@@ -853,7 +859,7 @@ func use() { s3wrap.LiveFunc() }
 			t.Errorf("漏报死符号 %q（实得 %v）", want, got)
 		}
 	}
-	for _, mustNot := range []string{"LiveFunc", "LiveMethod", "MarshalJSON", "DoThing", "Client", "Impl", "TableA", "TableB", "IotaOnly", "StdlibFace", "Read", "Unwrap", "String", "MarshalText", "UnmarshalText"} {
+	for _, mustNot := range []string{"LiveFunc", "LiveMethod", "MarshalJSON", "DoThing", "Client", "Impl", "TableA", "TableB", "IotaOnly", "StdlibFace", "Read", "Unwrap", "String", "MarshalText", "UnmarshalText", "Reset", "BlockSize"} {
 		if got[mustNot] {
 			t.Errorf("误报合法符号 %q", mustNot)
 		}

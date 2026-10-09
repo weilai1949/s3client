@@ -126,17 +126,17 @@ func TestUnsignedPayloadMiddlewareInjectsHash(t *testing.T) {
 // TestPresignedPutURLContainsSigV4Parameters 预签名 PUT 产出 SigV4 查询串（校验参数存在与过期秒数，不校验签名值）。
 func TestPresignedPutURLContainsSigV4Parameters(t *testing.T) {
 	c, srv := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	raw, err := c.PresignPut(context.Background(), "bkt", "k.txt", 5*time.Minute)
+	res, err := c.PresignPut(context.Background(), "bkt", "k.txt", 5*time.Minute, Conditions{})
 	if err != nil {
 		t.Fatalf("presign put: %v", err)
 	}
-	u, err := url.Parse(raw)
+	u, err := url.Parse(res.URL)
 	if err != nil {
 		t.Fatalf("parse presigned url: %v", err)
 	}
 	wantHost := strings.TrimPrefix(srv.URL, "http://")
 	if u.Scheme != "http" || u.Host != wantHost {
-		t.Fatalf("unexpected endpoint in %s, want host %q", raw, wantHost)
+		t.Fatalf("unexpected endpoint in %s, want host %q", res.URL, wantHost)
 	}
 	if u.Path != "/bkt/k.txt" {
 		t.Fatalf("path-style path = %q, want /bkt/k.txt", u.Path)

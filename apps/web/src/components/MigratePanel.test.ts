@@ -34,6 +34,11 @@ vi.mock('../api', () => ({
     migrateJobs: vi.fn(),
     migrateJobStatus: vi.fn(),
     migrateJobCancel: vi.fn(),
+    listSchedules: vi.fn(async () => ({ schedules: [] })),
+    createSchedule: vi.fn(),
+    updateSchedule: vi.fn(),
+    deleteSchedule: vi.fn(),
+    runScheduleNow: vi.fn(),
   },
   subscribeMigrateEvents: vi.fn(() => () => {}),
 }))

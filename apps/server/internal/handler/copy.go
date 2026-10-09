@@ -10,6 +10,15 @@ import (
 	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
+// allowedChecksumAlgorithms 复制时可物化的全对象校验和算法（与 OpenAPI enum 对齐；
+// 空串 = 不指定，走服务端默认）。暴露为 map 字面量供 openapi_semantics 机械抽取。
+var allowedChecksumAlgorithms = map[string]bool{
+	"CRC64NVME": true,
+	"SHA256":    true,
+	"CRC32C":    true,
+	"SHA1":      true,
+}
+
 // copyObject 复制单个对象到目标桶/目标 key（不删除源）。
 func (h *Handler) copyObject(w http.ResponseWriter, r *http.Request) {
 	client, acc, ok := h.accountClient(w, r)
@@ -17,10 +26,13 @@ func (h *Handler) copyObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Bucket    string `json:"bucket"`
-		Key       string `json:"key"`
-		NewKey    string `json:"newKey"`
-		NewBucket string `json:"newBucket"`
+		Bucket            string `json:"bucket"`
+		Key               string `json:"key"`
+		NewKey            string `json:"newKey"`
+		NewBucket         string `json:"newBucket"`
+		IfMatch           string `json:"ifMatch"`
+		IfNoneMatch       string `json:"ifNoneMatch"`
+		ChecksumAlgorithm string `json:"checksumAlgorithm"`
 	}
 	if err := h.readJSON(r, &req); err != nil {
 		h.writeBadJSON(w, err)
@@ -28,6 +40,14 @@ func (h *Handler) copyObject(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Key == "" || req.NewKey == "" {
 		h.writeErr(w, http.StatusBadRequest, "key and newKey are required")
+		return
+	}
+	if msg := validateConditions(req.IfMatch, req.IfNoneMatch); msg != "" {
+		h.writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
+	if req.ChecksumAlgorithm != "" && !allowedChecksumAlgorithms[req.ChecksumAlgorithm] {
+		h.writeErr(w, http.StatusBadRequest, "checksumAlgorithm must be CRC64NVME, SHA256, CRC32C or SHA1")
 		return
 	}
 	bucket := req.Bucket
@@ -42,7 +62,11 @@ func (h *Handler) copyObject(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "newKey must differ from key in the same bucket")
 		return
 	}
-	if err := client.CopyObject(r.Context(), bucket, req.Key, targetBucket, req.NewKey); err != nil {
+	opts := s3wrap.CopyOptions{
+		Conditions:        s3wrap.Conditions{IfMatch: req.IfMatch, IfNoneMatch: req.IfNoneMatch},
+		ChecksumAlgorithm: req.ChecksumAlgorithm,
+	}
+	if err := client.CopyObjectCond(r.Context(), bucket, req.Key, targetBucket, req.NewKey, opts); err != nil {
 		h.writeInternalErr(w, err, "copy operation failed")
 		return
 	}

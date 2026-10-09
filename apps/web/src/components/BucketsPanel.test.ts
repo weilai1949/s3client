@@ -5,6 +5,7 @@ import type { Component } from 'vue'
 import BucketsPanel from './BucketsPanel.vue'
 import BucketOverview from './BucketOverview.vue'
 import BucketEncryption from './BucketEncryption.vue'
+import BucketObjectLock from './BucketObjectLock.vue'
 import BucketCors from './BucketCors.vue'
 import BucketWebsite from './BucketWebsite.vue'
 import BucketPolicy from './BucketPolicy.vue'
@@ -215,6 +216,7 @@ describe('BucketsPanel', () => {
     await flushPromises()
     const tabs: [string, Component][] = [
       ['buckets.tabEncryption', BucketEncryption],
+      ['buckets.tabObjectLock', BucketObjectLock],
       ['buckets.tabCors', BucketCors],
       ['buckets.tabWebsite', BucketWebsite],
       ['buckets.tabPolicy', BucketPolicy],

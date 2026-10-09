@@ -754,6 +754,14 @@ describe('s3api', () => {
     await s3api.setHeaders('id1', { bucket: 'b', key: 'k' })
   })
 
+  it('storageReport 查询串仅在提供时拼接', async () => {
+    const { s3api } = await import('./api')
+    await s3api.storageReport('id1', { bucket: 'b', prefix: 'p/' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/storage-report?bucket=b&prefix=p%2F', expect.anything())
+    await s3api.storageReport('id1', {})
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/storage-report?', expect.anything())
+  })
+
   it('getLifecycle / putLifecycle', async () => {
     const { s3api } = await import('./api')
     await s3api.getLifecycle('id1', 'b')
@@ -786,6 +794,31 @@ describe('s3api', () => {
     await s3api.migrateJobs()
     await s3api.migrateJobStatus('job1')
     await s3api.migrateJobCancel('job1')
+  })
+
+  it('listSchedules / createSchedule / updateSchedule / deleteSchedule / runScheduleNow（ROADMAP #6）', async () => {
+    const { s3api } = await import('./api')
+    await s3api.listSchedules()
+    expect(fetch).toHaveBeenCalledWith('/api/schedules', expect.anything())
+    const body: import('./types').ScheduleInput = {
+      sourceAccountId: 'a1',
+      sourceBucket: 'b1',
+      sourcePrefix: 'data/',
+      targetAccountId: 'a2',
+      targetBucket: 'b2',
+      targetPrefix: 'backup/',
+      mode: 'etag',
+      cron: '0 2 * * *',
+      enabled: true,
+    }
+    await s3api.createSchedule(body)
+    expect(fetch).toHaveBeenCalledWith('/api/schedules', expect.objectContaining({ method: 'POST' }))
+    await s3api.updateSchedule('s1', body)
+    expect(fetch).toHaveBeenCalledWith('/api/schedules/s1', expect.objectContaining({ method: 'PUT' }))
+    await s3api.deleteSchedule('s1')
+    expect(fetch).toHaveBeenCalledWith('/api/schedules/s1', expect.objectContaining({ method: 'DELETE' }))
+    await s3api.runScheduleNow('s1')
+    expect(fetch).toHaveBeenCalledWith('/api/schedules/s1/run', expect.objectContaining({ method: 'POST' }))
   })
 
   it('downloadZipToDisk blob fallback success', async () => {
@@ -881,6 +914,125 @@ describe('s3api', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer tok-123' }),
       }),
     )
+  })
+})
+
+// ── S3 新协议特性：Object Lock / 保留期 / 法定保留 / 校验和 / 条件写 ──────────
+describe('s3api 对象保护与条件写（ROADMAP §三 #5）', () => {
+  beforeEach(() => {
+    stubFetch(() => Promise.resolve(makeBlobResponse({})))
+  })
+
+  it('getObjectLock 带 bucket 查询串；bucket 缺省拼空串', async () => {
+    const { s3api } = await import('./api')
+    await s3api.getObjectLock('id1', 'b name/ç')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/accounts/id1/bucket/object-lock?bucket=b%20name%2F%C3%A7',
+      expect.anything(),
+    )
+    await s3api.getObjectLock('id1')
+    expect(fetch).toHaveBeenLastCalledWith('/api/accounts/id1/bucket/object-lock?bucket=', expect.anything())
+  })
+
+  it('putObjectLock 走 PUT 并原样序列化保留策略', async () => {
+    const { s3api } = await import('./api')
+    await s3api.putObjectLock('id1', { bucket: 'b', defaultRetentionMode: 'GOVERNANCE', defaultRetentionYears: 1 })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/bucket/object-lock', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ bucket: 'b', defaultRetentionMode: 'GOVERNANCE', defaultRetentionYears: 1 }),
+    }))
+  })
+
+  it('getObjectRetention：key 必带、bucket/versionId 可选时才出现', async () => {
+    const { s3api } = await import('./api')
+    await s3api.getObjectRetention('id1', { key: 'dir/a b.txt' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/object-retention?key=dir%2Fa+b.txt', expect.anything())
+    await s3api.getObjectRetention('id1', { bucket: 'b', key: 'k', versionId: 'v1' })
+    expect(fetch).toHaveBeenLastCalledWith(
+      '/api/accounts/id1/object-retention?key=k&bucket=b&versionId=v1',
+      expect.anything(),
+    )
+  })
+
+  it('putObjectRetention 走 PUT，请求体含 mode 与 retainUntilDate', async () => {
+    const { s3api } = await import('./api')
+    await s3api.putObjectRetention('id1', {
+      bucket: 'b',
+      key: 'k',
+      mode: 'COMPLIANCE',
+      retainUntilDate: '2031-02-03T04:05:06Z',
+    })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/object-retention', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        bucket: 'b',
+        key: 'k',
+        mode: 'COMPLIANCE',
+        retainUntilDate: '2031-02-03T04:05:06Z',
+      }),
+    }))
+  })
+
+  it('getObjectLegalHold：key 必带、versionId 可选', async () => {
+    const { s3api } = await import('./api')
+    await s3api.getObjectLegalHold('id1', { key: 'k' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/object-legal-hold?key=k', expect.anything())
+    await s3api.getObjectLegalHold('id1', { bucket: 'b', key: 'k', versionId: 'v9' })
+    expect(fetch).toHaveBeenLastCalledWith(
+      '/api/accounts/id1/object-legal-hold?key=k&bucket=b&versionId=v9',
+      expect.anything(),
+    )
+  })
+
+  it('putObjectLegalHold 走 PUT 并携带 status', async () => {
+    const { s3api } = await import('./api')
+    await s3api.putObjectLegalHold('id1', { bucket: 'b', key: 'k', status: 'ON' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/object-legal-hold', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ bucket: 'b', key: 'k', status: 'ON' }),
+    }))
+  })
+
+  it('verifyChecksum 走 POST，versionId 可选', async () => {
+    const { s3api } = await import('./api')
+    await s3api.verifyChecksum('id1', { bucket: 'b', key: 'k' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/verify-checksum', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ bucket: 'b', key: 'k' }),
+    }))
+    await s3api.verifyChecksum('id1', { key: 'k', versionId: 'v3' })
+    expect(fetch).toHaveBeenLastCalledWith('/api/accounts/id1/verify-checksum', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ key: 'k', versionId: 'v3' }),
+    }))
+  })
+
+  it('presign 透传 ifMatch / ifNoneMatch 条件字段', async () => {
+    const { s3api } = await import('./api')
+    await s3api.presign('id1', { method: 'put', key: 'k', ifNoneMatch: '*' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/presign', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ method: 'put', key: 'k', ifNoneMatch: '*' }),
+    }))
+    await s3api.presign('id1', { method: 'put', key: 'k', ifMatch: '"etag-1"' })
+    expect(fetch).toHaveBeenLastCalledWith('/api/accounts/id1/presign', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ method: 'put', key: 'k', ifMatch: '"etag-1"' }),
+    }))
+  })
+
+  it('mkdirObject / copyObject 透传 ifNoneMatch / ifMatch 条件字段', async () => {
+    const { s3api } = await import('./api')
+    await s3api.mkdirObject('id1', { bucket: 'b', key: 'k/', ifNoneMatch: '*' })
+    expect(fetch).toHaveBeenCalledWith('/api/accounts/id1/mkdir', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ bucket: 'b', key: 'k/', ifNoneMatch: '*' }),
+    }))
+    await s3api.copyObject('id1', { bucket: 'b', key: 'k', newKey: 'k2', ifMatch: '"e1"' })
+    expect(fetch).toHaveBeenLastCalledWith('/api/accounts/id1/copy-object', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ bucket: 'b', key: 'k', newKey: 'k2', ifMatch: '"e1"' }),
+    }))
   })
 })
 

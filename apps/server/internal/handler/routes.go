@@ -66,6 +66,15 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/accounts/{id}/bucket/policy", h.getBucketPolicy)
 	mux.HandleFunc("PUT /api/accounts/{id}/bucket/policy", h.putBucketPolicy)
 	mux.HandleFunc("DELETE /api/accounts/{id}/bucket/policy", h.deleteBucketPolicy)
+	// Object Lock（WORM 保留）：桶级配置 + 对象保留期 + 法定保留
+	mux.HandleFunc("GET /api/accounts/{id}/bucket/object-lock", h.getObjectLock)
+	mux.HandleFunc("PUT /api/accounts/{id}/bucket/object-lock", h.putObjectLock)
+	mux.HandleFunc("GET /api/accounts/{id}/object-retention", h.getObjectRetention)
+	mux.HandleFunc("PUT /api/accounts/{id}/object-retention", h.putObjectRetention)
+	mux.HandleFunc("GET /api/accounts/{id}/object-legal-hold", h.getObjectLegalHold)
+	mux.HandleFunc("PUT /api/accounts/{id}/object-legal-hold", h.putObjectLegalHold)
+	// 端到端校验和：本地重算与存储端比对
+	mux.HandleFunc("POST /api/accounts/{id}/verify-checksum", h.verifyChecksum)
 	mux.HandleFunc("GET /api/accounts/{id}/bucket/tags", h.getBucketTags)
 	mux.HandleFunc("PUT /api/accounts/{id}/bucket/tags", h.putBucketTags)
 	mux.HandleFunc("DELETE /api/accounts/{id}/bucket/tags", h.deleteBucketTags)
@@ -74,6 +83,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{id}/version/restore", h.restoreObjectVersion)
 	mux.HandleFunc("POST /api/accounts/{id}/delete-marker/restore", h.restoreDeleteMarker)
 	mux.HandleFunc("POST /api/accounts/{id}/storage-class", h.changeStorageClass)
+	mux.HandleFunc("GET /api/accounts/{id}/storage-report", h.storageReport)
 	// 回收站：列出删除标记 / 彻底清除
 	mux.HandleFunc("GET /api/accounts/{id}/trash", h.listTrash)
 	mux.HandleFunc("POST /api/accounts/{id}/trash/purge", h.purgeTrashObject)
@@ -86,6 +96,13 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/migrate/jobs/{id}", h.migrateJobStatus)
 	mux.HandleFunc("POST /api/migrate/jobs/{id}/cancel", h.migrateJobCancel)
 	mux.HandleFunc("GET /api/migrate/jobs/{id}/events", h.withStreamLimit(h.migrateJobEvents))
+
+	// 计划任务（ROADMAP #6）：cron 定时增量同步；run/到点触发复用 migrate 任务链路。
+	mux.HandleFunc("GET /api/schedules", h.listSchedules)
+	mux.HandleFunc("POST /api/schedules", h.createSchedule)
+	mux.HandleFunc("PUT /api/schedules/{id}", h.updateSchedule)
+	mux.HandleFunc("DELETE /api/schedules/{id}", h.deleteSchedule)
+	mux.HandleFunc("POST /api/schedules/{id}/run", h.runSchedule)
 
 	// 静态资源（SPA）
 	spa := http.FileServer(http.Dir(h.staticDir))

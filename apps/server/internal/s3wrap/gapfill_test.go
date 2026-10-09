@@ -116,7 +116,7 @@ func TestPresignExpiryGuards(t *testing.T) {
 		name string
 		act  func() error
 	}{
-		{"PresignPut", func() error { _, err := c.PresignPut(ctx, "b", "k", 0); return err }},
+		{"PresignPut", func() error { _, err := c.PresignPut(ctx, "b", "k", 0, Conditions{}); return err }},
 		{"PresignPost", func() error { _, err := c.PresignPost(ctx, "b", "k", 0); return err }},
 		{"PresignGetVersion", func() error { _, err := c.PresignGetVersion(ctx, "b", "k", "", -time.Second); return err }},
 		{"PresignUploadPart", func() error { _, err := c.PresignUploadPart(ctx, "b", "k", "u", 1, 0); return err }},
@@ -138,7 +138,7 @@ func TestPresignTransportErrorPaths(t *testing.T) {
 		name string
 		act  func() error
 	}{
-		{"PresignPut", func() error { _, err := broken.PresignPut(ctx, "b", "k", time.Minute); return err }},
+		{"PresignPut", func() error { _, err := broken.PresignPut(ctx, "b", "k", time.Minute, Conditions{}); return err }},
 		{"PresignPost", func() error { _, err := broken.PresignPost(ctx, "b", "k", time.Minute); return err }},
 		{"PresignGetVersion", func() error { _, err := broken.PresignGetVersion(ctx, "b", "k", "v", time.Minute); return err }},
 		{"PresignUploadPart", func() error { _, err := broken.PresignUploadPart(ctx, "b", "k", "u", 1, time.Minute); return err }},

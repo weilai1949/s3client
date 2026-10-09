@@ -306,6 +306,8 @@ function dismissError() {
       <ObjectDetailDialog
         :open="!!detail"
         :detail="detail"
+        :account-id="accSel"
+        :bucket="currentBucket"
         @close="detail = null"
         @edit-headers="openHeadersDialog"
         @open-acl="openAcl"

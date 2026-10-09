@@ -72,6 +72,10 @@ export const uploadMessages: MessageBundle = {
     'upload.partHttpError': '分段上传失败：HTTP {status}',
     'upload.partNetworkError': '分段上传网络错误',
     'upload.partNoEtag': '分段上传完成但未读取到 ETag，请确认 Bucket CORS 暴露 ETag 响应头',
+    'upload.conditional': '仅当对象不存在时创建（If-None-Match: *）',
+    'upload.conditionalHint': '条件写只对单次 PUT 生效：分段上传（≥100MB）不支持，勾选后大文件会直接失败。',
+    'upload.conditionalFailed': '上传被拒绝：目标对象已存在（HTTP 412，条件不满足）',
+    'upload.conditionalMultipartUnsupported': '该文件 ≥100MB 走分段上传，不支持条件写；请取消「仅当对象不存在时创建」后重试',
   },
   'en-US': {
     'upload.title': 'Upload',
@@ -143,5 +147,9 @@ export const uploadMessages: MessageBundle = {
     'upload.partHttpError': 'Multipart upload failed: HTTP {status}',
     'upload.partNetworkError': 'Multipart upload network error',
     'upload.partNoEtag': 'Multipart finished but no ETag was read; expose the ETag header in Bucket CORS',
+    'upload.conditional': 'Create only if the object does not exist (If-None-Match: *)',
+    'upload.conditionalHint': 'Conditional writes apply to single PUT only: multipart uploads (≥100MB) are unsupported and larger files will fail.',
+    'upload.conditionalFailed': 'Upload rejected: the target object already exists (HTTP 412, condition not met)',
+    'upload.conditionalMultipartUnsupported': 'This file is ≥100MB and uses multipart upload, which does not support conditional writes; untick “Create only if the object does not exist” and retry',
   },
 }

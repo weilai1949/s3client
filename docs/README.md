@@ -20,8 +20,8 @@
 | 学会用这个工具 | [`user-guide.md`](user-guide.md) | 界面操作 / 首次配置 / 上传下载 / 版本与回收站 / 快捷键 / FAQ / 排障；含「数据与隐私」 |
 | 读英文版 README | [`en/index.md`](en/index.md) | 根 README 的完整英文翻译（中文为 SSOT，英文页为翻译快照）；当前唯一的英文文档 |
 | 读英文版架构与文档导航 | [`en/README.md`](en/README.md) · [`en/architecture.md`](en/architecture.md) | 英文文档落地页（列出已翻译与中文专属文档）+ 架构全文翻译；**中文为 SSOT，英文为翻译快照**，来源 revision 写在页头 |
-| 调 API / 接自己的程序 | [`api.md`](api.md) | REST API 参考（70 个 `/api/*` 端点），与 OpenAPI 注册表同源 |
-| 让工具 / AI 直接读契约 | [`api/openapi.json`](api/openapi.json) | 机器可读契约（53 paths / 70 operations，含鉴权与 tags），**不跑服务即可读** |
+| 调 API / 接自己的程序 | [`api.md`](api.md) | REST API 参考（84 个 `/api/*` 端点），与 OpenAPI 注册表同源 |
+| 让工具 / AI 直接读契约 | [`api/openapi.json`](api/openapi.json) | 机器可读契约（62 paths / 84 operations，含鉴权与 tags），**不跑服务即可读** |
 | 校验 / 生成账号库文件 | [`api/accounts.schema.json`](api/accounts.schema.json) | 账号库 `accounts.json` 的 JSON Schema（2020-12），与 `model.Account` 双向对齐 |
 | 查某个报错是什么意思 | [`errors.md`](errors.md) | S3 错误 → HTTP 状态 → 用户文案对照 |
 | 判断能不能升级 / 支持多久 / 哪些浏览器与 OS 能用 | [`compatibility.md`](compatibility.md) | 版本命名 / 支持窗口 / API 演进与弃用政策 / 存储格式兼容 / S3 厂商矩阵 / 客户端（浏览器与操作系统）支持矩阵 |

@@ -334,7 +334,7 @@ describe('UploadPanel keyFor', () => {
 
 type QueueOptionsProbe = {
   onItemStart: (it: { id: number; file: File; key: string }) => void
-  target: (it: { id: number; file: File; key: string }) => { accId: string; bucket?: string; key: string }
+  target: (it: { id: number; file: File; key: string }) => { accId: string; bucket?: string; key: string; ifNoneMatch?: '*' }
   selectBatch: (items: Array<{ status: string }>) => Array<{ status: string }>
 }
 
@@ -388,5 +388,45 @@ describe('UploadPanel queue option callbacks', () => {
     mounted = mount(UploadPanel)
 
     expect(() => opts.target({ id: 1, file: new File(['x'], 'a.txt'), key: 'a.txt' })).toThrow('no active account')
+  })
+})
+
+describe('UploadPanel 条件写选项（If-None-Match: *）', () => {
+  function captureQueue() {
+    const q = makeQueue()
+    let opts!: QueueOptionsProbe
+    vi.mocked(useUploadQueue).mockImplementation((o) => {
+      opts = o as unknown as QueueOptionsProbe
+      return q as unknown as ReturnType<typeof useUploadQueue>
+    })
+    const accState = ref<Account | undefined>(acc)
+    vi.mocked(currentAccount).mockImplementation(() => accState.value)
+    mounted = mount(UploadPanel)
+    return { opts: () => opts, w: mounted }
+  }
+
+  /** 条件写复选框（i18n mock 回显键 → 标签文本即键名）。 */
+  function conditionalInput(w: ReturnType<typeof mount>) {
+    const label = w.findAll('label').find((l) => l.text().trim() === 'upload.conditional')
+    expect(label, '条件写选项应存在').toBeTruthy()
+    return label!.find('input[type="checkbox"]')
+  }
+
+  it('渲染选项与「分段上传不支持条件写」提示', () => {
+    const { w } = captureQueue()
+    expect(w.text()).toContain('upload.conditionalHint')
+    expect(conditionalInput(w).exists()).toBe(true)
+  })
+
+  it('勾选后 target 带 ifNoneMatch=*, 取消勾选后不再携带', async () => {
+    const { opts, w } = captureQueue()
+    const it = { id: 1, file: new File(['x'], 'a.txt'), key: 'a.txt' }
+    expect(opts().target(it)).toEqual({ accId: 'acc-1', key: 'a.txt' })
+
+    await conditionalInput(w).setValue(true)
+    expect(opts().target(it)).toEqual({ accId: 'acc-1', key: 'a.txt', ifNoneMatch: '*' })
+
+    await conditionalInput(w).setValue(false)
+    expect(opts().target(it)).toEqual({ accId: 'acc-1', key: 'a.txt' })
   })
 })

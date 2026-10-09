@@ -370,9 +370,10 @@ describe('ObjectsPanel wiring', () => {
     }
     const detail = w.findComponent({ name: 'ObjectDetailDialog' })
     expect(detail.props('open')).toBe(true)
-    // F5b：零使用的 accountId/bucket props 已删除
-    expect(detail.props('accountId')).toBeUndefined()
-    expect(detail.props('bucket')).toBeUndefined()
+    // F5b：accountId/bucket 是对象保护（保留期 / 法定保留 / 校验和）读写的真实输入，
+    // 由面板的账号与当前桶注入——不再是「声明了却没人用」的空 props。
+    expect(detail.props('accountId')).toBe('acc-1')
+    expect(detail.props('bucket')).toBe('b1')
     // F5：该组件不再声明 error 事件（父级不再挂处理器）
     const emits = (detail.vm.$options.emits ?? []) as string[]
     expect(emits).not.toContain('error')

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/weilai1949/s3client/apps/server/internal/config"
@@ -36,6 +37,11 @@ type Handler struct {
 	migrateJobs    *service.JobRegistry
 	limiter        *ipLimiter
 	openapi        *openapi.Registry // 路由旁登记；/api/openapi.json 直接复用
+	// 计划任务（ROADMAP #6）：schedules 为计划注册表 + 调度循环；
+	// schedMu/schedActive 实现触发防叠加（check-and-set 原子，见 schedules.go）。
+	sched       *service.Scheduler
+	schedMu     sync.Mutex
+	schedActive map[string]bool
 }
 
 // New 构造 handler。token 支持逗号分隔多值（轮换/吊销：去掉旧 token 即可）。
@@ -44,7 +50,7 @@ type Handler struct {
 func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins []string, token, version string, exposeMetrics, exposeOpenAPI bool) *Handler {
 	reg := openapi.New("s3client API", version)
 	registerOpenAPI(reg, version)
-	return &Handler{
+	h := &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,
 		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics, exposeOpenAPI: exposeOpenAPI,
 		cspConnectSrc: defaultCSPConnectSrc,
@@ -52,7 +58,12 @@ func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins 
 		migrateJobs:   service.NewJobRegistry(),
 		limiter:       newIPLimiter(),
 		openapi:       reg,
+		schedActive:   make(map[string]bool),
 	}
+	// 调度器以 runScheduleJob 为触发器；persister 默认纯内存，SetSchedulePersister
+	// 在 Routes() 前替换为落盘版（同 SetJobPersister 的 setter 口径）。
+	h.sched = service.NewScheduler(nil, h.runScheduleJob)
+	return h
 }
 
 func splitTokens(s string) []string {
@@ -103,10 +114,22 @@ func (h *Handler) SetJobPersister(p service.JobPersister) {
 	h.migrateJobs = service.NewJobRegistryWithPersister(p)
 }
 
-// Shutdown 取消进行中的异步迁移并停止 reap 循环。
+// SetSchedulePersister 替换计划任务持久化器，并立即从历史清单恢复计划。
+// 需在 Routes() 前调用；不调用则保持纯内存（默认，与 SetJobPersister 同口径）。
+func (h *Handler) SetSchedulePersister(p service.SchedulePersister) {
+	// 先停旧调度循环，再以新 persister 重建（重建时 restore 读取历史清单）。
+	h.sched.Stop()
+	h.sched = service.NewScheduler(p, h.runScheduleJob)
+}
+
+// Shutdown 取消进行中的异步迁移、停止 reap 循环与计划调度循环。
+// sched 可能为零值（测试直接构造 Handler 白盒调用），须判空防 panic。
 func (h *Handler) Shutdown() {
 	if h.migrateJobs != nil {
 		h.migrateJobs.Stop()
+	}
+	if h.sched != nil {
+		h.sched.Stop()
 	}
 }
 

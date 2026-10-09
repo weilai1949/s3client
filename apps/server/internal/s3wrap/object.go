@@ -37,10 +37,19 @@ func (c *Client) listObjectsV2(ctx context.Context, bucket, prefix, delimiter, c
 
 // DeleteObject 删除单个对象。
 func (c *Client) DeleteObject(ctx context.Context, bucket, key string) error {
-	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+	return c.DeleteObjectCond(ctx, bucket, key, Conditions{})
+}
+
+// DeleteObjectCond 条件删除：仅当对象当前 ETag 匹配 IfMatch 才删除（防误删已变更对象）。
+func (c *Client) DeleteObjectCond(ctx context.Context, bucket, key string, cond Conditions) error {
+	in := &s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	})
+	}
+	if cond.IfMatch != "" {
+		in.IfMatch = aws.String(cond.IfMatch)
+	}
+	_, err := c.s3.DeleteObject(ctx, in)
 	return err
 }
 
@@ -90,11 +99,28 @@ func (c *Client) DeleteObjects(ctx context.Context, bucket string, keys []string
 
 // CopyObject 在服务端复制对象（同 endpoint 使用 CopyObject 接口）。
 func (c *Client) CopyObject(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string) error {
-	_, err := c.s3.CopyObject(ctx, &s3.CopyObjectInput{
+	return c.CopyObjectCond(ctx, srcBucket, srcKey, dstBucket, dstKey, CopyOptions{})
+}
+
+// CopyObjectCond 复制对象并带**目标端**条件写谓词与可选的校验和物化：
+// 条件不满足时 S3 返回 412/409（源对象不受影响）；ChecksumAlgorithm 非空时服务端
+// 计算并存储全对象校验和（RustFS 实测支持，供 verify-checksum 端到端比对）。
+func (c *Client) CopyObjectCond(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey string, opts CopyOptions) error {
+	in := &s3.CopyObjectInput{
 		Bucket:     aws.String(dstBucket),
 		Key:        aws.String(dstKey),
 		CopySource: aws.String(url.PathEscape(srcBucket + "/" + srcKey)),
-	})
+	}
+	if opts.IfMatch != "" {
+		in.IfMatch = aws.String(opts.IfMatch)
+	}
+	if opts.IfNoneMatch != "" {
+		in.IfNoneMatch = aws.String(opts.IfNoneMatch)
+	}
+	if opts.ChecksumAlgorithm != "" {
+		in.ChecksumAlgorithm = types.ChecksumAlgorithm(opts.ChecksumAlgorithm)
+	}
+	_, err := c.s3.CopyObject(ctx, in)
 	return wrapObjectTooLarge(err)
 }
 
@@ -135,6 +161,9 @@ func (c *Client) headObject(ctx context.Context, bucket, key, versionID string) 
 	in := &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
+		// ChecksumMode=ENABLED 让服务端在响应中带回存储的校验和；
+		// 不支持的厂商忽略该请求头（读侧降级，见 checksum.go）。
+		ChecksumMode: types.ChecksumModeEnabled,
 	}
 	if versionID != "" {
 		in.VersionId = aws.String(versionID)
@@ -144,6 +173,11 @@ func (c *Client) headObject(ctx context.Context, bucket, key, versionID string) 
 
 // PutObject 上传对象内容（ContentType/Metadata 用纯值传递，防腐层不暴露 SDK 输入类型）。
 func (c *Client) PutObject(ctx context.Context, bucket, key string, body io.Reader, contentType string, metadata map[string]string) error {
+	return c.PutObjectCond(ctx, bucket, key, body, contentType, metadata, Conditions{})
+}
+
+// PutObjectCond 带条件写谓词的上传：If-None-Match:"*" 只创建不覆盖，If-Match 按 ETag 乐观锁。
+func (c *Client) PutObjectCond(ctx context.Context, bucket, key string, body io.Reader, contentType string, metadata map[string]string, cond Conditions) error {
 	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -154,6 +188,12 @@ func (c *Client) PutObject(ctx context.Context, bucket, key string, body io.Read
 	}
 	if len(metadata) > 0 {
 		in.Metadata = metadata
+	}
+	if cond.IfMatch != "" {
+		in.IfMatch = aws.String(cond.IfMatch)
+	}
+	if cond.IfNoneMatch != "" {
+		in.IfNoneMatch = aws.String(cond.IfNoneMatch)
 	}
 	_, err := c.s3.PutObject(ctx, in)
 	return wrapObjectTooLarge(err)

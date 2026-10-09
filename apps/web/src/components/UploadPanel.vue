@@ -15,6 +15,8 @@ import type { UploadQueueItem } from '../composables/useUploadQueue'
 const prefix = ref('')
 const dragging = ref(false)
 const fileInput = ref<HTMLInputElement>()
+/** 条件写：仅当对象不存在时创建（If-None-Match: *）。分段上传不支持，见提示文案。 */
+const createOnly = ref(false)
 
 const account = computed(() => currentAccount())
 
@@ -29,7 +31,7 @@ const queue = useUploadQueue({
   target: (it) => {
     const accId = account.value?.id
     if (!accId) throw new Error('no active account')
-    return { accId, key: it.key }
+    return createOnly.value ? { accId, key: it.key, ifNoneMatch: '*' as const } : { accId, key: it.key }
   },
   onItemStart: (it) => (it.key = keyFor(it.file.name)), // 用当前前缀
   selectBatch: (all) => all.filter((it) => it.status !== 'done' && it.status !== 'cancelled'),
@@ -137,6 +139,12 @@ function clearDone() {
         <button class="btn secondary sm" :disabled="running || !doneCount" @click="clearDone">{{ t('upload.clearDone') }}</button>
         <button class="btn secondary sm" :disabled="running || !items.length" @click="clearList">{{ t('upload.clearAll') }}</button>
       </div>
+
+      <label class="check-row" style="margin-bottom:8px">
+        <input v-model="createOnly" type="checkbox" :disabled="running" />
+        {{ t('upload.conditional') }}
+      </label>
+      <div class="badge" style="margin-bottom:12px; color:var(--muted)">{{ t('upload.conditionalHint') }}</div>
 
       <div
         class="dropzone"

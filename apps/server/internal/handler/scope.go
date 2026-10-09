@@ -109,6 +109,16 @@ func accountIDFromPath(p string) string {
 	return id
 }
 
+// scheduleIDFromPath 从 /api/schedules/{id}[/...] 提取 {id}；非计划路径返回空串。
+func scheduleIDFromPath(p string) string {
+	rest, ok := strings.CutPrefix(p, "/api/schedules/")
+	if !ok {
+		return ""
+	}
+	id, _, _ := strings.Cut(rest, "/")
+	return id
+}
+
 // defaultBucket 解析账号默认桶（handler 省略 bucket 时会回退到它）。
 // 解析不到返回空串，由调用方 fail-closed。
 func (h *Handler) defaultBucket(r *http.Request) string {
@@ -283,5 +293,15 @@ func (h *Handler) requestScopeRefs(r *http.Request) ([]scopeRef, bool) {
 	}
 	add(str(body["sourceBucket"]), append(keys(body["sourceKeys"]), addKey(nil, str(body["sourcePrefix"]))...))
 	add(str(body["targetBucket"]), addKey(nil, str(body["targetPrefix"])))
+	// 计划任务的 {id} 路径（PUT/DELETE/run）：从已存计划注入桶/前缀引用——DELETE 与 run
+	// 无请求体，不注入的话前缀作用域 token 可触发/删除越界计划（POST 建计划仍走上方 body refs）。
+	// 计划不存在时不注入，交给 handler 回 404（不因越权状态泄露存在性）。
+	if sid := scheduleIDFromPath(r.URL.Path); sid != "" {
+		if s, ok := h.sched.Get(sid); ok {
+			refs = append(refs,
+				scopeRef{bucket: s.SourceBucket, key: s.SourcePrefix},
+				scopeRef{bucket: s.TargetBucket, key: s.TargetPrefix})
+		}
+	}
 	return refs, true
 }

@@ -154,13 +154,35 @@ GET /api/accounts/{id}/objects?bucket=B&prefix=P&delimiter=/&maxKeys=1000&contin
 ```
 `objects` 各项含 `storageClass`（存储类型），可用于列表展示。
 
+### 存储分析与成本洞察
+```
+GET /api/accounts/{id}/storage-report?bucket=B&prefix=P(可选)
+```
+列举桶（可限定 `prefix`）并聚合：按存储类与顶层前缀的用量、按 USD/GiB/月的成本估算，以及低频（30–89 天未修改）与归档（≥90 天）建议。最多列举 100 页 / 10 万个对象，超出或多页游标异常时置 `truncated` 为 `true`（报告仍可用，只是未覆盖全部对象）。未知存储类按 STANDARD 单价估算；`prefixGroupCount` 为 `byPrefix` 分组数。
+```json
+200 {"bucket":"my-bucket","prefix":"","objectCount":6,"totalSize":32212254720,"truncated":false,"monthlyCost":0.53,"prefixGroupCount":3,"byStorageClass":[{"storageClass":"STANDARD","count":3,"size":17179869184,"monthlyCost":0.368}],"byPrefix":[{"prefix":"photos/","count":3,"size":17179869184}],"recommendations":[{"kind":"infrequent","fromStorageClass":"STANDARD","toStorageClass":"STANDARD_IA","count":1,"size":5368709120,"estimatedMonthlySaving":0.0525}]}
+```
+
 ### 对象详情
 ```
 GET /api/accounts/{id}/head?bucket=B&key=K&versionId=V(可选)
 ```
 `bucket` 缺省用账号默认桶；对象不存在返回 404。`versionId` 可选，指定读取某历史版本的详情。
 ```json
-200 {"key":"dir/a.txt","size":17,"lastModified":"...","etag":"\"...\"","contentType":"text/plain","storageClass":"STANDARD_IA","metadata":{"owner":"alice"}}
+200 {"key":"dir/a.txt","size":17,"lastModified":"...","etag":"\"...\"","contentType":"text/plain","storageClass":"STANDARD_IA","metadata":{"owner":"alice"},"checksums":{"crc64nvme":"N4bktbEKNg8=","crc32c":"","sha256":"","sha1":"","type":"FULL_OBJECT"}}
+```
+`checksums` 为端到端校验和（服务端存储值）：对象无校验和或厂商不支持时为 `null`；`type` 为 `FULL_OBJECT`（全对象）或 `COMPOSITE_*`（分段合成，不可全对象比对）。可用 `POST /api/accounts/{id}/verify-checksum` 本地重算比对。
+
+### 校验对象内容（端到端校验和）
+```
+POST /api/accounts/{id}/verify-checksum
+```
+```json
+{"bucket":"B(可选)","key":"dir/a.txt","versionId":"V(可选)"}
+```
+先 `Head` 选定算法阶梯（`crc64nvme` → `crc32c` → `sha256` → `sha1` → `etag-md5`），再流式拉取全对象本地重算并与存储端比对。无校验和可用时 `method="none"`、`match=false`（如实降级，不是错误）。大对象验证会占用带宽与 CPU，响应在流读完后返回。
+```json
+200 {"bucket":"B","key":"dir/a.txt","versionId":"","method":"crc64nvme","local":"N4bktbEKNg8=","remote":"N4bktbEKNg8=","match":true}
 ```
 
 ### 新建文件夹
@@ -168,9 +190,9 @@ GET /api/accounts/{id}/head?bucket=B&key=K&versionId=V(可选)
 POST /api/accounts/{id}/mkdir
 ```
 ```json
-{"bucket":"B(可选)","key":"images"}
+{"bucket":"B(可选)","key":"images","ifMatch":"\"e1\"(可选)","ifNoneMatch":"*(可选)"}
 ```
-S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结尾（`images/`）。
+S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结尾（`images/`）。条件写（可选）：`ifNoneMatch` 只接受 `*`（目标不存在才创建，防并发覆盖）；`ifMatch` 为 ETag 字面量（仅当目标当前 ETag 匹配才写入）；条件不满足返回 412。
 ```json
 200 {"created":"images/","bucket":"B"}
 ```
@@ -192,9 +214,9 @@ POST /api/accounts/{id}/rename
 POST /api/accounts/{id}/copy-object
 ```
 ```json
-{"bucket":"B(可选)","key":"a.txt","newKey":"archive/a.txt","newBucket":"B2(可选)"}
+{"bucket":"B(可选)","key":"a.txt","newKey":"archive/a.txt","newBucket":"B2(可选)","ifMatch":"\"e1\"(可选)","ifNoneMatch":"*(可选)","checksumAlgorithm":"CRC64NVME|SHA256|CRC32C|SHA1(可选)"}
 ```
-复制单个对象到目标桶/目标 key，**不删除源**（区别于 `rename`）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同则拒绝。
+复制单个对象到目标桶/目标 key，**不删除源**（区别于 `rename`）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同则拒绝。条件写（可选）作用于**目标**对象：`ifNoneMatch="*"` 仅当目标不存在才复制、`ifMatch` 为目标 ETag；条件不满足返回 **412**（`PreconditionFailed`），并发冲突返回 **409**（`ConditionalRequestConflict`）。`checksumAlgorithm` 非空时服务端计算并**存储全对象校验和**（复制后即可被 `verify-checksum` 以对应算法端到端比对）；缺省走服务端默认（不改变历史行为）。
 ```json
 200 {"copied":"archive/a.txt","bucket":"B2"}
 ```
@@ -301,6 +323,44 @@ PUT /api/accounts/{id}/object-tags
 200 {"tags":[{"key":"env","value":"prod"}]}
 ```
 
+### 对象保留期（Object Lock 保留）
+```
+GET /api/accounts/{id}/object-retention?bucket=B(可选)&key=K&versionId=V(可选)
+```
+无保留期（或桶未启用 Object Lock）时 `configured=false`。
+```json
+200 {"bucket":"B","key":"a.txt","versionId":"","configured":true,"mode":"COMPLIANCE","retainUntilDate":"2030-01-02T03:04:05Z"}
+```
+```
+PUT /api/accounts/{id}/object-retention
+```
+```json
+{"bucket":"B(可选)","key":"a.txt","versionId":"V(可选)","mode":"GOVERNANCE|COMPLIANCE","retainUntilDate":"2031-02-03T04:05:06Z"}
+```
+`retainUntilDate` 为 RFC3339 且必须是未来时刻（否则 400）。错误映射：输入非法 / 保留期短于当前 → **400**；GOVERNANCE 保留期内拒绝（含权限不足）→ **403**；COMPLIANCE 锁定 → **409**（`ObjectLocked`）。
+```json
+200 {"bucket":"B","key":"a.txt","versionId":"","configured":true,"mode":"GOVERNANCE","retainUntilDate":"2031-02-03T04:05:06Z"}
+```
+
+### 法定保留（Legal Hold）
+```
+GET /api/accounts/{id}/object-legal-hold?bucket=B(可选)&key=K&versionId=V(可选)
+```
+未设置时 `status="OFF"`。
+```json
+200 {"bucket":"B","key":"a.txt","versionId":"","status":"ON"}
+```
+```
+PUT /api/accounts/{id}/object-legal-hold
+```
+```json
+{"bucket":"B(可选)","key":"a.txt","versionId":"V(可选)","status":"ON|OFF"}
+```
+`status` 只接受 `ON` / `OFF`；拒绝（含权限不足）→ 403，对象被锁定 → 409。
+```json
+200 {"bucket":"B","key":"a.txt","versionId":"","status":"ON"}
+```
+
 ### 桶属性（区域 / 创建时间 / 版本控制）
 ```
 GET /api/accounts/{id}/bucket-info?bucket=B(可选)
@@ -401,6 +461,25 @@ PUT /api/accounts/{id}/bucket/tags
 ```
 DELETE /api/accounts/{id}/bucket/tags?bucket=B
 200 {"deleted":"B"}
+```
+
+### 桶 Object Lock 配置（WORM 默认保留）
+```
+GET /api/accounts/{id}/bucket/object-lock?bucket=B(可选)
+```
+桶未在创建时启用 Object Lock（或厂商不支持）时 `enabled=false`，不是错误。
+```json
+200 {"bucket":"B","enabled":true,"defaultRetentionMode":"GOVERNANCE","defaultRetentionDays":30,"defaultRetentionYears":0}
+```
+```
+PUT /api/accounts/{id}/bucket/object-lock
+```
+```json
+{"bucket":"B(可选)","defaultRetentionMode":"GOVERNANCE|COMPLIANCE","defaultRetentionDays":30,"defaultRetentionYears":0}
+```
+`defaultRetentionMode` 必填；`defaultRetentionDays` 与 `defaultRetentionYears` **二选一**且 ≥1。桶必须**在创建时**启用 Object Lock：既有桶上设置返回 **409**（`InvalidBucketState`）；厂商未实现返回 **501**（`NotImplemented`）。
+```json
+200 {"bucket":"B","enabled":true,"defaultRetentionMode":"GOVERNANCE","defaultRetentionDays":30,"defaultRetentionYears":0}
 ```
 
 ### 对象版本列表（ListObjectVersions）
@@ -531,14 +610,16 @@ GET /api/accounts/{id}/proxy?bucket=B&key=K&mode=download|inline|text&maxBytes=N
 POST /api/accounts/{id}/presign
 ```
 ```json
-{"method":"get|put|post","key":"dir/a.txt","bucket":"B(可选)","versionId":"V(可选,仅get)","expiresIn":3600}
+{"method":"get|put|post","key":"dir/a.txt","bucket":"B(可选)","versionId":"V(可选,仅get)","expiresIn":3600,"ifMatch":"\"e1\"(可选,仅put)","ifNoneMatch":"*(可选,仅put)"}
 ```
 - `expiresIn` 单位秒；缺省（或 ≤0）时**默认 1 小时**，超过 **24 小时**会被钳到 24 小时（S3 协议上限为 7 天，控制台场景收紧到 24h；见 `s3wrap/presign.go` 与 `objects.go` 的钳制）。
 - `get` / `put` 返回 `{method,url,expiresIn,...}`；`post` 额外返回 `{url,fields}`（multipart 表单字段）。
 - `get` 可传 `versionId` 生成指向指定历史版本的签名 GET（用于「版本比较/详情」拉取某个版本内容）。
+- 条件写（可选，仅 `put`）：`ifNoneMatch` 只接受 `*`、`ifMatch` 为 ETag 字面量；条件不在 URL 里——**浏览器 PUT 时必须携带响应 `headers` 回显的请求头**（S3 服务端求值，且条件头参与签名），条件不满足返回 412。`get`/`post` 携带条件字段直接 400。浏览器直传场景要求桶 CORS 的 **AllowedHeaders 放行 `If-Match` / `If-None-Match`**（条件头必须原样回传，否则预检失败或签名校验不过）。
 ```json
 get: {"method":"get","bucket":"B","key":"k","url":"https://...X-Amz-Signature=...","expiresIn":3600}
 post: {"method":"post","bucket":"B","key":"k","url":"https://...","fields":{"X-Amz-Signature":"...","key":"k"},...}
+put: {"method":"put","bucket":"B","key":"k","url":"https://...","expiresIn":3600,"headers":{"If-None-Match":"*"}}
 ```
 
 ### 分段上传（大文件直传）
@@ -690,20 +771,77 @@ POST /api/migrate/sync
 ```
 `truncated=true` 时必须继续处理剩余对象（再次同步会从同一位置继续列举），否则超出上限的源对象**永不同步**且无任何信号。
 
+### 计划任务（cron 定时增量同步）
+
+```
+GET /api/schedules
+```
+返回全部计划任务（按创建时间倒序，最新在前）；空清单为 `[]`。
+```json
+200 {"schedules":[{"id":"9c2f1a44-...","sourceAccountId":"a","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"b","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T02:00:00Z","lastRunAt":"2026-10-08T02:00:00Z","lastJobId":"uuid","lastError":""}]}
+```
+`lastRunAt`（从未运行时省略）、`lastJobId`（最近一次触发的任务 id，前端跳转进度用）与 `lastError`
+（最近一次触发失败原因，成功或修复后更新计划时清除）为运行态；`enabled:false` 只冻结自动调度，不删除计划。
+
+```
+POST /api/schedules
+```
+```json
+{
+  "sourceAccountId":"a","sourceBucket":"src-bucket","sourcePrefix":"data/",
+  "targetAccountId":"b","targetBucket":"dst-bucket","targetPrefix":"backup/",
+  "mode":"etag","cron":"0 2 * * *","enabled":true
+}
+```
+- `cron` 为**标准 5 字段**（分 时 日 月 周），仅数字与 `*`/`-`/`,`/`/`；不支持 `MON`/`JAN` 名字、
+  每字段仅一个 `a/b` 步进。`0 0 30 2 *` 这类**永不触发**的表达式拒收（400）。
+- `mode`：`etag`（默认）/ `size_mtime` / `always`，空串按 `etag`；`enabled` 缺省 `true`；
+  桶缺省回退账号默认桶（两端都为空则 400）。引用的账号不存在回 404、配置缺密钥回 400。
+- 触发语义（均有测试钉住）：停机错过的多个槽**只补跑一次**；上一轮未结束**不叠加**（手动 run 回 409）；
+  触发失败**记录 `lastError` 且排期照常前移**（坏配置不会每分钟重试轰炸）。
+- 计划落盘 `S3C_DATA_DIR/schedules.json`（0600，原子写），重启自动恢复；手动 run 不改自动排期。
+```json
+201 {"schedule":{"id":"9c2f1a44-...","sourceAccountId":"a","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"b","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T02:00:00Z"}}
+```
+
+```
+PUT /api/schedules/{id}
+```
+请求体与 `POST /api/schedules` 相同（整体替换，保留 `id`/`createdAt`/运行态）；`cron` 变更时重算排期。
+```json
+200 {"schedule":{"id":"9c2f1a44-...","sourceAccountId":"a","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"b","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"size_mtime","cron":"30 3 * * *","enabled":false,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T03:30:00Z"}}
+```
+
+```
+DELETE /api/schedules/{id}
+```
+```json
+200 {"deleted":"9c2f1a44-..."}
+```
+
+```
+POST /api/schedules/{id}/run
+```
+立即触发一次（不改自动排期），返回异步任务 id；进度经 `GET /api/migrate/jobs/{id}` 与 SSE 订阅
+（与迁移任务同链路）。上一轮未结束回 409；计划或账号不存在回 404；账号配置已损坏回 400；在册任务满回 503。
+```json
+202 {"jobId":"uuid","scheduleId":"9c2f1a44-..."}
+```
+
 ### API 契约（OpenAPI 3.0）
 
 ```
 GET /api/openapi.json
 ```
 
-OpenAPI 3.0 规范，作为 71 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
+OpenAPI 3.0 规范，作为 84 个 `/api/*` 端点的契约单一来源；**经过鉴权层**——配置了 `S3C_TOKEN` 时无 token 访问返回 401，且需 `S3C_EXPOSE_OPENAPI=1` 才暴露（否则 404）。
 前端**已经**以它为源生成 TypeScript 类型与端点封装：`cd apps/web && pnpm gen:api` 从提交的
 黄金契约生成 `src/api/schema.d.ts`（类型）与 `src/api/operations.ts`（`operationId → method / path /
 路径参数`），`endpoints.ts` 的 URL 与 method 全部经 `opPath()` 取自生成物；`pnpm gen:api --check`
 （由 `src/api/generated.gate.test.ts` 在 `pnpm test` 内调用）钉住「spec 改了而忘了重新生成」。
 同一份契约也可用于 Swagger UI / 契约测试。
 共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
-鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 10 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
+鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 11 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `schedules` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
 
 ## 请求示例（curl）
 
@@ -774,6 +912,15 @@ curl -sS -X POST "$BASE/api/accounts/$ACCOUNT_ID/presign" \
 200 {"method":"get","bucket":"my-bucket","key":"docs/a.txt","url":"https://s3.example.com/my-bucket/docs/a.txt?X-Amz-Signature=...","expiresIn":3600}
 ```
 
+```bash
+# 存储分析与成本洞察（可选 prefix；返回按存储类 / 前缀的用量与建议）
+curl -sS -X GET "$BASE/api/accounts/$ACCOUNT_ID/storage-report?bucket=my-bucket&prefix=logs/" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+200 {"bucket":"my-bucket","prefix":"logs/","objectCount":6,"totalSize":32212254720,"truncated":false,"monthlyCost":0.53,"prefixGroupCount":3,"byStorageClass":[],"byPrefix":[],"recommendations":[]}
+```
+
 ### object-meta
 
 ```bash
@@ -835,6 +982,28 @@ curl -sS -X POST "$BASE/api/migrate/sync" \
 ```
 ```json
 200 {"scanned":100,"skipped":60,"copied":40,"failed":0,"failedKeys":[],"truncated":false}
+```
+
+### schedules
+
+```bash
+# 创建计划任务（cron 定时增量同步）
+curl -sS -X POST "$BASE/api/schedules" \
+  -H "Authorization: Bearer $S3C_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true}'
+```
+```json
+201 {"schedule":{"id":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T02:00:00Z"}}
+```
+
+```bash
+# 立即触发一次（不改自动排期）
+curl -sS -X POST "$BASE/api/schedules/9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d/run" \
+  -H "Authorization: Bearer $S3C_TOKEN"
+```
+```json
+202 {"jobId":"e5d4c3b2-...","scheduleId":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"}
 ```
 
 ### system

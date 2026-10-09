@@ -35,6 +35,7 @@ S3 兼容对象存储客户端工具，使用 **AWS Signature V4** 签名。提�
 - 桶属性与版本控制：查看区域 / 创建时间 / 版本控制状态，一键开启/暂停版本控制（`GetBucketLocation` / `Get/PutBucketVersioning`）；对象历史版本列表（`ListObjectVersions`，含删除标记），支持**删除指定版本 / 恢复某版本到当前**（`DeleteObject` 带 `versionId`、`CopyObject` 带 `?versionId=`）、**版本比较/详情**（选两个版本做内容差异比对）、**一键还原已删除对象**（删除标记 `DeleteObject` 撤销删除）。
 - **桶管理菜单**：独立顶层菜单，集中管理各桶的**版本控制、生命周期（前缀过期删除）、服务端加密（SSE）、CORS 规则、静态网站托管、桶策略、桶标签**（读写/开关，未配置时优雅展示）。
 - **回收站菜单**：独立顶层菜单，列出桶内所有**已删除对象（删除标记）**，支持**一键还原（撤销删除）**与**彻底清除（永久删除该 key 全部版本）**，可翻页加载全部历史删除标记。
+- **成本看板菜单**（FinOps）：独立顶层菜单，按**存储类**与**顶层前缀**聚合桶内用量，估算月成本（USD/GiB/月），并给出**低频（30–89 天）→ `STANDARD_IA`** 与**归档（≥90 天）→ `GLACIER_IR`** 优化建议；支持限定前缀，对象超 10 万时明确标记截断（成本为量级估算，非账单真值）。
 - 文件迁移：同 endpoint 走 `CopyObject`（服务端复制）；跨 endpoint 走 `GetObject` → `PutObject` 流式转发（保留 Content-Type 与元数据）；逐 key 执行、失败继续并汇总。
 - 复制 / 移动（跨桶）：文件与文件夹支持「复制到… / 移动到…」，统一对话框中可选目标 Bucket 与目标路径/前缀（同桶复制文件由后端 `CopyObject` 完成，文件夹递归复制；移动 = 复制成功后删除源）。
 - 增加文件前缀：上传与迁移时可给对象 key 追加前缀。
@@ -251,7 +252,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 **用法（产品是什么 / 怎么用）**
 
 - [用户手册](docs/user-guide.md) — 首次配置 / 上传下载 / 对象与桶操作 / 版本与回收站 / 快捷键 / FAQ / 排障
-- [REST API 参考](docs/api.md) — 71 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
+- [REST API 参考](docs/api.md) — 84 个 `/api/*` 端点（OpenAPI 3.0.3 自动生成）
 - [OpenAPI 规范文件](docs/api/openapi.json) — 机器可读契约（**不跑服务也能读**；Swagger UI / 代码生成 / AI 代理可直接消费）
 - [错误约定](docs/errors.md) — S3 错误 → HTTP 状态映射
 - [兼容性与客户端支持矩阵](docs/compatibility.md) — 版本命名 / 支持窗口 / API 演进承诺 / 存储格式兼容 / 弃用规则 / 浏览器与桌面 OS 支持矩阵（§6.2）

@@ -100,6 +100,8 @@ func runServer(ctx context.Context) int {
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
 	// 「复制成功但源未删除」的移动任务（KNOWN_ISSUES #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))
+	// 计划任务清单落盘（0600 原子写）：重启自动恢复计划与排期（ROADMAP #6）。
+	h.SetSchedulePersister(service.NewFileSchedulePersister(filepath.Join(cfg.DataDir, "schedules.json")))
 	// 数据目录用于 /api/metrics 的卷容量（statfs）与关停耗时落盘；
 	// 上一次优雅关停的耗时在启动时载入，使该指标跨进程可读（ROADMAP #18）。
 	h.SetDataDir(cfg.DataDir)

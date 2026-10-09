@@ -13,22 +13,43 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// PresignPut 生成 v4 签名的上传 URL（单文件 PUT，≤5GB）。
+// PresignPutResult 是 PresignPut 的产物：签名 URL 加「客户端随 PUT 必须携带的请求头」。
+//
+// 条件写头（If-Match / If-None-Match）不在查询串里——S3 按请求头在服务端求值，
+// 浏览器直传必须显式带上，故通过 Headers 回显；无条件时为空表，响应体形状稳定。
+type PresignPutResult struct {
+	URL     string
+	Headers map[string]string
+}
+
+// PresignPut 生成 v4 签名的上传 URL（单文件 PUT，≤5GB），可附条件写谓词。
 // errInvalidExpiry 预签名过期时长必须为正。
 var errInvalidExpiry = errors.New("presign: expiry must be positive")
 
-func (c *Client) PresignPut(ctx context.Context, bucket, key string, expires time.Duration) (string, error) {
+// 失败时也返回非 nil 的空结果（URL 为空），调用方可把 (result, err) 原样交给
+// 写响应的辅助函数一次成型——与改造前的 (url string, err) 形状语义一致，
+// 也让 handler 侧不必为 err 单开分支（覆盖与控制流同样简单）。
+func (c *Client) PresignPut(ctx context.Context, bucket, key string, expires time.Duration, cond Conditions) (*PresignPutResult, error) {
+	out := &PresignPutResult{Headers: cond.headers()}
 	if expires <= 0 {
-		return "", errInvalidExpiry
+		return out, errInvalidExpiry
 	}
-	res, err := c.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	}, func(o *s3.PresignOptions) { o.Expires = expires })
-	if err != nil {
-		return "", err
 	}
-	return res.URL, nil
+	if cond.IfMatch != "" {
+		in.IfMatch = aws.String(cond.IfMatch)
+	}
+	if cond.IfNoneMatch != "" {
+		in.IfNoneMatch = aws.String(cond.IfNoneMatch)
+	}
+	res, err := c.presign.PresignPutObject(ctx, in, func(o *s3.PresignOptions) { o.Expires = expires })
+	if err != nil {
+		return out, err
+	}
+	out.URL = res.URL
+	return out, nil
 }
 
 // PresignPost 生成 v4 签名的 POST 表单（multipart/form-data），用于浏览器大文件/表单直传。

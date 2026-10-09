@@ -42,7 +42,7 @@
 |---|---|---|---|
 | Go 后端 | 默认 `127.0.0.1:8080`（`S3C_ADDR`）；容器内 `0.0.0.0:8080`，非 root 用户 `app`（uid 1000） | `SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（上限 `S3C_SHUTDOWN_TIMEOUT`） | 容器：`docker compose logs server`（json-file，10m × 3 或 5）；本机：`.run/server.log` |
 | nginx | 单 worker 反向代理 / 静态托管；compose 发布 `127.0.0.1:8080:8080` | `SIGQUIT` 优雅停止；`nginx -s reload` 热加载 | `docker compose logs nginx` |
-| 账号存储 | 文件型：`accounts.json` / `accounts.db` / `accounts.json.enc`（取决于 `S3C_STORE_DRIVER`）+ `jobs.json` 任务清单 + `shutdown.json` 上次关停耗时 | 随进程退出释放 `flock` | 不单独打日志，错误由后端日志承载 |
+| 账号存储 | 文件型：`accounts.json` / `accounts.db` / `accounts.json.enc`（取决于 `S3C_STORE_DRIVER`）+ `jobs.json` 任务清单 + `schedules.json` 计划任务（0600） + `shutdown.json` 上次关停耗时 | 随进程退出释放 `flock` | 不单独打日志，错误由后端日志承载 |
 
 ## 3. 可观测性
 
@@ -565,6 +565,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | `accounts.db` | `S3C_STORE_DRIVER=sqlite` | ✅ 必须 | SQLite 主库 |
 | `accounts.db-wal` / `accounts.db-shm` | `sqlite`（WAL 模式） | ✅ 必须（与主库**同批**） | 侧车含尚未 checkpoint 的页；只拷 `.db` 可能丢掉最近写入 |
 | `jobs.json` | 有过异步任务时 | ⚠️ 可选 | 异步任务清单（含 `interrupted` 对账证据，保留 7 天）；丢失只影响重启后的对账视图，不影响账号数据 |
+| `schedules.json` | 建过计划任务时 | ⚠️ 可选 | 计划任务清单（cron / 桶引用 / 排期，0600）；丢失只丢计划本身（可在界面重建），不影响已完成的备份数据 |
 | `shutdown.json` | 至少完成过一次优雅关停 | ⚠️ 可选 | 上次关停耗时（`{"durationUs":...}`），供 `s3c_last_shutdown_duration_seconds` 在下次启动读入；丢失只让该指标回落 0，不影响服务 |
 | `.s3client.lock` | unix 且进程运行过 | ❌ **不需要** | `flock` 锁文件，内容无意义；锁由内核在进程退出时释放，残留文件不影响下次启动 |
 | `accounts.json.tmp` 等 `*.tmp` | 写盘中途崩溃时可能残留 | ❌ 不需要 | 原子写临时残骸；下次写盘会先清理，不影响读取 |

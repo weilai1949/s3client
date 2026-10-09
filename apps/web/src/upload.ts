@@ -7,6 +7,11 @@ export interface UploadTarget {
   accId: string
   bucket?: string
   key: string
+  /**
+   * 条件写：`'*'` = 仅当对象不存在时创建（`If-None-Match: *`）。只对单次 PUT 生效，
+   * 分段上传不支持——`uploadObject` 对 ≥100MB 的文件直接报错（UI 已注明）。
+   */
+  ifNoneMatch?: '*'
 }
 
 /** 超过该大小的文件自动走 S3 分段上传（单 PUT 上限 5GB，分段对超大文件更稳、可并行）。 */
@@ -83,15 +88,22 @@ export async function uploadObject(
   signal?: AbortSignal,
 ): Promise<void> {
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  // 条件写只在单次 PUT 上有意义（分段 Complete 不评估 If-None-Match）：
+  // 大文件宁可明确失败，也不让用户以为「仅当不存在时创建」生效了。
+  if (target.ifNoneMatch && file.size >= MULTIPART_THRESHOLD) {
+    throw new Error(t('upload.conditionalMultipartUnsupported'))
+  }
   if (file.size < MULTIPART_THRESHOLD) {
     const presign = await s3api.presign(target.accId, {
       method: 'put',
       key: target.key,
       bucket: target.bucket,
       expiresIn: 3600,
+      ifNoneMatch: target.ifNoneMatch,
     })
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    return directUpload(presign.url, file, onProgress, signal)
+    // 条件头已由后端签进 URL：必须原样带上，否则 S3 判签名不匹配（403）。
+    return directUpload(presign.url, file, onProgress, signal, presign.headers)
   }
   return multipartUpload(file, target, onProgress, signal)
 }

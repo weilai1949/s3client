@@ -22,13 +22,13 @@
 **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：`S3C_TOKEN` 支持逗号分隔多 token，但历史上每个 token 都是全权。现可选用独立 env `S3C_TOKEN_SCOPES`（JSON：token → `{readonly, prefixes, accounts, expiresAt}`）为单个 token 声明最小权限：
 
 - `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
-- `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；
+- `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
 - `accounts`：仅允许路径 `{id}` 命中的账号；
 - `expiresAt`：过期后 401（审计 `reason=token_expired`）。
 
 未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
-> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）与账号列表不受其约束；需要更细粒度授权时应在账号侧用 S3 策略收敛。
+> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表与**计划列表（`GET /api/schedules`，可读到越界计划的桶名，但不可触发 / 删除）**不受其约束；`accounts` 作用域按路径 `{id}` 判定，迁移 / 计划 body 里的账号 id 不受其约束（与 `prefixes` 按 body 桶判定不同）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
 
 ### 边界 B：预签名 URL 直传
 

@@ -61,6 +61,9 @@ type Schema struct {
 	Properties map[string]*Schema `json:"properties,omitempty"`
 	Required   []string           `json:"required,omitempty"`
 	Items      *Schema            `json:"items,omitempty"`
+	// Nullable OAS 3.0 的 `nullable: true`：值域为「object 或 null」
+	// （如 head 的 checksums——厂商不支持 / 对象无校验和时响应为 null）。
+	Nullable bool `json:"nullable,omitempty"`
 }
 
 // MediaType 一个请求 / 响应体的描述。

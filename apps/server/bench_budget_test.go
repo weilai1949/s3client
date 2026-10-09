@@ -106,13 +106,13 @@ func TestBenchPresignPutStaysWithinBudget(t *testing.T) {
 		}
 		ctx := context.Background()
 		// 先跑一次，确认基准确实在测一条能产出签名的路径（而不是恒定报错）。
-		if _, err := c.PresignPut(ctx, "bench-bucket", benchObjectKey, time.Hour); err != nil {
+		if _, err := c.PresignPut(ctx, "bench-bucket", benchObjectKey, time.Hour, s3wrap.Conditions{}); err != nil {
 			b.Fatalf("PresignPut 前置校验失败: %v", err)
 		}
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			if _, err := c.PresignPut(ctx, "bench-bucket", benchObjectKey, time.Hour); err != nil {
+			if _, err := c.PresignPut(ctx, "bench-bucket", benchObjectKey, time.Hour, s3wrap.Conditions{}); err != nil {
 				b.Fatalf("PresignPut: %v", err)
 			}
 		}

@@ -14,6 +14,12 @@
 | `InvalidRequest` / `InvalidArgument` / `MalformedPolicy` / `MalformedXML` / `InvalidStorageClass` / `InvalidPartOrder` | 400 | `invalid request` | `InvalidPartOrder` 由 handler 的段号升序校验先行拦截（`parts must be ordered by ascending partNumber`） |
 | `EntityTooLarge` | 400 | `entity too large` | `PutObject`/`CopyObject` 会把该错误码归一为 `s3wrap.ErrObjectTooLarge`（见下） |
 | `BucketNotEmpty` | 409 | `bucket not empty` | |
+| `PreconditionFailed` | 412 | `precondition failed (object changed or already exists)` | 条件写不满足（#5：presign/mkdir/copy 的 `ifMatch`/`ifNoneMatch`） |
+| `ConditionalRequestConflict` | 409 | `conditional request conflict, retry after re-reading the object` | 条件写的并发冲突（S3 建议重读后重试） |
+| `ObjectLocked` | 409 | `object is locked by retention or legal hold` | Object Lock 合规保留期内的写 / 删 / 改保留被拒 |
+| `RetentionPeriodTooShort` | 400 | `retention period too short (not later than current retention)` | 新保留期早于当前保留期 |
+| `ObjectLockConfigurationNotFoundError` | 400 | `object lock is not enabled for this bucket` | 桶未启用 Object Lock 时的写操作（读操作在 `s3wrap` 已降级，不外抛） |
+| `NotImplemented` | 501 | `not supported by this storage endpoint` | 厂商未实现该 API（按支持度降级的一部分） |
 | `InvalidRange` | 416 | （proxy 专用文案） | `proxyErr` |
 | `SlowDown` / `ServiceUnavailable` / `RequestTimeout` | 503 | `storage temporarily unavailable` | 两表（`HTTPStatus` / `UserMessageForCode`）对 `RequestTimeout` 同口径归 503（review §Nit） |
 | `NoSuchUpload` | 500* | `multipart upload not found` | *HTTP 默认走 fallback 500；消息单独映射 |
@@ -47,6 +53,15 @@
 | 请求体超过上限（16MB） | 413 | `request body too large (max 16MB)` | 与「JSON 无效」的 400 区分开（此前被 `LimitReader` 截断成 400） |
 | download-zip 传入空 key | 400 | `keys must not contain empty entries` | 空 key 会被 S3 当成「列举桶」，把 ListBucket XML 塞进 ZIP |
 | 分段顺序不是升序 | 400 | `parts must be ordered by ascending partNumber` | S3 要求 `CompleteMultipartUpload` 的 Parts 升序 |
+| `ifNoneMatch` 非 `*` | 400 | `ifNoneMatch must be *` | 条件写边界校验（`handler/conditions.go`；S3 只接受「仅当不存在」语义） |
+| `ifMatch` 超长（>512B） | 400 | `ifMatch is too long` | 条件值边界校验 |
+| `ifMatch` 含非可见 ASCII / 空格 | 400 | `ifMatch must be printable ASCII without spaces` | 条件值作为 HTTP 头发出，CRLF / 空格在边界拦截（防头注入） |
+| presign 的 get/post 携带条件字段 | 400 | `conditional write is only supported for method put` | 条件写只作用于 PUT；显式拒绝而非静默忽略 |
+| `checksumAlgorithm` 非法 | 400 | `checksumAlgorithm must be CRC64NVME, SHA256, CRC32C or SHA1` | `POST copy-object` 复制时物化校验和的算法枚举 |
+| Object Lock 默认保留输入非法 | 400 | `defaultRetentionMode must be GOVERNANCE or COMPLIANCE` / `default retention days and years must not be negative` / `specify only one of defaultRetentionDays or defaultRetentionYears` / `defaultRetentionDays or defaultRetentionYears is required` | `PUT bucket/object-lock` 边界校验（模式必填、天 / 年二选一且 ≥1） |
+| 在既有桶上启用 Object Lock | 409 | `object lock cannot be enabled on an existing bucket` | RustFS 返回 `InvalidBucketState`；Object Lock 只能在建桶时启用 |
+| 保留期输入非法 | 400 | `mode must be GOVERNANCE or COMPLIANCE` / `retainUntilDate is required` / `retainUntilDate must be RFC3339, e.g. 2031-02-03T04:05:06Z` / `retainUntilDate must be in the future` | `PUT object-retention` 边界校验 |
+| 法定保留状态非法 | 400 | `status must be ON or OFF` | `PUT object-legal-hold` 边界校验 |
 
 ## Handler 约定
 

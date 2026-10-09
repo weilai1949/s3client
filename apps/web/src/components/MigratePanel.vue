@@ -11,6 +11,7 @@ import { MIGRATE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
+import SchedulesSection from './SchedulesSection.vue'
 import type { BucketItem, JobRecord, ObjectItem } from '../types'
 
 // 大对象列表（listAll 上限 200×1000）走窗口化渲染，避免数十万行直接 v-for 冻结页面。
@@ -557,6 +558,9 @@ onMounted(async () => {
         {{ t('migrate.emptyHint') }}
       </div>
     </template>
+
+    <!-- 计划任务（ROADMAP #6）：自带源/目标引用，不依赖当前选中的源账号，始终可见 -->
+    <SchedulesSection />
 
     <!-- 迁移结果弹窗 -->
     <ModalDialog :open="resultDialog.open" :title="t('migrate.resultTitle')" width="min(560px, 100%)" @close="resultDialog.open = false">

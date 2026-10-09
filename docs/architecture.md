@@ -80,7 +80,7 @@ apps/web/src/
   api/               API 客户端（按职责拆分的模块目录，见下）
     storage.ts         浏览器凭据 / 多服务器 profile 存储（依赖图最底层）
     http.ts            传输层：base + Bearer + JSON + 错误归一
-    endpoints.ts       领域端点封装（s3api 对象，59 个方法；与后端 70 个 `/api/*` 端点不是同一量纲）
+    endpoints.ts       领域端点封装（s3api 对象，72 个方法；与后端 84 个 `/api/*` 端点不是同一量纲）
     jobs.ts            异步任务 SSE 订阅 + EOF 后状态回读兜底
     download.ts        ZIP 流式落盘（File System Access API + blob 兜底）
     upload.ts          预签名直传（XHR，提供上传进度）

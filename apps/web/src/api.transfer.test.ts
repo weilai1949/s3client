@@ -443,6 +443,35 @@ describe('directUpload', () => {
     await promise
   })
 
+  it('条件写 headers 逐个 setRequestHeader（条件头参与签名，漏带即签名不匹配）', async () => {
+    const XHRMock = createXhrMockClass()
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
+    const { directUpload } = await import('./api')
+    const promise = directUpload(
+      'https://x',
+      new Blob(['a']) as File,
+      undefined,
+      undefined,
+      { 'If-None-Match': '*', 'X-Amz-SignedHeaders': 'host;if-none-match' },
+    )
+    const inst = XHRMock.getInstances()[0]
+    expect(inst.setRequestHeader).toHaveBeenCalledWith('If-None-Match', '*')
+    expect(inst.setRequestHeader).toHaveBeenCalledWith('X-Amz-SignedHeaders', 'host;if-none-match')
+    inst._fire('load', {})
+    await promise
+  })
+
+  it('412 条件不满足 → 返回可读的条件写失败提示（而非裸状态码）', async () => {
+    const XHRMock = createXhrMockClass()
+    vi.stubGlobal('XMLHttpRequest', XHRMock)
+    const { directUpload } = await import('./api')
+    const promise = directUpload('https://x', new Blob(['a']) as File, undefined, undefined, { 'If-None-Match': '*' })
+    const inst = XHRMock.getInstances()[0]
+    inst.status = 412
+    inst._fire('load', {})
+    await expect(promise).rejects.toThrow('upload.conditionalFailed')
+  })
+
   it('signal listener 在非 abort 信号时注册', async () => {
     const XHRMock = createXhrMockClass()
     vi.stubGlobal('XMLHttpRequest', XHRMock)

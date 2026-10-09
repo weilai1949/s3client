@@ -389,6 +389,13 @@ func (j *Job) Emit(p JobProgress) {
 		j.mu.Unlock()
 		return
 	}
+	// 总数学习（ROADMAP #6 计划同步）：创建时 total=0（SyncKeys 列举前未知总数）
+	// 的任务，从首个携带正总数的进度帧学习。只在 j.Total==0 时写入 ⇒ 已知总数的
+	// 任务（migrateAsync / copy 等）Emit 路径不触碰 j.Total，与它们响应体里对
+	// job.Total 的无锁读不构成并发写。学习后不再改写（首学为准）。
+	if j.Total == 0 && p.Total > 0 {
+		j.Total = p.Total
+	}
 	j.progress = p
 	shouldPersist := j.persist != nil && time.Since(j.lastSave) >= jobProgressPersistEvery
 	if shouldPersist {

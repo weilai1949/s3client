@@ -17,14 +17,16 @@ import BucketCors from './BucketCors.vue'
 import BucketWebsite from './BucketWebsite.vue'
 import BucketPolicy from './BucketPolicy.vue'
 import BucketTags from './BucketTags.vue'
+import BucketObjectLock from './BucketObjectLock.vue'
 import type { BucketItem } from '../types'
 
-type TabKey = 'overview' | 'lifecycle' | 'encryption' | 'cors' | 'website' | 'policy' | 'tags'
+type TabKey = 'overview' | 'lifecycle' | 'encryption' | 'objectlock' | 'cors' | 'website' | 'policy' | 'tags'
 
 const tabs = computed(() => [
   { key: 'overview' as TabKey, label: t('buckets.tabOverview') },
   { key: 'lifecycle' as TabKey, label: t('buckets.tabLifecycle') },
   { key: 'encryption' as TabKey, label: t('buckets.tabEncryption') },
+  { key: 'objectlock' as TabKey, label: t('buckets.tabObjectLock') },
   { key: 'cors' as TabKey, label: t('buckets.tabCors') },
   { key: 'website' as TabKey, label: t('buckets.tabWebsite') },
   { key: 'policy' as TabKey, label: t('buckets.tabPolicy') },
@@ -177,6 +179,7 @@ async function removeBucket(name: string) {
           <button class="btn sm" @click="lifecycleOpen = true">{{ t('buckets.editLifecycle') }}</button>
         </template>
         <BucketEncryption v-else-if="activeTab === 'encryption'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
+        <BucketObjectLock v-else-if="activeTab === 'objectlock'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
         <BucketCors v-else-if="activeTab === 'cors'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
         <BucketWebsite v-else-if="activeTab === 'website'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />
         <BucketPolicy v-else-if="activeTab === 'policy'" :account-id="accSel" :bucket="selectedBucket" @error="error = $event" @changed="loadBuckets" />

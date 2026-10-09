@@ -60,6 +60,7 @@ function mountApp() {
         UploadPanel: true,
         MigratePanel: true,
         BucketsPanel: true,
+        StorageReportPanel: true,
         RecycleBinPanel: true,
         ServerPanel: true,
         ConfirmDialog: true,
@@ -143,7 +144,7 @@ describe('App', () => {
     const w = mountApp()
     await flushPromises()
     const navBtns = w.findAll('.tabs button')
-    expect(navBtns.length).toBe(7)
+    expect(navBtns.length).toBe(8)
     const serverBtn = navBtns.find((b) => b.text().includes('nav.server'))!
     await serverBtn.trigger('click')
     expect(w.find('server-panel-stub').exists()).toBe(true)
@@ -287,6 +288,16 @@ describe('App', () => {
     const migrateBtn = w.findAll('.tabs button').find((b) => b.text().includes('nav.migrate'))!
     await migrateBtn.trigger('click')
     expect(w.find('migrate-panel-stub').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('nav 点击 finops 切换到 StorageReportPanel', async () => {
+    vi.mocked(s3api.listAccounts).mockResolvedValueOnce({ accounts: [] })
+    const w = mountApp()
+    await flushPromises()
+    const finopsBtn = w.findAll('.tabs button').find((b) => b.text().includes('nav.finops'))!
+    await finopsBtn.trigger('click')
+    expect(w.find('storage-report-panel-stub').exists()).toBe(true)
     w.unmount()
   })
 

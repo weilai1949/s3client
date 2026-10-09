@@ -26,6 +26,9 @@ type ObjectMeta struct {
 	ContentType  string
 	StorageClass string
 	Metadata     map[string]string
+	// Checksums 服务端存储的校验和（Head 以 ChecksumMode=ENABLED 请求；
+	// 厂商不支持或对象无校验和 → nil）。
+	Checksums *ObjectChecksums
 }
 
 // GetObjectStream 读取对象内容流。
@@ -60,9 +63,27 @@ func (c *Client) HeadObjectMeta(ctx context.Context, bucket, key, versionID stri
 		ContentType:  aws.ToString(out.ContentType),
 		StorageClass: string(out.StorageClass),
 		Metadata:     out.Metadata,
+		Checksums:    checksumsFrom(out),
 	}
 	if out.LastModified != nil {
 		m.LastModified = *out.LastModified
 	}
 	return m, nil
+}
+
+// checksumsFrom 从 Head 响应提取校验和；四个算法值全空（哪怕带了 checksum-type）→ nil。
+func checksumsFrom(out *s3.HeadObjectOutput) *ObjectChecksums {
+	cs := &ObjectChecksums{
+		CRC64NVME: aws.ToString(out.ChecksumCRC64NVME),
+		CRC32C:    aws.ToString(out.ChecksumCRC32C),
+		SHA256:    aws.ToString(out.ChecksumSHA256),
+		SHA1:      aws.ToString(out.ChecksumSHA1),
+		Type:      string(out.ChecksumType),
+	}
+	for _, v := range []string{cs.CRC64NVME, cs.CRC32C, cs.SHA256, cs.SHA1} {
+		if v != "" {
+			return cs
+		}
+	}
+	return nil
 }

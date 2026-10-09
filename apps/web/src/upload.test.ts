@@ -245,6 +245,52 @@ describe('uploadObject', () => {
     expect(directUpload).toHaveBeenCalled()
   })
 
+  it('条件写：presign 携带 ifNoneMatch，响应 headers 原样交给直传 XHR', async () => {
+    const file = new File(['small'], 'small.txt', { type: 'text/plain' })
+    vi.mocked(s3api.presign).mockResolvedValue({
+      method: 'put',
+      bucket: 'mybucket',
+      key: 'small.txt',
+      url: 'https://presigned.url',
+      expiresIn: 3600,
+      headers: { 'If-None-Match': '*' },
+    })
+    vi.mocked(directUpload).mockResolvedValue(undefined)
+    await uploadObject(file, { accId: 'acc1', bucket: 'b1', key: 'small.txt', ifNoneMatch: '*' })
+    expect(s3api.presign).toHaveBeenCalledWith(
+      'acc1',
+      expect.objectContaining({ method: 'put', key: 'small.txt', bucket: 'b1', ifNoneMatch: '*' }),
+    )
+    expect(directUpload).toHaveBeenCalledWith('https://presigned.url', file, undefined, undefined, {
+      'If-None-Match': '*',
+    })
+  })
+
+  it('无条件上传：presign 不带条件字段，直传也收不到条件头', async () => {
+    const file = new File(['small'], 'small.txt', { type: 'text/plain' })
+    vi.mocked(s3api.presign).mockResolvedValue({
+      method: 'put',
+      bucket: 'mybucket',
+      key: 'small.txt',
+      url: 'https://presigned.url',
+      expiresIn: 3600,
+      headers: {},
+    })
+    vi.mocked(directUpload).mockResolvedValue(undefined)
+    await uploadObject(file, { accId: 'acc1', key: 'small.txt' })
+    expect(s3api.presign).toHaveBeenCalledWith('acc1', expect.not.objectContaining({ ifNoneMatch: expect.anything() }))
+    expect(directUpload).toHaveBeenCalledWith('https://presigned.url', file, undefined, undefined, {})
+  })
+
+  it('条件写 + 分段上传（≥100MB）不支持：直接失败，既不预签名也不 init 分段', async () => {
+    vi.mocked(s3api.presign).mockClear()
+    await expect(
+      uploadObject(largeFile(), { accId: 'acc1', bucket: 'b', key: 'big.bin', ifNoneMatch: '*' }),
+    ).rejects.toThrow('不支持条件写')
+    expect(s3api.presign).not.toHaveBeenCalled()
+    expect(s3api.multipartInit).not.toHaveBeenCalled()
+  })
+
   it('large file uses multipart upload and completes after part PUT', async () => {
     mockMultipartParts()
     const onProgress = vi.fn()

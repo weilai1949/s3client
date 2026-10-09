@@ -55,13 +55,13 @@ func BenchmarkPresignPut(b *testing.B) {
 		key    = "some/prefix/object-with-a-realistic-name.bin"
 	)
 	// 先跑一次确认签名确实能产出（避免基准在测一条恒定报错的路径）。
-	if _, err := c.PresignPut(ctx, bucket, key, time.Hour); err != nil {
+	if _, err := c.PresignPut(ctx, bucket, key, time.Hour, Conditions{}); err != nil {
 		b.Fatalf("PresignPut 前置校验失败: %v", err)
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if _, err := c.PresignPut(ctx, bucket, key, time.Hour); err != nil {
+		if _, err := c.PresignPut(ctx, bucket, key, time.Hour, Conditions{}); err != nil {
 			b.Fatalf("PresignPut: %v", err)
 		}
 	}

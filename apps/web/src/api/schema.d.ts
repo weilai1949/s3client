@@ -147,6 +147,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/bucket/object-lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 桶 Object Lock 配置 */
+        get: operations["getObjectLock"];
+        /** 设置桶默认保留策略（桶须创建时启用 Object Lock） */
+        put: operations["putObjectLock"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}/bucket/policy": {
         parameters: {
             query?: never;
@@ -546,6 +564,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/object-legal-hold": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对象法定保留状态 */
+        get: operations["getObjectLegalHold"];
+        /** 设置对象法定保留（ON/OFF） */
+        put: operations["putObjectLegalHold"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/object-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对象保留期（Object Lock） */
+        get: operations["getObjectRetention"];
+        /** 设置对象保留期（Object Lock） */
+        put: operations["putObjectRetention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}/object-tags": {
         parameters: {
             query?: never;
@@ -666,6 +720,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/storage-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 存储分析与成本洞察（按存储类 / 前缀聚合） */
+        get: operations["storageReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}/test": {
         parameters: {
             query?: never;
@@ -711,6 +782,23 @@ export interface paths {
         put?: never;
         /** 彻底清除某 key 的全部版本+标记 */
         post: operations["purgeTrashObject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/verify-checksum": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 端到端校验和验证（本地重算与存储端比对） */
+        post: operations["verifyChecksum"];
         delete?: never;
         options?: never;
         head?: never;
@@ -932,6 +1020,59 @@ export interface paths {
         get: operations["openapi"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 计划任务清单（最新在前） */
+        get: operations["listSchedules"];
+        put?: never;
+        /** 创建计划（cron 定时增量同步） */
+        post: operations["createSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 整体替换计划（保留 id/createdAt/运行态） */
+        put: operations["updateSchedule"];
+        post?: never;
+        /** 删除计划（冻结的计划一并移除） */
+        delete: operations["deleteSchedule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/schedules/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}） */
+        post: operations["runScheduleNow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1866,6 +2007,134 @@ export interface operations {
             };
         };
     };
+    getObjectLock: {
+        parameters: {
+            query?: {
+                /** @description 桶名；账号有默认桶时可省略 */
+                bucket?: components["parameters"]["Bucket"];
+            };
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 未启用 Object Lock 时 enabled=false */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "enabled": true,
+                     *       "defaultRetentionMode": "GOVERNANCE",
+                     *       "defaultRetentionDays": 30,
+                     *       "defaultRetentionYears": 0
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        defaultRetentionDays?: number;
+                        /** @description GOVERNANCE | COMPLIANCE（未配置默认保留时为空串） */
+                        defaultRetentionMode?: string;
+                        defaultRetentionYears?: number;
+                        enabled?: boolean;
+                    };
+                };
+            };
+        };
+    };
+    putObjectLock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bucket": "my-bucket",
+                 *       "defaultRetentionMode": "GOVERNANCE",
+                 *       "defaultRetentionDays": 30,
+                 *       "defaultRetentionYears": 0
+                 *     }
+                 */
+                "application/json": {
+                    bucket: string;
+                    /** @description 与 defaultRetentionYears 二选一；必须 ≥1 */
+                    defaultRetentionDays?: number;
+                    /** @enum {string} */
+                    defaultRetentionMode: "GOVERNANCE" | "COMPLIANCE";
+                    /** @description 与 defaultRetentionDays 二选一；必须 ≥1 */
+                    defaultRetentionYears?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "enabled": true,
+                     *       "defaultRetentionMode": "GOVERNANCE",
+                     *       "defaultRetentionDays": 30,
+                     *       "defaultRetentionYears": 0
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        defaultRetentionDays?: number;
+                        /** @description GOVERNANCE | COMPLIANCE（未配置默认保留时为空串） */
+                        defaultRetentionMode?: string;
+                        defaultRetentionYears?: number;
+                        enabled?: boolean;
+                    };
+                };
+            };
+            /** @description 输入非法 / 桶未启用 Object Lock */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 桶未在创建时启用 Object Lock（InvalidBucketState） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 厂商未实现 Object Lock（NotImplemented） */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getBucketPolicy: {
         parameters: {
             query?: {
@@ -2304,6 +2573,18 @@ export interface operations {
                  */
                 "application/json": {
                     bucket: string;
+                    /**
+                     * @description 可选；非空时服务端计算并存储全对象校验和（供 verify-checksum 端到端比对）
+                     * @enum {string}
+                     */
+                    checksumAlgorithm?: "CRC64NVME" | "SHA256" | "CRC32C" | "SHA1";
+                    /** @description 可选；条件写：仅当**目标**对象当前 ETag 匹配时写入 */
+                    ifMatch?: string;
+                    /**
+                     * @description 可选；条件写：仅当**目标**对象不存在时写入
+                     * @enum {string}
+                     */
+                    ifNoneMatch?: "*";
                     key: string;
                     /** Format: 可选；省略=同桶 */
                     newBucket?: string;
@@ -2328,6 +2609,24 @@ export interface operations {
                         bucket?: string;
                         copied?: string;
                     };
+                };
+            };
+            /** @description 条件字段非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 条件不满足（PreconditionFailed） */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -2842,6 +3141,15 @@ export interface operations {
                      *     }
                      */
                     "application/json": {
+                        /** @description 服务端存储的校验和；无校验和或厂商不支持时为 null */
+                        checksums?: {
+                            crc32c?: string;
+                            crc64nvme?: string;
+                            sha1?: string;
+                            sha256?: string;
+                            /** @description FULL_OBJECT | COMPOSITE_*（分段合成，不可全对象比对） */
+                            type?: string;
+                        } | null;
                         contentType?: string;
                         etag?: string;
                         key?: string;
@@ -2973,6 +3281,13 @@ export interface operations {
                  */
                 "application/json": {
                     bucket: string;
+                    /** @description 可选；条件写：仅当目标对象当前 ETag 匹配时写入 */
+                    ifMatch?: string;
+                    /**
+                     * @description 可选；条件写：仅当目标对象不存在时写入（防并发覆盖）
+                     * @enum {string}
+                     */
+                    ifNoneMatch?: "*";
                     key: string;
                 };
             };
@@ -2994,6 +3309,15 @@ export interface operations {
                         bucket?: string;
                         created?: string;
                     };
+                };
+            };
+            /** @description key/条件字段非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -3373,6 +3697,256 @@ export interface operations {
             };
         };
     };
+    getObjectLegalHold: {
+        parameters: {
+            query: {
+                /** @description 桶名；账号有默认桶时可省略 */
+                bucket?: components["parameters"]["Bucket"];
+                key: string;
+                /** @description 可选；读取指定版本的法定保留 */
+                versionId?: string;
+            };
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 未设置 → status=OFF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "key": "docs/a.txt",
+                     *       "versionId": "",
+                     *       "status": "ON"
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        key?: string;
+                        status?: string;
+                        versionId?: string;
+                    };
+                };
+            };
+        };
+    };
+    putObjectLegalHold: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bucket": "my-bucket",
+                 *       "key": "docs/a.txt",
+                 *       "versionId": "",
+                 *       "status": "ON"
+                 *     }
+                 */
+                "application/json": {
+                    bucket: string;
+                    key: string;
+                    /** @enum {string} */
+                    status: "ON" | "OFF";
+                    versionId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "key": "docs/a.txt",
+                     *       "versionId": "",
+                     *       "status": "ON"
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        key?: string;
+                        status?: string;
+                        versionId?: string;
+                    };
+                };
+            };
+            /** @description 拒绝（含越权） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 对象被锁定 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getObjectRetention: {
+        parameters: {
+            query: {
+                /** @description 桶名；账号有默认桶时可省略 */
+                bucket?: components["parameters"]["Bucket"];
+                key: string;
+                /** @description 可选；读取指定版本的保留期 */
+                versionId?: string;
+            };
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 无保留期（或桶未启用 Object Lock）时 configured=false */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "key": "docs/a.txt",
+                     *       "versionId": "",
+                     *       "configured": true,
+                     *       "mode": "COMPLIANCE",
+                     *       "retainUntilDate": "2030-01-02T03:04:05Z"
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        configured?: boolean;
+                        key?: string;
+                        /** @description GOVERNANCE | COMPLIANCE（configured=false 时为空串） */
+                        mode?: string;
+                        /** @description RFC3339 到期时间（configured=false 时为空串） */
+                        retainUntilDate?: string;
+                        versionId?: string;
+                    };
+                };
+            };
+        };
+    };
+    putObjectRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bucket": "my-bucket",
+                 *       "key": "docs/a.txt",
+                 *       "versionId": "",
+                 *       "mode": "GOVERNANCE",
+                 *       "retainUntilDate": "2031-02-03T04:05:06Z"
+                 *     }
+                 */
+                "application/json": {
+                    bucket: string;
+                    key: string;
+                    /** @enum {string} */
+                    mode: "GOVERNANCE" | "COMPLIANCE";
+                    /** @description RFC3339（如 2031-02-03T04:05:06Z），必须是未来时刻 */
+                    retainUntilDate: string;
+                    versionId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "key": "docs/a.txt",
+                     *       "versionId": "",
+                     *       "configured": true,
+                     *       "mode": "GOVERNANCE",
+                     *       "retainUntilDate": "2031-02-03T04:05:06Z"
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        configured?: boolean;
+                        key?: string;
+                        mode?: string;
+                        retainUntilDate?: string;
+                        versionId?: string;
+                    };
+                };
+            };
+            /** @description 输入非法 / 保留期违规 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description GOVERNANCE 保留期内的拒绝（含越权） */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 对象被 COMPLIANCE 锁定（ObjectLocked） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getObjectTags: {
         parameters: {
             query: {
@@ -3553,6 +4127,13 @@ export interface operations {
                 "application/json": {
                     bucket: string;
                     expiresIn?: number;
+                    /** @description 可选；条件写：仅当目标对象当前 ETag 匹配时写入（仅 method=put） */
+                    ifMatch?: string;
+                    /**
+                     * @description 可选；条件写：仅当目标对象不存在时写入（仅 method=put）
+                     * @enum {string}
+                     */
+                    ifNoneMatch?: "*";
                     key: string;
                     /** @enum {string} */
                     method?: "get" | "put" | "post";
@@ -3561,7 +4142,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description get/put 含 url/expiresIn；post 额外含 fields */
+            /** @description get/put 含 url/expiresIn；post 额外含 fields；put 含 headers（条件头回显） */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3581,13 +4162,15 @@ export interface operations {
                         expiresIn?: number;
                         /** @description 仅 method=post：multipart 表单字段 */
                         fields?: Record<string, never>;
+                        /** @description 仅 method=put：随 PUT 必须携带的请求头（条件写回显；无条件时为空对象） */
+                        headers?: Record<string, never>;
                         key?: string;
                         method?: string;
                         url?: string;
                     };
                 };
             };
-            /** @description method/expiresIn 非法 */
+            /** @description method/expiresIn/条件字段非法 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3795,6 +4378,150 @@ export interface operations {
             };
         };
     };
+    storageReport: {
+        parameters: {
+            query?: {
+                /** @description 桶名；账号有默认桶时可省略 */
+                bucket?: components["parameters"]["Bucket"];
+                /** @description 前缀（目录路径） */
+                prefix?: components["parameters"]["Prefix"];
+            };
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "prefix": "",
+                     *       "objectCount": 6,
+                     *       "totalSize": 32212254720,
+                     *       "truncated": false,
+                     *       "monthlyCost": 0.53,
+                     *       "prefixGroupCount": 3,
+                     *       "byStorageClass": [
+                     *         {
+                     *           "storageClass": "STANDARD",
+                     *           "count": 3,
+                     *           "size": 17179869184,
+                     *           "monthlyCost": 0.368
+                     *         },
+                     *         {
+                     *           "storageClass": "STANDARD_IA",
+                     *           "count": 1,
+                     *           "size": 8589934592,
+                     *           "monthlyCost": 0.1
+                     *         },
+                     *         {
+                     *           "storageClass": "GLACIER_IR",
+                     *           "count": 1,
+                     *           "size": 4294967296,
+                     *           "monthlyCost": 0.016
+                     *         },
+                     *         {
+                     *           "storageClass": "VENDOR_X",
+                     *           "count": 1,
+                     *           "size": 2147483648,
+                     *           "monthlyCost": 0.046
+                     *         }
+                     *       ],
+                     *       "byPrefix": [
+                     *         {
+                     *           "prefix": "photos/",
+                     *           "count": 3,
+                     *           "size": 17179869184
+                     *         },
+                     *         {
+                     *           "prefix": "logs/",
+                     *           "count": 1,
+                     *           "size": 8589934592
+                     *         },
+                     *         {
+                     *           "prefix": "",
+                     *           "count": 2,
+                     *           "size": 6442450944
+                     *         }
+                     *       ],
+                     *       "recommendations": [
+                     *         {
+                     *           "kind": "infrequent",
+                     *           "fromStorageClass": "STANDARD",
+                     *           "toStorageClass": "STANDARD_IA",
+                     *           "count": 1,
+                     *           "size": 5368709120,
+                     *           "estimatedMonthlySaving": 0.0525
+                     *         },
+                     *         {
+                     *           "kind": "archive",
+                     *           "fromStorageClass": "STANDARD",
+                     *           "toStorageClass": "GLACIER_IR",
+                     *           "count": 1,
+                     *           "size": 10737418240,
+                     *           "estimatedMonthlySaving": 0.19
+                     *         },
+                     *         {
+                     *           "kind": "archive",
+                     *           "fromStorageClass": "STANDARD_IA",
+                     *           "toStorageClass": "GLACIER_IR",
+                     *           "count": 1,
+                     *           "size": 8589934592,
+                     *           "estimatedMonthlySaving": 0.068
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": {
+                        bucket: string;
+                        byPrefix: {
+                            /** Format: int64 */
+                            count: number;
+                            prefix: string;
+                            /** Format: int64 */
+                            size: number;
+                        }[];
+                        byStorageClass: {
+                            /** Format: int64 */
+                            count: number;
+                            monthlyCost: number;
+                            /** Format: int64 */
+                            size: number;
+                            storageClass: string;
+                        }[];
+                        monthlyCost: number;
+                        /** Format: int64 */
+                        objectCount: number;
+                        prefix: string;
+                        prefixGroupCount: number;
+                        recommendations: {
+                            /** Format: int64 */
+                            count: number;
+                            estimatedMonthlySaving: number;
+                            fromStorageClass: string;
+                            /** @enum {string} */
+                            kind: "infrequent" | "archive";
+                            /** Format: int64 */
+                            size: number;
+                            toStorageClass: string;
+                        }[];
+                        /** Format: int64 */
+                        totalSize: number;
+                        truncated: boolean;
+                    };
+                };
+            };
+        };
+    };
     testAccount: {
         parameters: {
             query?: {
@@ -3932,6 +4659,76 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    verifyChecksum: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 账号 UUID */
+                id: components["parameters"]["AccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "bucket": "my-bucket",
+                 *       "key": "docs/a.txt",
+                 *       "versionId": ""
+                 *     }
+                 */
+                "application/json": {
+                    bucket: string;
+                    key: string;
+                    versionId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description method=none 表示无可验证来源（厂商未存校验和 / 分段合成 / 非单段 ETag），match=false */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "bucket": "my-bucket",
+                     *       "key": "docs/a.txt",
+                     *       "versionId": "",
+                     *       "method": "crc64nvme",
+                     *       "local": "N4bktbEKNg8=",
+                     *       "remote": "N4bktbEKNg8=",
+                     *       "match": true
+                     *     }
+                     */
+                    "application/json": {
+                        bucket?: string;
+                        key?: string;
+                        /** @description 本地全量重算值（校验和为大端 base64；etag-md5 为小写 hex） */
+                        local?: string;
+                        match?: boolean;
+                        /** @description crc64nvme | crc32c | sha256 | sha1 | etag-md5 | none */
+                        method?: string;
+                        /** @description 存储端值（method=none 时为空） */
+                        remote?: string;
+                        versionId?: string;
+                    };
+                };
+            };
+            /** @description key 缺失或请求体非法 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     deleteObjectVersion: {
@@ -4596,6 +5393,390 @@ export interface operations {
                      *     }
                      */
                     "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    listSchedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 计划数组（空清单为 []） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "schedules": [
+                     *         {
+                     *           "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *           "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *           "sourceBucket": "src-bucket",
+                     *           "sourcePrefix": "data/",
+                     *           "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                     *           "targetBucket": "dst-bucket",
+                     *           "targetPrefix": "backup/",
+                     *           "mode": "etag",
+                     *           "cron": "0 2 * * *",
+                     *           "enabled": true,
+                     *           "createdAt": "2026-10-08T10:00:00Z",
+                     *           "nextRunAt": "2026-10-09T02:00:00Z",
+                     *           "lastRunAt": "2026-10-08T02:00:00Z",
+                     *           "lastJobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                     *           "lastError": ""
+                     *         }
+                     *       ]
+                     *     }
+                     */
+                    "application/json": {
+                        schedules?: {
+                            /** Format: date-time */
+                            createdAt: string;
+                            cron: string;
+                            enabled: boolean;
+                            id: string;
+                            lastError?: string;
+                            lastJobId?: string;
+                            /** Format: date-time */
+                            lastRunAt?: string;
+                            /** @enum {string} */
+                            mode: "etag" | "size_mtime" | "always";
+                            /** Format: date-time */
+                            nextRunAt: string;
+                            sourceAccountId: string;
+                            sourceBucket: string;
+                            sourcePrefix?: string;
+                            targetAccountId: string;
+                            targetBucket: string;
+                            targetPrefix?: string;
+                        }[];
+                    };
+                };
+            };
+        };
+    };
+    createSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                 *       "sourceBucket": "src-bucket",
+                 *       "sourcePrefix": "data/",
+                 *       "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                 *       "targetBucket": "dst-bucket",
+                 *       "targetPrefix": "backup/",
+                 *       "mode": "etag",
+                 *       "cron": "0 2 * * *",
+                 *       "enabled": true
+                 *     }
+                 */
+                "application/json": {
+                    cron: string;
+                    enabled?: boolean;
+                    /** @enum {string} */
+                    mode?: "etag" | "size_mtime" | "always";
+                    sourceAccountId: string;
+                    sourceBucket?: string;
+                    sourcePrefix?: string;
+                    targetAccountId: string;
+                    targetBucket?: string;
+                    targetPrefix?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 已创建并完成首次排期 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "schedule": {
+                     *         "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *         "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *         "sourceBucket": "src-bucket",
+                     *         "sourcePrefix": "data/",
+                     *         "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                     *         "targetBucket": "dst-bucket",
+                     *         "targetPrefix": "backup/",
+                     *         "mode": "etag",
+                     *         "cron": "0 2 * * *",
+                     *         "enabled": true,
+                     *         "createdAt": "2026-10-08T10:00:00Z",
+                     *         "nextRunAt": "2026-10-09T02:00:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        schedule?: {
+                            /** Format: date-time */
+                            createdAt: string;
+                            cron: string;
+                            enabled: boolean;
+                            id: string;
+                            lastError?: string;
+                            lastJobId?: string;
+                            /** Format: date-time */
+                            lastRunAt?: string;
+                            /** @enum {string} */
+                            mode: "etag" | "size_mtime" | "always";
+                            /** Format: date-time */
+                            nextRunAt: string;
+                            sourceAccountId: string;
+                            sourceBucket: string;
+                            sourcePrefix?: string;
+                            targetAccountId: string;
+                            targetBucket: string;
+                            targetPrefix?: string;
+                        };
+                    };
+                };
+            };
+            /** @description 字段缺失 / cron 非法或永不触发 / mode 非法 / 桶不可解析 / 账号配置无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 引用的账号不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                 *       "sourceBucket": "src-bucket",
+                 *       "sourcePrefix": "data/",
+                 *       "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                 *       "targetBucket": "dst-bucket",
+                 *       "targetPrefix": "backup/",
+                 *       "mode": "size_mtime",
+                 *       "cron": "30 3 * * *",
+                 *       "enabled": false
+                 *     }
+                 */
+                "application/json": {
+                    cron: string;
+                    enabled?: boolean;
+                    /** @enum {string} */
+                    mode?: "etag" | "size_mtime" | "always";
+                    sourceAccountId: string;
+                    sourceBucket?: string;
+                    sourcePrefix?: string;
+                    targetAccountId: string;
+                    targetBucket?: string;
+                    targetPrefix?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 更新后的计划（cron 变更则重算排期） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "schedule": {
+                     *         "id": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *         "sourceAccountId": "1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d",
+                     *         "sourceBucket": "src-bucket",
+                     *         "sourcePrefix": "data/",
+                     *         "targetAccountId": "2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809",
+                     *         "targetBucket": "dst-bucket",
+                     *         "targetPrefix": "backup/",
+                     *         "mode": "size_mtime",
+                     *         "cron": "30 3 * * *",
+                     *         "enabled": false,
+                     *         "createdAt": "2026-10-08T10:00:00Z",
+                     *         "nextRunAt": "2026-10-09T03:30:00Z"
+                     *       }
+                     *     }
+                     */
+                    "application/json": {
+                        schedule?: {
+                            /** Format: date-time */
+                            createdAt: string;
+                            cron: string;
+                            enabled: boolean;
+                            id: string;
+                            lastError?: string;
+                            lastJobId?: string;
+                            /** Format: date-time */
+                            lastRunAt?: string;
+                            /** @enum {string} */
+                            mode: "etag" | "size_mtime" | "always";
+                            /** Format: date-time */
+                            nextRunAt: string;
+                            sourceAccountId: string;
+                            sourceBucket: string;
+                            sourcePrefix?: string;
+                            targetAccountId: string;
+                            targetBucket: string;
+                            targetPrefix?: string;
+                        };
+                    };
+                };
+            };
+            /** @description 字段缺失 / cron 或 mode 非法 / 账号配置无效 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 计划或引用的账号不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 回显被删计划 id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "deleted": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"
+                     *     }
+                     */
+                    "application/json": {
+                        deleted?: string;
+                    };
+                };
+            };
+            /** @description 计划不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    runScheduleNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 异步任务已创建 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "jobId": "6f1e2d3c-4b5a-6789-abcd-ef0123456789",
+                     *       "scheduleId": "9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"
+                     *     }
+                     */
+                    "application/json": {
+                        jobId?: string;
+                        scheduleId?: string;
+                    };
+                };
+            };
+            /** @description 引用的账号配置已损坏（缺密钥等） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 计划或引用的账号不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 上一轮执行尚未结束（不叠加） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 在册任务已满，稍后重试 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

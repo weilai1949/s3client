@@ -264,8 +264,9 @@ func (c enumContract) extract(a *handlerAST) []string {
 // enumContracts 把注册表每个 enum 站点映射到 handler 的机械抽取契约。
 // 新增 `openapi.EnumStr` 时必须在此登记，否则 TestOpenAPISemanticsEnumsMatchHandlers 红灯。
 var enumContracts = map[string]enumContract{
-	// objects.go presign：switch strings.ToLower(req.Method) { get / post / put }。
-	"POST /api/accounts/{id}/presign method": {method: "presign", scrutinee: "req.Method"},
+	// objects.go presign：method := strings.ToLower(req.Method) 后 switch method { get / post / put }
+	//（2026-10-08 条件写批次把 switch 换成同名变量，抽取口径同步改为 method）。
+	"POST /api/accounts/{id}/presign method": {method: "presign", scrutinee: "method"},
 	// proxy.go proxyObject：switch mode { text / inline,download }。
 	"GET /api/accounts/{id}/proxy mode": {method: "proxyObject", scrutinee: "mode"},
 	// buckets.go createBucket：switch req.ACL { "",private,public-read,public-read-write }。
@@ -279,6 +280,21 @@ var enumContracts = map[string]enumContract{
 	"PUT /api/accounts/{id}/object-acl acl": {method: "putObjectAcl", scrutinee: "req.ACL"},
 	// migrate_sync.go syncHandler：switch mode { "",service.CompareETag/SizeTime/Always }。
 	"POST /api/migrate/sync mode": {method: "syncHandler", scrutinee: "mode"},
+	// conditions.go allowedIfNoneMatchValues：map 字面量 {"*"}（presign / mkdir / copy-object 共用）。
+	"POST /api/accounts/{id}/presign ifNoneMatch":     {mapVar: "allowedIfNoneMatchValues"},
+	"POST /api/accounts/{id}/mkdir ifNoneMatch":       {mapVar: "allowedIfNoneMatchValues"},
+	"POST /api/accounts/{id}/copy-object ifNoneMatch": {mapVar: "allowedIfNoneMatchValues"},
+	// objectlock.go allowedRetentionModes：GOVERNANCE / COMPLIANCE（桶默认保留与对象保留期共用）。
+	"PUT /api/accounts/{id}/bucket/object-lock defaultRetentionMode": {mapVar: "allowedRetentionModes"},
+	"PUT /api/accounts/{id}/object-retention mode":                   {mapVar: "allowedRetentionModes"},
+	// objectlock.go allowedLegalHoldStatuses：ON / OFF。
+	"PUT /api/accounts/{id}/object-legal-hold status": {mapVar: "allowedLegalHoldStatuses"},
+	// copy.go allowedChecksumAlgorithms：复制时可物化的校验和算法。
+	"POST /api/accounts/{id}/copy-object checksumAlgorithm": {mapVar: "allowedChecksumAlgorithms"},
+	// schedules.go parseSchedule：switch mode { ""→etag, etag / size_mtime / always }。
+	// 两个站点（POST 建 / PUT 改）共用同一抽取方法。
+	"POST /api/schedules mode":     {method: "parseSchedule", scrutinee: "mode"},
+	"PUT /api/schedules/{id} mode": {method: "parseSchedule", scrutinee: "mode"},
 }
 
 // registryEnumSites 返回 "METHOD /path field" -> 注册表声明的 enum 取值（字符串）。

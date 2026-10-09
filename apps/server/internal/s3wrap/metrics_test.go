@@ -34,7 +34,7 @@ func TestS3MetricsPresignNotCounted(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	ctx := context.Background()
-	if _, err := c.PresignPut(ctx, "bkt", "k.txt", time.Minute); err != nil {
+	if _, err := c.PresignPut(ctx, "bkt", "k.txt", time.Minute, Conditions{}); err != nil {
 		t.Fatalf("PresignPut: %v", err)
 	}
 	if _, err := c.PresignUploadPart(ctx, "bkt", "big.bin", "upid-1", 2, time.Minute); err != nil {

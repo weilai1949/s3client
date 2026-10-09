@@ -4,6 +4,8 @@ import { bucketsMessages } from './messages/buckets'
 import { commonMessages } from './messages/common'
 import { objectDialogsMessages } from './messages/objectDialogs'
 import { objectsMessages } from './messages/objects'
+import { schedulesMessages } from './messages/schedules'
+import { storageReportMessages } from './messages/storageReport'
 import { uploadMessages } from './messages/upload'
 import type { Locale, MessageBundle } from './messages/types'
 
@@ -52,6 +54,8 @@ const messages = mergeBundles(
   bucketsMessages,
   uploadMessages,
   accountsMessages,
+  schedulesMessages,
+  storageReportMessages,
 )
 
 export function t(key: string): string {

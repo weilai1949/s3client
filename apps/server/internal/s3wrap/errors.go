@@ -93,6 +93,18 @@ func UserMessageForCode(code string) string {
 		return "storage temporarily unavailable"
 	case "NoSuchUpload":
 		return "multipart upload not found"
+	case "PreconditionFailed":
+		return "precondition failed (object changed or already exists)"
+	case "ConditionalRequestConflict":
+		return "conditional request conflict, retry after re-reading the object"
+	case "ObjectLocked":
+		return "object is locked by retention or legal hold"
+	case "RetentionPeriodTooShort":
+		return "retention period too short (not later than current retention)"
+	case "ObjectLockConfigurationNotFoundError":
+		return "object lock is not enabled for this bucket"
+	case "NotImplemented":
+		return "not supported by this storage endpoint"
 	}
 	return "storage operation failed"
 }
@@ -121,6 +133,18 @@ func HTTPStatus(err error) int {
 		return 409
 	case "InvalidRange":
 		return 416
+	case "PreconditionFailed":
+		return 412
+	case "ConditionalRequestConflict":
+		return 409
+	case "ObjectLocked":
+		return 409
+	case "RetentionPeriodTooShort":
+		return 400
+	case "ObjectLockConfigurationNotFoundError":
+		return 400
+	case "NotImplemented":
+		return 501
 	case "SlowDown", "ServiceUnavailable", "RequestTimeout":
 		return 503
 	}

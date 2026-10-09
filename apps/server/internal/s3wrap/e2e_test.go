@@ -80,11 +80,11 @@ func TestE2ERustFS(t *testing.T) {
 	}
 
 	// 4) PresignPut（浏览器直传路径）：拿到预签名 URL 后真实 HTTP PUT
-	presignedPut, err := c.PresignPut(ctx, bucket, "presign.txt", 10*time.Minute)
+	presignedPut, err := c.PresignPut(ctx, bucket, "presign.txt", 10*time.Minute, Conditions{})
 	if err != nil {
 		t.Fatalf("presign put: %v", err)
 	}
-	if _, err := httpPut(presignedPut, []byte("presigned body")); err != nil {
+	if _, err := httpPut(presignedPut.URL, []byte("presigned body")); err != nil {
 		t.Fatalf("http put to presigned url: %v", err)
 	}
 	if got := getObjectString(t, ctx, c, bucket, "presign.txt"); got != "presigned body" {
@@ -528,12 +528,17 @@ func httpPut(url string, body []byte) (string, error) {
 
 func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 	// 依次删除所有版本与删除标记（版本控制开启时需逐个版本删除）。
-	for {
+	// 有界循环：对象删除被拒（保留期 / 权限 / 厂商 bug）时曾经**无限循环**挂死测试
+	//（2026-10-08 探测实跑 10 分钟超时），改为达上限后显式报错、把残留清单交回调用方。
+	const maxCleanupRounds = 100
+	cleared := false
+	for i := 0; i < maxCleanupRounds; i++ {
 		out, err := c.ListObjectVersions(ctx, bucket, "", "", "", 1000)
 		if err != nil {
 			return err
 		}
 		if len(out.Versions) == 0 && len(out.DeleteMarkers) == 0 {
+			cleared = true
 			break
 		}
 		for _, v := range out.Versions {
@@ -555,6 +560,16 @@ func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 			} else {
 				_ = c.DeleteObject(ctx, bucket, d.Key)
 			}
+		}
+	}
+	if !cleared {
+		out, err := c.ListObjectVersions(ctx, bucket, "", "", "", 1000)
+		if err != nil {
+			return err
+		}
+		if len(out.Versions) != 0 || len(out.DeleteMarkers) != 0 {
+			return fmt.Errorf("cleanup did not converge after %d rounds: %d versions, %d markers remain",
+				maxCleanupRounds, len(out.Versions), len(out.DeleteMarkers))
 		}
 	}
 	// 删除当前对象（版本控制下也许有遗漏，再清一遍普通对象）

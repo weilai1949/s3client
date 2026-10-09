@@ -330,7 +330,7 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
 | English docs landing page (this directory) | [`README.md`](README.md) |
 | Architecture & key design decisions (English) | [`architecture.md`](architecture.md) |
 | User guide (UI / shortcuts / FAQ / privacy) | [`user-guide.md`](../user-guide.md) |
-| REST API reference (71 `/api/*` endpoints) | [`api.md`](../api.md) |
+| REST API reference (84 `/api/*` endpoints) | [`api.md`](../api.md) |
 | Machine-readable API contract | [`api/openapi.json`](../api/openapi.json) |
 | Account store format schema | [`api/accounts.schema.json`](../api/accounts.schema.json) |
 | Error → HTTP mapping | [`errors.md`](../errors.md) |

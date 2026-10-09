@@ -103,10 +103,11 @@ func TestPresignURLFollowsPathStyle(t *testing.T) {
 	ctx := context.Background()
 	// path-style：host 与 endpoint 一致，路径 /bucket/key。
 	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	raw, err := c.PresignPut(ctx, "bkt", "k.txt", time.Minute)
+	presigned, err := c.PresignPut(ctx, "bkt", "k.txt", time.Minute, Conditions{})
 	if err != nil {
 		t.Fatalf("PresignPut(path-style): %v", err)
 	}
+	raw := presigned.URL
 	u, _ := url.Parse(raw)
 	if !strings.HasPrefix(u.Path, "/bkt/") {
 		t.Fatalf("path-style path = %q", u.Path)
@@ -119,10 +120,11 @@ func TestPresignURLFollowsPathStyle(t *testing.T) {
 		// 故换成不可解析但形态合法的主机名以观察 virtual-host 形态。
 		a.Endpoint = strings.Replace(a.Endpoint, "127.0.0.1", "s3fake.local", 1)
 	})
-	raw, err = c2.PresignPut(ctx, "mybucket", "k.txt", time.Minute)
+	presigned2, err := c2.PresignPut(ctx, "mybucket", "k.txt", time.Minute, Conditions{})
 	if err != nil {
 		t.Fatalf("PresignPut(virtual-host): %v", err)
 	}
+	raw = presigned2.URL
 	u, _ = url.Parse(raw)
 	if !strings.HasPrefix(u.Host, "mybucket.") {
 		t.Fatalf("virtual-host host = %q (want mybucket.*), url=%s", u.Host, raw)

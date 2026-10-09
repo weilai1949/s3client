@@ -288,6 +288,11 @@ var apiExamples = map[string]openapi.OpExample{
 			"200": ex(`{"changed":"docs/a.txt","versionId":"","storageClass":"STANDARD_IA"}`),
 		},
 	},
+	"GET /api/accounts/{id}/storage-report": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","prefix":"","objectCount":6,"totalSize":32212254720,"truncated":false,"monthlyCost":0.53,"prefixGroupCount":3,"byStorageClass":[{"storageClass":"STANDARD","count":3,"size":17179869184,"monthlyCost":0.368},{"storageClass":"STANDARD_IA","count":1,"size":8589934592,"monthlyCost":0.1},{"storageClass":"GLACIER_IR","count":1,"size":4294967296,"monthlyCost":0.016},{"storageClass":"VENDOR_X","count":1,"size":2147483648,"monthlyCost":0.046}],"byPrefix":[{"prefix":"photos/","count":3,"size":17179869184},{"prefix":"logs/","count":1,"size":8589934592},{"prefix":"","count":2,"size":6442450944}],"recommendations":[{"kind":"infrequent","fromStorageClass":"STANDARD","toStorageClass":"STANDARD_IA","count":1,"size":5368709120,"estimatedMonthlySaving":0.0525},{"kind":"archive","fromStorageClass":"STANDARD","toStorageClass":"GLACIER_IR","count":1,"size":10737418240,"estimatedMonthlySaving":0.19},{"kind":"archive","fromStorageClass":"STANDARD_IA","toStorageClass":"GLACIER_IR","count":1,"size":8589934592,"estimatedMonthlySaving":0.068}]}`),
+		},
+	},
 
 	// ---- object-meta ----
 	"GET /api/accounts/{id}/object-acl": {
@@ -310,6 +315,47 @@ var apiExamples = map[string]openapi.OpExample{
 		Request: ex(`{"bucket":"my-bucket","key":"docs/a.txt","tags":[{"key":"env","value":"prod"}]}`),
 		Responses: map[string]json.RawMessage{
 			"200": ex(`{"tags":[{"key":"env","value":"prod"}]}`),
+		},
+	},
+
+	// ---- object lock / conditional & checksum (ROADMAP §三 #5) ----
+	"GET /api/accounts/{id}/bucket/object-lock": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","enabled":true,"defaultRetentionMode":"GOVERNANCE","defaultRetentionDays":30,"defaultRetentionYears":0}`),
+		},
+	},
+	"PUT /api/accounts/{id}/bucket/object-lock": {
+		Request: ex(`{"bucket":"my-bucket","defaultRetentionMode":"GOVERNANCE","defaultRetentionDays":30,"defaultRetentionYears":0}`),
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","enabled":true,"defaultRetentionMode":"GOVERNANCE","defaultRetentionDays":30,"defaultRetentionYears":0}`),
+		},
+	},
+	"GET /api/accounts/{id}/object-retention": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","configured":true,"mode":"COMPLIANCE","retainUntilDate":"2030-01-02T03:04:05Z"}`),
+		},
+	},
+	"PUT /api/accounts/{id}/object-retention": {
+		Request: ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","mode":"GOVERNANCE","retainUntilDate":"2031-02-03T04:05:06Z"}`),
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","configured":true,"mode":"GOVERNANCE","retainUntilDate":"2031-02-03T04:05:06Z"}`),
+		},
+	},
+	"GET /api/accounts/{id}/object-legal-hold": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","status":"ON"}`),
+		},
+	},
+	"PUT /api/accounts/{id}/object-legal-hold": {
+		Request: ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","status":"ON"}`),
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","status":"ON"}`),
+		},
+	},
+	"POST /api/accounts/{id}/verify-checksum": {
+		Request: ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":""}`),
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"bucket":"my-bucket","key":"docs/a.txt","versionId":"","method":"crc64nvme","local":"N4bktbEKNg8=","remote":"N4bktbEKNg8=","match":true}`),
 		},
 	},
 
@@ -422,6 +468,34 @@ var apiExamples = map[string]openapi.OpExample{
 		ContentTypes: map[string]string{"200": "text/event-stream"},
 	},
 
+	// ---- schedules ----
+	"GET /api/schedules": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"schedules":[{"id":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T02:00:00Z","lastRunAt":"2026-10-08T02:00:00Z","lastJobId":"6f1e2d3c-4b5a-6789-abcd-ef0123456789","lastError":""}]}`),
+		},
+	},
+	"POST /api/schedules": {
+		Request: ex(`{"sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true}`),
+		Responses: map[string]json.RawMessage{
+			"201": ex(`{"schedule":{"id":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"etag","cron":"0 2 * * *","enabled":true,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T02:00:00Z"}}`),
+		},
+	},
+	"PUT /api/schedules/{id}": {
+		Request: ex(`{"sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"size_mtime","cron":"30 3 * * *","enabled":false}`),
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"schedule":{"id":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceAccountId":"1f0c2a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d","sourceBucket":"src-bucket","sourcePrefix":"data/","targetAccountId":"2a1b3c4d-5e6f-7081-92a3-b4c5d6e7f809","targetBucket":"dst-bucket","targetPrefix":"backup/","mode":"size_mtime","cron":"30 3 * * *","enabled":false,"createdAt":"2026-10-08T10:00:00Z","nextRunAt":"2026-10-09T03:30:00Z"}}`),
+		},
+	},
+	"DELETE /api/schedules/{id}": {
+		Responses: map[string]json.RawMessage{
+			"200": ex(`{"deleted":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"}`),
+		},
+	},
+	"POST /api/schedules/{id}/run": {
+		Responses: map[string]json.RawMessage{
+			"202": ex(`{"jobId":"6f1e2d3c-4b5a-6789-abcd-ef0123456789","scheduleId":"9c2f1a44-0b1e-4f5a-9c3d-7e8f9a0b1c2d"}`),
+		},
+	},
 	// ---- system ----
 	"GET /api/health": {
 		Responses: map[string]json.RawMessage{

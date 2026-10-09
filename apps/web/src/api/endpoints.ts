@@ -8,8 +8,16 @@ import type {
   LifecycleRule,
   ListObjectsResponse,
   ListVersionsResponse,
+  ObjectLegalHold,
+  ObjectLockConfig,
   ObjectMeta,
+  ObjectRetention,
   PresignResponse,
+  RetentionMode,
+  Schedule,
+  ScheduleInput,
+  StorageReport,
+  VerifyResult,
 } from '../types'
 import { opPath, request } from './http'
 import { operations } from './operations'
@@ -53,11 +61,55 @@ export const s3api = {
     const qs = new URLSearchParams(q).toString()
     return request<ObjectMeta>(`${opPath('headObject', { id })}?${qs}`)
   },
-  mkdirObject: (id: string, body: { bucket?: string; key: string }) =>
+  /* ---- S3 新协议特性（ROADMAP §三 #5）：Object Lock / 保留期 / 法定保留 / 校验和 ---- */
+  /** 桶级 Object Lock 配置；未启用时 `enabled=false`。 */
+  getObjectLock: (id: string, bucket?: string) =>
+    request<ObjectLockConfig>(`${opPath('getObjectLock', { id })}?bucket=${encodeURIComponent(bucket ?? '')}`),
+  /**
+   * 配置桶默认保留策略（仅创建时启用了 Object Lock 的桶可写）。
+   * 409 = 桶未在创建时启用 Object Lock；501 = 厂商未实现。
+   */
+  putObjectLock: (
+    id: string,
+    body: { bucket?: string; defaultRetentionMode: RetentionMode; defaultRetentionDays?: number; defaultRetentionYears?: number },
+  ) =>
+    request<ObjectLockConfig>(opPath('putObjectLock', { id }), { method: operations.putObjectLock.method, body: JSON.stringify(body) }),
+  /** 对象版本的保留期；无保留期（或桶未启用 Object Lock）时 `configured=false`。 */
+  getObjectRetention: (id: string, q: { bucket?: string; key: string; versionId?: string }) => {
+    const qs = new URLSearchParams()
+    qs.set('key', q.key)
+    if (q.bucket) qs.set('bucket', q.bucket)
+    if (q.versionId) qs.set('versionId', q.versionId)
+    return request<ObjectRetention>(`${opPath('getObjectRetention', { id })}?${qs.toString()}`)
+  },
+  /** 设置保留期；`retainUntilDate` 必须是未来时刻。400 输入违规 / 403 GOVERNANCE 拒绝 / 409 ObjectLocked。 */
+  putObjectRetention: (
+    id: string,
+    body: { bucket?: string; key: string; versionId?: string; mode: RetentionMode; retainUntilDate: string },
+  ) =>
+    request<ObjectRetention>(opPath('putObjectRetention', { id }), { method: operations.putObjectRetention.method, body: JSON.stringify(body) }),
+  /** 对象版本的法定保留；未设置 → `status='OFF'`。 */
+  getObjectLegalHold: (id: string, q: { bucket?: string; key: string; versionId?: string }) => {
+    const qs = new URLSearchParams()
+    qs.set('key', q.key)
+    if (q.bucket) qs.set('bucket', q.bucket)
+    if (q.versionId) qs.set('versionId', q.versionId)
+    return request<ObjectLegalHold>(`${opPath('getObjectLegalHold', { id })}?${qs.toString()}`)
+  },
+  /** 开 / 关法定保留；409 = 对象被锁定。 */
+  putObjectLegalHold: (id: string, body: { bucket?: string; key: string; versionId?: string; status: 'ON' | 'OFF' }) =>
+    request<ObjectLegalHold>(opPath('putObjectLegalHold', { id }), { method: operations.putObjectLegalHold.method, body: JSON.stringify(body) }),
+  /**
+   * 服务端校验对象校验和。`method='none'` 表示无可验证来源——如实降级，不是错误。
+   */
+  verifyChecksum: (id: string, body: { bucket?: string; key: string; versionId?: string }) =>
+    request<VerifyResult>(opPath('verifyChecksum', { id }), { method: operations.verifyChecksum.method, body: JSON.stringify(body) }),
+  mkdirObject: (id: string, body: { bucket?: string; key: string; ifNoneMatch?: '*' }) =>
     request<{ created: string; bucket: string }>(opPath('mkdirObject', { id }), { method: operations.mkdirObject.method, body: JSON.stringify(body) }),
   renameObject: (id: string, body: { bucket?: string; key: string; newKey: string; newBucket?: string }) =>
     request<{ renamed: string }>(opPath('renameObject', { id }), { method: operations.renameObject.method, body: JSON.stringify(body) }),
-  copyObject: (id: string, body: { bucket?: string; key: string; newKey: string; newBucket?: string }) =>
+  /** 复制对象；`ifMatch` / `ifNoneMatch` 条件作用于**目标**对象（412 条件不满足 / 409 条件冲突）。 */
+  copyObject: (id: string, body: { bucket?: string; key: string; newKey: string; newBucket?: string; ifMatch?: string; ifNoneMatch?: '*' }) =>
     request<{ copied: string; bucket: string }>(opPath('copyObject', { id }), { method: operations.copyObject.method, body: JSON.stringify(body) }),
   /** 异步批量复制/移动：立即返回 jobId，进度走 migrate jobs SSE；`deleteSource` 由服务端在任务内删源。 */
   copyFilesAsync: (id: string, body: { bucket?: string; targetBucket?: string; targetPrefix?: string; keys: string[]; deleteSource?: boolean }) =>
@@ -151,13 +203,25 @@ export const s3api = {
     request<{ purged: string; deleted: number }>(opPath('purgeTrashObject', { id }), { method: operations.purgeTrashObject.method, body: JSON.stringify(body) }),
   changeStorageClass: (id: string, body: { bucket?: string; key: string; versionId?: string; storageClass: string }) =>
     request<{ changed: string; versionId: string; storageClass: string }>(opPath('changeStorageClass', { id }), { method: operations.changeStorageClass.method, body: JSON.stringify(body) }),
+  /** 存储分析与成本洞察（ROADMAP §三 #7）：按存储类 / 顶层前缀聚合用量与月成本估算。 */
+  storageReport: (id: string, q: { bucket?: string; prefix?: string }) => {
+    const qs = new URLSearchParams()
+    if (q.bucket) qs.set('bucket', q.bucket)
+    if (q.prefix) qs.set('prefix', q.prefix)
+    return request<StorageReport>(`${opPath('storageReport', { id })}?${qs.toString()}`)
+  },
   setHeaders: (id: string, body: { bucket?: string; key: string; contentType?: string; metadata?: Record<string, string> }) =>
     request<{ updated: string }>(opPath('setHeaders', { id }), { method: operations.setHeaders.method, body: JSON.stringify(body) }),
   getLifecycle: (id: string, bucket?: string) =>
     request<{ rules: LifecycleRule[] }>(`${opPath('getLifecycle', { id })}?bucket=${encodeURIComponent(bucket ?? '')}`),
   putLifecycle: (id: string, body: { bucket?: string; rules: LifecycleRule[] }) =>
     request<{ updated: number }>(opPath('putLifecycle', { id }), { method: operations.putLifecycle.method, body: JSON.stringify(body) }),
-  presign: (id: string, body: { method?: string; key: string; bucket?: string; versionId?: string; expiresIn?: number }) =>
+  /**
+   * 预签名。条件写字段仅 `method='put'` 有效（get/post 携带会 400）：
+   * `ifMatch` = ETag 字面量，`ifNoneMatch` 仅接受 `'*'`。带条件时响应多出
+   * `headers`（参与签名，直传必须原样带上，否则签名不匹配）。
+   */
+  presign: (id: string, body: { method?: string; key: string; bucket?: string; versionId?: string; expiresIn?: number; ifMatch?: string; ifNoneMatch?: '*' }) =>
     request<PresignResponse>(opPath('presign', { id }), { method: operations.presign.method, body: JSON.stringify(body) }),
   multipartInit: (id: string, body: { bucket?: string; key: string; contentType?: string }) =>
     request<{ uploadId: string; key: string; bucket: string }>(opPath('multipartInit', { id }), { method: operations.multipartInit.method, body: JSON.stringify(body) }),
@@ -221,4 +285,23 @@ export const s3api = {
       { method: operations.migrateJobCancel.method },
     ),
 
+  // ---- 计划任务（ROADMAP #6：cron 定时增量备份） ----
+  /** 计划清单（最新在前；空清单为 []）。 */
+  listSchedules: () => request<{ schedules: Schedule[] }>(opPath('listSchedules')),
+
+  /** 创建计划（cron 非法 / 永不触发 / 账号不存在均有 400/404 具名错误）。 */
+  createSchedule: (body: ScheduleInput) =>
+    request<{ schedule: Schedule }>(opPath('createSchedule'), { method: operations.createSchedule.method, body: JSON.stringify(body) }),
+
+  /** 整体替换计划（保留 id/createdAt/运行态；cron 变更则重算排期）。 */
+  updateSchedule: (id: string, body: ScheduleInput) =>
+    request<{ schedule: Schedule }>(opPath('updateSchedule', { id }), { method: operations.updateSchedule.method, body: JSON.stringify(body) }),
+
+  /** 删除计划（冻结的计划一并移除）。 */
+  deleteSchedule: (id: string) =>
+    request<{ deleted: string }>(opPath('deleteSchedule', { id }), { method: operations.deleteSchedule.method }),
+
+  /** 立即触发一次（不改自动排期）；进度复用 /api/migrate/jobs/{id}。 */
+  runScheduleNow: (id: string) =>
+    request<{ jobId: string; scheduleId: string }>(opPath('runScheduleNow', { id }), { method: operations.runScheduleNow.method }),
 }

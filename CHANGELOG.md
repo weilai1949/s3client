@@ -31,6 +31,67 @@
 
 ## [Unreleased]
 
+### 新增（2026-10-08 ROADMAP §三 3.2 #7 FinOps 存储分析与成本看板，全栈）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BV**；[`docs/ROADMAP.md`](docs/ROADMAP.md)
+> §三 3.2 的 #7 行**整行移出**（转空号，编号不重排）。范围由交付人拍板为**全栈**：后端聚合端点 +
+> OpenAPI 契约 + 前端独立顶层「成本看板」Tab + 文档。
+
+- **后端**：新增只读端点 `GET /api/accounts/{id}/storage-report?bucket=&prefix=`（缺桶 400 / 未知账号
+  404；**端点总数 83 → 84**）。列举桶（可限定前缀）后由 `service.AggregateStorageReport` 聚合：按存储类
+  与「列举前缀下首层前缀」的用量、`USD/GiB/月` 成本估算，以及低频（30–89 天）与归档（≥90 天）建议。
+  沿用 `sync` / `delete-prefix` 的列举硬上限（100 页 / 10 万对象 / token 不前进即停），超额或多页游标
+  异常置 `truncated=true`；未知存储类按 STANDARD 单价估算。AWS SDK 类型不越过 `s3wrap`。
+- **前端**：新增顶层 `finops` Tab（`StorageReportPanel.vue`）——选桶 + 可选前缀 → 生成报告，展示总量
+  卡片、按存储类 / 前缀用量表与优化建议表；`storageReport.ts` 提供字节 / 金额格式化；i18n 中英双语。
+  响应类型派生自 OpenAPI 生成物（`operations['storageReport']`），漂移由 `vue-tsc` 拦。
+- **文档**：`api.md` 增端点小节与 curl 示例；`openapi.json` 重生成（61 → 62 paths / 83 → 84 operations）；
+  `architecture.md` / `README.md` / `docs/en/index.md` / `docs/README.md` 端点计数同步；`user-guide.md`
+  补「成本看板」用法。
+
+### 新增（2026-10-08 ROADMAP §三 3.2 #6：计划任务——cron 定时增量备份）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BU**；[`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2
+> **#6 整行移出**（转空号，编号不重排）。本批新增 **5 个** `/api/*` 端点（78 → 83，以提交版
+> `docs/api/openapi.json` 为准），自研 5 字段 cron 解析（零新增依赖，`go.mod` 无变化）、
+> 调度循环与计划落盘复用 `JobRegistry` / `atomicfile` 既有口径；提交版规范与前端生成物已重新生成。
+
+- **计划任务 5 端点**：`GET/POST /api/schedules`、`PUT/DELETE /api/schedules/{id}`、
+  `POST /api/schedules/{id}/run`。自研 cron 解析（标准 5 字段、仅数字、Vixie dom/dow OR 语义、
+  40 年视界拒绝永不触发表达式）；三条调度语义有测试钉住：停机补跑**只补一次**、
+  上一轮未结束**不叠加**（手动 run → 409）、触发失败**记录 `lastError` 且排期照常前移**（防重试轰炸）。
+  计划落盘 `S3C_DATA_DIR/schedules.json`（0600 原子写，重启自动恢复）；手动 run 复用
+  `JobRegistry` 异步任务链路（进度 / SSE / 取消与迁移任务同口径），列举失败与截断均记入
+  `result.lastError`（不静默报「无事可做」）。
+- **前端**：迁移面板新增「计划任务」区块（`SchedulesSection`）——列表 / 新建 / 编辑 /
+  启停 / 立即运行 / 删除，cron 与账号校验错误行内回显；i18n 中英双语键与字典门禁同步。
+- **作用域**：`S3C_TOKEN_SCOPES` 的 `prefixes` 对计划的 `run`/`DELETE` 按**已存计划的桶/前缀**判定
+  （请求无 body 时从计划注入引用，越界计划不可触发/删除）；`readonly` 拦全部写方法。
+
+### 新增（2026-10-08 ROADMAP §三 3.2 #5：S3 条件写 / 端到端校验和 / Object Lock）
+
+> 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BT**；[`docs/ROADMAP.md`](docs/ROADMAP.md) §三 3.2
+> **#5 整行移出**（转空号，编号不重排）。本批新增 **7 个** `/api/*` 端点（71 → 78；同日并行批次
+> （#6 计划任务 / #7 FinOps）收口后仓库合计 **84**——以提交版 `docs/api/openapi.json` 为准），
+> 提交版规范与前端 `schema.d.ts` / `operations.ts` 均已重新生成。
+> 三件套均经 `s3wrap` 单边界接入、按厂商支持度降级；真实 RustFS E2E 实测通过（7/7）。
+
+- **条件写（If-Match / If-None-Match）**：`POST /api/accounts/{id}/presign`（`method=put`）新增
+  `ifMatch` / `ifNoneMatch`，响应新增 `headers` 回显（浏览器直传必须原样携带，条件头参与签名）；
+  `mkdir` / `copy-object` 同字段（复制条件作用于**目标**对象）。条件不满足 → **412**
+  （`PreconditionFailed`）、并发冲突 → **409**（`ConditionalRequestConflict`）；前端上传支持
+  「仅当对象不存在时创建」，防并发覆盖 / 丢更新。
+- **端到端校验和**：`GET .../head` 新增 `checksums`（CRC64NVME / CRC32C / SHA256 / SHA1 + `type`，
+  无则 `null`）；新端点 `POST .../verify-checksum` 流式拉取全对象本地重算与存储端比对
+  （阶梯 crc64nvme → crc32c → sha256 → sha1 → etag-md5；合成校验和跳过；无来源 → `method="none"`
+  如实降级）；自研流式 **CRC-64/NVME** 实现（参数与 AWS `aws_checksums_crc64nvme` 一致，
+  独立向量 + 真实 RustFS 返回值双向对齐）。
+- **Object Lock（WORM 保留）**：新端点 `GET/PUT .../bucket/object-lock`（桶默认保留策略）、
+  `GET/PUT .../object-retention`（对象保留期）、`GET/PUT .../object-legal-hold`（法定保留）；
+  读侧降级（未启用 → `enabled/configured=false`、未设置 → `status=OFF`），错误映射
+  **400**（未启用 / 保留期违规）/ **403**（GOVERNANCE 拒绝）/ **409**（`ObjectLocked`、既有桶启用被拒）/
+  **501**（厂商未实现）。前端：对象详情显示 / 校验 / 编辑校验和与保留状态，桶设置新增 Object Lock 区块。
+
 ### 变更（2026-10-08 ROADMAP §三 3.2 #8 / #11 / #13 三路并行落地：大文件续传 + 并行分段 / 零依赖 OTLP trace / Token 作用域）
 
 > 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BQ**（#8）/ **§BR**（#11）/ **§BS**（#13）；

@@ -18,11 +18,13 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	registerBuckets(r)
 	registerBucketSettings(r)
 	registerObjects(r)
+	registerStorageReport(r)
 	registerObjectMeta(r)
 	registerMultipart(r)
 	registerVersions(r)
 	registerTrash(r)
 	registerMigrate(r)
+	registerSchedules(r)
 	registerSystem(r)
 
 	// 示例在所有 operation 注册完成后统一附加（集中登记，见 openapi_examples.go）。
@@ -43,6 +45,7 @@ var apiTags = []openapi.Tag{
 	{Name: "versions", Description: "对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）"},
 	{Name: "trash", Description: "回收站：列出删除标记与彻底清除（docs/api.md「回收站」）"},
 	{Name: "migrate", Description: "跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）"},
+	{Name: "schedules", Description: "计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）"},
 	{Name: "system", Description: "系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）"},
 }
 

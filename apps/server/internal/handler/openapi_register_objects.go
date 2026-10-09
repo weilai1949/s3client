@@ -5,6 +5,14 @@ import (
 )
 
 func registerObjects(r *openapi.Registry) {
+	// checksums：head 的端到端校验和（可空——对象无校验和或厂商不支持时为 null）。
+	checksums := openapi.BuildObj(map[string]*openapi.Schema{
+		"crc64nvme": openapi.Str(), "crc32c": openapi.Str(),
+		"sha256": openapi.Str(), "sha1": openapi.Str(),
+		"type": desc(openapi.Str(), "FULL_OBJECT | COMPOSITE_*（分段合成，不可全对象比对）"),
+	})
+	checksums.Nullable = true
+	checksums.Description = "服务端存储的校验和；无校验和或厂商不支持时为 null"
 	r.Operation("GET", "/api/accounts/{id}/objects", openapi.Op{
 		Tags: []string{"objects"}, Summary: "列对象（含公共前缀 / 分页）", OperationID: "listObjects",
 		Params: []openapi.Param{
@@ -34,6 +42,7 @@ func registerObjects(r *openapi.Registry) {
 			"contentType":  openapi.Str(),
 			"storageClass": openapi.Str(),
 			"metadata":     openapi.Obj(),
+			"checksums":    checksums,
 		})}, "404": refResp("NotFound")},
 	})
 	r.Operation("GET", "/api/accounts/{id}/proxy", openapi.Op{
@@ -93,19 +102,22 @@ func registerObjects(r *openapi.Registry) {
 				"bucket": openapi.Str(),
 				"key":    openapi.Str(),
 				// method 枚举必须与 objects.go presign 的 switch 一致（小写 get|put|post）。
-				"method":    openapi.EnumStr("get", "put", "post"),
-				"expiresIn": openapi.Int(),
-				"versionId": openapi.Str(),
+				"method":      openapi.EnumStr("get", "put", "post"),
+				"expiresIn":   openapi.Int(),
+				"versionId":   openapi.Str(),
+				"ifMatch":     desc(openapi.Str(), "可选；条件写：仅当目标对象当前 ETag 匹配时写入（仅 method=put）"),
+				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当目标对象不存在时写入（仅 method=put）"),
 			}, "bucket", "key")},
 		},
-		Responses: map[string]openapi.Response{"200": {Description: "get/put 含 url/expiresIn；post 额外含 fields", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+		Responses: map[string]openapi.Response{"200": {Description: "get/put 含 url/expiresIn；post 额外含 fields；put 含 headers（条件头回显）", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"method":    openapi.Str(),
 			"bucket":    openapi.Str(),
 			"key":       openapi.Str(),
 			"url":       openapi.Str(),
 			"expiresIn": openapi.Int(),
 			"fields":    desc(openapi.Obj(), "仅 method=post：multipart 表单字段"),
-		})}, "400": {Description: "method/expiresIn 非法", JSON: refSchema("Error")}},
+			"headers":   desc(openapi.Obj(), "仅 method=put：随 PUT 必须携带的请求头（条件写回显；无条件时为空对象）"),
+		})}, "400": {Description: "method/expiresIn/条件字段非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/mkdir", openapi.Op{
 		Tags: []string{"objects"}, Summary: "新建空文件夹（PUT 空对象）", OperationID: "mkdirObject",
@@ -113,14 +125,16 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket": openapi.Str(),
-				"key":    openapi.Str(),
+				"bucket":      openapi.Str(),
+				"key":         openapi.Str(),
+				"ifMatch":     desc(openapi.Str(), "可选；条件写：仅当目标对象当前 ETag 匹配时写入"),
+				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当目标对象不存在时写入（防并发覆盖）"),
 			}, "bucket", "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"created": openapi.Str(),
 			"bucket":  openapi.Str(),
-		})}},
+		})}, "400": {Description: "key/条件字段非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/rename", openapi.Op{
 		Tags: []string{"objects"}, Summary: "重命名 / 移动（copy+delete，可跨桶）", OperationID: "renameObject",
@@ -142,16 +156,20 @@ func registerObjects(r *openapi.Registry) {
 		Request: &openapi.Request{
 			Required: true,
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":    openapi.Str(),
-				"key":       openapi.Str(),
-				"newBucket": openapi.Str("可选；省略=同桶"),
-				"newKey":    openapi.Str(),
+				"bucket":      openapi.Str(),
+				"key":         openapi.Str(),
+				"newBucket":   openapi.Str("可选；省略=同桶"),
+				"newKey":      openapi.Str(),
+				"ifMatch":     desc(openapi.Str(), "可选；条件写：仅当**目标**对象当前 ETag 匹配时写入"),
+				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当**目标**对象不存在时写入"),
+				"checksumAlgorithm": desc(openapi.EnumStr("CRC64NVME", "SHA256", "CRC32C", "SHA1"),
+					"可选；非空时服务端计算并存储全对象校验和（供 verify-checksum 端到端比对）"),
 			}, "bucket", "key", "newKey")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"copied": openapi.Str(),
 			"bucket": openapi.Str(),
-		})}},
+		})}, "412": {Description: "条件不满足（PreconditionFailed）", JSON: refSchema("Error")}, "400": {Description: "条件字段非法", JSON: refSchema("Error")}},
 	})
 	// copyObjectsBody 是同步 / 异步批量复制共用的请求体：两者共用 copy.go 的同一个 DTO
 	// （bucket/targetBucket/targetPrefix/keys/deleteSource），此前同步侧误写成 `items`、
@@ -311,6 +329,27 @@ func registerObjects(r *openapi.Registry) {
 			"storageClass": openapi.Str(),
 		})}, "400": {Description: "存储类型非法", JSON: refSchema("Error")}},
 	})
+	r.Operation("POST", "/api/accounts/{id}/verify-checksum", openapi.Op{
+		Tags: []string{"objects"}, Summary: "端到端校验和验证（本地重算与存储端比对）", OperationID: "verifyChecksum",
+		Params: []openapi.Param{acctIDParam()},
+		Request: &openapi.Request{
+			Required: true,
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"bucket":    openapi.Str(),
+				"key":       openapi.Str(),
+				"versionId": openapi.Str(),
+			}, "bucket", "key")},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "method=none 表示无可验证来源（厂商未存校验和 / 分段合成 / 非单段 ETag），match=false", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":    openapi.Str(),
+			"key":       openapi.Str(),
+			"versionId": openapi.Str(),
+			"method":    desc(openapi.Str(), "crc64nvme | crc32c | sha256 | sha1 | etag-md5 | none"),
+			"local":     desc(openapi.Str(), "本地全量重算值（校验和为大端 base64；etag-md5 为小写 hex）"),
+			"remote":    desc(openapi.Str(), "存储端值（method=none 时为空）"),
+			"match":     openapi.Bool(),
+		})}, "400": {Description: "key 缺失或请求体非法", JSON: refSchema("Error")}, "404": refResp("NotFound")},
+	})
 }
 
 // ---- Object Metadata (ACL/Tags) ----
@@ -356,6 +395,81 @@ func registerObjectMeta(r *openapi.Registry) {
 			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "未配置返回空数组", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(tagRowSchema())})}},
+	})
+	r.Operation("GET", "/api/accounts/{id}/object-retention", openapi.Op{
+		Tags: []string{"object-meta"}, Summary: "对象保留期（Object Lock）", OperationID: "getObjectRetention",
+		Params: []openapi.Param{
+			acctIDParam(),
+			refParam("Bucket"),
+			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
+			openapi.Param{Name: "versionId", In: "query", Schema: openapi.Str(), Description: "可选；读取指定版本的保留期"},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "无保留期（或桶未启用 Object Lock）时 configured=false", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":          openapi.Str(),
+			"key":             openapi.Str(),
+			"versionId":       openapi.Str(),
+			"configured":      openapi.Bool(),
+			"mode":            desc(openapi.Str(), "GOVERNANCE | COMPLIANCE（configured=false 时为空串）"),
+			"retainUntilDate": desc(openapi.Str(), "RFC3339 到期时间（configured=false 时为空串）"),
+		})}},
+	})
+	r.Operation("PUT", "/api/accounts/{id}/object-retention", openapi.Op{
+		Tags: []string{"object-meta"}, Summary: "设置对象保留期（Object Lock）", OperationID: "putObjectRetention",
+		Params: []openapi.Param{acctIDParam()},
+		Request: &openapi.Request{
+			Required: true,
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"bucket":          openapi.Str(),
+				"key":             openapi.Str(),
+				"versionId":       openapi.Str(),
+				"mode":            openapi.EnumStr("GOVERNANCE", "COMPLIANCE"),
+				"retainUntilDate": desc(openapi.Str(), "RFC3339（如 2031-02-03T04:05:06Z），必须是未来时刻"),
+			}, "bucket", "key", "mode", "retainUntilDate")},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":          openapi.Str(),
+			"key":             openapi.Str(),
+			"versionId":       openapi.Str(),
+			"configured":      openapi.Bool(),
+			"mode":            openapi.Str(),
+			"retainUntilDate": openapi.Str(),
+		})}, "400": {Description: "输入非法 / 保留期违规", JSON: refSchema("Error")},
+			"403": {Description: "GOVERNANCE 保留期内的拒绝（含越权）", JSON: refSchema("Error")},
+			"409": {Description: "对象被 COMPLIANCE 锁定（ObjectLocked）", JSON: refSchema("Error")}},
+	})
+	r.Operation("GET", "/api/accounts/{id}/object-legal-hold", openapi.Op{
+		Tags: []string{"object-meta"}, Summary: "对象法定保留状态", OperationID: "getObjectLegalHold",
+		Params: []openapi.Param{
+			acctIDParam(),
+			refParam("Bucket"),
+			openapi.Param{Name: "key", In: "query", Required: true, Schema: openapi.Str()},
+			openapi.Param{Name: "versionId", In: "query", Schema: openapi.Str(), Description: "可选；读取指定版本的法定保留"},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "未设置 → status=OFF", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":    openapi.Str(),
+			"key":       openapi.Str(),
+			"versionId": openapi.Str(),
+			"status":    openapi.Str(),
+		})}},
+	})
+	r.Operation("PUT", "/api/accounts/{id}/object-legal-hold", openapi.Op{
+		Tags: []string{"object-meta"}, Summary: "设置对象法定保留（ON/OFF）", OperationID: "putObjectLegalHold",
+		Params: []openapi.Param{acctIDParam()},
+		Request: &openapi.Request{
+			Required: true,
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"bucket":    openapi.Str(),
+				"key":       openapi.Str(),
+				"versionId": openapi.Str(),
+				"status":    openapi.EnumStr("ON", "OFF"),
+			}, "bucket", "key", "status")},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
+			"bucket":    openapi.Str(),
+			"key":       openapi.Str(),
+			"versionId": openapi.Str(),
+			"status":    openapi.Str(),
+		})}, "403": {Description: "拒绝（含越权）", JSON: refSchema("Error")}, "409": {Description: "对象被锁定", JSON: refSchema("Error")}},
 	})
 	r.Operation("PUT", "/api/accounts/{id}/object-tags", openapi.Op{
 		Tags: []string{"object-meta"}, Summary: "设置对象标签（空数组=清空）", OperationID: "putObjectTags",

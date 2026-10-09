@@ -167,6 +167,38 @@ func registerBucketSettings(r *openapi.Registry) {
 			"deleted": openapi.Str(),
 		})}},
 	})
+
+	// Object Lock（WORM）：桶级默认保留策略。桶须在创建时启用 Object Lock，
+	// 否则 PUT 返回 409（InvalidBucketState）；GET 未启用 → enabled=false。
+	objectLockResp := openapi.BuildObj(map[string]*openapi.Schema{
+		"bucket":                openapi.Str(),
+		"enabled":               openapi.Bool(),
+		"defaultRetentionMode":  desc(openapi.Str(), "GOVERNANCE | COMPLIANCE（未配置默认保留时为空串）"),
+		"defaultRetentionDays":  openapi.Int(),
+		"defaultRetentionYears": openapi.Int(),
+	})
+	r.Operation("GET", "/api/accounts/{id}/bucket/object-lock", openapi.Op{
+		Tags: []string{"bucket-settings"}, Summary: "桶 Object Lock 配置", OperationID: "getObjectLock",
+		Params:    []openapi.Param{acctIDParam(), bucketQ},
+		Responses: map[string]openapi.Response{"200": {Description: "未启用 Object Lock 时 enabled=false", JSON: objectLockResp}},
+	})
+	r.Operation("PUT", "/api/accounts/{id}/bucket/object-lock", openapi.Op{
+		Tags: []string{"bucket-settings"}, Summary: "设置桶默认保留策略（桶须创建时启用 Object Lock）", OperationID: "putObjectLock",
+		Params: []openapi.Param{acctIDParam()},
+		Request: &openapi.Request{
+			Required: true,
+			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
+				"bucket":                openapi.Str(),
+				"defaultRetentionMode":  openapi.EnumStr("GOVERNANCE", "COMPLIANCE"),
+				"defaultRetentionDays":  desc(openapi.Int(), "与 defaultRetentionYears 二选一；必须 ≥1"),
+				"defaultRetentionYears": desc(openapi.Int(), "与 defaultRetentionDays 二选一；必须 ≥1"),
+			}, "bucket", "defaultRetentionMode")},
+		},
+		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: objectLockResp},
+			"400": {Description: "输入非法 / 桶未启用 Object Lock", JSON: refSchema("Error")},
+			"409": {Description: "桶未在创建时启用 Object Lock（InvalidBucketState）", JSON: refSchema("Error")},
+			"501": {Description: "厂商未实现 Object Lock（NotImplemented）", JSON: refSchema("Error")}},
+	})
 }
 
 // ---- Objects ----
