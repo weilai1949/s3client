@@ -44,14 +44,21 @@ const lifecycleOpen = ref(false)
 
 const account = () => state.accounts.find((a) => a.id === accSel.value)
 
+// 桶加载代际（评审 R6）：切账号可能连续发起两次 listBuckets，乱序返回时旧响应
+// 会把上一个账号的桶渲染在当前账号选择器之下——写入 / 清错 / 清 loading 都须
+// 先验 seq（口径同 useObjectBrowser.loadBuckets）。
+let bucketSeq = 0
+
 async function loadBuckets() {
   if (!accSel.value) {
     buckets.value = []
     return
   }
+  const seq = ++bucketSeq
   loadingBuckets.value = true
   try {
     const r = await s3api.listBuckets(accSel.value)
+    if (seq !== bucketSeq) return // 过期响应：当前账号的加载已接管状态，静默丢弃
     buckets.value = r.buckets
     if (!selectedBucket.value || !r.buckets.some((b) => b.name === selectedBucket.value)) {
       selectedBucket.value = r.buckets[0]?.name ?? ''
@@ -60,12 +67,13 @@ async function loadBuckets() {
     // 否则重试成功后列表仍被 v-else-if="error" 顶掉，用户必须刷新页面。
     error.value = ''
   } catch (err) {
+    if (seq !== bucketSeq) return // 过期失败：不污染当前账号的横幅
     // 失败必须清桶列表：保留上一次成功的结果会把**上一个账号**的桶渲染在
     // 当前账号选择器之下（watch(accSel) 只清 selectedBucket，不清 buckets）。
     buckets.value = []
     error.value = toErrorMessage(err)
   } finally {
-    loadingBuckets.value = false
+    if (seq === bucketSeq) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
   }
 }
 

@@ -233,10 +233,8 @@ export const s3api = {
     request<{ aborted: boolean }>(opPath('multipartAbort', { id }), { method: operations.multipartAbort.method, body: JSON.stringify(body) }),
   /**
    * 列出服务端真实已上传分段（断点续传对齐，ROADMAP §三 #8）。
-   *
-   * 路径暂以字面量拼接：`operations.ts` 由 `pnpm gen:api` 生成，本端点的 operationId
-   * 要等 Lead 重新生成后才进入 `OperationId` 联合类型；生成后此处可改为
-   * `opPath('multipartParts', { id })`。路径与 `docs/api/openapi.json` 一致。
+   * 路径经 `opPath` 走 spec 生成的 path 模板（评审 R8：不再手写字面量绕过契约层），
+   * query 单独构造；URL 行为由 api.gaps.test.ts 的 multipartParts 用例钉住。
    */
   multipartParts: (id: string, q: { bucket?: string; key: string; uploadId: string }) => {
     const qs = new URLSearchParams()
@@ -244,7 +242,7 @@ export const s3api = {
     qs.set('uploadId', q.uploadId)
     if (q.bucket) qs.set('bucket', q.bucket)
     return request<{ parts: { partNumber: number; etag: string; size: number; lastModified: string }[] }>(
-      `/api/accounts/${encodeURIComponent(id)}/multipart/parts?${qs.toString()}`,
+      `${opPath('multipartParts', { id })}?${qs.toString()}`,
     )
   },
   /**

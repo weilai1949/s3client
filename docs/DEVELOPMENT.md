@@ -6,7 +6,7 @@
 ## 1. 核心原则（TDD 优先）
 
 1. **先写会失败的测试，再写让它通过的实现。**
-2. **小步提交**：一个逻辑改动一个 commit；改动前后都要 `go test ./...` 与 `pnpm build` 全绿。
+2. **小步提交**：一个逻辑改动一个 commit；改动前后都要 `go test ./...` 与 `pnpm build` 全绿。**成文例外**：同日并行、且共享同一组生成物 / 文档（如 `docs/api/openapi.json`、`docs/FEATURES.md`、计数类文档）的多个批次，可合并为一次提交——强拆会产生互相依赖的半成品 commit；但该 commit 的提交信息**必须按批切片**（逐批列出改动点），评审据此按批阅读。
 3. **行为驱动，不测内部实现**：断言「外部可见的行为 / 返回值 / HTTP 状态码」，不要断言私有函数或内部变量。
 4. **红灯-绿灯-重构（红绿蓝）**：先看到测试因缺实现而失败（红），再让实现通过（绿），最后在测试保护下优化结构（重构）。
 5. **改完代码必须同步文档**：任何一次**修复 bug** 或**新增功能**完成之后，必须更新相关文档；文档未同步 = 改动未完成，不得提交 / 合并。文档与代码属于同一个 commit（或同一 PR）。
@@ -17,7 +17,7 @@
 |----|------|----------|------|
 | **单元 / 行为测试** | `apps/server/internal/.../*_test.go` | `cd apps/server && go test ./...` | 用 `httptest.NewServer` 的**假 S3** 验证 handler 层逻辑（路由、参数校验、正/反例、错误码映射） |
 | **真实对端 E2E** | `apps/server/internal/s3wrap/e2e_test.go` | `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E' -v` | 验证最硬核路径：**SigV4 签名 / 预签名直传 / 分段 Multipart 组装 / 跨 bucket 复制 / 标签 / 版本控制**。默认指向本地 RustFS |
-| **真实联调浏览器 E2E** | `apps/web/e2e-real/real-backend.spec.ts` | `make e2e-real` | 真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器，**不 mock `/api`**：账号落库、建桶列桶、**浏览器直传**（预签名 PUT 跨源）。mock 版 `apps/web/e2e/*.spec.ts` 覆盖不到的结合部 |
+| **真实联调浏览器 E2E** | `apps/web/e2e-real/real-backend.spec.ts` | `make e2e-real` | 真实 Go 后端（托管真实 `vite build` 产物）+ 真实 RustFS + 真实浏览器，**不 mock `/api`**：账号落库、建桶列桶、**浏览器直传**（预签名 PUT 跨源）、**OpenAPI 规范真断言**（后端带 `S3C_EXPOSE_OPENAPI=1`，生产默认 404）。mock 版 `apps/web/e2e/*.spec.ts` 覆盖不到的结合部 |
 | **前端类型 + 构建** | `web` | `cd apps/web && pnpm build`（含 `vue-tsc --noEmit`） | 类型安全与可构建性；UI 改动同时保留手测/截图证据 |
 
 ### 假 S3 模式（handler 测试）
@@ -31,7 +31,7 @@
 
 ### 真实后端 + RustFS 浏览器联调（历史任务 #37，已闭环）
 - #37 已于 2026-09-22 闭环并从 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 移除，归档证据见 [`FEATURES.md`](FEATURES.md) §V；当前待办以 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（问题）与 [`ROADMAP.md`](ROADMAP.md)（方向）为准。
-- 一条命令：`make e2e-real`（脚本 [`scripts/e2e-real.sh`](../scripts/e2e-real.sh)）。它会起一份**独立** RustFS 容器、构建真实前端产物与后端、起真实后端托管产物、跑 `pnpm e2e:real`，最后 `trap` 自动清理。
+- 一条命令：`make e2e-real`（脚本 [`scripts/e2e-real.sh`](../scripts/e2e-real.sh)）。它会起一份**独立** RustFS 容器、构建真实前端产物与后端、起真实后端托管产物（env 显式带 `S3C_EXPOSE_OPENAPI=1`——生产默认不暴露 `/api/openapi.json`，评审 R9 迁入的契约真断言需要显式打开）、跑 `pnpm e2e:real`，最后 `trap` 自动清理。
 - **该脚本是这套编排的唯一来源**：本地 `make e2e-real`、GitHub Actions 与 GitLab CI 都调用它，各自只负责「装工具链 / 装浏览器系统依赖」。门禁 `TestRealE2EUsesSharedScript` 断言两侧 CI 都**实际调用** `bash scripts/e2e-real.sh`（仅出现在 `paths:`/`changes:` 里不算），防止又抄一份编排而漂移。
 - **必须给 RustFS 配 `RUSTFS_CORS_ALLOWED_ORIGINS`**（脚本自起时已默认配好，GitLab service 变量里也配了）：浏览器直传（预签名 PUT）是页面 → S3 的**跨源**请求，缺 CORS 会被浏览器拦下。注意 curl / Playwright `APIRequestContext` **不经 CORS**，只用它们验证会「假绿」——所以用例特意驱动真实浏览器 XHR。
 - 复用外部对端（GitLab service / 已起的实例）：`RUSTFS_ENDPOINT=http://rustfs:9000 bash scripts/e2e-real.sh --no-rustfs`（此时脚本不管理容器生命周期）。
@@ -91,9 +91,12 @@ make rust-audit
 > `Unknown argument`），见 `TestMakefileGclStripsEnvPrefixVars`）、
 > `doc_number_gate_test.go`（md 叙述性数字）、`config_doc_gate_test.go`（配置 SSOT
 > [`CONFIGURATION.md`](CONFIGURATION.md) ⇔ `internal/config` 读取的 `S3C_*` 变量全量）、
-> `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）；
+> `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）、
+> `ci_consistency_gate_test.go`（两套 CI 的 job / 命令 / 版本 pin 逐项一致 + checkout 深克隆与前端依赖
+> 前置——评审 2026-10-09 C1/C2，见下节）；
 > 前端半边落点是四份：`apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 /
-> 孤儿模块**，引用计数走 **TS AST**——注释与字符串字面量不算引用）、
+> 孤儿模块 + 类型导出零引用**（`export type` / `interface`——评审 R7 后半区从声明的盲区升级为真断言），
+> 引用计数走 **TS AST**——注释与字符串字面量不算引用）、
 > `apps/web/src/a11y_gate.test.ts`（**源码形态**：`:focus-visible` 列表必须含 `textarea`、
 > `prefers-reduced-motion` 媒体查询必须关闭 animation / transition）、
 > `apps/web/src/vite_env_guard.test.ts`（宿主 `NODE_ENV` 隔离）、
@@ -136,6 +139,11 @@ make rust-audit
 
 同一套门禁同时落在 **GitHub Actions** 与 **GitLab CI**，两边 job、命令、门禁阈值必须一致；
 改任一侧都要同步另一侧（含下表），否则会漂移成「GitHub 绿 / GitLab 红」。
+双侧一致性由 `apps/server/ci_consistency_gate_test.go` 机械钉住（评审 2026-10-09 C1）。两个易碎前提同为该批评审点名，两侧都已落地：
+**① 所有 checkout 必须 `fetch-depth: 0`**（`changelog_tag` 门禁从 `.git` 读 v* tag，浅克隆读不到即必红——C2）；
+**② Go job 必须先真装前端依赖**（GitHub `server` job 加 pnpm/setup-node + `pnpm install --frozen-lockfile`，
+GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store/` cache）——根包 `agent_evals_gate_test.go`
+的判据前置是 `apps/web/node_modules` 存在（gitignore 构建产物，**不得 `mkdir` 伪造**——C1）。
 
 | GitHub Actions | GitLab CI job | 门禁内容 |
 |---|---|---|
@@ -297,6 +305,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | [`../CITATION.cff`](../CITATION.cff)（工具固定名：GitHub 引用元数据） | 6 个月，或作者 / 许可变化时同 PR | 登记时基线（2026-09-30） |
 | [`../deploy/grafana/`](../deploy/grafana/) · [`../scripts/evals/`](../scripts/evals/)（机器可读运维 / 评测资产） | 由门禁强制，无需人肉周期 | 登记时基线（2026-09-30） |
 | [`archive/handoff-20260930.md`](archive/handoff-20260930.md)（批次交接**时点快照**，**冻结件**，2026-10-01 批次收口） | 不复审——归档 = 冻结，不回写、不改写 | 2026-10-08（归档登记） |
+| [`code-review-2026-10-09.md`](code-review-2026-10-09.md)（全仓代码质量评审**时点快照**，**活跃中**，闭环后归档） | 引用收敛后归档（时点快照，不逐份复审） | 2026-10-09（创建登记） |
 
 落地要求：
 
@@ -310,7 +319,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 - **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有**工具固定名**留在根目录：`LICENSE` 与 `CITATION.cff`（GitHub 的 cite 功能只认根目录，2026-09-30 登记）。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
   - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）、`CITATION.cff`（GitHub 引用元数据，只认根目录）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
-  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。**时点性批次交接快照**同用小写（先例 `assessment.md`、`handoff-20260930.md`，结论绑定日期、批次收口后归档入 `docs/archive/`——两者均已归档）。
+  - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。**时点性批次交接快照**同用小写（先例 `assessment.md`、`handoff-20260930.md`，结论绑定日期、批次收口后归档入 `docs/archive/`——两者均已归档）；时点性**代码评审快照**同样小写（当前 `code-review-2026-10-09.md`，闭环后归档）。
   - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
   - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。
 - **目录**：一律小写（`docs/`、`docs/decisions/`、`docs/archive/`、`docs/en/`、`apps/server/`、`apps/web/`）。**本条只约束目录名**（文件名规则见上一条）——目录不存在「约定大写」这一说，大写只由工具强制决定：`.github/` 与 `.github/ISSUE_TEMPLATE/`（GitHub 按字面名查找，小写不生效）已符合；若将来引入 REUSE 规范的逐文件许可证全文，则用 `LICENSES/`。把 `docs/` 改成 `Docs/` 会让 GitHub 的社区健康文件查找（以及将来的 Pages 发布源）失效。`docs/en/` 为英文文档目录（当前唯一文件 [`en/index.md`](en/index.md)）：中文为 SSOT、英文页是翻译快照，根 `README.md` 变更时同 PR 同步。

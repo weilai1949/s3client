@@ -190,9 +190,50 @@ func TestScopeAccountsRestrictPathID(t *testing.T) {
 	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/accounts", ""); rr.Code != http.StatusOK {
 		t.Errorf("GET /api/accounts = %d, want 200", rr.Code)
 	}
-	// preview-buckets 不是账号 id，不得被误判为越界。
+	// preview-buckets 不是账号 {id}（此行不再按账号判定），但该端点由独立作用域闸
+	// 对受限 token 一律拦截（R2，见 TestScopePreviewBucketsDeniedForRestrictedTokens）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/preview-buckets", `{}`); rr.Code != http.StatusForbidden {
+		t.Errorf("preview-buckets 未被作用域闸拦截（账号作用域 token）：%d", rr.Code)
+	}
+}
+
+// ---- preview-buckets：已设任何作用域的 token 一律拒绝（评审 R2）----
+
+// TestScopePreviewBucketsDeniedForRestrictedTokens：preview-buckets 用**调用方自带**的
+// endpoint/credential 由服务端去拨号（SSRF 面，ADR-003 自托管放行私网）。它既不是
+// 账号 {id} 路径、body 也默认不带桶引用——前缀/账号作用域判定对它全部落空。
+// 已设任何资源作用域（Readonly / Prefixes / Accounts）的 token 不得把它当认证后的
+// 拨号板：一律 403 + 审计；无作用域 token 保持历史行为（放行到业务校验）。
+func TestScopePreviewBucketsDeniedForRestrictedTokens(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		scope config.TokenScope
+	}{
+		{"readonly", config.TokenScope{Readonly: true}},
+		{"prefixes", config.TokenScope{Prefixes: []string{"bucket-a"}}},
+		{"accounts", config.TokenScope{Accounts: []string{"acc-x"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newScopeEnv(t, map[string]config.TokenScope{scopeTokReadonly: c.scope})
+			rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/preview-buckets", `{}`)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("preview-buckets（%s 作用域）= %d, want 403", c.name, rr.Code)
+			}
+			var denied bool
+			for _, ev := range e.auditEvents() {
+				if ev["audit"] == auditScopeDenied {
+					denied = true
+				}
+			}
+			if !denied {
+				t.Errorf("缺少 auth.scope_denied 审计事件：%v", e.auditEvents())
+			}
+		})
+	}
+	// 无作用域（未启用）→ 不被闸拦：放行到业务校验（body {} → 400，而非 403）。
+	e := newScopeEnv(t, nil)
 	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/preview-buckets", `{}`); rr.Code == http.StatusForbidden {
-		t.Errorf("preview-buckets 被误判为越界账号：%d", rr.Code)
+		t.Errorf("无作用域 token 被 preview-buckets 闸误拦：%d", rr.Code)
 	}
 }
 
@@ -470,6 +511,67 @@ func TestScopeMultiBucketGroups(t *testing.T) {
 				t.Fatalf("%s 界内被作用域拒绝（403）", c.path)
 			}
 		})
+	}
+}
+
+// ---- 迁移任务路由 /api/migrate/jobs*：资源作用域 token 一律拒绝（评审 R1）----
+
+// TestScopeMigrateJobRoutesDeniedForResourcedTokens：routes.go 的
+// GET /api/migrate/jobs、/{id}、/{id}/events 与 POST /{id}/cancel 在作用域判定里
+// 没有任何可注入的桶引用（requestScopeRefs 返回空）、也不匹配账号 {id}——前缀作用域
+// token 曾可枚举全部任务、读别桶 failedKeys（对象键名）、取消他人进行中的迁移。
+// 已声明资源作用域（Prefixes / Accounts）的 token 对这些路由一律 403 + 审计。
+// （任务归属不在任务记录里，无法按桶细判——拒绝是唯一可验证的最小权限口径；
+// 作用域 token 需要任务追踪时使用全权 token 创建与轮询。）
+func TestScopeMigrateJobRoutesDeniedForResourcedTokens(t *testing.T) {
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/api/migrate/jobs"},
+		{http.MethodGet, "/api/migrate/jobs/job-1"},
+		{http.MethodPost, "/api/migrate/jobs/job-1/cancel"},
+		{http.MethodGet, "/api/migrate/jobs/job-1/events"},
+	}
+	for _, c := range []struct {
+		name  string
+		scope config.TokenScope
+	}{
+		{"prefixes", config.TokenScope{Prefixes: []string{"bucket-a"}}},
+		{"accounts", config.TokenScope{Accounts: []string{"acc-x"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newScopeEnv(t, map[string]config.TokenScope{scopeTokReadonly: c.scope})
+			for _, rt := range routes {
+				if rr := e.request(scopeTokReadonly, rt.method, rt.path, ""); rr.Code != http.StatusForbidden {
+					t.Errorf("%s %s（%s 作用域）= %d, want 403", rt.method, rt.path, c.name, rr.Code)
+				}
+			}
+			var denied bool
+			for _, ev := range e.auditEvents() {
+				if ev["audit"] == auditScopeDenied {
+					denied = true
+				}
+			}
+			if !denied {
+				t.Errorf("缺少 auth.scope_denied 审计事件：%v", e.auditEvents())
+			}
+		})
+	}
+}
+
+// TestScopeMigrateJobRoutesKeepReadonlyReads：readonly 读任务路由不被误拦——它本就
+// 可读全量桶，任务清单不构成新增权限面；其 POST 取消仍被方法闸 403。未知 id 过
+// 作用域闸后由 handler 判 404（不因作用域状态泄露存在性）。
+func TestScopeMigrateJobRoutesKeepReadonlyReads(t *testing.T) {
+	e := newScopeEnv(t, map[string]config.TokenScope{
+		scopeTokReadonly: {Readonly: true},
+	})
+	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/migrate/jobs", ""); rr.Code != http.StatusOK {
+		t.Errorf("readonly 列任务 = %d, want 200", rr.Code)
+	}
+	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/migrate/jobs/nope", ""); rr.Code != http.StatusNotFound {
+		t.Errorf("readonly 查未知任务 = %d, want 404（作用域闸放行后由 handler 判定）", rr.Code)
+	}
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate/jobs/nope/cancel", ""); rr.Code != http.StatusForbidden {
+		t.Errorf("readonly POST 取消 = %d, want 403（方法闸）", rr.Code)
 	}
 }
 

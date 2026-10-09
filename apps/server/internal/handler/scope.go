@@ -10,6 +10,13 @@ package handler
 //   - accounts：仅允许路径 {id} 命中的账号；
 //   - expiresAt：过期 → 401（审计 reason token_expired）。
 //
+// 另有两条**端点级**闸（评审 2026-10-09 R1/R2）——某些端点的请求不携带可判定的
+// 桶/账号引用，通用判定对它全部落空，必须整体拒绝受限 token：
+//   - POST /api/accounts/preview-buckets：调用方自带 endpoint/凭据由服务端拨号
+//     （SSRF 拨号面），已设任何资源作用域（readonly/prefixes/accounts）→ 403；
+//   - /api/migrate/jobs*（列取/状态/取消/事件流）：任务记录不带归属，无法按桶细判，
+//     已声明前缀/账号作用域 → 403（readonly 读不受限：本就可读全量桶）。
+//
 // 拒绝一律写审计事件（auth.scope_denied + reason）并回统一 JSON 错误；
 // **不记录 token 明文**（凭证不落日志）。
 //
@@ -30,6 +37,18 @@ import (
 // auditScopeDenied 是「token 作用域越权」的审计事件名（与 auth.denied 分开便于单独告警）。
 const auditScopeDenied = "auth.scope_denied"
 
+// 端点级作用域闸钉住的路径（与 routes.go 的注册名一致）。
+const (
+	previewBucketsPath    = "/api/accounts/preview-buckets"
+	migrateJobsPathPrefix = "/api/migrate/jobs"
+)
+
+// scopeHasRestriction 报告该作用域是否声明了资源/能力限制（readonly / 前缀 / 账号
+// 任一）。仅 expiresAt 的声明没有限制语义（到点失效而已），不触发端点级闸。
+func scopeHasRestriction(s config.TokenScope) bool {
+	return s.Readonly || len(s.Prefixes) > 0 || len(s.Accounts) > 0
+}
+
 // SetTokenScopes 注入「token → 作用域」查询函数（来自 config.Config.ScopeFor）。
 // nil = 不启用作用域（所有 token 全权）。需在 Routes() 前调用。
 func (h *Handler) SetTokenScopes(lookup func(string) (config.TokenScope, bool)) {
@@ -48,6 +67,23 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, token string
 	if !scope.ExpiresAt.IsZero() && time.Now().After(scope.ExpiresAt) {
 		h.audit(r, auditAuthDenied, "reason", "token_expired")
 		h.writeErr(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+	// 端点级闸（评审 R2）：preview-buckets 用**调用方自带**的 endpoint/credential 由
+	// 服务端去拨号（SSRF 拨号面，ADR-003 自托管放行私网）。它不是账号 {id} 路径、
+	// body 也默认不带桶引用——下面的账号/前缀判定对它全部落空。已设任何资源作用域
+	// 的 token 不得把它当认证后的跳板；无限制语义（仅 expiresAt）的 token 不受影响。
+	if r.URL.Path == previewBucketsPath && scopeHasRestriction(scope) {
+		h.denyScope(w, r, "preview_buckets")
+		return false
+	}
+	// 端点级闸（评审 R1）：/api/migrate/jobs*（列取 / 状态 / 取消 / 事件流）没有任何
+	// 可注入的桶引用（任务记录不带归属），也不匹配账号 {id}——前缀作用域 token 曾可
+	// 枚举全量任务、读别桶 failedKeys、取消他人进行中的迁移。已声明前缀/账号作用域的
+	// token 一律拒绝；readonly 不在此列（本就可读全量桶，任务清单不构成新增权限面，
+	// POST 取消被下方方法闸拦）。
+	if strings.HasPrefix(r.URL.Path, migrateJobsPathPrefix) && (len(scope.Prefixes) > 0 || len(scope.Accounts) > 0) {
+		h.denyScope(w, r, "migrate_jobs")
 		return false
 	}
 	if scope.Readonly && r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -96,16 +132,14 @@ func scopeContains(list []string, want string) bool {
 }
 
 // accountIDFromPath 从 /api/accounts/{id}/... 提取 {id}；非账号路径返回空串。
-// preview-buckets 是固定子路径、不是账号 id，按空串处理，避免被误判为越界账号。
+// preview-buckets 等固定子路径不会走到这里：该端点在 authorize 的端点级作用域闸
+// 已先行拦截（见头注释 R2），账号判定只看真实 {id}。
 func accountIDFromPath(p string) string {
 	rest, ok := strings.CutPrefix(p, "/api/accounts/")
 	if !ok {
 		return ""
 	}
 	id, _, _ := strings.Cut(rest, "/")
-	if id == "preview-buckets" {
-		return ""
-	}
 	return id
 }
 

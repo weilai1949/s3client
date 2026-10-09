@@ -25,6 +25,7 @@ const buckets = ref<BucketItem[]>([])
 const markers = ref<TrashMarker[]>([])
 const loading = ref(false)
 const loadingMore = ref(false)
+const loadingBuckets = ref(false)
 const error = ref('')
 const isTruncated = ref(false)
 const nextKeyMarker = ref('')
@@ -78,19 +79,31 @@ watch(() => markers.value, () => resetWindowScroll())
 
 onBeforeUnmount(() => resizeObs?.disconnect())
 
+// 桶加载代际（评审 R6）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
+// 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 seq
+//（口径同 useObjectBrowser.loadBuckets）。loadingBuckets 配 finally 复位：
+// 异常时不得永久为 true（否则桶选择器永久禁用）。
+let bucketSeq = 0
+
 async function loadBuckets() {
   if (!accSel.value) {
     buckets.value = []
     return
   }
+  const seq = ++bucketSeq
+  loadingBuckets.value = true
   try {
     const r = await s3api.listBuckets(accSel.value)
+    if (seq !== bucketSeq) return // 过期响应：当前账号的加载已接管状态，静默丢弃
     buckets.value = r.buckets
     if (!bucketSel.value || !r.buckets.some((b) => b.name === bucketSel.value)) bucketSel.value = r.buckets[0]?.name ?? ''
     // 成功即清：横幅不得永久遮蔽整页（v-if 三分支互斥，error 一旦置位列表就再也出不来）。
     error.value = ''
   } catch (e) {
+    if (seq !== bucketSeq) return // 过期失败：不污染当前账号的横幅
     error.value = toErrorMessage(e)
+  } finally {
+    if (seq === bucketSeq) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
   }
 }
 
@@ -218,7 +231,7 @@ async function purge(m: TrashMarker) {
         <option v-for="a in state.accounts" :key="a.id" :value="a.id">{{ a.name }}</option>
       </select>
       <label class="badge" for="trash-bucket-select">{{ t('trash.bucket') }}</label>
-      <select id="trash-bucket-select" v-model="bucketSel" class="acc-select" :title="t('trash.switchBucket')">
+      <select id="trash-bucket-select" v-model="bucketSel" class="acc-select" :disabled="loadingBuckets" :title="t('trash.switchBucket')">
         <option v-if="!buckets.length" value="">{{ t('trash.noBuckets') }}</option>
         <option v-for="b in buckets" :key="b.name" :value="b.name">{{ b.name }}</option>
       </select>

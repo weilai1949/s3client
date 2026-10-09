@@ -57,6 +57,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       # Go：版本取自 apps/server/go.mod（与 ci.yml / e2e.yml 同口径，避免手写漂移）。
       - if: matrix.language == 'go'

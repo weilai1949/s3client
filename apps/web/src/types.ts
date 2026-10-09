@@ -34,9 +34,6 @@ export type ListObjectsResponse = components['schemas']['ListObjectsResp']
 // FinOps 成本看板（ROADMAP §三 #7）：响应类型直接派生自 spec 的 operation 200 响应，
 // 漂移由 `pnpm gen:api` + `vue-tsc` 拦（后端另有响应契约门禁钉注册表）。
 export type StorageReport = operations['storageReport']['responses'][200]['content']['application/json']
-export type StorageClassUsage = StorageReport['byStorageClass'][number]
-export type PrefixUsage = StorageReport['byPrefix'][number]
-export type StorageRecommendation = StorageReport['recommendations'][number]
 
 export interface PresignResponse {
   method: 'get' | 'put' | 'post'

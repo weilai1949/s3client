@@ -25,7 +25,11 @@ import { api, s3api } from './api'
  *      两半共同镜像后端 `apps/server/deadcode_gate_test.go` 的「零生产引用」口径。
  *
  * 盲区（有意接受，写清以免被误读为"该类风险已收敛"）：
- *   1. 不覆盖类型导出（`type X`）——类型仅存在于编译期，`vue-tsc` 已覆盖；
+ *   1. 类型导出（`type X` / `interface X`）自 2026-10-09（评审 R7）起由本文件的
+ *      「类型导出半边」覆盖——旧版此处写的是「不覆盖，vue-tsc 已覆盖」，属**误判**
+ *      （vue-tsc 不报未使用导出），`types.ts` 的三个死类型因此长期无人发现。
+ *      剩余口径限制：`export { type X }` 列表形态、`.d.ts` 生成物、同文件内部引用
+ *      （含互引用环）不算缺口，见「类型导出半边」段注释；
  *   2. 动态成员访问（`s3api[name]`）无法静态识别——当前全仓无此写法；
  *   3. B 半边按**引用标识符**计数（TS AST，`.vue` 的 `<template>` 原样按裸词计数）：
  *      同名标识符跨文件抵消仍然存在（与后端 Gate 1 同向，只会漏报）；而**注释与字符串
@@ -233,7 +237,10 @@ function isExportedDeclarationName(id: ts.Identifier): boolean {
     ts.isFunctionDeclaration(p) ||
     ts.isClassDeclaration(p) ||
     ts.isEnumDeclaration(p) ||
-    ts.isModuleDeclaration(p)
+    ts.isModuleDeclaration(p) ||
+    // 类型半边（评审 R7）：类型别名与接口的声明名同样不能自证被引用。
+    ts.isTypeAliasDeclaration(p) ||
+    ts.isInterfaceDeclaration(p)
   ) {
     return hasExportModifier(p) && p.name === id
   }
@@ -399,6 +406,88 @@ it('口径：注释与字符串里的同名整词不算引用', () => {
   // 反向守卫：真实引用（普通调用 / 模板插值）不得被误杀
   expect(red).not.toContain('./src/real-use.ts → live')
   expect(red).not.toContain('./src/real-interp.ts → interp')
+})
+
+// ===== 类型导出半边（评审 R7 收口盲区 1） =====
+//
+// 背景：`vue-tsc` 不报「导出后无人引用」的类型，运行期半边（runtimeExportNames）
+// 又只抽 function/class/const——`types.ts` 的 `StorageClassUsage` / `PrefixUsage` /
+// `StorageRecommendation` 三个类型导出因此全仓零引用而无人发现（评审 R7）。
+//
+// 口径限制（有意接受，与运行期半边的裸词口径同向，只会漏报）：
+//   - `export { type X }` / `export type { X } from` 列表形态不在抽取范围
+//     （再导出面以声明处为准）；
+//   - `.d.ts` 生成物不扫（由 `pnpm gen:api` 与 vue-tsc 负责）；
+//   - 同文件内部引用（含自引用 / 互引用环）算引用——引用可达性按裸标识符计。
+
+/** 抽取类型导出名：`export type X = …` / `export interface X …`（含 declare）。 */
+function typeExportNames(text: string): string[] {
+  const names: string[] = []
+  for (const m of text.matchAll(/\bexport\s+(?:declare\s+)?(?:type|interface)\s+([A-Za-z_$][\w$]*)/g)) {
+    names.push(m[1])
+  }
+  return names
+}
+
+/**
+ * 在给定源码集合上求「零生产引用的类型导出」。
+ *
+ * 与运行期半边同构：抽成纯函数以便用合成源码做口径测试；引用判定复用
+ * `usageBody`（剥 import / 导出声明名，AST 级排除注释与字符串，`.vue` 取
+ * script + template）。`.d.ts` 生成物跳过。
+ */
+function findUnreferencedTypeExports(
+  sources: ReadonlyArray<readonly [string, string]>,
+): { red: string[]; scanned: number } {
+  const bodies = sources.map(([path, text]) => [path, usageBody(path, text)] as const)
+  const red: string[] = []
+  let scanned = 0
+  for (const [path, text] of sources) {
+    if (path.endsWith('.d.ts')) continue
+    for (const name of typeExportNames(text)) {
+      scanned++
+      const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+      if (bodies.some(([, body]) => re.test(body))) continue
+      red.push(`${path} → ${name}`)
+    }
+  }
+  return { red: red.sort(), scanned }
+}
+
+it('类型导出必须被生产代码引用（零引用即死代码，评审 R7）', () => {
+  const { red, scanned } = findUnreferencedTypeExports(files)
+  // 防空跑：解析口径失效时不得静默变绿（真实基数见扫描数下限）。
+  expect(files.length).toBeGreaterThanOrEqual(50)
+  expect(scanned, '未抽取到任何类型导出（解析口径失效）').toBeGreaterThanOrEqual(40)
+  expect(
+    red,
+    `以下类型导出在生产代码中零引用（仅测试引用 = 死代码）：\n  ${red.join('\n  ')}\n` +
+      '请删除该导出，并同步改写只引用它的测试。',
+  ).toEqual([])
+})
+
+it('口径：类型导出的声明名自身不算引用；注释里的同名整词也不算', () => {
+  const synthetic: Array<[string, string]> = [
+    // 只有声明本身 → 必须判死（若声明名自证被引用，此例假绿）
+    ['./src/dead-type.ts', 'export type Lonely = string\n'],
+    // 只在注释里被提到 → 必须判死（AST 级口径排除注释）
+    ['./src/comment-only-type.ts', 'export interface Mentioned { a: number }\n// Mentioned 已无人使用\n'],
+    // 同文件内部真实引用（类型标注） → 不得误杀
+    ['./src/used-here.ts', 'export type Local = string\nexport const v: Local = "x"\n'],
+  ]
+  const { red } = findUnreferencedTypeExports(synthetic)
+  expect(red).toEqual(['./src/comment-only-type.ts → Mentioned', './src/dead-type.ts → Lonely'])
+})
+
+it('口径：跨文件的真实类型引用保活，不得误杀', () => {
+  const synthetic: Array<[string, string]> = [
+    ['./src/only-decl.ts', 'export type Shared = string\n'],
+    ['./src/uses-shared.ts', 'export type Wrap = Shared[]\n'],
+  ]
+  const { red } = findUnreferencedTypeExports(synthetic)
+  // Shared 被 uses-shared 引用 → 保活；Wrap 自身零引用 → 照常判死（两条分开断言）。
+  expect(red).not.toContain('./src/only-decl.ts → Shared')
+  expect(red).toContain('./src/uses-shared.ts → Wrap')
 })
 
 /**

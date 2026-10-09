@@ -145,7 +145,7 @@ async function createAccountViaUI(page: Page, name: string): Promise<string> {
   return created!.id
 }
 
-/** 建桶（真实 UI）并停留在桶列表，返回桶名。 */
+/** 建桶（真实 UI）并停留在桶列表。 */
 async function createBucketViaUI(page: Page, bucket: string) {
   await page.getByRole('button', { name: zh.navBuckets }).click()
   // BucketsPanel 的工具栏（无账号/无桶时是空状态 + 「+ 新建桶」）。
@@ -159,10 +159,23 @@ async function createBucketViaUI(page: Page, bucket: string) {
   // loadBuckets）。等这次刷新落定再回列表：否则「点返回列表」可能抢在刷新 resolve
   // 之前，loadBuckets 随后又把空 selectedBucket 自动选中 buckets[0] 钻进详情页，
   // 断言随即闪断——竞态成败，不能留。
-  const listRefreshed = page.waitForResponse(
-    (r) => r.ok() && r.request().method() === 'GET' && r.url().includes('/buckets'),
+  //
+  // 同时等 createBucket 自身的响应：失败（如桶名非法被后端 400 拒绝）时**立即**抛出
+  // 真实错误。只等 GET 刷新的话，失败路径会一直挂到 test timeout（`waitForResponse`
+  // 在此没有 30s 上限，实测挂满 135s 且报错行号指向后续无关语句），排查体验极差。
+  // 失败路径不 await `listRefreshed`，故先挂 `.catch` 消掉它的 rejection，避免收尾时
+  // 冒未处理的 Promise rejection。
+  const listRefreshed = page
+    .waitForResponse((r) => r.ok() && r.request().method() === 'GET' && r.url().includes('/buckets'))
+    .catch(() => null)
+  const createCalled = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && r.url().includes('/bucket'),
   )
   await dlg.getByRole('button', { name: /^创建$|^Create$/ }).click()
+  const created = await createCalled
+  if (!created.ok()) {
+    throw new Error(`建桶失败（HTTP ${created.status()}）：${(await created.text()).slice(0, 200)}`)
+  }
   await listRefreshed
 
   // 刷新完成后建桶落定的页面是**桶详情**（loadBuckets 在 selectedBucket 为空时自动
@@ -205,13 +218,56 @@ async function cleanupBucket(request: APIRequestContext, accId: string, bucket: 
   }
 }
 
-/** 创建账号 → 建桶 → 返回 (accId, bucket)；统一登记 finally 清理。 */
-async function seedAccountAndBucket(page: Page, name: string, bucketPrefix: string) {
+/**
+ * seed 过程中**已真实创建**的资源登记簿，由调用方持有（配合 `cleanupSeeded`）。
+ *
+ * 为什么不让 `seedAccountAndBucket` 只靠返回值：seed 在建桶步骤抛错时**不会返回**，
+ * 调用方拿不到任何 id / 桶名，`finally` 便无从清理——失败运行会在真实后端与 RustFS
+ * 留下账号与桶垃圾。改为「边创建边登记」，`finally` 才能按已创建的部分判空清理。
+ * 桶名在 seed 内部生成，调用方本就不掌握，故登记簿是唯一出口。
+ */
+type SeededResources = { accId?: string; bucket?: string }
+
+/**
+ * 创建账号 → 建桶：把每一步已创建的资源登记进 `seeded`，并返回（正常返回时两者必已创建，
+ * 供用例正文直接使用）。
+ */
+async function seedAccountAndBucket(
+  page: Page,
+  name: string,
+  bucketPrefix: string,
+  seeded: SeededResources,
+): Promise<{ accId: string; bucket: string }> {
   await resetBackend(page.request)
   const accId = await createAccountViaUI(page, name)
+  seeded.accId = accId
   const bucket = uniqueBucket(bucketPrefix)
+  seeded.bucket = bucket
   await createBucketViaUI(page, bucket)
   return { accId, bucket }
+}
+
+/**
+ * 清理 seed 登记的真实资源（清理失败仅告警，不掩盖用例结论）。
+ *
+ * 判空跳过未创建的部分：`bucket` 未登记就没有桶要删；账号则按**名称**清理而非按登记的
+ * `accId`——`createAccountViaUI` 可能在返回 id 之前就失败（账号已落库、`accId` 未登记），
+ * 按名称兜底才不会漏。
+ */
+async function cleanupSeeded(request: APIRequestContext, seeded: SeededResources, name: string) {
+  try {
+    if (seeded.accId && seeded.bucket) {
+      await cleanupBucket(request, seeded.accId, seeded.bucket)
+    }
+    const res = await requestWithRetry(request, 'get', `${BASE_URL}/api/accounts`)
+    expect(res.status()).toBe(200)
+    const body = (await res.json()) as { accounts: Array<{ id: string; name: string }> }
+    for (const a of body.accounts.filter((a) => a.name === name)) {
+      await requestWithRetry(request, 'delete', `${BASE_URL}/api/accounts/${a.id}`)
+    }
+  } catch (e) {
+    console.warn(`cleanup seed ${name} failed: ${String(e)}`)
+  }
 }
 
 test.describe('真实后端 + 真实 RustFS 联调冒烟', () => {
@@ -229,6 +285,28 @@ test.describe('真实后端 + 真实 RustFS 联调冒烟', () => {
       }
       sessionStorage.setItem('s3c.token', token)
     }, API_TOKEN)
+  })
+
+  // 限速节流：后端令牌桶（`ratelimit.go`：120 req/min、突发 30 → 回填 2 token/s）是
+  // **真实后端的一部分**，本套用例秒级打出 60+ 个 /api 请求，必然把桶抽干；而页面自身
+  // 的请求（列表刷新等）不像本文件那样带退避重试，桶空时 UI 断言会直接撞 429（实测
+  // 「直传」用例首当其冲：上传成功后列表刷新 429 → 行断言 15s 超时）。
+  // 故每个用例后按回填速率留出间隔，让下一用例从**接近满桶**起步——这是「尊重真实
+  // 限速」的节流，不是绕过它（不关限速、不改后端）。
+  test.afterEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+  })
+
+  // 评审 R9：e2e/smoke.spec.ts 的旧版「接受 [200,404,500,502,503]」是永真断言，
+  // 端点坏掉也绿。契约断言的常驻版本放在这里——真实后端 + 真实构建产物 +
+  // S3C_EXPOSE_OPENAPI=1（scripts/e2e-real.sh 注入），断言 200 + JSON 合法 spec。
+  test('OpenAPI 规范：真实后端返回 200 + JSON spec', async ({ request }) => {
+    const res = await requestWithRetry(request, 'get', `${BASE_URL}/api/openapi.json`)
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type'] || '').toContain('application/json')
+    const spec = (await res.json()) as { openapi?: string; paths?: Record<string, unknown> }
+    expect(typeof spec.openapi, 'openapi 字段必须是版本字符串').toBe('string')
+    expect(Object.keys(spec.paths ?? {}).length, 'paths 不得为空').toBeGreaterThan(0)
   })
 
   test('账号 CRUD 真实落库：新增 → 列表 → 后端可见 → 测试连接', async ({ page }) => {
@@ -257,31 +335,61 @@ test.describe('真实后端 + 真实 RustFS 联调冒烟', () => {
 
   test('建桶 → 列桶：真实 S3 CreateBucket/ListBuckets', async ({ page }) => {
     const name = `e2e-real-${randomUUID().slice(0, 8)}`
-    const { accId, bucket } = await seedAccountAndBucket(page, name, 's3c-e2e-bucket')
+    // seed 放进 try：已创建资源登记在 `seeded` 上，seed 中途失败（如建桶断言红）时
+    // finally 仍能判空清理——否则失败运行会在真实后端 + RustFS 留垃圾。
+    const seeded: SeededResources = {}
     try {
+      const { accId, bucket } = await seedAccountAndBucket(page, name, 's3c-e2e-bucket', seeded)
       // 后端真实列举到该桶
       const res = await requestWithRetry(page.request, 'get', `${BASE_URL}/api/accounts/${accId}/buckets`)
       const body = (await res.json()) as { buckets: Array<{ name: string }> }
       expect(body.buckets.map((b) => b.name)).toContain(bucket)
     } finally {
-      await cleanupBucket(page.request, accId, bucket)
-      await requestWithRetry(page.request, 'delete', `${BASE_URL}/api/accounts/${accId}`)
+      await cleanupSeeded(page.request, seeded, name)
     }
+  })
+
+  test('seed 中途失败不泄漏：建桶失败后账号/桶仍被清理（回归）', async ({ page }) => {
+    const name = `e2e-real-${randomUUID().slice(0, 8)}`
+    const seeded: SeededResources = {}
+    try {
+      // 非法桶名（含大写）→ 后端 400 → seed 在**建桶**步骤抛错。这正是「失败运行留垃圾」的
+      // 真实路径：账号已真实落库，但 seedAccountAndBucket 不会返回，调用方只有 seeded 登记簿。
+      await expect(
+        seedAccountAndBucket(page, name, 'S3C-E2E-INVALID-BUCKET', seeded),
+      ).rejects.toThrow()
+
+      // 前提校验：账号确实已落库——否则失败点漂移到了更早的步骤，本用例会退化成空转。
+      const leaked = await requestWithRetry(page.request, 'get', `${BASE_URL}/api/accounts`)
+      const leakedBody = (await leaked.json()) as { accounts: Array<{ id: string; name: string }> }
+      expect(leakedBody.accounts.map((a) => a.name)).toContain(name)
+    } finally {
+      await cleanupSeeded(page.request, seeded, name)
+    }
+
+    // 失败运行结束后不得残留账号（旧结构：seed 在 try 之外 → finally 不执行 → 残留 1 个）。
+    const res = await requestWithRetry(page.request, 'get', `${BASE_URL}/api/accounts`)
+    expect(res.status()).toBe(200)
+    const body = (await res.json()) as { accounts: Array<{ id: string }> }
+    expect(body.accounts).toHaveLength(0)
   })
 
   test('浏览器真实直传 → 列对象 → 回读内容', async ({ page }) => {
     const name = `e2e-real-${randomUUID().slice(0, 8)}`
-    const { accId, bucket } = await seedAccountAndBucket(page, name, 's3c-e2e-object')
     const key = 'hello.txt'
     const payload = `hello from real rustfs ${randomUUID()}`
-
-    // 捕获浏览器对 RustFS 的真实 PUT（预签名直传），证明字节不经 Go 服务。
-    const browserPut = page.waitForRequest(
-      (r) => r.method() === 'PUT' && r.url().includes(`/${key}`) && r.url().includes(S3_ENDPOINT),
-      { timeout: 30_000 },
-    )
+    // 同「建桶 → 列桶」：seed 放进 try，失败时由 seeded 登记簿兜底清理。
+    const seeded: SeededResources = {}
 
     try {
+      const { accId, bucket } = await seedAccountAndBucket(page, name, 's3c-e2e-object', seeded)
+
+      // 捕获浏览器对 RustFS 的真实 PUT（预签名直传），证明字节不经 Go 服务。
+      const browserPut = page.waitForRequest(
+        (r) => r.method() === 'PUT' && r.url().includes(`/${key}`) && r.url().includes(S3_ENDPOINT),
+        { timeout: 30_000 },
+      )
+
       // 切到「对象管理」（BucketList 里才有「进入」按钮），进入该桶
       await page.getByRole('button', { name: zh.navObjects }).click()
       await page.getByRole('row', { name: new RegExp(bucket) }).getByRole('button', { name: zh.enterBucket }).click()
@@ -316,8 +424,7 @@ test.describe('真实后端 + 真实 RustFS 联调冒烟', () => {
       }, getUrl)
       expect(text).toBe(payload)
     } finally {
-      await cleanupBucket(page.request, accId, bucket)
-      await requestWithRetry(page.request, 'delete', `${BASE_URL}/api/accounts/${accId}`)
+      await cleanupSeeded(page.request, seeded, name)
     }
   })
 })

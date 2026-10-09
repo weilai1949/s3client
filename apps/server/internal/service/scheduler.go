@@ -76,6 +76,9 @@ type Scheduler struct {
 	trigger   ScheduleTrigger
 	stopCh    chan struct{}
 	once      sync.Once
+	// persistMu 串行化「快照 + Save」整体（评审 R5，防旧快照后落盘覆盖新状态）；
+	// 锁序 persistMu → mu，见 persist 注释。
+	persistMu sync.Mutex
 }
 
 // NewScheduler 构造调度器：恢复既有清单（Load 失败降级为空，不阻塞启动）、
@@ -113,13 +116,20 @@ func (sc *Scheduler) restore() {
 	}
 }
 
-// persist 加锁生成快照后回写整份清单；失败静默降级（下一次状态变更会再试）。
-// 锁只包住快照生成——落盘 IO 不得拖长与 Get/Update 的互斥窗口（同 job.go 口径）。
-// 调用方**不得**已持有 sc.mu（否则死锁）。
+// persist 串行化「快照 + Save」后回写整份清单；失败静默降级（下一次状态变更会再试）。
+//
+// 落盘互斥 persistMu（评审 R5）：快照与 Save 必须作为**一个整体**串行——否则两次
+// 并发 persist 可能「后快照者先落盘、先快照者后落盘」，旧快照把磁盘覆盖回旧状态
+// （重启回退：丢编辑 / 丢新增，见 TestSchedulerPersistKeepsNewestSnapshot）。
+// sc.mu 仍只包住快照生成——落盘 IO 不拖长与 Get/Update 的内存互斥窗口。
+// 锁序：persistMu → sc.mu（persist 内部），任何路径不得在持有 sc.mu 时取 persistMu；
+// 调用方**不得**已持有 sc.mu（否则死锁，历史不变式不变）。
 func (sc *Scheduler) persist() {
 	if sc.persister == nil {
 		return
 	}
+	sc.persistMu.Lock()
+	defer sc.persistMu.Unlock()
 	sc.mu.Lock()
 	recs := sc.listLocked()
 	sc.mu.Unlock()

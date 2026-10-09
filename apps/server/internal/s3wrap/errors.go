@@ -188,9 +188,6 @@ func IsNotFound(err error) bool {
 	return HasErrorCode(err, "NoSuchBucket", "NotFound", "NoSuchKey", "NoSuchVersion")
 }
 
-// IsAPIError 是否为可识别的 S3 API 错误。
-func IsAPIError(err error) bool { return ErrorCode(err) != "" }
-
 // IsEntityTooLarge 判断是否为对象过大错误：只做结构化判定（应用层 sentinel 或 S3
 // 错误码），不匹配错误文案——文案会被上游措辞 / 本地化改变，字符串子串匹配会静默失效
 // （review Nit：冗余文案匹配已删除）。

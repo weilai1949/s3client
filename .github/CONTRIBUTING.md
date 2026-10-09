@@ -33,7 +33,7 @@ git commit -m "feat: ..."
 ## 提交规范
 
 - 使用 [Conventional Commits](https://www.conventionalcommits.org/zh-CN/)：`feat:`、`fix:`、`docs:`、`refactor:`、`test:` 等。
-- 每个 commit 只做一件事；重构与功能分开。
+- 每个 commit 只做一件事；重构与功能分开。**成文例外**：同日并行、且共享同一组生成物 / 文档的多批改动可合并为一次提交，但提交信息必须按批切片（逐批列出改动点），详见 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) §1。
 - 改动前先跑 `go test ./...`、`go vet ./...`、`pnpm build`（或 `make test-all`）。
 
 ## 发布流程

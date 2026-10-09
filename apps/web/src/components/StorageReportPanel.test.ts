@@ -205,3 +205,57 @@ describe('StorageReportPanel', () => {
     expect(vi.mocked(s3api.storageReport)).toHaveBeenCalledWith('acc-1', { bucket: 'beta', prefix: '' })
   })
 })
+
+describe('StorageReportPanel 请求代际守卫（评审 R6）', () => {
+  type ListResult = Awaited<ReturnType<typeof s3api.listBuckets>>
+
+  /** 逐调用挂起 listBuckets，返回可按调用顺序 resolve/reject 的把手。 */
+  function trackListBuckets() {
+    const pend: Array<{ resolve: (v: ListResult) => void; reject: (e: unknown) => void }> = []
+    vi.mocked(s3api.listBuckets).mockImplementation(
+      () => new Promise((resolve, reject) => { pend.push({ resolve, reject }) }),
+    )
+    return pend
+  }
+
+  it('切账号乱序返回：过期响应不得覆盖当前账号的桶选择', async () => {
+    state.currentAccountId = 'acc-1'
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick()
+    expect(pend).toHaveLength(1) // onMounted → loadBuckets（acc-1）
+    state.currentAccountId = 'acc-2'
+    await nextTick()
+    expect(pend).toHaveLength(2) // watch(accountId) → loadBuckets（acc-2，当前请求）
+
+    pend[1].resolve({ buckets: [{ name: 'acc2-first', creationDate: '' }] })
+    await flushPromises()
+    expect((w.find('select').element as HTMLSelectElement).value).toBe('acc2-first')
+
+    pend[0].resolve({ buckets: [{ name: 'acc1-stale', creationDate: '' }] })
+    await flushPromises()
+    expect((w.find('select').element as HTMLSelectElement).value, '过期响应不得改写桶选择').toBe('acc2-first')
+    expect(w.text(), '过期响应不得渲染').not.toContain('acc1-stale')
+  })
+
+  it('过期请求失败：不显示错误、不抢清当前请求的 loading', async () => {
+    state.currentAccountId = 'acc-1'
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick()
+    state.currentAccountId = 'acc-2'
+    await nextTick()
+    expect(pend).toHaveLength(2)
+
+    pend[0].reject(new Error('stale boom'))
+    await flushPromises()
+    expect(w.find('.msg.err').exists(), '过期失败不得设置错误横幅').toBe(false)
+    expect(w.find('select').attributes('disabled'), '当前请求仍在途，loading 不得被过期 finally 抢清').toBeDefined()
+
+    pend[1].resolve({ buckets: [{ name: 'acc2-first', creationDate: '' }] })
+    await flushPromises()
+    expect((w.find('select').element as HTMLSelectElement).value).toBe('acc2-first')
+    expect(w.find('select').attributes('disabled')).toBeUndefined()
+    expect(w.find('.msg.err').exists()).toBe(false)
+  })
+})

@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
@@ -526,6 +529,25 @@ func httpPut(url string, body []byte) (string, error) {
 	return resp.Header.Get("ETag"), nil
 }
 
+// e2eForceDeleteVersion 强删被 Object Lock 拦住的版本：先关法定保留（ON 会挡住一切删除，
+// GOVERNANCE bypass 也无效），再带 x-amz-bypass-governance-retention 头重删版本。
+// 两步都吞错——非锁定桶上 legal-hold 请求必然报错，删没删掉由 cleanupBucket 下一轮
+// 列表收敛判定；COMPLIANCE 保留不可绕过，届时仍会走「did not converge」报错。
+func e2eForceDeleteVersion(ctx context.Context, c *Client, bucket, key, versionID string) {
+	_, _ = c.s3.PutObjectLegalHold(ctx, &s3.PutObjectLegalHoldInput{
+		Bucket:    aws.String(bucket),
+		Key:       aws.String(key),
+		VersionId: aws.String(versionID),
+		LegalHold: &types.ObjectLockLegalHold{Status: types.ObjectLockLegalHoldStatusOff},
+	})
+	_, _ = c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String(key),
+		VersionId:                 aws.String(versionID),
+		BypassGovernanceRetention: aws.Bool(true),
+	})
+}
+
 func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 	// 依次删除所有版本与删除标记（版本控制开启时需逐个版本删除）。
 	// 有界循环：对象删除被拒（保留期 / 权限 / 厂商 bug）时曾经**无限循环**挂死测试
@@ -545,10 +567,14 @@ func cleanupBucket(ctx context.Context, c *Client, bucket string) error {
 			if v.Key == "" {
 				continue
 			}
-			if v.VersionID != "" {
-				_ = c.DeleteObjectVersion(ctx, bucket, v.Key, v.VersionID)
-			} else {
+			if v.VersionID == "" {
 				_ = c.DeleteObject(ctx, bucket, v.Key)
+				continue
+			}
+			if err := c.DeleteObjectVersion(ctx, bucket, v.Key, v.VersionID); err != nil {
+				// 版本删除被拒（Object Lock 保留期 / 法定保留）→ 走强删收尾：
+				// 先关法定保留，再带 GOVERNANCE bypass 头重删。
+				e2eForceDeleteVersion(ctx, c, bucket, v.Key, v.VersionID)
 			}
 		}
 		for _, d := range out.DeleteMarkers {

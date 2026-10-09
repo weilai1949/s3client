@@ -134,9 +134,15 @@ function startEdit(a: Account) {
   fetchBuckets()
 }
 
+// fetchBuckets 的代际计数（评审 R6），口径见函数内注释。
+let fetchSeq = 0
+
 async function fetchBuckets() {
   bucketErr.value = ''
   loadingBuckets.value = true
+  // 拉取代际（评审 R6）：连续 startEdit 会连发两次拉取，乱序返回时旧账号的桶会
+  // 写进当前表单——写入 / 提示 / 清 loading 都须先验 seq（口径同 useObjectBrowser）。
+  const seq = ++fetchSeq
   try {
     let res: { buckets: BucketItem[] }
     if (editingId.value) {
@@ -147,15 +153,16 @@ async function fetchBuckets() {
       }
       res = await s3api.previewBuckets(form)
     }
+    if (seq !== fetchSeq) return // 过期拉取：当前表单的拉取已接管状态，静默丢弃
     bucketOptions.value = res.buckets ?? []
     if (bucketOptions.value.length === 1 && !form.bucket) {
       form.bucket = bucketOptions.value[0].name
     }
     toast(tf('accounts.toastFetched', { n: bucketOptions.value.length }))
   } catch (e) {
-    bucketErr.value = toErrorMessage(e)
+    if (seq === fetchSeq) bucketErr.value = toErrorMessage(e) // 过期失败：不污染当前表单
   } finally {
-    loadingBuckets.value = false
+    if (seq === fetchSeq) loadingBuckets.value = false // 过期 finally 不得抢清在途拉取的 loading
   }
 }
 

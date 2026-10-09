@@ -71,6 +71,7 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           ref: ${{ steps.meta.outputs.tag }}
 
       - name: Verify tag matches manifest versions
@@ -208,6 +209,7 @@ jobs:
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          fetch-depth: 0
           ref: ${{ steps.meta.outputs.tag }}
 
       - name: Generate desktop SBOM (CycloneDX)

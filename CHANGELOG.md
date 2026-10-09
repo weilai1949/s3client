@@ -31,6 +31,78 @@
 
 ## [Unreleased]
 
+### 修复（2026-10-09 全仓代码评审批次：C1–C2 + R1–R9 全修，O1–O12 登记）
+
+来源 [`docs/code-review-2026-10-09.md`](docs/code-review-2026-10-09.md)（状态表与 §8 已回写）。
+
+- **C1** CI Go job 补真实前端依赖前置：GitHub `server` job 加 pnpm/setup-node（与 web job 同 pin：pnpm 9.15.0 / node 26.10.0 + pnpm cache）+ `pnpm install --frozen-lockfile`；GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store/` cache override。根包 `agent_evals` 门禁的判据前置是 `apps/web/node_modules` 存在（gitignore 构建产物，**不 `mkdir` 伪造**）。
+- **C2** 两套 CI 全部 checkout 改深克隆（GitHub 十处 `fetch-depth: 0`，GitLab `GIT_DEPTH: "0"`）——`changelog_tag` 门禁从 `.git` 读 v* tag，浅克隆必红。新增 `apps/server/ci_consistency_gate_test.go` 把两侧 job / 命令 / 版本 pin 逐项一致机械钉住（`gitlab-ci-local` 本地实测可用性见 `docs/DEVELOPMENT.md` §CI 双平台一致性）。
+- **R1（安全）** `/api/migrate/jobs*` 端点级作用域闸：任务记录不带归属、通用桶/账号判定落空，声明 `prefixes` / `accounts` 的 token 一律 403（审计 `reason=migrate_jobs`），`readonly` 读放行（本就可读全量桶）、POST 取消仍由方法闸拦——此前前缀 token 可枚举全量任务、读别桶 `failedKeys`、取消他人迁移。
+- **R2（安全）** `POST /api/accounts/preview-buckets` 端点级作用域闸：自带 endpoint/凭据由服务端拨号的 SSRF 拨号面，声明 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；`accountIDFromPath` 特例死分支随之删除。`docs/api.md` 与 `docs/threat-model.md` 同步两闸与新 reason。
+- **R3** cron DST 重写为「绝对时间轴 + 本地字段回验」：`cronCandidates` 以墙钟 UTC 锚定，Go 归一化落点 ±2h 探针收集偏移、逐一回验本地字段——春季跳变间隙当天触发一次（跳变前偏移解释、落点为跳变后本地时刻，晚触发优于漏跑）、秋季重复小时两次都触发、日锚点取正午防跨日误判；测试自嵌 `time/tzdata`（新增智利午夜跳变「跨日候选剔除」用例）。
+- **R4** trash purge 错误映射收窄：仅 `s3wrap.HasErrorCode(err, "ObjectLocked")` → 409，其余上游错误落 500（此前一切 S3 API 错误都映射 409，掩盖真实故障）；连带删除零引用的 `s3wrap.IsAPIError`。
+- **R5** 计划 / 任务清单落盘串行化：`persistMu` 把「生成快照 + Save」整体串行（Scheduler 与 JobRegistry 各一，锁序 persistMu → mu），旧快照不再可能覆盖新状态；并发回归测试重构为真并发（Finish 入 goroutine + release 信号，100ms 有界等待）。
+- **R6** 前端四个 bucket 面板补请求代际守卫（BucketsPanel / StorageReportPanel / RecycleBinPanel / AccountsPanel 各自内联 `loadSeq`：乱序成功不渲染、过期失败不触底）；RecycleBin 补 `loadingBuckets` 标志 + 桶选择器 `:disabled` + finally 复位（异常不再永久卡 loading，测试钉住「当前请求异常必须复位」）。
+- **R7** 删除 `types.ts` 三个死类型导出（`StorageClassUsage` / `PrefixUsage` / `StorageRecommendation`）；**连带**把 `deadcode_gate.test.ts` 声明的「类型导出」盲区升级为真断言（`export type` / `interface` 生产代码零引用即红，含合成口径用例），收口「类型维度无机械保证」；新口径扫出生成物 `operations.ts → Operation` 零引用，由 `gen-api.mjs` 改 `as const satisfies Record<string, Operation>` 真正消费并重新生成（`gen:api --check` 同步）。
+- **R8** `endpoints.ts` 的 `multipartParts` 改走 `opPath('multipartParts', { id })`、删过期注释（手写 URL 模板绕过生成契约）；`api.gaps.test.ts` 加整路径断言守回归。
+- **R9（测试）** e2e OpenAPI 断言不再「不可能失败」：mock 预览无后端（确定性 502/503）时**条件跳过**，其余状态严格断言 200 + JSON + openapi 字段；常驻真断言迁入 `apps/web/e2e-real/real-backend.spec.ts` 新用例（`scripts/e2e-real.sh` 补 `S3C_EXPOSE_OPENAPI=1`——生产默认 404 不暴露规范）。
+- **登记**：评审 O1–O12 → [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#72–#83**（12 条全属技术债 / 缺陷，按「同一事项只登记一处」不进 ROADMAP）；R10 工具链残留同日解除（本机 `/usr/local/go1.26.9` 与 CI 同版本）。
+- **验证**：Go——`gofmt` 干净 / `go vet` 0 告警 / `golangci-lint` 0 issues / `go test ./...` 10 包 / `make test-cover` 100.0% statements + `count==0` 零块（`-race`）/ `govulncheck` 0 可达；前端——`pnpm lint` 0 告警、`typecheck` + `typecheck:e2e` exit 0、`test:coverage` 四指标 100%（4879 / 3251 / 1229 / 4213，82 文件 1283 例）、`pnpm build`、mock Playwright 21 passed + 1 skipped（R9 条件跳过项）；真实联调 `make e2e-real`（真后端 + 真 RustFS + 真浏览器）**5 passed**（含新增 OpenAPI 契约真断言）。
+
+### 文档（2026-10-09 提交粒度规范补「同日并行多批一次提交」成文例外）
+
+- **`docs/DEVELOPMENT.md` §1.2 与 `.github/CONTRIBUTING.md` 提交规范**：此前规范只写「一个逻辑改动一个 commit / 每个 commit 只做一件事」，与仓库「同日并行多批一次提交」的既有先例（`28218f2` 四批、`e965e54` 三批）长期存在张力，导致每次评审重提。现补一条**成文例外**：同日并行、且共享同一组生成物 / 文档（`docs/api/openapi.json`、`docs/FEATURES.md`、计数类文档等）的多批改动可合并为一次提交，但提交信息必须**按批切片**（逐批列出改动点），以便评审按批阅读。
+
+### 修复（2026-10-09 s3wrap E2E 清桶对被 Object Lock 锁定的版本不收敛 → 共享实例残留桶泄漏）
+
+- **`cleanupBucket` 遇到被锁版本时空转 100 轮后放弃**（`apps/server/internal/s3wrap/e2e_test.go`）：
+  版本删除被 GOVERNANCE 保留 / 法定保留拒绝（403）时原先只吞错不重试，循环空转到上限报
+  「did not converge」，桶连同对象留在对端——这正是 2026-10-08 共享 RustFS 上
+  `s3c-e2el-*` / `s3c-probe-*-lock` 残留桶（含跨重启存活的对象锁 1 天默认保留）的泄漏机制。
+  现增 `e2eForceDeleteVersion`：普通删除被拒后先**关法定保留**（`PutObjectLegalHold` OFF，
+  非锁定桶上报错属预期、吞掉），再带 **`x-amz-bypass-governance-retention` 头**重删版本；
+  删没删掉仍由下一轮列表收敛判定，COMPLIANCE 保留不可绕过时照常走「did not converge」报错。
+  无锁桶路径不变：普通删除成功即不发任何强删请求。
+- **`TestE2EObjectLock` 清理不再等到期**（`e2e_features_test.go`）：原「10s 短保留窗 + defer
+  睡到到期再清」被强删路径取代（且短窗下 E2E 每跑必等 10s+、真对端永远走不到强删路径）——
+  现 defer 直接 `cleanupBucket`，Object Lock E2E 由 ≥11s 降至 **0.17s**，强删路径每次真跑。
+- 验证：新增假 S3 回归测试 [`cleanup_fake_test.go`](apps/server/internal/s3wrap/cleanup_fake_test.go)
+  （被锁版本「403 → 法保留 OFF → bypass 删除 → 删桶收敛」+ 无锁版本「不发强删请求」，
+  **先红后绿**：旧实现报 `cleanup did not converge after 100 rounds: 1 versions`）；`S3CLIENT_E2E=1 go test
+  ./internal/s3wrap/ -run TestE2E -v` **7/7 通过**且共享 RustFS `ListBuckets` 复核为 `[]`（零残留）；
+  `go vet` / `golangci-lint run`（0 issues）/ `go test ./...`（10 包）全绿。
+
+### 修复（2026-10-09 e2e-real 用例 seed 中途失败泄漏账号/桶 + 建桶失败诊断 + 限速节流）
+
+- **`seedAccountAndBucket(...)` 被放在 `try` 之外 → 失败运行留垃圾**（`apps/web/e2e-real/real-backend.spec.ts`）：
+  两个用例都在 `try` 之前调用 seed，而 seed 在**建桶**步骤抛错时不会返回，`finally` 根本不执行——
+  账号（以及已建成的桶）就留在真实后端与 RustFS 上，这正是失败运行留垃圾的机制。
+  修法：新增**调用方持有的资源登记簿** `SeededResources`，seed 改为「边创建边登记」；seed 移入 `try`，
+  `finally` 统一走 `cleanupSeeded`——对未创建的部分判空跳过，账号按**名称**清理（覆盖
+  「`createAccountViaUI` 在返回 id 之前失败、`accId` 未登记」这一更隐蔽的泄漏面）。
+- **建桶失败不再挂满测试超时**：`createBucketViaUI` 原先只等「建桶成功才会触发的 `GET /buckets`」，
+  而该 `waitForResponse` 在本套配置下**没有 30s 上限**（trace 实测 `Page.__waitInfo__` 挂满 135s
+  test timeout，且报错行号指向后续无关语句，排查体验极差）。现同时等 `POST /bucket` 的响应，
+  失败时立即抛出后端错误（状态码 + 响应体摘要）。
+- **限速节流**：新增回归用例后，套件在秒级打出 60+ 个 `/api` 请求，会抽干后端令牌桶
+  （`ratelimit.go`：120 req/min、突发 30 = 回填 2 token/s）；而页面自身的请求（对象/桶列表刷新）
+  不像本文件那样带退避重试——「直传」用例上传成功后列表刷新撞 429、行断言 15s 超时（可复现）。
+  按回填速率在用例之间补 5s 间隔，让每个用例从**接近满桶**起步；**不关限速、不改后端**，保真度不变。
+- 验证：`scripts/e2e-real.sh`（自管 RustFS 容器）**4 passed（29.6s）**；回归用例**先红后绿**
+  （旧结构下残留 1 个账号：`Expected length: 0, Received length: 1`）；`pnpm typecheck:e2e` / `pnpm lint` exit 0。
+
+### 文档（2026-10-09 全仓代码质量评审快照建档）
+
+- **新增活跃评审文档 [`docs/code-review-2026-10-09.md`](docs/code-review-2026-10-09.md)**：对 `e965e54`
+  的全仓五轴评审（Go 后端 + Vue/TS 前端；6 路深潜 + 机械门禁**独立复跑**）：结论 **Request changes**
+  ——2 Critical（CI 的 Go job 缺 `apps/web/node_modules` 前置、GitHub checkout 浅克隆读不到 tag，
+  两处叠加使仓库自述的「全绿门禁」在 CI 上不可复现）+ 10 Required（迁移任务作用域越权、
+  `preview-buckets` 成 SSRF 跳板、cron DST 错时/漏跑、trash purge 全 API 错误→409、清单落盘乱序、
+  前端加载竞态、死类型导出、契约绕过等，均带 `file:line` 证据与复现口径）。按 §4 文档同步门禁同 PR
+  登记：`docs/README.md` 导航 + 本文件 §4 命名约定与「文档登记表」+ 根 `llms.txt` + 根 `AGENTS.md`。
+  报告中的未闭环项**本次未登记**事项台账，待修复时按报告 §8 处置计划登记
+  [`KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)（开放技术债）/ [`ROADMAP.md`](docs/ROADMAP.md) §三（排期项）。
+
 ### 修复（2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞）+ e2e-real 用例对残留桶不幂等）
 
 - **Go 工具链 1.26.6 → 1.26.9**：`govulncheck ./...` 实测 go1.26.6 上有 **10 个可达** stdlib 漏洞

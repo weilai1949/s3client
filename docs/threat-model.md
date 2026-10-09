@@ -24,9 +24,10 @@
 - `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
 - `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
 - `accounts`：仅允许路径 `{id}` 命中的账号；
+- 端点级闸（评审 2026-10-09 R1/R2，请求不携带可判定引用、通用判定落空的端点）：`POST /api/accounts/preview-buckets`（自带 endpoint/凭据由服务端拨号的 SSRF 拨号面）对声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；`/api/migrate/jobs*`（任务记录不带归属、无法按桶细判）对声明了 `prefixes` / `accounts` 的 token 一律 403（`reason=migrate_jobs`，`readonly` 读放行）；
 - `expiresAt`：过期后 401（审计 `reason=token_expired`）。
 
-未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
 > 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表与**计划列表（`GET /api/schedules`，可读到越界计划的桶名，但不可触发 / 删除）**不受其约束；`accounts` 作用域按路径 `{id}` 判定，迁移 / 计划 body 里的账号 id 不受其约束（与 `prefixes` 按 body 桶判定不同）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
 
@@ -77,7 +78,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | **R**epudiation 抵赖 | ➖ 不适用：出站目标决策不记审计事件；策略生效值可观测（见下「生效值核对」） | ➖ |
 | **I**nfo disclosure 泄露 | 拦截链路本地与云元数据：阿里云 IMDS（100.100.100.200）、火山引擎（100.96.0.2）、AWS IMDS IPv6（fd00:ec2::254）、GCP metadata 主机名；私网 / 回环放行为自托管取舍（[ADR-003](decisions/0003-ssrf-private-allow.md)），`S3C_SSRF_DENY_PRIVATE=1` 可将私网 / 回环 / 未指定地址一并拒绝（默认关） | ✅ 已缓解（私网放行为已决策取舍，见 §6.2） |
 | **D**oS 拒绝服务 | ➖ 不适用（按威胁域划分）：洪泛类归边界 A；本边界防的是「访问了不该访问的目标」而非可用性 | ➖ |
-| **E**levation 提权 | 认证用户可让服务器访问其可达的私网服务——依赖鉴权兜底 + [ADR-003](decisions/0003-ssrf-private-allow.md) 明文记录取舍；严格部署显式开 `S3C_SSRF_DENY_PRIVATE` | ➖ 已决策放行（见 §6.2） |
+| **E**levation 提权 | 认证用户可让服务器访问其可达的私网服务——依赖鉴权兜底 + [ADR-003](decisions/0003-ssrf-private-allow.md) 明文记录取舍；严格部署显式开 `S3C_SSRF_DENY_PRIVATE`；受限 token 把 `preview-buckets` 当认证后跳板的面由端点级作用域闸 403 收口（评审 2026-10-09 R2，见下方「最小权限」） | ➖ 已决策放行（见 §6.2） |
 
 **生效值核对**：启动日志 `ssrfDenyPrivate` + `/api/metrics` 的 `s3c_ssrf_deny_private`。
 

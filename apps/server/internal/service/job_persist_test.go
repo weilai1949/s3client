@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -410,5 +411,118 @@ func TestJobRecordJSONShape(t *testing.T) {
 		if _, ok := m[k]; !ok {
 			t.Errorf("missing json field %q in %s", k, b)
 		}
+	}
+}
+
+// ---- 落盘乱序（评审 R5）----
+
+// blockingJobPersister 被 arm 后的首次 Save 阻塞至放行，用于制造「先快照者后落盘」
+// 的乱序窗口；disk 记录最后一次**完成**的 Save（= 重启后读到的状态）。
+type blockingJobPersister struct {
+	mu      sync.Mutex
+	armed   bool
+	started bool
+	entered chan struct{}
+	release chan struct{}
+	disk    []JobRecord
+}
+
+func (p *blockingJobPersister) Load() ([]JobRecord, error) { return nil, nil }
+
+// arm 让下一次 Save 进入阻塞分支。
+func (p *blockingJobPersister) arm() {
+	p.mu.Lock()
+	p.armed = true
+	p.mu.Unlock()
+}
+
+func (p *blockingJobPersister) Save(recs []JobRecord) error {
+	p.mu.Lock()
+	if p.armed && !p.started {
+		p.started = true
+		p.mu.Unlock()
+		close(p.entered)
+		<-p.release
+	} else {
+		p.mu.Unlock()
+	}
+	p.mu.Lock()
+	p.disk = append([]JobRecord(nil), recs...)
+	p.mu.Unlock()
+	return nil
+}
+
+// diskSnapshot 返回最后一次完成的 Save 的快照副本。
+func (p *blockingJobPersister) diskSnapshot() []JobRecord {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]JobRecord(nil), p.disk...)
+}
+
+// TestJobRegistryPersistKeepsNewestSnapshot（评审 R5）：终态落盘与后续落盘不串行时，
+// 「先快照者后落盘」会把磁盘覆盖回旧状态——重启后 done 任务被 restore 标回
+// interrupted，触发虚假对账告警。行为级断言：并发落盘全部完成后，磁盘必须是最终态
+// （job1 终态 + job2 在册）。
+func TestJobRegistryPersistKeepsNewestSnapshot(t *testing.T) {
+	p := &blockingJobPersister{entered: make(chan struct{}), release: make(chan struct{})}
+	reg := NewJobRegistryWithPersister(p)
+	t.Cleanup(reg.Stop)
+
+	// 首次落盘不 arm（建 job1 时正常完成），随后 arm 把 job1.Finish 的落盘拦住。
+	job1, err := reg.TryCreate(10, func() {})
+	if err != nil {
+		t.Fatalf("TryCreate job1: %v", err)
+	}
+	p.arm()
+	g1done := make(chan struct{})
+	go func() {
+		defer close(g1done)
+		job1.Finish(JobResult{Migrated: 1}, JobStatusDone)
+	}()
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("job1.Finish 未进入落盘阻塞点")
+	}
+
+	// G2 = 并发创建 job2：旧实现下其 Save 先完成（含 job2 的最终态），随后 job1 的
+	// 放行落盘会把磁盘覆盖回「只有 job1、且以先快照为准」的旧态；新实现下它在
+	// 落盘互斥上等待，放行后才快照 + 落盘。
+	g2done := make(chan struct{})
+	go func() {
+		defer close(g2done)
+		if _, cerr := reg.TryCreate(5, func() {}); cerr != nil {
+			t.Errorf("TryCreate job2: %v", cerr)
+		}
+	}()
+	select {
+	case <-g2done:
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(p.release)
+	for _, d := range []chan struct{}{g1done, g2done} {
+		select {
+		case <-d:
+		case <-time.After(5 * time.Second):
+			t.Fatal("落盘协程未在放行后返回（落盘互斥死锁？）")
+		}
+	}
+
+	disk := p.diskSnapshot()
+	if len(disk) != 2 {
+		t.Fatalf("磁盘终态条目数 = %d, want 2（旧快照后落盘覆盖了新状态）: %+v", len(disk), disk)
+	}
+	var job1Rec *JobRecord
+	for i := range disk {
+		if disk[i].ID == job1.ID {
+			job1Rec = &disk[i]
+		}
+	}
+	if job1Rec == nil {
+		t.Fatalf("磁盘终态缺 job1: %+v", disk)
+	}
+	if job1Rec.Result.Migrated != 1 || !IsTerminalJobStatus(job1Rec.Status) {
+		t.Errorf("磁盘上 job1 非终态：status=%q result=%+v", job1Rec.Status, job1Rec.Result)
 	}
 }

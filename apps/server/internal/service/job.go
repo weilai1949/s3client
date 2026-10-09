@@ -79,6 +79,10 @@ type JobRegistry struct {
 	once      sync.Once
 	persister JobPersister
 	maxJobs   int
+	// persistMu 串行化「快照 + Save」整体（评审 R5，防旧快照后落盘覆盖新状态——
+	// done 任务重启后被 restore 标回 interrupted 触发虚假告警）；
+	// 锁序 persistMu → mu（persistJobs 内 List 取 mu），不得在持有 mu 时取 persistMu。
+	persistMu sync.Mutex
 }
 
 // defaultMaxJobs 是在册任务上限：每个任务持有 goroutine、SSE 订阅与落盘条目，
@@ -153,11 +157,17 @@ func (r *JobRegistry) restore() {
 	}
 }
 
-// persistJobs 回写整份清单；失败静默降级（下一次状态变更会再试）。
+// persistJobs 串行化「快照 + Save」后回写整份清单；失败静默降级（下一次状态变更会再试）。
+//
+// 落盘互斥 persistMu（评审 R5）：快照（r.List）与 Save 作为整体串行——否则「先快照者
+// 后落盘」会把磁盘覆盖回旧状态（见 TestJobRegistryPersistKeepsNewestSnapshot）。
+// r.mu 仍只在 List 内部短暂持有；锁序 persistMu → mu，调用方不得已持有 r.mu。
 func (r *JobRegistry) persistJobs() {
 	if r.persister == nil {
 		return
 	}
+	r.persistMu.Lock()
+	defer r.persistMu.Unlock()
 	_ = r.persister.Save(r.List())
 }
 

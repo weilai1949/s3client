@@ -4,6 +4,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	// 测试自嵌 tzdata：LoadLocation 不依赖系统 zoneinfo（评审 R3 的 DST 三例必须
+	// 在任何 runner 镜像上可复现）。
+	_ "time/tzdata"
 )
 
 // cronLoc 固定 +08:00：Next 按传入时间所在时区计算，固定偏移让断言不随机器时区漂移。
@@ -75,6 +79,103 @@ func TestParseCronNext(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestParseCronNextDST（评审 R3）：非 UTC 时区的 DST 边界行为。America/New_York 2026
+// 实测三例（2026-03-08 02:00 EST→03:00 EDT 春季跳变、2026-11-01 02:00 EDT→01:00 EST
+// 秋季回拨）。时刻一律用绝对 UTC 锚定再转本地，避免构造歧义（秋季 01:xx 出现两次）：
+//  1. `30 2` after 01:00 EST → 当日 03:30 EDT：间隙墙钟按跳变前偏移解释
+//     （02:30 EST ≡ 07:30 UTC ≡ 本地 03:30 EDT），晚触发优于漏跑，且小时 3 ≠
+//     表达式小时 2 是「间隙归一化」的预期，不是违约；
+//  2. `30 2` after 01:45 EST → 仍是当日 03:30 EDT：候选 01:30 已过期时不得直接
+//     跳到次日，当天必须触发一次；
+//  3. `30 1` after 11-01 01:45 EDT → 当日第二次 01:30 EST（06:30 UTC，45 分钟后）：
+//     重复小时的第二次出现同样可触发，不漏跑。
+func TestParseCronNextDST(t *testing.T) {
+	t.Parallel()
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	cases := []struct {
+		name  string
+		expr  string
+		after time.Time
+		want  time.Time
+	}{
+		{
+			"春季间隙-跳变前偏移解释",
+			"30 2 * * *",
+			time.Date(2026, 3, 8, 6, 0, 0, 0, time.UTC).In(ny),  // 01:00 EST
+			time.Date(2026, 3, 8, 7, 30, 0, 0, time.UTC).In(ny), // 03:30 EDT
+		},
+		{
+			"春季间隙-01:45 后当天仍触发一次",
+			"30 2 * * *",
+			time.Date(2026, 3, 8, 6, 45, 0, 0, time.UTC).In(ny), // 01:45 EST
+			time.Date(2026, 3, 8, 7, 30, 0, 0, time.UTC).In(ny), // 03:30 EDT
+		},
+		{
+			"秋季重复小时-第二次出现不漏跑",
+			"30 1 * * *",
+			time.Date(2026, 11, 1, 5, 45, 0, 0, time.UTC).In(ny), // 01:45 EDT
+			time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC).In(ny), // 01:30 EST
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, perr := ParseCron(tc.expr)
+			if perr != nil {
+				t.Fatalf("ParseCron(%q) = %v", tc.expr, perr)
+			}
+			got := c.Next(tc.after)
+			if !got.Equal(tc.want) {
+				t.Errorf("Next(%v, %s) = %v (%s), want %v (%s)",
+					tc.after, tc.expr, got, got.Format("15:04 MST"), tc.want, tc.want.Format("15:04 MST"))
+			}
+			if !got.IsZero() {
+				if !got.After(tc.after) {
+					t.Errorf("Next = %v 不晚于 after %v", got, tc.after)
+				}
+				if got.Location() != ny {
+					t.Errorf("Next 时区 = %v, want %v", got.Location(), ny)
+				}
+			}
+		})
+	}
+}
+
+// TestParseCronNextDSTMidnightGap 覆盖回验中的**跨日剔除**分支（评审 R3）：
+// 智利 2026-09-06 00:00 本地墙钟因跳变不存在（09-05 24:00 → 01:00）。cronCandidates
+// 会按 ±2h 探针构造两个偏移的候选——旧偏移落点是前一日 23:00（本地日期不符，必须
+// 剔除，否则会把 09-05 的触发误算到 09-06），跳变前偏移解释的落点是 01:00（跳变后
+// 本地时刻）。墙钟不存在 → 按间隙语义当天触发一次（晚触发优于漏跑）。
+func TestParseCronNextDSTMidnightGap(t *testing.T) {
+	t.Parallel()
+	scl, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	c, perr := ParseCron("0 0 * * *")
+	if perr != nil {
+		t.Fatalf("ParseCron: %v", perr)
+	}
+	after := time.Date(2026, 9, 5, 16, 0, 0, 0, time.UTC).In(scl) // 09-05 12:00 -04
+	got := c.Next(after)
+	want := time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC).In(scl) // 09-06 01:00 -03（跳变后）
+	if !got.Equal(want) {
+		t.Errorf("Next(%v, 0 0 * * *) = %v (%s), want %v (%s)",
+			after, got, got.Format("2006-01-02 15:04 MST"), want, want.Format("2006-01-02 15:04 MST"))
+	}
+	if !got.IsZero() {
+		if !got.After(after) {
+			t.Errorf("Next = %v 不晚于 after %v", got, after)
+		}
+		if got.Location() != scl {
+			t.Errorf("Next 时区 = %v, want %v", got.Location(), scl)
+		}
 	}
 }
 

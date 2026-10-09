@@ -6,8 +6,10 @@ package service
 // 解锁后 close 这些 channel。两者之间没有任何互斥 → 一旦 Emit 与 Finish 并发，
 // Emit 就可能对已 close 的 channel 发送 → panic（进程不 recover，直接退出）。
 //
-// 复现方式：让 Emit 在「快照之后、投递之前」停住（节流的落盘钩子），此时调用 Finish
-// 关闭订阅通道，再放行 Emit —— 旧实现必然 send on closed channel。
+// 复现方式：让 Emit 停在落盘钩子（此时它已锁内投递完毕、正要回写进度），并发调用
+// Finish 关闭订阅通道，再放行 Emit —— 若投递不在锁内（§B7 之前的旧实现），Finish
+// 的 close 与 Emit 的发送无互斥，必然 send on closed channel。本测试因此同时守护
+// 「投递锁内」的结构性保证与「Emit 落盘期间并发 Finish 不 panic、订阅者收到终态帧」。
 
 import (
 	"sync"
@@ -65,10 +67,24 @@ func TestJobEmitFinishConcurrentDoesNotPanic(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Emit 未进入落盘钩子")
 	}
-	// Emit 此刻停在「快照之后、投递之前」：Finish 会关闭订阅通道。
-	job.Finish(JobResult{Migrated: 1}, JobStatusDone)
+	// Emit 此刻停在落盘钩子里（投递已在锁内完成），Finish 与其并发执行：清空
+	// 订阅表、投递终态。Finish 放到独立 goroutine——落盘串行化（评审 R5 的
+	// persistMu）后，Finish 的终态落盘会等 Emit 的 Save 放行，主线程直调会与
+	// 下方 close(release) 互相等待而死锁。等 100ms：实现不串行时 Finish 早已
+	// 全程跑完（窗口 = 与 park 中的 Emit 并发）；串行时它在 persistMu 上等待，
+	// 由下方放行解除——两种情况都不死锁。
+	finishDone := make(chan struct{})
+	go func() {
+		defer close(finishDone)
+		job.Finish(JobResult{Migrated: 1}, JobStatusDone)
+	}()
+	select {
+	case <-finishDone:
+	case <-time.After(100 * time.Millisecond):
+	}
 	close(p.release)
 	<-emitDone
+	<-finishDone
 
 	sawFinal := false
 	for prog := range ch {

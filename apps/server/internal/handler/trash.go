@@ -72,7 +72,11 @@ func (h *Handler) purgeTrashObject(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := client.PurgeObject(r.Context(), bucket, req.Key)
 	if err != nil {
-		if s3wrap.IsAPIError(err) {
+		// 仅「对象被合规锁」是 purge 的语义冲突 → 409（保留 purged/deleted 摘要，
+		// 让客户端看到锁发生前清掉了多少）。其余 S3 API 错误走 writeInternalErr 的
+		// errors.go 映射表（AccessDenied→403、NoSuchBucket→404、SlowDown→503），
+		// 不再一律 409（评审 R4：状态码与 GET /trash 及错误文案口径必须一致）。
+		if s3wrap.HasErrorCode(err, "ObjectLocked") {
 			h.writeJSON(w, http.StatusConflict, map[string]any{"purged": req.Key, "deleted": n, "error": s3UserMessage(err)})
 			return
 		}

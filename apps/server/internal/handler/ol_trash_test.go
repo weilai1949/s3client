@@ -1,6 +1,7 @@
 package handler
 
-// ol_trash_test.go —— trash.go 错误分支/边界补测（仅新增，不改生产代码）。
+// ol_trash_test.go —— trash.go 错误分支/边界测试。
+//（R4 修正：purge 的 S3 错误映射与 s3wrap/errors.go 同口径，仅 ObjectLocked 保留 409。）
 
 import (
 	"net/http"
@@ -63,15 +64,18 @@ func TestOlTrashList(t *testing.T) {
 	olExpectStatus(t, rr, http.StatusForbidden, "trash list err")
 }
 
-// TestOlTrashPurge 彻底清除：API 错误 → 409；成功 → 200 + 删除数。
+// TestOlTrashPurge 彻底清除：仅 ObjectLocked → 409（purge 的真实冲突，保留
+// purged/deleted 摘要）；其余 S3 API 错误与 errors.go 映射表同口径
+// （AccessDenied → 403、NoSuchBucket → 404）；成功 → 200 + 删除数。
 func TestOlTrashPurge(t *testing.T) {
-	var failList bool
+	var listErrCode string
+	var listErrStatus int
 	srv := olFake(t, func(r *http.Request) olResp {
 		q := r.URL.Query()
 		switch {
 		case q.Has("versions"):
-			if failList {
-				return olErr(http.StatusForbidden, "AccessDenied")
+			if listErrCode != "" {
+				return olErr(listErrStatus, listErrCode)
 			}
 			return olXML(http.StatusOK, olVersionsXML("k", true))
 		case q.Has("delete"):
@@ -82,11 +86,21 @@ func TestOlTrashPurge(t *testing.T) {
 	env := accNewEnv(t, srv.URL, "b")
 	id := env.acc.ID
 
-	// S3 API 错误 → 409 冲突 + 错误摘要
-	failList = true
+	// AccessDenied → 403（与 GET /trash 同口径；不再一律 409，review R4）
+	listErrCode, listErrStatus = "AccessDenied", http.StatusForbidden
 	rr := env.accDoRec("POST", "/api/accounts/"+id+"/trash/purge", `{"bucket":"b","key":"k"}`)
-	olExpectStatus(t, rr, http.StatusConflict, "purge api error")
-	failList = false
+	olExpectStatus(t, rr, http.StatusForbidden, "purge access denied")
+
+	// NoSuchBucket → 404（bucket 不存在不是「冲突」）
+	listErrCode, listErrStatus = "NoSuchBucket", http.StatusNotFound
+	rr = env.accDoRec("POST", "/api/accounts/"+id+"/trash/purge", `{"bucket":"b","key":"k"}`)
+	olExpectStatus(t, rr, http.StatusNotFound, "purge no such bucket")
+
+	// ObjectLocked → 409（合规锁下无法彻底清除，语义上确为冲突）
+	listErrCode, listErrStatus = "ObjectLocked", http.StatusConflict
+	rr = env.accDoRec("POST", "/api/accounts/"+id+"/trash/purge", `{"bucket":"b","key":"k"}`)
+	olExpectStatus(t, rr, http.StatusConflict, "purge object locked")
+	listErrCode = ""
 
 	// 成功：列出该 key 的 1 版本 + 1 删除标记并全部删除
 	rr = env.accDoRec("POST", "/api/accounts/"+id+"/trash/purge", `{"bucket":"b","key":"k"}`)

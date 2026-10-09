@@ -161,11 +161,14 @@ fi
 DATA_DIR="$WORK_DIR/data"
 rm -rf "$DATA_DIR"; mkdir -p "$DATA_DIR"
 log "启动真实 Go 后端（$SERVER_ORIGIN，静态目录 apps/web/dist，S3C_TOKEN 鉴权开启）"
+# 评审 R9：e2e-real 下显式暴露 /api/openapi.json（生产默认 404 假装不存在），
+# 供 real-backend.spec.ts 对契约面做「200 + JSON 合法 spec」的真断言。
 (
   cd "$ROOT"
   S3C_ADDR="127.0.0.1:${SERVER_PORT}" \
   S3C_STATIC_DIR="$ROOT/apps/web/dist" \
   S3C_TOKEN="$S3C_TOKEN" \
+  S3C_EXPOSE_OPENAPI=1 \
   S3C_DATA_DIR="$DATA_DIR" \
   S3C_STORE_DRIVER=json \
   S3C_ALLOW_PLAINTEXT_STORE=1 \

@@ -15,7 +15,10 @@ package service
 //     （Vixie 语义；只受限其一则只看那个字段）；
 //   - **只接受数字**：MON/JAN 等名字明确报错，不静默按非法数字处理；
 //   - Next 返回**严格晚于** after、按 after 所在时区、分钟对齐的下一时刻；
-//     结构性不可能的表达式（如 2 月 30 日）返回零值。
+//     结构性不可能的表达式（如 2 月 30 日）返回零值；
+//   - **DST 语义**（评审 R3）：春季跳变间隙的墙钟按**跳变前偏移**解释（落点为
+//     跳变后本地时刻，如 02:30 间隙 → 03:30 EDT），当天触发一次；秋季重复小时的
+//     第二次出现同样触发，不漏跑（实测三例见 TestParseCronNextDST）。
 //
 // 搜索策略按「日 → 时 → 分」三级下钻（而非逐分钟暴力扫）：40 年视界 ≈ 1.5 万次
 // 日期构造，命中日才进入时/分枚举——`0 0 30 2 *` 这类永不命中的表达式也只是
@@ -23,6 +26,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -207,31 +211,81 @@ func bitsOnesCount(mask uint64) int {
 
 // Next 返回严格晚于 after 的下一触发时刻（after 所在时区、分钟对齐）。
 // 40 年视界内不命中（结构性不可能的日期）返回零值。
+//
+// DST 语义（评审 R3 修正，三例实测见 TestParseCronNextDST）：候选在**绝对时间轴**
+// 上构造并回验本地字段等于表达式——
+//   - 正常日：单一偏移，行为与历史实现一致；
+//   - 秋季重复小时：墙钟出现两次 → 两个候选各自与 after 比较，第一次已过仍可命中
+//     第二次（不漏跑）。当日取「严格晚于 after 的最早候选」而非首个命中的墙钟——
+//     否则早墙钟的第二次出现会抢在晚墙钟的第一次出现之前返回；
+//   - 春季跳变间隙：墙钟不存在 → 按**跳变前偏移**解释（02:30 间隙落点 = 03:30 EDT
+//     即跳变后的本地时刻），当天触发一次，晚触发优于漏跑。旧注释所称「落到跳变后
+//     的合法时刻」与实测相反，已随本次修正。
 func (c *Cron) Next(after time.Time) time.Time {
 	loc := after.Location()
-	// 从 after 的下一分钟所在日期开始搜索；当日更早的时刻必然不晚于 after。
+	// 从 after 所在日期开始搜索；当日更早的候选由 cand.After(after) 过滤。
 	y, m, d := after.Date()
 	for i := 0; i < cronHorizonDays; i++ {
-		day := time.Date(y, m, d+i, 0, 0, 0, 0, loc)
+		// 正午锚定日期身份：个别时区在 00:00 跳变，午夜锚点会被归一化到邻日。
+		day := time.Date(y, m, d+i, 12, 0, 0, 0, loc)
 		if c.month&(1<<uint(day.Month())) == 0 {
 			continue
 		}
 		if !c.dayMatches(day) {
 			continue
 		}
-		// 时间构造对 DST 间隙/重叠的归一化是「已接受的取舍」：春季跳变日的
-		// 不存在时刻会落到跳变后的合法时刻，与主流 cron 行为一致；备份场景
-		// 晚触发一次优于不触发。
+		best := time.Time{}
 		for _, h := range c.hours {
 			for _, mi := range c.minutes {
-				cand := time.Date(day.Year(), day.Month(), day.Day(), h, mi, 0, 0, loc)
-				if cand.After(after) {
-					return cand
+				for _, cand := range cronCandidates(day.Year(), day.Month(), day.Day(), h, mi, loc) {
+					if cand.After(after) && (best.IsZero() || cand.Before(best)) {
+						best = cand
+					}
 				}
 			}
 		}
+		if !best.IsZero() {
+			return best
+		}
 	}
 	return time.Time{}
+}
+
+// cronCandidates 返回墙钟 (year-mon-day hour:min) 在 loc 下的全部绝对触发时刻
+// （升序、分钟对齐；通常 1 个，DST 重复小时 2 个）。
+//
+// 构造口径：inst = 墙钟(UTC 锚定) − 偏移。偏移集合取自 Go 归一化落点 base 的
+// ±2 小时（真实跳变 ≤2 小时必被跨越；无跳变时三点同偏移，去重后单一候选），
+// 再逐一**回验**本地字段等于请求的墙钟：
+//   - 全部命中（秋季重复小时）→ 返回两个实例，交由 Next 逐个与 after 比较；
+//   - 无一命中（春季跳变间隙）→ 返回最晚实例，即跳变前偏移的解释，落点为跳变后
+//     的本地时刻（如 02:30 间隙 → 03:30 EDT），当天触发一次。
+func cronCandidates(year int, mon time.Month, day, hour, min int, loc *time.Location) []time.Time {
+	wallUTC := time.Date(year, mon, day, hour, min, 0, 0, time.UTC)
+	base := time.Date(year, mon, day, hour, min, 0, 0, loc)
+	offs := make(map[int]struct{}, 2)
+	for _, probe := range [3]time.Time{base.Add(-2 * time.Hour), base, base.Add(2 * time.Hour)} {
+		_, off := probe.Zone()
+		offs[off] = struct{}{}
+	}
+	insts := make([]time.Time, 0, len(offs))
+	for off := range offs {
+		insts = append(insts, wallUTC.Add(-time.Duration(off)*time.Second).In(loc))
+	}
+	sort.Slice(insts, func(i, j int) bool { return insts[i].Before(insts[j]) })
+	valid := make([]time.Time, 0, len(insts))
+	for _, t := range insts {
+		if y, mo, dd := t.Date(); y != year || mo != mon || dd != day {
+			continue
+		}
+		if h, m, _ := t.Clock(); h == hour && m == min {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) > 0 {
+		return valid
+	}
+	return insts[len(insts)-1:]
 }
 
 // dayMatches 按 Vixie 语义判定日期是否命中：

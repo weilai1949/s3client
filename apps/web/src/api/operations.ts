@@ -95,7 +95,7 @@ export const operations = {
   updateAccount: { method: "PUT", path: "/api/accounts/{id}", params: ["id"] },
   updateSchedule: { method: "PUT", path: "/api/schedules/{id}", params: ["id"] },
   verifyChecksum: { method: "POST", path: "/api/accounts/{id}/verify-checksum", params: ["id"] },
-} as const
+} as const satisfies Record<string, Operation>
 
 /** spec 里全部操作的标识（84 个，见 docs/api/openapi.json）。 */
 export type OperationId = keyof typeof operations

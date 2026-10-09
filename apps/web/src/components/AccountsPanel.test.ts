@@ -515,3 +515,69 @@ describe('AccountsPanel', () => {
     expect(btn.attributes('disabled')).toBeUndefined()
   })
 })
+
+describe('AccountsPanel 拉取桶请求代际守卫（评审 R6）', () => {
+  type ListResult = Awaited<ReturnType<typeof s3api.listBuckets>>
+
+  /** 逐调用挂起 listBuckets，返回可按调用顺序 resolve/reject 的把手。 */
+  function trackListBuckets() {
+    const pend: Array<{ resolve: (v: ListResult) => void; reject: (e: unknown) => void }> = []
+    vi.mocked(s3api.listBuckets).mockImplementation(
+      () => new Promise((resolve, reject) => { pend.push({ resolve, reject }) }),
+    )
+    return pend
+  }
+
+  /** 按账号名定位行内「编辑」按钮（两行同文案，必须按行取）。 */
+  function editButton(w: ReturnType<typeof mount>, name: string) {
+    const row = w.findAll('tbody tr').find((r) => r.text().includes(name))
+    expect(row, `row ${name} should exist`).toBeTruthy()
+    const b = row!.findAll('button').find((x) => x.text() === 'common.edit')
+    expect(b, `edit button of ${name} should exist`).toBeTruthy()
+    return b!
+  }
+
+  it('切换编辑对象乱序返回：旧账号的桶不得写入当前表单', async () => {
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] })
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await flushPromises()
+    await editButton(w, 'MyAcc').trigger('click')
+    expect(pend).toHaveLength(1)
+    await editButton(w, 'Other').trigger('click')
+    expect(pend).toHaveLength(2)
+
+    // 当前拉取（acc-2 编辑）先返回
+    pend[1].resolve({ buckets: [] })
+    await flushPromises()
+    expect(w.find('select').findAll('option').map((o) => o.text())).toEqual(['accounts.bucketSelect'])
+    expect((w.find('select').element as HTMLSelectElement).value).toBe('')
+
+    // 过期拉取（acc-1 编辑）后返回——不得写入 bucketOptions / form.bucket
+    pend[0].resolve({ buckets: [{ name: 'stale-acc1', creationDate: '' }] })
+    await flushPromises()
+    expect(w.find('select').findAll('option').map((o) => o.text()), '过期响应不得写入桶选项').toEqual(['accounts.bucketSelect'])
+    expect((w.find('select').element as HTMLSelectElement).value, '过期响应不得改写 form.bucket').toBe('')
+  })
+
+  it('过期拉取失败：不显示 bucketErr、不抢清当前拉取的 loading', async () => {
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [acc1, acc2] })
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await flushPromises()
+    await editButton(w, 'MyAcc').trigger('click')
+    await editButton(w, 'Other').trigger('click')
+    expect(pend).toHaveLength(2)
+
+    pend[0].reject(new Error('stale boom'))
+    await flushPromises()
+    expect(w.findAll('span.badge').some((s) => s.text() === 'stale boom'), '过期失败不得设置 bucketErr').toBe(false)
+    expect(findButton(w, 'accounts.fetchingBuckets'), '当前拉取仍在途，loading 不得被过期 finally 抢清').toBeTruthy()
+
+    pend[1].resolve({ buckets: [] })
+    await flushPromises()
+    expect(w.find('select').findAll('option').map((o) => o.text())).toEqual(['accounts.bucketSelect'])
+    expect(findButton(w, 'accounts.fetchBuckets').attributes('disabled')).toBeUndefined()
+    expect(w.findAll('span.badge').some((s) => s.text() === 'stale boom')).toBe(false)
+  })
+})

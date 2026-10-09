@@ -227,14 +227,12 @@ func TestE2EObjectLock(t *testing.T) {
 	}
 	bucket := fmt.Sprintf("s3c-e2el-%d", time.Now().UnixNano())
 	var retentionUntil time.Time
-	// 保留期取「短窗 + 到期收尾」：RustFS 对 GOVERNANCE 保留做**真实强制**（版本删除 403）
-	// 且保留期一经设置**不可修改**（再 PUT → 405 MethodNotAllowed，2026-10-08 实测），
-	// 所以用 10 秒短窗：断言强制行为后等到期再清理，否则对象永不可删、桶必泄漏。
+	// 保留期短窗即可：RustFS 对 GOVERNANCE 保留做**真实强制**（版本删除 403）且一经设置
+	// 不可修改（再 PUT → 405 MethodNotAllowed，2026-10-08 实测）。清理不再等到期——
+	// cleanupBucket 对被锁版本走「法定保留 OFF + GOVERNANCE bypass」强删（2026-10-09 补，
+	// 根治 10-08 共享实例残留桶泄漏），短窗只为把「保留期内删不掉」的行为断言进真对端。
 	retentionWindow := 10 * time.Second
 	defer func() {
-		if wait := time.Until(retentionUntil.Add(time.Second)); wait > 0 {
-			time.Sleep(wait)
-		}
 		if err := cleanupBucket(ctx, c, bucket); err != nil {
 			t.Logf("cleanup %s: %v", bucket, err)
 		}

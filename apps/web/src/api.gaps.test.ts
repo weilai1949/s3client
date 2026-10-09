@@ -216,6 +216,9 @@ describe('api gaps: s3api bucket 可选参数', () => {
     await s3api.multipartParts('id2', { bucket: 'bkt', key: 'k', uploadId: 'U2' })
     const urls = vi.mocked(fetch).mock.calls.map((c) => String(c[0]))
     expect(urls[0]).toContain('/api/accounts/id%2F1/multipart/parts?')
+    // pathname 整体等于 spec 的 path 模板展开（评审 R8：端点必须走 opPath 契约层，
+    // 后缀匹配之外再钉一次全路径，防止前缀漂移静默通过）。
+    expect(new URL(urls[0], 'http://e').pathname).toBe('/api/accounts/id%2F1/multipart/parts')
     expect(urls[0]).toContain('key=dir%2Fa+b.bin')
     expect(urls[0]).toContain('uploadId=U+1')
     expect(urls[0]).not.toContain('bucket=')

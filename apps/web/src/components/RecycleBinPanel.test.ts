@@ -530,3 +530,70 @@ describe('RecycleBinPanel', () => {
     expect(() => w.unmount()).not.toThrow()
   })
 })
+
+describe('RecycleBinPanel 桶加载请求代际守卫（评审 R6）', () => {
+  type ListResult = Awaited<ReturnType<typeof s3api.listBuckets>>
+
+  /** 逐调用挂起 listBuckets，返回可按调用顺序 resolve/reject 的把手。 */
+  function trackListBuckets() {
+    const pend: Array<{ resolve: (v: ListResult) => void; reject: (e: unknown) => void }> = []
+    vi.mocked(s3api.listBuckets).mockImplementation(
+      () => new Promise((resolve, reject) => { pend.push({ resolve, reject }) }),
+    )
+    return pend
+  }
+
+  it('切账号乱序返回：过期响应不得覆盖当前账号的桶选择', async () => {
+    state.accounts = [acc1, acc2]
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick()
+    await nextTick()
+    expect(pend).toHaveLength(2) // onMounted 的直接 loadBuckets + accSel watch
+    await w.findAll('select.acc-select')[0].setValue('acc-2')
+    await w.findAll('select.acc-select')[0].setValue('acc-1')
+    expect(pend).toHaveLength(4)
+
+    // 当前请求（acc-1）先返回
+    pend[3].resolve({ buckets: [b1] })
+    await flushPromises()
+    const bucketSel = () => w.findAll('select.acc-select')[1]
+    expect((bucketSel().element as HTMLSelectElement).value).toBe('b1')
+
+    // 过期请求后返回——不得改写 buckets / bucketSel
+    pend[0].resolve({ buckets: [b1] })
+    pend[1].resolve({ buckets: [b1] })
+    pend[2].resolve({ buckets: [{ name: 'stale-b', creationDate: '' }] })
+    await flushPromises()
+    expect((bucketSel().element as HTMLSelectElement).value, '过期响应不得改写桶选择').toBe('b1')
+    expect(bucketSel().findAll('option').map((o) => o.text()), '过期响应不得改写桶列表').toEqual(['b1'])
+  })
+
+  it('过期请求失败：不显示错误、不抢清 loading；当前请求异常必须复位 loading', async () => {
+    state.accounts = [acc1, acc2]
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick()
+    await nextTick()
+    await w.findAll('select.acc-select')[0].setValue('acc-2')
+    await w.findAll('select.acc-select')[0].setValue('acc-1')
+    expect(pend).toHaveLength(4)
+
+    pend[0].reject(new Error('stale boom'))
+    await flushPromises()
+    expect(w.find('.msg.err').exists(), '过期失败不得设置错误横幅').toBe(false)
+    expect(w.findAll('select.acc-select')[1].attributes('disabled'), '当前请求仍在途，loading 不得被过期 finally 抢清').toBeDefined()
+
+    pend[3].resolve({ buckets: [b1] })
+    await flushPromises()
+    expect((w.findAll('select.acc-select')[1].element as HTMLSelectElement).value).toBe('b1')
+    expect(w.findAll('select.acc-select')[1].attributes('disabled')).toBeUndefined()
+
+    // 评审 R6 原句：异常时 loading 必须复位——当前请求失败后 select 不得永久禁用
+    vi.mocked(s3api.listBuckets).mockRejectedValueOnce(new Error('current boom'))
+    await w.findAll('select.acc-select')[0].setValue('acc-2')
+    await flushPromises()
+    expect(w.find('.msg.err').text()).toContain('current boom')
+    expect(w.findAll('select.acc-select')[1].attributes('disabled'), '当前请求异常后 loading 必须复位').toBeUndefined()
+  })
+})

@@ -17,17 +17,21 @@ test('SPA 渲染：顶栏 + 无账号空状态', async ({ page }) => {
 })
 
 test('OpenAPI 规范可被前端获取', async ({ request }) => {
-  // 这是契约测试：vite preview 没有后端代理 → /api/openapi.json 应被 SPA
-  // fallback 之外的逻辑处理（vite preview 直接 404/500）。当真实 CI 起后端时
-  // 应返回 200 + JSON。我们接受任何非 SPA HTML 的响应。
+  // 评审 R9：原断言接受 `[200,404,500,502,503]` 且仅在 200 分支校验 content-type——
+  // 端点彻底坏掉也绿（永真断言）。静态预览把 /api 代理到 127.0.0.1:8080：无后端时
+  // 确定性返回 503（本套用例的常态），此时**条件跳过**；一旦代理打到了真实后端
+  //（任意其它状态码 = 有真进程应答），必须 200 + JSON 合法 spec。
+  // 「真实后端模式断言 200 + JSON」的常驻版本在 e2e-real/real-backend.spec.ts
+  //（配合 scripts/e2e-real.sh 的 S3C_EXPOSE_OPENAPI=1）。
   const res = await request.get('/api/openapi.json', { failOnStatusCode: false })
-  // 接受：404（vite 无此路由）/ 502/503/500（后端不在时 vite 转发失败）
-  expect([200, 404, 500, 502, 503]).toContain(res.status())
-  // 如果返回 200，必须是 JSON 而非 HTML（避免回退到 SPA）。
-  if (res.status() === 200) {
-    const ct = res.headers()['content-type'] || ''
-    expect(ct).toContain('application/json')
-  }
+  test.skip(
+    res.status() === 503 || res.status() === 502,
+    '静态预览无后端（/api 代理无目标）——真实契约断言见 e2e-real/real-backend.spec.ts',
+  )
+  expect(res.status(), '有后端应答时 /api/openapi.json 必须可用').toBe(200)
+  expect(res.headers()['content-type'] || '').toContain('application/json')
+  const spec = (await res.json()) as { openapi?: string }
+  expect(typeof spec.openapi).toBe('string')
 })
 
 test('静态资源 200', async ({ request }) => {

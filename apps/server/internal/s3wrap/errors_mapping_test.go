@@ -167,19 +167,6 @@ func TestIsNotFoundCoversAllForms(t *testing.T) {
 	}
 }
 
-// TestIsAPIError 可识别的 S3 API 错误 vs 普通错误。
-func TestIsAPIError(t *testing.T) {
-	if !IsAPIError(fakeAPIError{code: "AccessDenied"}) {
-		t.Fatal("API error should be recognized")
-	}
-	if IsAPIError(errors.New("dial tcp: refused")) {
-		t.Fatal("plain error is not an API error")
-	}
-	if IsAPIError(nil) {
-		t.Fatal("nil is not an API error")
-	}
-}
-
 // TestIsEntityTooLargeForms 只做结构化判定：S3 错误码 / 应用层 sentinel / 二者的包装
 // 三种形态可识别；纯文案（即便含 "EntityTooLarge" 子串）不得触发——文案匹配会随上游
 // 措辞变化静默失效（review Nit：冗余文案匹配）。

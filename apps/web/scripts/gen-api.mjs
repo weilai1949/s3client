@@ -82,7 +82,7 @@ const opsText =
   `  readonly path: string\n` +
   `  /** path 模板里 \`{占位符}\` 的名字，顺序即模板出现顺序。 */\n` +
   `  readonly params: readonly string[]\n}\n\n` +
-  `export const operations = {\n${rows.join('\n')}\n} as const\n\n` +
+  `export const operations = {\n${rows.join('\n')}\n} as const satisfies Record<string, Operation>\n\n` +
   `/** spec 里全部操作的标识（${ops.length} 个，见 ${specRel}）。 */\n` +
   `export type OperationId = keyof typeof operations\n`
 

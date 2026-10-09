@@ -383,3 +383,66 @@ describe('BucketsPanel empty account guard', () => {
     state.currentAccountId = 'acc-1' // 恢复，避免影响后续
   })
 })
+
+describe('BucketsPanel 请求代际守卫（评审 R6）', () => {
+  type ListResult = Awaited<ReturnType<typeof s3api.listBuckets>>
+
+  /** 逐调用挂起 listBuckets，返回可按调用顺序 resolve/reject 的把手。 */
+  function trackListBuckets() {
+    const pend: Array<{ resolve: (v: ListResult) => void; reject: (e: unknown) => void }> = []
+    vi.mocked(s3api.listBuckets).mockImplementation(
+      () => new Promise((resolve, reject) => { pend.push({ resolve, reject }) }),
+    )
+    return pend
+  }
+
+  it('切账号乱序返回：过期响应不得覆盖当前账号的桶状态', async () => {
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick() // onMounted 的直接 loadBuckets
+    await nextTick() // accSel watch 的第二次 loadBuckets（既有口径）
+    expect(pend).toHaveLength(2)
+    // 切到 acc-2 再切回 acc-1：pend[3]（acc-1）是当前请求，其余全部过期
+    await w.find('select.acc-select').setValue('acc-2')
+    await w.find('select.acc-select').setValue('acc-1')
+    expect(pend).toHaveLength(4)
+
+    // 当前请求先返回：空桶列表
+    pend[3].resolve({ buckets: [] })
+    await flushPromises()
+    expect(w.findComponent(BucketOverview).exists()).toBe(false)
+    expect(w.text()).toContain('buckets.empty')
+
+    // 过期请求后返回——不得写入 buckets / selectedBucket（否则 A 账号的桶渲染在 B 账号下）
+    pend[0].resolve({ buckets: [{ name: 'stale-mount', creationDate: '' }] })
+    pend[1].resolve({ buckets: [{ name: 'stale-mount', creationDate: '' }] })
+    pend[2].resolve({ buckets: [{ name: 'stale-acc2', creationDate: '' }] })
+    await flushPromises()
+    expect(w.findComponent(BucketOverview).exists(), '过期响应不得自动打开桶详情').toBe(false)
+    expect(w.text(), '过期响应不得渲染').not.toContain('stale-acc2')
+    expect(w.text(), '当前账号的空列表不得被过期响应顶掉').toContain('buckets.empty')
+  })
+
+  it('过期请求失败：不显示错误、不抢清当前请求的 loading', async () => {
+    const pend = trackListBuckets()
+    const w = mountPanel()
+    await nextTick()
+    await nextTick()
+    await w.find('select.acc-select').setValue('acc-2')
+    await w.find('select.acc-select').setValue('acc-1')
+    expect(pend).toHaveLength(4)
+
+    // 过期请求在当前请求（pend[3]）仍挂起时失败：
+    // 不得写 error，也不得把 loadingBuckets 抢清（loading 归当前请求所有）
+    pend[0].reject(new Error('stale boom'))
+    await flushPromises()
+    expect(w.find('.msg.err').exists(), '过期失败不得设置错误横幅').toBe(false)
+    expect(w.text(), '当前请求仍在途，loading 不得被过期 finally 抢清').toContain('buckets.loading')
+
+    // 当前请求返回 → 正常收尾
+    pend[3].resolve({ buckets: [] })
+    await flushPromises()
+    expect(w.text()).toContain('buckets.empty')
+    expect(w.find('.msg.err').exists()).toBe(false)
+  })
+})

@@ -90,6 +90,11 @@ variables:
   GOPROXY: "https://proxy.golang.org,direct"
   NPM_REGISTRY: "https://registry.npmjs.org"
   PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
+  # C2（评审 2026-10-09 §3）：默认 GIT_DEPTH=20 是浅克隆、不带旧 tag——根包
+  # changelog_tag_gate 刻意不调 git 命令、直读 .git/refs/tags 与 .git/packed-refs，
+  # 要求 ≥15 个 `v*` tag，浅历史里 tag 缺失即构造性红灯。0 = 不限深度（含全部 tag），
+  # 与 GitHub 各 checkout 的 fetch-depth: 0 对齐（ci_consistency_gate_test.go 钉住两侧）。
+  GIT_DEPTH: "0"
 
 # ---------------------------------------------------------------- 基础模板 ----
 
@@ -219,7 +224,27 @@ server:
     - .ci-trigger
   stage: ci
   timeout: 20 minutes
+  # .go-base 的 go 缓存之外再带上 web 依赖的 pnpm store（C1：本 job 装前端前置）。
+  # key.files 放两把锁：任一侧依赖变更即整体失效，避免拿旧 store 装新 lockfile。
+  cache:
+    key:
+      files:
+        - apps/server/go.sum
+        - apps/web/pnpm-lock.yaml
+    paths:
+      - .go/pkg/mod/
+      - .gocache/
+      - .pnpm-store/
   script:
+    # C1（评审 2026-10-09 §3）：本 job 跑全量 `go test ./...`，根包 agent_evals 门禁
+    # 断言 GT-4 判据前置 requires_path=apps/web/node_modules 存在（os.Stat 缺则红）。
+    # 该目录是 gitignore 构建产物——装真实前置，不得 mkdir 伪造。golang 镜像没有 node：
+    # 官方 tarball pin 26.10.0（与 .web-base 的 node 镜像同版）；pnpm pin 9.15.0
+    # （与 packageManager 及两套 CI 同版，repo_infra_gate 两道 pin 门禁钉住）。
+    # before_script 结束时 cwd = apps/server，故 ../web 进前端目录装完再回来。
+    - curl -fsSL https://nodejs.org/dist/v26.10.0/node-v26.10.0-linux-x64.tar.gz | tar -xz -C /usr/local --strip-components=1
+    - npm install -g pnpm@9.15.0
+    - cd ../web && pnpm config set store-dir "$PNPM_STORE_DIR" && pnpm install --frozen-lockfile && cd ../server
     # gofmt
     - |
       out=$(gofmt -l .)
