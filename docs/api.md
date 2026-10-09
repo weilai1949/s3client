@@ -192,7 +192,7 @@ POST /api/accounts/{id}/mkdir
 ```json
 {"bucket":"B(可选)","key":"images","ifMatch":"\"e1\"(可选)","ifNoneMatch":"*(可选)"}
 ```
-S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结尾（`images/`）。条件写（可选）：`ifNoneMatch` 只接受 `*`（目标不存在才创建，防并发覆盖）；`ifMatch` 为 ETag 字面量（仅当目标当前 ETag 匹配才写入）；条件不满足返回 412。
+S3 无真实目录：服务端 PUT 空对象，`key` 自动补全为以 `/` 结尾（`images/`）。条件写（可选）：`ifNoneMatch` 只接受 `*`（目标不存在才创建，防并发覆盖）；`ifMatch` 为 ETag 字面量（仅当目标当前 ETag 匹配才写入）；条件不满足返回 412。**注记（有意残留）**：条件字段仅到 API 层——前端新建文件夹走共享单值输入对话框，UI 不暴露条件选项（见 `FEATURES.md` §BT 残留⑤）。
 ```json
 200 {"created":"images/","bucket":"B"}
 ```
@@ -216,7 +216,7 @@ POST /api/accounts/{id}/copy-object
 ```json
 {"bucket":"B(可选)","key":"a.txt","newKey":"archive/a.txt","newBucket":"B2(可选)","ifMatch":"\"e1\"(可选)","ifNoneMatch":"*(可选)","checksumAlgorithm":"CRC64NVME|SHA256|CRC32C|SHA1(可选)"}
 ```
-复制单个对象到目标桶/目标 key，**不删除源**（区别于 `rename`）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同则拒绝。条件写（可选）作用于**目标**对象：`ifNoneMatch="*"` 仅当目标不存在才复制、`ifMatch` 为目标 ETag；条件不满足返回 **412**（`PreconditionFailed`），并发冲突返回 **409**（`ConditionalRequestConflict`）。`checksumAlgorithm` 非空时服务端计算并**存储全对象校验和**（复制后即可被 `verify-checksum` 以对应算法端到端比对）；缺省走服务端默认（不改变历史行为）。
+复制单个对象到目标桶/目标 key，**不删除源**（区别于 `rename`）；`newBucket` 缺省同桶；同桶内 `newKey` 与 `key` 相同则拒绝。条件写（可选）作用于**目标**对象：`ifNoneMatch="*"` 仅当目标不存在才复制、`ifMatch` 为目标 ETag；条件不满足返回 **412**（`PreconditionFailed`），并发冲突返回 **409**（`ConditionalRequestConflict`）。`checksumAlgorithm` 非空时服务端计算并**存储全对象校验和**（复制后即可被 `verify-checksum` 以对应算法端到端比对）；缺省走服务端默认（不改变历史行为）。**注记（有意残留）**：条件字段仅到类型层——前端复制对话框不传 `ifMatch`/`ifNoneMatch`，`checksumAlgorithm` 不在前端 endpoints 类型里（见 `FEATURES.md` §BT 残留⑥）。
 ```json
 200 {"copied":"archive/a.txt","bucket":"B2"}
 ```

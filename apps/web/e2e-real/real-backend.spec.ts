@@ -90,6 +90,7 @@ const zh = {
   // BucketsPanel 的工具栏按钮（`buckets.createBtn`）；注意别与 ObjectsPanel 的
   // BucketList 按钮（`buckets.createAction` = 「+ 创建 Bucket」）混淆。
   createBucketBtn: /\+ 新建桶|\+ New bucket/,
+  backList: /返回列表|Back to list/,
   enterBucket: /^进入$|^Open$/,
   upload: /^上传文件$|^Upload$/,
   uploadOk: /已上传 1 个文件到当前目录|Uploaded 1 file/,
@@ -154,21 +155,51 @@ async function createBucketViaUI(page: Page, bucket: string) {
   const dlg = page.getByRole('dialog', { name: zh.createBucket })
   await expect(dlg).toBeVisible()
   await dlg.getByPlaceholder(zh.bucketNamePh).fill(bucket)
+  // 建桶成功路径必然触发一次 BucketsPanel 的 GET /buckets 刷新（onCreateBucket →
+  // loadBuckets）。等这次刷新落定再回列表：否则「点返回列表」可能抢在刷新 resolve
+  // 之前，loadBuckets 随后又把空 selectedBucket 自动选中 buckets[0] 钻进详情页，
+  // 断言随即闪断——竞态成败，不能留。
+  const listRefreshed = page.waitForResponse(
+    (r) => r.ok() && r.request().method() === 'GET' && r.url().includes('/buckets'),
+  )
   await dlg.getByRole('button', { name: /^创建$|^Create$/ }).click()
+  await listRefreshed
 
-  // 真实 S3 建桶后列表刷新出现该桶
+  // 刷新完成后建桶落定的页面是**桶详情**（loadBuckets 在 selectedBucket 为空时自动
+  // 选中 buckets[0]；复用有残留桶的 RustFS 时更是先进旧桶详情）。必须返回列表再断言：
+  // 直接按行断言会命中详情页概览表里含桶名的那行，测的是别的东西（误中假绿）。
+  await page.getByRole('button', { name: zh.backList }).click()
   await expect(page.getByRole('row', { name: new RegExp(bucket) })).toBeVisible()
 }
 
-/** 删除真实桶（清理，失败仅告警，不掩盖用例结论）。 */
+/** 清空并删除真实桶（清理，失败仅告警，不掩盖用例结论）。 */
 async function cleanupBucket(request: APIRequestContext, accId: string, bucket: string) {
   try {
-    // 先清空对象（delete-prefix 会列举并删除桶内全部 key）
-    await requestWithRetry(request, 'post', `${BASE_URL}/api/accounts/${accId}/delete-prefix`, {
-      data: { bucket, prefix: '' },
-      timeout: 20_000,
-    })
-    await requestWithRetry(request, 'delete', `${BASE_URL}/api/accounts/${accId}/bucket?name=${encodeURIComponent(bucket)}`)
+    // 先清空对象。不能走 delete-prefix：handler 有意拒绝空前缀
+    // （objects.go「拒绝空前缀以免误删全桶」，空 prefix 必 400），只能对象级批量删除。
+    const list = await requestWithRetry(
+      request,
+      'get',
+      `${BASE_URL}/api/accounts/${accId}/objects?bucket=${encodeURIComponent(bucket)}`,
+    )
+    expect(list.status()).toBe(200)
+    const body = (await list.json()) as { objects: Array<{ key: string }> }
+    // 本套用例每桶最多 1 个对象（直传用例 1 个 hello.txt），单页列举足够；
+    // 将来用例若批量灌对象，此处需按 nextToken 翻页。
+    const keys = body.objects.map((o) => o.key)
+    if (keys.length > 0) {
+      const del = await requestWithRetry(request, 'post', `${BASE_URL}/api/accounts/${accId}/delete`, {
+        data: { bucket, keys },
+        timeout: 20_000,
+      })
+      expect(del.status()).toBe(200)
+    }
+    const rm = await requestWithRetry(
+      request,
+      'delete',
+      `${BASE_URL}/api/accounts/${accId}/bucket?name=${encodeURIComponent(bucket)}`,
+    )
+    expect(rm.status()).toBe(200)
   } catch (e) {
     console.warn(`cleanup ${bucket} failed: ${String(e)}`)
   }

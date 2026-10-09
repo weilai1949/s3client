@@ -140,7 +140,7 @@ Object Lock」+ #6「计划任务」+ #7「FinOps 存储分析与成本看板」
 | Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
 | Go 测试 | `go test -race -count=1 ./...` | ✅ 10/10 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`；**2026-10-08 §BR** 再增至 10 包，新增 `internal/tracing`；**2026-10-09 三批合并态复测**（#5 + #6 + #7）仍 10/10，无新增包） |
 | Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100%（**2026-10-09 三批合并态复测**：`make test-cover` 10/10 包全绿、`count==0` 零块——§BT 三件套、#6 schedules 与 #7 storage-report 全部入表） |
-| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.6；已入 CI 门禁。**2026-10-08 复测**：0 可达；另扫出 21 个「被 require 但代码未调用」的模块漏洞，不构成可达面。此前 **2026-10-01 复测**同结论） |
+| Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.9；已入 CI 门禁。**2026-10-09 复测**：go1.26.6 上扫出 10 个可达 stdlib 漏洞（net/http、net/textproto、crypto/tls，均 go1.26.9 修复），工具链四处同步升级后归 0；另 24 个「被 require 但代码未调用」的模块漏洞不构成可达面。此前 **2026-10-08 复测**：0 可达 + 21 个不可达模块漏洞；**2026-10-01 复测**同结论） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
 | 前端测试 | `pnpm test` | ✅ **1272** 例全绿（**82** 文件；**2026-10-09 三批合并态**：#5 §BT + #6 `SchedulesSection` + #7 `StorageReportPanel` / `storageReport` 合并后 1254 → 1272、80 → 82（#7 新增 2 个测试文件 / 18 例）；**2026-10-08 晚**：#5 §BT（条件写上传 / 对象详情校验和与保留 / BucketObjectLock 页签 / 7 新端点方法）与 #6 `SchedulesSection` 合并态，1189 → 1254、78 → 80；**2026-10-08 §BQ**：大文件批次新增 `src/multipartResume.test.ts` 与 `src/api/download.test.ts`、扩充 `upload.test.ts` / `proxy.test.ts` / `api.gaps.test.ts`，文件数 76 → 78、例数 1158 → 1189；**2026-10-01 §BN**：#10 代码生成批次 +3 例（新增 `src/api/generated.gate.test.ts`：生成物新鲜度 + 结构自检 + `opPath` 行为），文件数 75 → 76；**2026-10-01 §BM**：可访问性批次 +23 例（焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态 1 等），文件数 74 → 75（新增 `src/a11y_axe.test.ts`）；2026-09-30 前的轨迹：2026-09-28 KNOWN_ISSUES #60 拆 4 文件为 9 文件，测试数与测试名清单不变，此前为 67 文件；同日 #64 修复新增 16 条红灯用例 1110 → 1126；2026-09-29 新增 `src/vite_env_guard.test.ts` 2 例隔离开宿主 `NODE_ENV` → 1128；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例、改写为派发真实 keydown 的行为断言 → 1126**；**同日 §AO 补死代码门禁的合成源码口径用例 → 1127**；**同日 §AP 收口 #67 / #68，新增 `a11y_gate.test.ts` 3 例与 `i18n` 2 例 → 1132、文件数 74**） |
@@ -222,7 +222,7 @@ Object Lock」+ #6「计划任务」+ #7「FinOps 存储分析与成本看板」
 
 | # | 依赖 | 类型 | 被谁依赖 | 当前状态 | 失效后果 | 兜底 / 约定 |
 |---|---|---|---|---|---|---|
-| E1 | Go `1.26.6` 工具链 | 构建 | `go.mod` / `Dockerfile` / 两套 CI | ✅ `go.mod`、`Dockerfile`、GitLab 镜像三处显式一致（GitHub 侧读 `go-version-file`） | 本地绿 CI 红，或镜像回退到含 CVE 版本 | 升级须同步这四处，`govulncheck` 兜底 |
+| E1 | Go `1.26.9` 工具链 | 构建 | `go.mod` / `Dockerfile` / 两套 CI | ✅ `go.mod`、`Dockerfile`、GitLab 镜像三处显式一致（GitHub 侧读 `go-version-file`） | 本地绿 CI 红，或镜像回退到含 CVE 版本 | 升级须同步这四处，`govulncheck` 兜底 |
 | E2 | AWS SDK for Go v2（`v1.43.7` / `s3 v1.107.3`） | 库 | 签名 / 预签名 / 分段 / 复制 | ✅ 已 pin | 破坏性升级使签名或错误映射漂移 | `s3wrap` 是唯一边界；升级必须跑 RustFS 真对端 E2E |
 | E3 | `modernc.org/sqlite`（纯 Go、无 cgo） | 库 | `sqlite` store 驱动 | ✅ 已 pin | 换驱动需重做加密与并发验证 | `store.Open` 可按驱动切换（json / encrypted） |
 | E4 | RustFS `1.0.0-rc.3` 镜像 | 服务 | 本地 compose 联调 + 两套 CI 的真对端 E2E | ⏳ 上游 RC 版本 | 上游行为变化污染 E2E 结论 | 镜像 pin 版本；E2E 只在 E2E 工作流跑 |

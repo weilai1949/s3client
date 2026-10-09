@@ -1,6 +1,6 @@
 module github.com/weilai1949/s3client/apps/server
 
-go 1.26.6
+go 1.26.9
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.43.7

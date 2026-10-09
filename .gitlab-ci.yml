@@ -100,7 +100,7 @@ variables:
 # alpine 镜像两者都没有，`-race` 会直接报 "requires cgo" 而失败。Debian 镜像自带 gcc，
 # 也与 GitHub 的 ubuntu-latest 运行环境更接近。
 .go-base:
-  image: golang:1.26.6-bookworm
+  image: golang:1.26.9-bookworm
   variables:
     GOPATH: "$CI_PROJECT_DIR/.go"
     GOCACHE: "$CI_PROJECT_DIR/.gocache"
@@ -543,7 +543,7 @@ e2e-real:
   extends: .e2e-real-trigger
   stage: e2e
   timeout: 30 minutes
-  image: golang:1.26.6-bookworm
+  image: golang:1.26.9-bookworm
   services:
     - name: rustfs/rustfs:1.0.0-rc.3
       alias: rustfs

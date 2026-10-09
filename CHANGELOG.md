@@ -31,6 +31,27 @@
 
 ## [Unreleased]
 
+### 修复（2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞）+ e2e-real 用例对残留桶不幂等）
+
+- **Go 工具链 1.26.6 → 1.26.9**：`govulncheck ./...` 实测 go1.26.6 上有 **10 个可达** stdlib 漏洞
+  （GO-2026-6617 等，net/http / net/textproto / crypto/tls，均 go1.26.9 修复；调用链如
+  `service.WriteObjectsZip → io.WriteString → http.response.WriteString`），另 24 个
+  「被 require 但代码未调用」的模块漏洞不构成可达面。按 ROADMAP E1 口径**四处同步**：
+  `apps/server/go.mod` / `apps/server/Dockerfile`（`golang:1.26.9-alpine`）/
+  `.gitlab-ci.yml` 两处（`golang:1.26.9-bookworm`）；GitHub 侧经 `go-version-file` 自动跟随。
+- **e2e-real「建桶 → 列桶」对残留桶不幂等**（`--no-rustfs` 复用长期 RustFS 即红）：所有运行共用
+  同一组凭据时桶列表全局可见，`BucketsPanel.loadBuckets` 在 selectedBucket 为空时自动钻进
+  `buckets[0]`——有残留桶时用例一进桶管理就停在旧桶详情页，建桶后按行断言 15s 超时。两处修复
+  （`e2e-real/real-backend.spec.ts`）：① `createBucketViaUI` 先等建桶触发的 `GET /buckets` 刷新
+  落定再点「返回列表」后断言列表行——消除「回列表被在途刷新重新钻走」的竞态，同时修掉原先直接按行
+  断言**误中详情页概览行**的假绿（干净环境下断言命中的根本不是桶列表行）；② `cleanupBucket` 改走
+  「列对象 → 批量 `/delete` → 删桶」：原 `delete-prefix` 空前缀被 handler 有意拒绝（400「拒绝空前缀
+  以免误删全桶」），非空桶清不掉、直传用例每跑一次泄漏一个桶。
+- 验证：共享 RustFS（残留桶在场）`--no-rustfs` 单跑「建桶 → 列桶」由红转绿，全量 3 用例通过；
+  `pnpm typecheck:e2e` / `pnpm lint` exit 0；`govulncheck ./...` 升级后 0 可达。
+- 顺带修复：`docs/FEATURES.md` 被上个提交（e965e54）整块复制出的第二份「三、质量与覆盖率现状」
+  （109 行逐行重复，仅尾部少一个 `### 已知边界与取舍` 子节）——删除首份副本，保留含完整尾节的第二份。
+
 ### 新增（2026-10-08 ROADMAP §三 3.2 #7 FinOps 存储分析与成本看板，全栈）
 
 > 证据台账 [`docs/FEATURES.md`](docs/FEATURES.md) **§BV**；[`docs/ROADMAP.md`](docs/ROADMAP.md)

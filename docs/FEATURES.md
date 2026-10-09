@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-08（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18）、§BG AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）、§BH 门禁实跑回填与 §BG 结构归位、§BI 第二轮收口（ROADMAP ✅ 行移出 / §AU 注记 / 评估缺口补登记 / §四 复测）、§BJ ROADMAP #19 文档可读性与流程机械化（mermaid 时序图 / 超大体量预警 / 复审到期门禁 / PR 模板 ADR 勾选）、§BK KNOWN_ISSUES #70 闭环（`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）、§BL ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘）、§BM ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾）、§BN ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁）、§BO KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client`，推翻 ➖「维持现状」决策）、§BP KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一，含锁文件 / 镜像 / 指标命名空间）、§BQ ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点）、§BR ROADMAP #11 零依赖 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关）、§BS ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`）、§BT ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock）、§BU ROADMAP #6 计划任务（cron 定时增量备份）、§BV ROADMAP #7 FinOps 存储分析与成本看板（全栈：聚合端点 83→84 + 独立「成本看板」Tab））
+> 最后更新：2026-10-09（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18）、§BG AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）、§BH 门禁实跑回填与 §BG 结构归位、§BI 第二轮收口（ROADMAP ✅ 行移出 / §AU 注记 / 评估缺口补登记 / §四 复测）、§BJ ROADMAP #19 文档可读性与流程机械化（mermaid 时序图 / 超大体量预警 / 复审到期门禁 / PR 模板 ADR 勾选）、§BK KNOWN_ISSUES #70 闭环（`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）、§BL ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘）、§BM ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾）、§BN ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁）、§BO KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client`，推翻 ➖「维持现状」决策）、§BP KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一，含锁文件 / 镜像 / 指标命名空间）、§BQ ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点）、§BR ROADMAP #11 零依赖 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关）、§BS ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`）、§BT ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock）、§BU ROADMAP #6 计划任务（cron 定时增量备份）、§BV ROADMAP #7 FinOps 存储分析与成本看板（全栈：聚合端点 83→84 + 独立「成本看板」Tab）、§BW Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（断言前返回列表 + 清桶走对象级批量删除）+ 本文件 e965e54 重复章节去重）
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性） · BF 2026-09-30 docs 内待修项收口（文档失真 + 对比度静态核查 + 改进项登记 SSOT） · BG 2026-09-30 AI 时代文档补强（六路并行：效果证据 / 机器可读 / 元信息） · BH 2026-09-30 门禁实跑回填与 §BG 结构归位 · BI 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 + 评估缺口补登记） · BJ 2026-09-30 ROADMAP #19 文档可读性与流程机械化（mermaid / 体量预警 / 复审到期门禁 / PR ADR 勾选） · BK 2026-09-30 KNOWN_ISSUES #70 闭环（NormalizeEndpoint 幂等修复） · BL 2026-09-30 ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘） · BM 2026-09-30 ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾） · BN 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + 生成物新鲜度门禁） · BO 2026-10-08 KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client` + 全仓 import / 仓库 URL） · BP 2026-10-08 KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一 + 5 文件改名 + 生成物重生成） · BQ 2026-10-08 ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点） · BR 2026-10-08 ROADMAP #11 零依赖 OTLP tracing（traceparent + OTLP/HTTP JSON，默认关） · BS 2026-10-08 ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`） · BT 2026-10-08 ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock） · BU 2026-10-08 ROADMAP #6 计划任务（cron 定时增量备份） · BV 2026-10-08 ROADMAP #7 FinOps 存储分析与成本看板（全栈）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性） · BF 2026-09-30 docs 内待修项收口（文档失真 + 对比度静态核查 + 改进项登记 SSOT） · BG 2026-09-30 AI 时代文档补强（六路并行：效果证据 / 机器可读 / 元信息） · BH 2026-09-30 门禁实跑回填与 §BG 结构归位 · BI 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 + 评估缺口补登记） · BJ 2026-09-30 ROADMAP #19 文档可读性与流程机械化（mermaid / 体量预警 / 复审到期门禁 / PR ADR 勾选） · BK 2026-09-30 KNOWN_ISSUES #70 闭环（NormalizeEndpoint 幂等修复） · BL 2026-09-30 ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘） · BM 2026-09-30 ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾） · BN 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + 生成物新鲜度门禁） · BO 2026-10-08 KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client` + 全仓 import / 仓库 URL） · BP 2026-10-08 KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一 + 5 文件改名 + 生成物重生成） · BQ 2026-10-08 ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点） · BR 2026-10-08 ROADMAP #11 零依赖 OTLP tracing（traceparent + OTLP/HTTP JSON，默认关） · BS 2026-10-08 ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`） · BT 2026-10-08 ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock） · BU 2026-10-08 ROADMAP #6 计划任务（cron 定时增量备份） · BV 2026-10-08 ROADMAP #7 FinOps 存储分析与成本看板（全栈） · BW 2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（含本文件去重）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1991,7 +1991,10 @@ functions 1095 / lines 3503）。
 > （S3 POST policy 无条件头，UI 对 ≥100MB 分段路径不提供条件写）；② 批量复制 / 迁移不物化校验和
 > （`checksumAlgorithm` 仅单文件 `copy-object`，避免改变存量迁移行为）；③ RustFS 差异：保留期一经设置
 > 不可修改（405）、GOVERNANCE→COMPLIANCE 升级被拒（`AccessDenied`）——以 AWS 语义为准的行为不在
-> RustFS 断言；④ 对象保留期编辑 UI 只支持新增 / 延长语义（缩短由服务端按厂商规则裁决）。
+> RustFS 断言；④ 对象保留期编辑 UI 只支持新增 / 延长语义（缩短由服务端按厂商规则裁决）；
+> ⑤ mkdir 条件写仅到 API 层（`endpoints.ts` `mkdirObject` 类型含 `ifNoneMatch`，UI 走共享
+> `promptDialog` 单值契约未动，调用只传 `bucket/key`）；⑥ 复制对话框条件字段仅到类型层
+> （`DestDialog.vue` 不传 `ifMatch/ifNoneMatch`，`checksumAlgorithm` 不在前端 endpoints 类型里）。
 
 ### §BU 2026-10-08 ROADMAP #6 计划任务：cron 定时增量备份
 
@@ -2076,114 +2079,44 @@ functions 1095 / lines 3503）。
 > **残留（有意）**：成本为公开牌价的量级估算（非账单真值，页内已声明）；聚合基于**当前版本**对象
 > （不含历史版本 / 未完成分段的存储占用）；`byPrefix` 只到列举前缀下的首层，更细粒度需多次请求。
 
----
+### §BW 2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞归零）+ e2e-real 用例幂等化
 
-## 三、质量与覆盖率现状
+> 来源：质量画像评审复跑门禁发现——`govulncheck ./...` 在 go1.26.6 上 **10 个可达** stdlib 漏洞
+> （GO-2026-6617 等，net/http / net/textproto / crypto/tls，均 go1.26.9 修复，调用链含
+> `service.WriteObjectsZip → io.WriteString → http.response.WriteString`）；`make e2e-real --no-rustfs`
+> 复用长期 RustFS（残留桶在场）时「建桶 → 列桶」红灯。与 [`../CHANGELOG.md`](../CHANGELOG.md)
+> `[Unreleased]` 同日条目同一 commit。
 
-> 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过
-> （`handler` 覆盖率 100.0%）、`govulncheck ./...` **0 可达漏洞**、前端 62 文件 / **967** 测试全绿且四指标均 100%、
-> `vue-tsc` / `vite build` / `eslint` 干净。
->
-> 2026-09-19 风险登记集中处置后复测：`make test-cover` 8/8 包 **100.0%**（含新增 `deadcode_gate_test.go`）、
-> `golangci-lint run ./...` **0 issues**、前端 64 文件 / **986** 测试全绿、`cargo audit` **0 漏洞**（7 条告警已 triage）。
->
-> 2026-09-19 审查 §三（正确性 B3–B11 / F2–F10）处置后复测见 §R 末段：后端 8/8 包 **100.0%**、前端 66 文件 / **1039** 测试全绿。
->
-> 2026-09-20 审查 §9.3 P2（契约 #26–#28 + 安全 / 供应链 #29–#34）处置后复测见 §T 末段：
-> 后端 8/8 包 **100.0%**（`awk '$NF==0'` 零块）、`golangci-lint` **0 issues**、前端 66 文件 / **1039** 测试全绿、
-> `docker compose config` 在缺 `S3C_STORE_KEY` 时拒绝启动。
->
-> 2026-09-22 §37 真实联调收口后复测（roadmap §四 门禁基线同步为此轮实跑值）：后端 8/8 包 **100.0%**、
-> `golangci-lint` **0 issues**、前端 66 文件 / **1042** 测试全绿（覆盖率 4074 / 2844 / 1095 / 3503 四指标 100%）、
-> `pnpm audit` **0 漏洞**、`make e2e-real` **3 passed**。
->
-> 2026-09-24 roadmap §三 #3 死代码纪律收口（前后端两道「零生产引用」导出门禁，见 §Z）后复测
-> （roadmap §四 门禁基线同步为此轮实跑值）：`gofmt -l` 干净 / `go vet` 0 告警 / 后端 `go test` **8/8 包通过**、
-> `golangci-lint` **0 issues**、`go build` 干净；前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 /
-> **66 文件 1043 例全绿**（覆盖率 **4072 / 2843 / 1093 / 3501 四指标 100%**）/ `pnpm build` OK。
->
-> 2026-09-24 全仓代码审查处置（2 Critical + 20 Required 全清；Nit 31/35 闭环 + 3 项转登记 + 1 项判定不成立，见 §AA）后复测：
-> `gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 / 后端 `go test` **9/9 包通过**（R11 新增 `internal/atomicfile`，
-> 故由 8 包增至 9 包；**每包 100.0% statements**）、`golangci-lint` **0 issues**；
-> 前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / **67 文件 1110 例全绿**（覆盖率
-> **4255 / 2908 / 1124 / 3653 四指标 100%**）/ `pnpm build` OK；真实 E2E 两项——
-> `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'` **4/4 PASS**、`make e2e-real` **3 passed**
-> （后端 `S3C_TOKEN` 开启的生产同构形态，C1 修复的验收实跑）。
->
-> 2026-09-28 KNOWN_ISSUES #60–#63 收口（见 §AB）后复测：`gofmt -l` 干净 / `go vet` 0 告警 / `go build` 干净 /
-> 后端 `go test` **9/9 包、每包 100.0% statements**、`golangci-lint` **0 issues**；前端 `pnpm lint` 0 告警 /
-> `pnpm typecheck` + `typecheck:e2e` exit 0 / **72 文件 1110 例全绿**（#60 拆分只动文件归属，
-> 测试名清单与拆分前**逐条一致**；覆盖率 **4255 / 2908 / 1124 / 3653 四指标 100% 不变**）/ `pnpm build` OK。
->
-> **2026-09-29 §AN / §AO / §AP 复测**（roadmap §四 门禁基线同步为此轮实跑值）：
-> `gofmt -l` 干净 / `go vet` **0 告警** / 后端 `go test` **9/9 包通过** / `golangci-lint` **0 issues**；
-> 前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / **74 文件 1132 例全绿** /
-> `pnpm test:coverage` **四指标 100%（宿主 `NODE_ENV` 未设 4296 / 2932 / 1130 / 3679；
-> `NODE_ENV=production` 4294 / 2932 / 1130 / 3677）** / `pnpm build` OK（**366.72 kB，gzip 112.72 kB**；
-> CSS 31.84 kB——§AP 的 `prefers-reduced-motion` 块与注释带来的 +0.16 kB，属预期）。
->
-> ⚠️ **例数轨迹 1128 → 1126 → 1127 → 1132，没有一次是「丢测试」**：§AN 删除了死代码
-> `isTopKeydown`（生产零调用，靠注释与测试「续命」）及**仅**测它的白盒用例，把断言改为
-> **派发真实 `keydown` 观测行为**——旧断言读内部栈状态，只能证明「栈里有谁」，证明不了
-> 「真的有且只有栈顶收到事件」；§AO 为死代码门禁补 1 条**合成源码口径用例**；§AP 为
-> #67 / #68 补 5 条（`a11y_gate.test.ts` 3 条源码形态 + `i18n` 2 条行为）。故一降三升之间，
-> **行为覆盖面是净增的**，覆盖率四指标始终 100%。`App.test.ts` / `i18n/index.test.ts` 中
-> 只改注释里文档路径（`features.md` → `FEATURES.md`）的部分不涉及例数。
->
-> **2026-10-01 §BM 复测**（ROADMAP #17 可访问性批次收口后全量重跑；roadmap §四 门禁基线同步为此轮实跑值）：
-> `gofmt -l` 干净 / `go vet` **0 告警** / `golangci-lint` **0 issues** / 后端 `go test ./...`
-> **9/9 包** + `make test-cover` **9/9 包 100.0%（`count==0` 零块）** / `go build` OK /
-> `govulncheck ./...` **0 可达漏洞**；前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e`
-> 均 exit 0 / **75 文件 1155 例全绿**（§BM 新增 23 例，文件 74 → 75）/
-> `pnpm test:coverage` **四指标 100%（4321 / 2932 / 1130 / 3706）** / `pnpm build` OK
-> （**371.05 kB，gzip 113.84 kB**；CSS 32.40 kB——§BM 新增全局 `.sr-only` 工具类与
-> `--brand-mark-*` 注释）；**真实浏览器 E2E 首次在本环境实跑** `pnpm e2e` **22 passed / 0 skipped**
-> （含 `e2e/a11y.spec.ts` 5 条 axe 扫描——本批配色 / `role` / `caption` 改动的渲染态验证）；
-> `cargo audit --no-fetch` **0 漏洞**（7 条告警已 triage）。
-> 同轮补跑**两项真实 E2E**（本轮改了前端，按 AGENTS 必跑）：`make e2e-real` **3 passed / 0 skipped**
-> （真实后端 + RustFS + 真实产物，`S3C_TOKEN` 生产同构形态；本机 8080 被 `haproxy` 占用，用
-> `SERVER_PORT=8081`，脚本编排不变）；`S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run 'TestE2E'`
-> **4/4 PASS**（临时起 `rustfs/rustfs:1.0.0-rc.3` 于 `127.0.0.1:9000`，跑完即删）；另
-> `make check` **exit 0**（vet / lint / 后端覆盖率 / 前端覆盖率 / `typecheck:e2e` 一把跑齐）、
-> `make bench` **exit 0**（确定性预算门禁 + 原始基准数字通过）。
-> **未能实跑**：`pnpm audit`——镜像 `registry.npmmirror.com` 不提供 audit 端点
-> （`ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS`），沿用 CI 与 2026-09-22 值。
+| # | 项 | 改动 |
+|---|---|---|
+| 1 | Go 工具链 **1.26.6 → 1.26.9** | 按 ROADMAP E1「四处同步」口径：[`../apps/server/go.mod`](../apps/server/go.mod) / [`../apps/server/Dockerfile`](../apps/server/Dockerfile)（`golang:1.26.9-alpine`）/ [`../.gitlab-ci.yml`](../.gitlab-ci.yml) 两处（`golang:1.26.9-bookworm`）；GitHub 侧经 `go-version-file` 自动跟随。`govulncheck` **10 可达 → 0** |
+| 2 | e2e-real 建桶断言（`e2e-real/real-backend.spec.ts`） | `createBucketViaUI` 先 `waitForResponse` 等建桶触发的 `GET /buckets` 落定 → 点「返回列表」→ 断言**列表行**。修两层：① 残留桶时 `BucketsPanel.loadBuckets` 在 selectedBucket 为空时自动钻进 `buckets[0]` 详情页，建桶后按行断言 15s 超时（共享实例实测红）；② 干净环境原断言命中的其实是**详情页概览行**而非列表行（假绿）。等待刷新同时消除「回列表被在途刷新重新钻走」竞态 |
+| 3 | e2e-real 清桶幂等 | `cleanupBucket` 改「列对象 → 批量 `POST /delete` → `DELETE /bucket`」：原 `delete-prefix` 空前缀被 handler 有意拒绝（400「拒绝空前缀以免误删全桶」，`objects.go`），非空桶清不掉——直传用例每跑一次泄漏一个桶。清理失败仍仅 `console.warn`，不掩盖用例结论 |
+| 4 | 本文件去重 | 上个提交 e965e54 把「三、质量与覆盖率现状」整块复制（109 行逐行重复，首份仅尾部少 `### 已知边界与取舍`）——删首份、保留含完整尾节的第二份 |
 
-> **2026-10-01 §BN 复测**（ROADMAP #10 代码生成批次收口后全量重跑；roadmap §四 门禁基线同步为此轮实跑值）：
-> `gofmt -l` 干净 / `go vet` **0 告警** / `golangci-lint` **0 issues** / `go build ./...` OK /
-> 后端 `go test ./... -count=1` **9/9 包** + `make test-cover` **9/9 包 100.0%（`count==0` 零块）** /
-> `govulncheck ./...` **0 可达漏洞**；前端 `pnpm lint` **0 告警** / `pnpm typecheck` + `typecheck:e2e`
-> 均 exit 0 / **76 文件 1158 例全绿**（§BN 新增 3 例，文件 75 → 76，新增 `src/api/generated.gate.test.ts`）/
-> `pnpm test:coverage` **四指标 100%（4327 / 2932 / 1131 / 3712）** / `pnpm build` OK
-> （**377.34 kB，gzip 114.83 kB**；CSS 32.40 kB——`src/api/operations.ts` 进入生产包）/
-> **`pnpm gen:api --check` exit 0**（§BN 新登记的生成物新鲜度门禁）。
-> **仓库级**：`make check` **exit 0**、`make bench` **exit 0**。
-> **渲染态与真实链路**（本批改了前端，按 AGENTS 必跑）：`pnpm e2e` **22 passed / 0 skipped**、
-> `make e2e-real` **3 passed**（`SERVER_PORT=8081`）、`S3CLIENT_E2E=1 go test ./internal/s3wrap/
-> -run 'TestE2E' -v` **4/4 PASS**——**首轮 4/4 全红是环境性的**（本机 `127.0.0.1:9000` 当时无
-> RustFS，`connection refused`），临时起 `rustfs/rustfs:1.0.0-rc.3` 后复跑 4/4 PASS，
-> 跑完 `docker rm -f` 并核验端口已关闭。
-> 第三方许可证清单重生成：**Go 43 模块 / Rust 428 crates / npm 1 包，UNKNOWN 0 项**（devDependency 不入清单）。
-> **未能实跑**：`pnpm audit`——同上，镜像不提供 audit 端点，沿用 CI 结果。
+> **门禁实跑（2026-10-09，全部本机实跑）**：
+>
+> | 门禁 | 结果 |
+> |---|---|
+> | `go vet ./... && go build ./... && gofmt -l .` | 0 告警 / OK / 干净（go1.26.9） |
+> | `go test ./... -count=1` | **10/10 包 ok** |
+> | `make test-cover`（`-race`） | **10/10 包 100.0% statements** + profile `count==0` 零块 |
+> | `golangci-lint run ./...` | **0 issues** |
+> | `govulncheck ./...` | **0 可达漏洞**（修复前 **10**） |
+> | `pnpm lint` / `pnpm typecheck` / `pnpm typecheck:e2e` | 0 告警 / exit 0 / exit 0 |
+> | `pnpm test` | **82 文件 / 1272 例**全绿 |
+> | `pnpm test:coverage` | **四指标 100%**（statements 4849 / branches 3227 / functions 1229 / lines 4195） |
+> | `pnpm build` | OK（`index.js` 416.90 kB，gzip 124.98 kB；CSS 33.66 kB，gzip 7.05 kB） |
+> | 共享脏 RustFS `--no-rustfs` 实跑 | 「建桶 → 列桶」**由红转绿**；全量 2 passed / 1 failed——第 3 条败于共享实例缺 `RUSTFS_CORS_ALLOWED_ORIGINS`（`scripts/e2e-real.sh` 注明必需的环境配置缺口，非代码问题） |
+> | 洁净实例 + **预埋残留桶**（legacy-a 空桶 / legacy-b 非空桶）全量 | **3 passed（10.4s）**；跑后仅剩预埋桶——用例桶（含非空直传桶）**0 泄漏**，③ 的清理修复实证 |
+> | `make e2e-real`（自管容器规范路径） | **3 passed（9.5s）** |
 
-| 门禁 | 结果 |
-|---|---|
-| `go vet ./...` | 干净 |
-| `go test -race -count=1 ./...` | 9/9 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`） |
-| `govulncheck ./...` | **0 可达漏洞**（go1.26.6；修复前 6 个） |
-| `golangci-lint run ./...` | **0 issues**（errcheck / staticcheck / govet / ineffassign / unused / gosec / nolintlint 零告警，`run.tests: true` 含测试文件） |
-| 后端覆盖率 | **每个包 + 汇总均 100.0% statements**（main / config / model / openapi / store / service / s3wrap / handler） |
-| 前端 `pnpm test` | **76 文件 / 1158** 测试全绿（**2026-10-01 §BN +3 例**——新增 `src/api/generated.gate.test.ts`（生成物新鲜度 / 结构自检 / `opPath` 行为），文件 75 → 76；**2026-10-01 §BM +23 例**——焦点陷阱 7 / live region 3 / 表格与标签 3 / 组件级 axe 6 / 选中态与可见标签等，新增文件 `src/a11y_axe.test.ts`；2026-09-17 新增 health poll / grid 窗口化 / reload 竞态 / i18n 分支用例；2026-09-19 补分段缺 ETag 用例与前端公开面死代码门禁，审查 §三 处置再补虚拟窗口重置 / 分片提交 / SSE 空闲超时 / 存储降级等用例；2026-09-22 §37 联调后再 +3；2026-09-24 §Z 删 2 例仅测试引用直测、非 API 导出门禁 +3 例；2026-09-24 §AA 审查处置 +67 例——在途守卫 / 防御分支 / 稳定行键 / 虚拟滚动 / `useAccountSelect` 等，含新文件 `useAccountSelect.test.ts`；2026-09-28 §AB 按 KNOWN_ISSUES #60 拆 4 文件为 9 文件——**文件数 67 → 72，测试数与测试名清单不变**；2026-09-28 §AF / §AI 修复新增 16 条红灯用例——**1110 → 1126，文件数仍 72**；2026-09-29 §AK 新增 `vite_env_guard.test.ts` 2 例 → **1128**；**同日 §AN 删除死代码 `isTopKeydown` 及其白盒用例并改写为行为断言 → 1126**；**同日 §AO 补死代码门禁的口径用例 → 1127**；**同日 §AP 收口 #67 / #68 新增 `a11y_gate.test.ts` 3 例 + `i18n` 2 例 → 1132、文件数 74**——中间的一降三升**不是丢测试**，说明见下方 §AN / §AO / §AP 复测段） |
-| 前端覆盖率 | **statements / branches / functions / lines 均 100%**（含 `src/i18n/index.ts`；**2026-10-01 §BN 复测 4327 / 2932 / 1131 / 3712**；2026-10-01 §BM 复测 4321 / 2932 / 1130 / 3706；2026-09-24 §AA 实测 4255 / 2908 / 1124 / 3653；2026-09-28 §AB 拆分后复测**四指标与例数不变**；同日 §AF / §AI 修复后复测 **4294 / 2934 / 1130 / 3677**；**2026-09-29 §AN 复测 4293 / 2932 / 1129 / 3676**） |
-| `vue-tsc --noEmit` / `vite build` | 干净 / OK（**377.34 kB，gzip 114.83 kB；CSS 32.40 kB，2026-10-01 §BN 实测**；2026-10-01 §BM 为 371.05 kB / gzip 113.84 kB / CSS 32.40 kB；2026-09-29 §AP 为 366.72 kB / gzip 112.72 kB / CSS 31.84 kB） |
-| `eslint` | 0 违规（`no-explicit-any: error`） |
-| `gofmt -l .` | 干净 |
-| `docker compose config` | base / prod / tls 均通过 |
-| E2E（Playwright，`/api` mock） | **22 passed / 0 skipped**（**2026-10-01 实跑**：含 `e2e/a11y.spec.ts` 5 条 axe 扫描 + `screenshots.spec.ts` 2 例；此前 2026-09-29 记为 17 passed） |
-| E2E（真实后端 + RustFS，`make e2e-real`） | **3 passed / 0 skipped**（**2026-10-01 复测**，见上方复测段） |
-| E2E（真实 RustFS，`S3CLIENT_E2E=1`） | **4/4 PASS**（**2026-10-01 复测**：`TestE2ERustFS` / `TestE2EBatch1` / `TestE2EBucketSettings` / `TestE2ETrash`；仍属按需运行、不阻塞 CI） |
-| E2E（真实后端 + 真实 RustFS + 真实产物，`make e2e-real`） | **3 passed / 0 skipped**（KNOWN_ISSUES #37；不 mock `/api`，含浏览器直传） |
-| Rust 依赖审计（`cargo audit`） | **0 漏洞**；7 条 unmaintained / unsound 告警已 triage（[threat-model.md](threat-model.md) §5。**2026-10-01 `--no-fetch` 复测**结论不变——本环境拉不到 advisory DB，用本地缓存） |
+> **环境注记**：本机经模块代理拉工具链的路径长期卡死（mod cache 内 1.26.8 半截 tmp 自 09-16 停滞），
+> 本次改由 `dl.google.com` 直下 tarball（SHA256 与官方一致）装 `/usr/local/go1.26.9`，门禁均以
+> `PATH=/usr/local/go1.26.9/bin:$PATH` 执行；CI 侧 `setup-go` 读 `go-version-file`、镜像按 tag 拉取，不受影响。
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目、[`ROADMAP.md`](ROADMAP.md) §四
+> govulncheck 行 + E1 行、[`threat-model.md`](threat-model.md) CI 门禁行；本节 + 头部摘要 + 目录行三处同步。
 
 ---
 

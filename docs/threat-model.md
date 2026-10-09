@@ -135,7 +135,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 ## 5. 依赖与供应链
 
 - **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ `govulncheck@v1.8.0`（Go 可达漏洞，
-  go1.26.6 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+
+  go1.26.9 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+
   **OpenSSF Scorecard**（每周六 + 手动，仓库健康度评分发布到 OpenSSF API 与 code scanning，见 §5.5）+
   **Dependency Review**（每个 PR 对依赖 diff 做漏洞 / 许可证审查，见 §5.5）+
   actions 全部 pin 完整 commit SHA（门禁 `TestWorkflowActionsAreShaPinned` 扫描
