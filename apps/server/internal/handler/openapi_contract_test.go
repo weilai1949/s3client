@@ -289,6 +289,35 @@ func TestOpenAPI_ContractOperationsAreComplete(t *testing.T) {
 	}
 }
 
+// TestOpenAPI_ContractEveryOperationHasDescription 验证每个 operation 都有非空 `description`
+// （2026-10-10 交接快照 §5 未做第 8 项：84 个 operation 此前全缺 description，Swagger UI 与
+// 代码生成器只看得到一句 summary）。
+//
+// 允许两种来源：注册时显式声明 `Op.Description`，或在渲染时由**已声明的契约事实**合成
+// （`internal/openapi` 的 `describeOp`：摘要 + 所属分组说明 + 声明的 2xx 成功码）——合成内容
+// 全部可机械推导，因此不会引入需要人工维护、注定漂移的散文。
+func TestOpenAPI_ContractEveryOperationHasDescription(t *testing.T) {
+	t.Parallel()
+	doc := openAPIDoc(t)
+	paths := openAPIPaths(t, doc)
+
+	total := countOperations(paths)
+	if total < 60 {
+		t.Fatalf("扫描面塌缩：只解析到 %d 个 operation（阈值 60）", total)
+	}
+	missing := 0
+	for _, p := range sortedPaths(paths) {
+		for _, m := range sortedMethods(paths[p]) {
+			desc, _ := paths[p][m]["description"].(string)
+			if strings.TrimSpace(desc) == "" {
+				missing++
+				t.Errorf("%s %s: description 为空——operation 元数据必须对 Swagger UI / 代码生成器可读", strings.ToUpper(m), p)
+			}
+		}
+	}
+	t.Logf("operation description 覆盖 %d/%d", total-missing, total)
+}
+
 // ---- 3. 路径参数 ----
 
 var pathTemplateParamRe = regexp.MustCompile(`\{([^{}]+)\}`)

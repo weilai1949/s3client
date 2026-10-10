@@ -108,17 +108,8 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_s3_call_duration_seconds` | histogram | 上游调用耗时；输出 `_bucket{le=...}` / `_sum` / `_count` | `histogram_quantile(0.95, ...)` > 2s 持续 10 分钟告警（建议） |
 | `s3c_s3_stream_bytes_total` | counter | 经本服务从 S3 流式读出的字节数 | 与业务量比对；中断时用于估算已读量 |
 
-直方图桶上界（逐字）。上游调用 `s3c_s3_call_duration_seconds`：`"0.01"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`；
-HTTP 请求 `s3c_http_request_duration_seconds`：`"0.005"`、`"0.01"`、`"0.025"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`。
-两者的 `_bucket{le="+Inf"}` 都恒等于 `_count`，可用于自检指标完整性
-（HTTP 侧还恒等于 `s3c_http_requests_total`——同一次请求在同一处记录，不可能漂移）。
-
-**`s3c_s3_call_errors_total` 的 `code` 标签取值是有限白名单**（防止不可信上游用任意 `<Code>` 撑爆标签基数）：
-`AccessDenied`、`BucketNotEmpty`、`EntityTooLarge`、`InvalidAccessKeyId`、`InvalidArgument`、`InvalidPartOrder`、
-`InvalidRange`、`InvalidRequest`、`InvalidStorageClass`、`MalformedPolicy`、`MalformedXML`、`NoSuchBucket`、
-`NoSuchKey`、`NoSuchUpload`、`NoSuchVersion`、`NotFound`、`RequestTimeout`、`ServiceUnavailable`、
-`SignatureDoesNotMatch`、`SlowDown`；白名单之外的 API 错误码**一律收敛为 `other`**；非 API 错误归
-`transport`（连接 / DNS 等）、`timeout`（上下文超时）、`canceled`（上下文取消）。
+> **逐字枚举（直方图桶上界、`code` 标签白名单）已外移到 [§12 附录 A](#12-附录-a指标标签白名单与直方图桶逐字)**
+> ——主清单只留「是什么 / 怎么用」，改指标时两处同改（2026-10-10 交接快照 §5 未做第 11 项）。
 
 > **指标基线特性（排查前必读）**：除 `s3c_last_shutdown_duration_seconds`（唯一落盘的指标，
 > 见 `data/shutdown.json`）外，全部指标是**进程级内存计数**，进程重启即清零；不落盘、无历史。
@@ -882,3 +873,25 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | nginx 反向代理运维（reload / 优雅停止） | [`../deploy/nginx/README.md`](../deploy/nginx/README.md) |
 | 本地开发进程管理与健康检查脚本 | [`../Makefile`](../Makefile) · [`../scripts/graceful-restart.sh`](../scripts/graceful-restart.sh) |
 | 发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) |
+
+## 12. 附录 A：指标标签白名单与直方图桶（逐字）
+
+> 本节是 §3.2 的**实现细节外移**（2026-10-10 交接快照 §5 未做第 11 项）：主清单保留「指标是什么 / 怎么用」
+> 这类高频读取的信息，两段逐字枚举（标签白名单、桶上界）集中在此，避免 §3.2 被低读取频率的清单撑长。
+> **改指标时两处同改**：白名单 / 桶边界一旦与 `internal/handler/metrics.go` 不一致，这里是唯一的人工校对点。
+
+### A.1 `s3c_s3_call_errors_total` 的 `code` 标签白名单
+
+**`s3c_s3_call_errors_total` 的 `code` 标签取值是有限白名单**（防止不可信上游用任意 `<Code>` 撑爆标签基数）：
+`AccessDenied`、`BucketNotEmpty`、`EntityTooLarge`、`InvalidAccessKeyId`、`InvalidArgument`、`InvalidPartOrder`、
+`InvalidRange`、`InvalidRequest`、`InvalidStorageClass`、`MalformedPolicy`、`MalformedXML`、`NoSuchBucket`、
+`NoSuchKey`、`NoSuchUpload`、`NoSuchVersion`、`NotFound`、`RequestTimeout`、`ServiceUnavailable`、
+`SignatureDoesNotMatch`、`SlowDown`；白名单之外的 API 错误码**一律收敛为 `other`**；非 API 错误归
+`transport`（连接 / DNS 等）、`timeout`（上下文超时）、`canceled`（上下文取消）。
+
+### A.2 直方图桶上界（逐字）
+
+上游调用 `s3c_s3_call_duration_seconds`：`"0.01"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`；
+HTTP 请求 `s3c_http_request_duration_seconds`：`"0.005"`、`"0.01"`、`"0.025"`、`"0.05"`、`"0.1"`、`"0.25"`、`"0.5"`、`"1"`、`"2.5"`、`"5"`、`"10"`、`"30"`、`"+Inf"`。
+两者的 `_bucket{le="+Inf"}` 都恒等于 `_count`，可用于自检指标完整性
+（HTTP 侧还恒等于 `s3c_http_requests_total`——同一次请求在同一处记录，不可能漂移）。

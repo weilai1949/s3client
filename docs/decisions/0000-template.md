@@ -18,6 +18,12 @@
 
 Proposed | Accepted | Deprecated | Superseded by ADR-NNN
 
+> **填写形态**（2026-10-10 统一，门禁 [`../../apps/server/adr_format_gate_test.go`](../../apps/server/adr_format_gate_test.go)）：
+> 正文只写**裸枚举值**——`Proposed` / `Accepted` / `Deprecated`；被取代的旧篇写 `Superseded by ADR-MMM`，
+> 取代旧篇的新篇写 `Accepted（Supersedes ADR-NNN）`（**仅此两种括注形态**）。**不要**在正文追加
+> 「（已采纳）」这类**语义括注**：括注只属于 [`index.md`](index.md) 的「状态」列（`Accepted（已采纳）` /
+> `Accepted（已采纳；默认策略未变）`）——正文供工具解析、索引给人读，两处形态不同是有意的。
+
 ## Date
 
 YYYY-MM-DD（若为回溯记录，注明「回溯记录；决策自 <时点> 沿用」）
@@ -35,6 +41,8 @@ YYYY-MM-DD（若为回溯记录，注明「回溯记录；决策自 <时点> 沿
 ## Alternatives Considered
 
 逐个列出**认真考虑过**的替代方案（含「什么都不做」），每个都要写 **Pros / Cons**。
+方案用 `### <方案名>` 起头（**不要**用编号列表：编号会随增删漂移，标题才是稳定锚点；
+体例由 `adr_format_gate_test.go` 钉住）。
 不要写明显荒谬的稻草人——替代方案的价值在于解释「为什么没选它」。
 
 ## Consequences

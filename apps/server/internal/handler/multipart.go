@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
@@ -109,7 +110,11 @@ func (h *Handler) multipartComplete(w http.ResponseWriter, r *http.Request) {
 	specs := make([]s3wrap.UploadPartSpec, 0, len(req.Parts))
 	seen := map[int32]bool{}
 	for _, p := range req.Parts {
-		if p.PartNumber < 1 || p.PartNumber > 10000 || p.ETag == "" {
+		// etag 引号口径统一（2026-10-10）：客户端可能提交 S3 原始形态（浏览器 PUT 分段后读到的
+		// `ETag` 响应头**带引号**）或本服务 `GET /multipart/parts` 返回的**去引号**形态；
+		// 转发前统一去引号，与 s3wrap 的 UploadPart / ListParts 口径一致（internal/s3wrap/multipart.go）。
+		etag := strings.Trim(p.ETag, `"`)
+		if p.PartNumber < 1 || p.PartNumber > 10000 || etag == "" {
 			h.writeErr(w, http.StatusBadRequest, "each part needs partNumber in 1..10000 and etag")
 			return
 		}
@@ -126,7 +131,7 @@ func (h *Handler) multipartComplete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		seen[p.PartNumber] = true
-		specs = append(specs, s3wrap.UploadPartSpec{PartNumber: p.PartNumber, ETag: p.ETag})
+		specs = append(specs, s3wrap.UploadPartSpec{PartNumber: p.PartNumber, ETag: etag})
 	}
 	if err := client.CompleteMultipartUpload(r.Context(), bucket, req.Key, req.UploadID, specs); err != nil {
 		h.writeInternalErr(w, err, "multipart operation failed")

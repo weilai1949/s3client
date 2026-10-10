@@ -40,6 +40,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -360,5 +361,118 @@ func TestAiPolicyDisclosureTemplateMatchesPRTemplate(t *testing.T) {
 		if !strings.Contains(policy, label) {
 			t.Errorf("AI_POLICY.md §5 的披露模板缺少字段 %q——与 PR 模板字段集不一致（两处必须同改）", label)
 		}
+	}
+}
+
+// ---- 度量台账的流程闭环（2026-10-10 交接快照 §5 未做第 4 项）----
+//
+// 背景：`AGENT_EVALS.md` §四 的度量表自 2026-09-30 建立、2026-10-10 仍为「0 条已回填」，文档自己也
+// 承认「回填动作当前**无门禁强制**」。本组三条断言把「约定」变成红灯，覆盖三个可机械化的面：
+//   - 表行数 ⇄ 状态行「N 条已回填」（回填了一行却忘改状态行 → 漂移立即暴露）；
+//   - PR 模板的「AI 度量」勾选（披露 → 回填的载体）必须存在且点名 AGENT_EVALS §四；
+//   - `scripts/release-version.sh` 的「发版前人工复核」清单必须含度量表对账（发版时对账不靠记性）。
+// 做不到机械化的部分（评分是否公允、返工次数是否属实）仍是人工评审，不在此假装覆盖。
+
+// agentEvalsMetricStatusRe 解析 §四 的「⚠️ **当前状态（YYYY-MM-DD）：N 条已回填**」行。
+var agentEvalsMetricStatusRe = regexp.MustCompile(`\*\*当前状态（(\d{4}-\d{2}-\d{2})）：(\d+) 条已回填\*\*`)
+
+// minAgentEvalsMetricCols 是度量表的最小列数（PR# / 工具 / 任务类型 / 门禁结果 / 返工次数 / 评分）。
+const minAgentEvalsMetricCols = 6
+
+// TestAgentEvalsMetricLedgerIsSelfConsistent 断言度量表的数据行数与状态行声明的条数一致。
+func TestAgentEvalsMetricLedgerIsSelfConsistent(t *testing.T) {
+	text := readRepoFile(t, agentEvalsDocPath)
+
+	start := strings.Index(text, "## 四、")
+	end := strings.Index(text, "## 五、")
+	if start < 0 || end <= start {
+		t.Fatalf("%s 未解析出 §四 / §五 边界（章节标题变更需同步本门禁）", agentEvalsDocPath)
+	}
+	section := text[start:end]
+
+	status := agentEvalsMetricStatusRe.FindStringSubmatch(section)
+	if status == nil {
+		t.Fatalf("%s §四 未找到「**当前状态（YYYY-MM-DD）：N 条已回填**」状态行——"+
+			"没有显式状态就无法机械对账（口径变更需同步本门禁）", agentEvalsDocPath)
+	}
+	want, err := strconv.Atoi(status[2])
+	if err != nil {
+		t.Fatalf("解析状态行条数 %q: %v", status[2], err)
+	}
+
+	rows, width := 0, 0
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := strings.Split(strings.Trim(line, "|"), "|")
+		first := strings.TrimSpace(cells[0])
+		if first == "" || first == "PR#" || strings.HasPrefix(first, "---") {
+			continue // 表头 / 分隔行
+		}
+		if first == "—" || first == "-" {
+			continue // 占位行（尚未回填）
+		}
+		rows++
+		width = len(cells)
+	}
+	if rows != want {
+		t.Errorf("%s §四 度量表有 %d 条真实数据行，但状态行声明「%d 条已回填」——"+
+			"回填一行必须同步改状态行（两处漂移 = 度量口径失真）", agentEvalsDocPath, rows, want)
+	}
+	if rows > 0 && width < minAgentEvalsMetricCols {
+		t.Errorf("%s §四 度量表列数 = %d，少于 %d 列（PR# / 工具 / 任务类型 / 门禁结果 / 返工次数 / 评分）——"+
+			"回填时不得丢列", agentEvalsDocPath, width, minAgentEvalsMetricCols)
+	}
+	t.Logf("§四 度量台账：%d 条已回填（状态行声明 %d，基准日 %s）", rows, want, status[1])
+}
+
+// TestPRTemplateRequiresMetricBackfill 断言 PR 模板的「AI 度量」勾选项存在，且点名
+// AGENT_EVALS §四 的度量表——它是「披露 → 回填」的唯一载体，被删则回填无入口。
+func TestPRTemplateRequiresMetricBackfill(t *testing.T) {
+	text := readRepoFile(t, filepath.Join(".github", "PULL_REQUEST_TEMPLATE.md"))
+	var line string
+	for _, l := range strings.Split(text, "\n") {
+		if strings.Contains(l, "AGENT_EVALS.md") && strings.Contains(l, "回填") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("PR 模板缺少「AI 度量」勾选项（需同时含 `AGENT_EVALS.md` 与「回填」）——"+
+			"§四 度量表的回填入口消失，度量永远停在基线（见 %s）", agentEvalsDocPath)
+	}
+	if !strings.Contains(line, "[ ]") {
+		t.Errorf("PR 模板的 AI 度量行不是可勾选清单项（缺 `[ ]`）：%s", strings.TrimSpace(line))
+	}
+	if !strings.Contains(line, "§四") {
+		t.Errorf("PR 模板的 AI 度量行未点名 `§四`（度量表所在小节）：%s", strings.TrimSpace(line))
+	}
+}
+
+// TestReleaseScriptRemindsMetricLedgerReview 断言发版脚本印出「发版前人工复核」清单且含度量表对账——
+// 发版时对账是 §四 的第二道机制（第一道是 PR 收口回填），只在文档里写「发版前复核」等于靠记性。
+func TestReleaseScriptRemindsMetricLedgerReview(t *testing.T) {
+	text := readRepoFile(t, filepath.Join("scripts", "release-version.sh"))
+	for _, kw := range []string{"发版前人工复核", "AGENT_EVALS.md §四 度量表", "对账"} {
+		if !strings.Contains(text, kw) {
+			t.Errorf("scripts/release-version.sh 的复核提醒缺少 %q——发版时对账的机械锚点消失", kw)
+		}
+	}
+	if !strings.Contains(text, "REMINDER") {
+		t.Error("scripts/release-version.sh 未用 heredoc 印出复核清单（提示只在注释里 = 跑发版的人看不到）")
+	}
+	// heredoc 起始行必须是**未被注释**的（`# cat <<'REMINDER'` 注解掉 = 跑发版时什么都不印）。
+	printed := false
+	for _, l := range strings.Split(text, "\n") {
+		if strings.TrimSpace(l) == "cat <<'REMINDER'" {
+			printed = true
+			break
+		}
+	}
+	if !printed {
+		t.Error("scripts/release-version.sh 的复核清单 heredoc 未真正执行（`cat <<'REMINDER'` 被注释或改写）——" +
+			"注释掉的提醒等于没有提醒")
 	}
 }

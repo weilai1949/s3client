@@ -302,6 +302,7 @@
   "paths": {
     "/api/accounts": {
       "get": {
+        "description": "列出全部账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "listAccounts",
         "responses": {
           "200": {
@@ -359,6 +360,7 @@
         ]
       },
       "post": {
+        "description": "新建账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：201。",
         "operationId": "createAccount",
         "requestBody": {
           "content": {
@@ -463,6 +465,7 @@
     },
     "/api/accounts/preview-buckets": {
       "post": {
+        "description": "用表单凭证预览桶（不落库）。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "previewBuckets",
         "requestBody": {
           "content": {
@@ -569,6 +572,7 @@
     },
     "/api/accounts/{id}": {
       "delete": {
+        "description": "删除账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "deleteAccount",
         "parameters": [
           {
@@ -613,6 +617,7 @@
         ]
       },
       "get": {
+        "description": "获取账号详情。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "getAccount",
         "parameters": [
           {
@@ -663,6 +668,7 @@
         ]
       },
       "put": {
+        "description": "更新账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "updateAccount",
         "parameters": [
           {
@@ -770,6 +776,7 @@
     },
     "/api/accounts/{id}/bucket": {
       "delete": {
+        "description": "删除空桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。",
         "operationId": "deleteBucket",
         "parameters": [
           {
@@ -830,6 +837,7 @@
         ]
       },
       "post": {
+        "description": "创建桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。",
         "operationId": "createBucket",
         "parameters": [
           {
@@ -922,6 +930,7 @@
     },
     "/api/accounts/{id}/bucket-info": {
       "get": {
+        "description": "桶属性（区域 / 创建时间 / 版本控制）。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。",
         "operationId": "getBucketInfo",
         "parameters": [
           {
@@ -981,6 +990,7 @@
     },
     "/api/accounts/{id}/bucket-versioning": {
       "put": {
+        "description": "开关桶版本控制（Enabled / Suspended）。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。",
         "operationId": "putBucketVersioning",
         "parameters": [
           {
@@ -1059,6 +1069,7 @@
     },
     "/api/accounts/{id}/bucket/cors": {
       "delete": {
+        "description": "删除 CORS。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "deleteBucketCors",
         "parameters": [
           {
@@ -1103,6 +1114,7 @@
         ]
       },
       "get": {
+        "description": "桶 CORS 规则列表。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getBucketCors",
         "parameters": [
           {
@@ -1208,6 +1220,7 @@
         ]
       },
       "put": {
+        "description": "配置 CORS（rules 空数组=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putBucketCors",
         "parameters": [
           {
@@ -1339,6 +1352,7 @@
     },
     "/api/accounts/{id}/bucket/encryption": {
       "delete": {
+        "description": "删除 SSE 配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "deleteBucketEncryption",
         "parameters": [
           {
@@ -1383,6 +1397,7 @@
         ]
       },
       "get": {
+        "description": "桶服务端加密（SSE）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getBucketEncryption",
         "parameters": [
           {
@@ -1443,6 +1458,7 @@
         ]
       },
       "put": {
+        "description": "配置 SSE。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putBucketEncryption",
         "parameters": [
           {
@@ -1540,6 +1556,7 @@
     },
     "/api/accounts/{id}/bucket/object-lock": {
       "get": {
+        "description": "桶 Object Lock 配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getObjectLock",
         "parameters": [
           {
@@ -1601,6 +1618,7 @@
         ]
       },
       "put": {
+        "description": "设置桶默认保留策略（桶须创建时启用 Object Lock）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putObjectLock",
         "parameters": [
           {
@@ -1745,6 +1763,7 @@
     },
     "/api/accounts/{id}/bucket/policy": {
       "delete": {
+        "description": "删除桶策略。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "deleteBucketPolicy",
         "parameters": [
           {
@@ -1789,6 +1808,7 @@
         ]
       },
       "get": {
+        "description": "桶策略（JSON 字符串）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getBucketPolicy",
         "parameters": [
           {
@@ -1841,6 +1861,7 @@
         ]
       },
       "put": {
+        "description": "配置桶策略（policy=空=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putBucketPolicy",
         "parameters": [
           {
@@ -1923,6 +1944,7 @@
     },
     "/api/accounts/{id}/bucket/tags": {
       "delete": {
+        "description": "删除桶标签。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "deleteBucketTags",
         "parameters": [
           {
@@ -1967,6 +1989,7 @@
         ]
       },
       "get": {
+        "description": "桶标签。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getBucketTags",
         "parameters": [
           {
@@ -2035,6 +2058,7 @@
         ]
       },
       "put": {
+        "description": "配置桶标签（空数组=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putBucketTags",
         "parameters": [
           {
@@ -2129,6 +2153,7 @@
     },
     "/api/accounts/{id}/bucket/website": {
       "delete": {
+        "description": "删除静态网站托管。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "deleteBucketWebsite",
         "parameters": [
           {
@@ -2173,6 +2198,7 @@
         ]
       },
       "get": {
+        "description": "桶静态网站托管配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "getBucketWebsite",
         "parameters": [
           {
@@ -2233,6 +2259,7 @@
         ]
       },
       "put": {
+        "description": "配置静态网站托管。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。",
         "operationId": "putBucketWebsite",
         "parameters": [
           {
@@ -2318,6 +2345,7 @@
     },
     "/api/accounts/{id}/buckets": {
       "get": {
+        "description": "列出账号下全部桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。",
         "operationId": "listBuckets",
         "parameters": [
           {
@@ -2372,6 +2400,7 @@
     },
     "/api/accounts/{id}/copy-object": {
       "post": {
+        "description": "单文件复制（不删源）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "copyObject",
         "parameters": [
           {
@@ -2508,6 +2537,7 @@
     },
     "/api/accounts/{id}/copy-objects": {
       "post": {
+        "description": "批量复制（同步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "copyObjects",
         "parameters": [
           {
@@ -2618,6 +2648,7 @@
     },
     "/api/accounts/{id}/copy-objects/async": {
       "post": {
+        "description": "批量复制（异步，SSE 进度）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。",
         "operationId": "copyObjectsAsync",
         "parameters": [
           {
@@ -2722,6 +2753,7 @@
     },
     "/api/accounts/{id}/copy-prefix": {
       "post": {
+        "description": "递归复制前缀（同步流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "copyPrefix",
         "parameters": [
           {
@@ -2824,6 +2856,7 @@
     },
     "/api/accounts/{id}/copy-prefix/async": {
       "post": {
+        "description": "递归复制前缀（异步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。",
         "operationId": "copyPrefixAsync",
         "parameters": [
           {
@@ -2923,6 +2956,7 @@
     },
     "/api/accounts/{id}/delete": {
       "post": {
+        "description": "批量删除（≤1000 keys）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "deleteObjects",
         "parameters": [
           {
@@ -3017,6 +3051,7 @@
     },
     "/api/accounts/{id}/delete-marker/restore": {
       "post": {
+        "description": "撤销删除标记（一键还原已删除对象）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。",
         "operationId": "restoreDeleteMarker",
         "parameters": [
           {
@@ -3097,6 +3132,7 @@
     },
     "/api/accounts/{id}/delete-prefix": {
       "post": {
+        "description": "递归删除前缀（同步流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "deletePrefix",
         "parameters": [
           {
@@ -3179,6 +3215,7 @@
     },
     "/api/accounts/{id}/delete-prefix/async": {
       "post": {
+        "description": "递归删除前缀（异步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。",
         "operationId": "deletePrefixAsync",
         "parameters": [
           {
@@ -3268,6 +3305,7 @@
     },
     "/api/accounts/{id}/download-zip": {
       "post": {
+        "description": "流式 ZIP 打包下载（≤1000 个）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "downloadZip",
         "parameters": [
           {
@@ -3345,6 +3383,7 @@
     },
     "/api/accounts/{id}/head": {
       "get": {
+        "description": "对象元数据。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "headObject",
         "parameters": [
           {
@@ -3462,6 +3501,7 @@
     },
     "/api/accounts/{id}/lifecycle": {
       "get": {
+        "description": "生命周期规则（桶级）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "getLifecycle",
         "parameters": [
           {
@@ -3531,6 +3571,7 @@
         ]
       },
       "put": {
+        "description": "写入生命周期规则（空规则=删除）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "putLifecycle",
         "parameters": [
           {
@@ -3624,6 +3665,7 @@
     },
     "/api/accounts/{id}/mkdir": {
       "post": {
+        "description": "新建空文件夹（PUT 空对象）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "mkdirObject",
         "parameters": [
           {
@@ -3720,6 +3762,7 @@
     },
     "/api/accounts/{id}/multipart/abort": {
       "post": {
+        "description": "中止分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。",
         "operationId": "multipartAbort",
         "parameters": [
           {
@@ -3796,6 +3839,7 @@
     },
     "/api/accounts/{id}/multipart/complete": {
       "post": {
+        "description": "完成分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。",
         "operationId": "multipartComplete",
         "parameters": [
           {
@@ -3812,7 +3856,7 @@
                 "parts": [
                   {
                     "partNumber": 1,
-                    "etag": "\"e1\""
+                    "etag": "e1"
                   }
                 ]
               },
@@ -3897,6 +3941,7 @@
     },
     "/api/accounts/{id}/multipart/init": {
       "post": {
+        "description": "初始化分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。",
         "operationId": "multipartInit",
         "parameters": [
           {
@@ -3980,6 +4025,7 @@
     },
     "/api/accounts/{id}/multipart/part": {
       "post": {
+        "description": "预签名单段 PUT URL。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。",
         "operationId": "multipartPart",
         "parameters": [
           {
@@ -4084,6 +4130,7 @@
     },
     "/api/accounts/{id}/multipart/parts": {
       "get": {
+        "description": "列已上传分段（断点续传对齐）。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。",
         "operationId": "multipartParts",
         "parameters": [
           {
@@ -4199,6 +4246,7 @@
     },
     "/api/accounts/{id}/object-acl": {
       "get": {
+        "description": "对象 ACL。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "getObjectAcl",
         "parameters": [
           {
@@ -4288,6 +4336,7 @@
         ]
       },
       "put": {
+        "description": "设置对象 ACL。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "putObjectAcl",
         "parameters": [
           {
@@ -4371,6 +4420,7 @@
     },
     "/api/accounts/{id}/object-legal-hold": {
       "get": {
+        "description": "对象法定保留状态。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "getObjectLegalHold",
         "parameters": [
           {
@@ -4444,6 +4494,7 @@
         ]
       },
       "put": {
+        "description": "设置对象法定保留（ON/OFF）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "putObjectLegalHold",
         "parameters": [
           {
@@ -4560,6 +4611,7 @@
     },
     "/api/accounts/{id}/object-retention": {
       "get": {
+        "description": "对象保留期（Object Lock）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "getObjectRetention",
         "parameters": [
           {
@@ -4643,6 +4695,7 @@
         ]
       },
       "put": {
+        "description": "设置对象保留期（Object Lock）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "putObjectRetention",
         "parameters": [
           {
@@ -4783,6 +4836,7 @@
     },
     "/api/accounts/{id}/object-tags": {
       "get": {
+        "description": "对象标签。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "getObjectTags",
         "parameters": [
           {
@@ -4856,6 +4910,7 @@
         ]
       },
       "put": {
+        "description": "设置对象标签（空数组=清空）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。",
         "operationId": "putObjectTags",
         "parameters": [
           {
@@ -4972,6 +5027,7 @@
     },
     "/api/accounts/{id}/objects": {
       "get": {
+        "description": "列对象（含公共前缀 / 分页）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "listObjects",
         "parameters": [
           {
@@ -5052,6 +5108,7 @@
     },
     "/api/accounts/{id}/presign": {
       "post": {
+        "description": "生成预签名 URL。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "presign",
         "parameters": [
           {
@@ -5184,6 +5241,7 @@
     },
     "/api/accounts/{id}/proxy": {
       "get": {
+        "description": "对象代理下载 / 预览（流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "proxyObject",
         "parameters": [
           {
@@ -5281,6 +5339,7 @@
     },
     "/api/accounts/{id}/rename": {
       "post": {
+        "description": "重命名 / 移动（copy+delete，可跨桶）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "renameObject",
         "parameters": [
           {
@@ -5361,6 +5420,7 @@
     },
     "/api/accounts/{id}/set-headers": {
       "post": {
+        "description": "编辑 HTTP 头 / 元数据（CopyObject+REPLACE）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "setHeaders",
         "parameters": [
           {
@@ -5452,6 +5512,7 @@
     },
     "/api/accounts/{id}/storage-class": {
       "post": {
+        "description": "切换对象存储类型。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "changeStorageClass",
         "parameters": [
           {
@@ -5549,6 +5610,7 @@
     },
     "/api/accounts/{id}/storage-report": {
       "get": {
+        "description": "存储分析与成本洞察（按存储类 / 前缀聚合）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "storageReport",
         "parameters": [
           {
@@ -5797,6 +5859,7 @@
     },
     "/api/accounts/{id}/test": {
       "post": {
+        "description": "连通性检测（200+ok 表示通；ok=false 含 error）。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。",
         "operationId": "testAccount",
         "parameters": [
           {
@@ -5850,6 +5913,7 @@
     },
     "/api/accounts/{id}/trash": {
       "get": {
+        "description": "列出桶内全部删除标记（分页游标）。分组：回收站：列出删除标记与彻底清除（docs/api.md「回收站」）。成功状态码：200。",
         "operationId": "listTrash",
         "parameters": [
           {
@@ -5961,6 +6025,7 @@
     },
     "/api/accounts/{id}/trash/purge": {
       "post": {
+        "description": "彻底清除某 key 的全部版本+标记。分组：回收站：列出删除标记与彻底清除（docs/api.md「回收站」）。成功状态码：200。",
         "operationId": "purgeTrashObject",
         "parameters": [
           {
@@ -6046,6 +6111,7 @@
     },
     "/api/accounts/{id}/verify-checksum": {
       "post": {
+        "description": "端到端校验和验证（本地重算与存储端比对）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。",
         "operationId": "verifyChecksum",
         "parameters": [
           {
@@ -6161,6 +6227,7 @@
     },
     "/api/accounts/{id}/version": {
       "delete": {
+        "description": "删除指定版本。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。",
         "operationId": "deleteObjectVersion",
         "parameters": [
           {
@@ -6239,6 +6306,7 @@
     },
     "/api/accounts/{id}/version/restore": {
       "post": {
+        "description": "把历史版本恢复为当前（复制回 key）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。",
         "operationId": "restoreObjectVersion",
         "parameters": [
           {
@@ -6319,6 +6387,7 @@
     },
     "/api/accounts/{id}/versions": {
       "get": {
+        "description": "对象版本列表（含删除标记）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。",
         "operationId": "listObjectVersions",
         "parameters": [
           {
@@ -6496,6 +6565,7 @@
     },
     "/api/health": {
       "get": {
+        "description": "健康检查（含 store 状态与版本）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
         "operationId": "health",
         "responses": {
           "200": {
@@ -6614,6 +6684,7 @@
     },
     "/api/metrics": {
       "get": {
+        "description": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
         "operationId": "metrics",
         "responses": {
           "200": {
@@ -6643,6 +6714,7 @@
     },
     "/api/migrate": {
       "post": {
+        "description": "同步迁移（流式）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrate",
         "requestBody": {
           "content": {
@@ -6741,6 +6813,7 @@
     },
     "/api/migrate/async": {
       "post": {
+        "description": "异步迁移（SSE 进度）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：202。",
         "operationId": "migrateAsync",
         "requestBody": {
           "content": {
@@ -6839,6 +6912,7 @@
     },
     "/api/migrate/jobs": {
       "get": {
+        "description": "异步任务清单（含重启后中断的任务）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrateJobs",
         "responses": {
           "200": {
@@ -6981,6 +7055,7 @@
     },
     "/api/migrate/jobs/{id}": {
       "get": {
+        "description": "查询迁移任务状态。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrateJobStatus",
         "parameters": [
           {
@@ -7104,6 +7179,7 @@
     },
     "/api/migrate/jobs/{id}/cancel": {
       "post": {
+        "description": "取消迁移任务。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrateJobCancel",
         "parameters": [
           {
@@ -7171,6 +7247,7 @@
     },
     "/api/migrate/jobs/{id}/events": {
       "get": {
+        "description": "迁移任务 SSE 进度事件。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrateJobEvents",
         "parameters": [
           {
@@ -7230,6 +7307,7 @@
     },
     "/api/migrate/sync": {
       "post": {
+        "description": "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。",
         "operationId": "migrateSync",
         "requestBody": {
           "content": {
@@ -7364,6 +7442,7 @@
     },
     "/api/openapi.json": {
       "get": {
+        "description": "OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
         "operationId": "openapi",
         "responses": {
           "200": {
@@ -7401,6 +7480,7 @@
     },
     "/api/schedules": {
       "get": {
+        "description": "计划任务清单（最新在前）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。",
         "operationId": "listSchedules",
         "responses": {
           "200": {
@@ -7525,6 +7605,7 @@
         ]
       },
       "post": {
+        "description": "创建计划（cron 定时增量同步）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：201。",
         "operationId": "createSchedule",
         "requestBody": {
           "content": {
@@ -7726,6 +7807,7 @@
     },
     "/api/schedules/{id}": {
       "delete": {
+        "description": "删除计划（冻结的计划一并移除）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。",
         "operationId": "deleteSchedule",
         "parameters": [
           {
@@ -7783,6 +7865,7 @@
         ]
       },
       "put": {
+        "description": "整体替换计划（保留 id/createdAt/运行态）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。",
         "operationId": "updateSchedule",
         "parameters": [
           {
@@ -7995,6 +8078,7 @@
     },
     "/api/schedules/{id}/run": {
       "post": {
+        "description": "立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：202。",
         "operationId": "runScheduleNow",
         "parameters": [
           {

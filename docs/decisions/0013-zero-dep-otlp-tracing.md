@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted（已采纳）
+Accepted
 
 ## Date
 
@@ -19,7 +19,7 @@ trace（**该条已于 2026-10-08 落地后按 §六 第 1 条移出转空号，
   与 W3C Trace Context 互操作（上游网关 / 下游采集端按标准头传递采样决定）。
 - 本仓库的可执行体是**单个 Go 二进制**（`apps/server`），依赖清单受
   [`../DEVELOPMENT.md`](../DEVELOPMENT.md) §4「依赖增删改后重新生成 THIRD_PARTY_LICENSES」与
-  供应链门禁约束；前端已有“零运行时依赖”先例（ADR-004 / ADR-008）。
+  供应链门禁约束；前端已有「零运行时依赖」先例（ADR-004 / ADR-008）。
 - 本期需要的 trace 面很窄：每请求一个 server span + 三个业务子 span（`presign` / `proxy` /
   `migrate`），导出到标准 OTLP 采集端。不需要 metrics / logs 信号，不需要 tail sampling、
   不需要 OTLP/gRPC、不需要自定义 resource 探测。
@@ -38,7 +38,7 @@ trace（**该条已于 2026-10-08 落地后按 §六 第 1 条移出转空号，
     `(*Tracer).Enabled()`；`(*Tracer).Middleware(http.Handler) http.Handler`；
     包级 `Start(ctx, name) (context.Context, func())`；`(*Tracer).Close(context.Context) error`。
   - W3C `traceparent` 解析 / 生成（`00-<32hex>-<16hex>-<2hex>`；版本非 `00`、字段数 / 长度不符、
-    trace id / span id 全 0 一律按“不可继承、新建 trace”处理）。
+    trace id / span id 全 0 一律按「不可继承、新建 trace」处理）。
   - 导出 `POST {Endpoint}/v1/traces`，`Content-Type: application/json`，结构
     `resourceSpans[].scopeSpans[].spans[]`（含 `traceId` / `spanId` / `parentSpanId` /
     `name` / `kind` / `startTimeUnixNano` / `endTimeUnixNano` / `attributes`；resource attribute
@@ -58,27 +58,41 @@ trace（**该条已于 2026-10-08 落地后按 §六 第 1 条移出转空号，
 
 ## Alternatives Considered
 
-1. **接入官方 `go.opentelemetry.io/otel` + `otlptracehttp`**
-   - Pros：规范完整（span status / events / links / sampler 生态）、长期由社区维护、
-     未来接 metrics / logs 同一套 API。
-   - Cons：引入十数个传递依赖（`otel` API/SDK/exporters、`grpc`/`protobuf` 视 exporter 而定），
-     二进制与依赖清单显著变大；需同步重生成 `THIRD_PARTY_LICENSES.md` 并接受新的供应链面；
-     对当前「4 类 span、单一 OTLP/HTTP 接收端」的窄需求属于过度配置。若将来需要完整语义，
-     可另写 ADR 推翻本篇（ADR 不归档、只叠加）。
-2. **OTLP/gRPC（`otlptracegrpc` / 自研 gRPC）**
-   - Pros：采集端默认同时开 4317，传输更省。
-   - Cons：必须依赖 `google.golang.org/grpc` + `protobuf`，与「零新增依赖」直接冲突；
-     自研 gRPC 帧与 protobuf 编解码的成本远高于 OTLP/HTTP JSON。
-3. **什么都不做，继续只用 Prometheus 指标 + `X-Request-ID`**
-   - Pros：零成本、零新失败模式。
-   - Cons：无法表达「一次请求内的子操作耗时 / 父子关系」，也没有 W3C 头互操作；
-     #11 的验收目标（trace 贯穿签名 / 代理 / 迁移）无法达成。
-4. **只把 trace id 写进结构化日志（结构化日志追踪）**
-   - Pros：实现最省，复用现有日志管道。
-   - Cons：没有 span 树与采集端生态，跨服务传播仍要靠自定义字段；不满足 OTLP 互操作诉求。
-5. **改用 Jaeger / Zipkin 私有 JSON 协议**
-   - Pros：实现同样简单，且这些后端成熟。
-   - Cons：与 OTLP 这一事实标准分叉，采集端换型要重写导出；违背“对齐标准”的目标。
+### 接入官方 `go.opentelemetry.io/otel` + `otlptracehttp`
+
+- Pros：规范完整（span status / events / links / sampler 生态）、长期由社区维护、
+  未来接 metrics / logs 同一套 API。
+- Cons：引入十数个传递依赖（`otel` API/SDK/exporters、`grpc`/`protobuf` 视 exporter 而定），
+  二进制与依赖清单显著变大；需同步重生成 `THIRD_PARTY_LICENSES.md` 并接受新的供应链面；
+  对当前「4 类 span、单一 OTLP/HTTP 接收端」的窄需求属于过度配置。若将来需要完整语义，
+  可另写 ADR 推翻本篇（ADR 不归档、只叠加）。
+- 被拒：依赖预算与「零新增第三方依赖」直接冲突。
+
+### OTLP/gRPC（`otlptracegrpc` / 自研 gRPC）
+
+- Pros：采集端默认同时开 4317，传输更省。
+- Cons：必须依赖 `google.golang.org/grpc` + `protobuf`，与「零新增依赖」直接冲突；
+  自研 gRPC 帧与 protobuf 编解码的成本远高于 OTLP/HTTP JSON。
+- 被拒：同上，依赖预算不可接受。
+
+### 什么都不做，继续只用 Prometheus 指标 + `X-Request-ID`
+
+- Pros：零成本、零新失败模式。
+- Cons：无法表达「一次请求内的子操作耗时 / 父子关系」，也没有 W3C 头互操作；
+  #11 的验收目标（trace 贯穿签名 / 代理 / 迁移）无法达成。
+- 被拒：达不成验收目标。
+
+### 只把 trace id 写进结构化日志（结构化日志追踪）
+
+- Pros：实现最省，复用现有日志管道。
+- Cons：没有 span 树与采集端生态，跨服务传播仍要靠自定义字段；不满足 OTLP 互操作诉求。
+- 被拒：没有 span 树与采集端生态。
+
+### 改用 Jaeger / Zipkin 私有 JSON 协议
+
+- Pros：实现同样简单，且这些后端成熟。
+- Cons：与 OTLP 这一事实标准分叉，采集端换型要重写导出；违背「对齐标准」的目标。
+- 被拒：与事实标准分叉。
 
 ## Consequences
 
@@ -94,4 +108,4 @@ trace（**该条已于 2026-10-08 落地后按 §六 第 1 条移出转空号，
   [`../OPERATIONS.md`](../OPERATIONS.md) §3.4、[`../architecture.md`](../architecture.md) §2/§7 与本索引；
   行为由 `apps/server/internal/tracing/*_test.go`（导出报文 / traceparent / 采样 / 队列）与
   `apps/server/internal/handler/tracing_wiring_test.go`（子 span 接线）守住。若将来需要完整
-  OTel 语义或 gRPC，按上述替代方案 1/2 另写 ADR 推翻本篇。
+  OTel 语义或 gRPC，按上述「接入官方 otel」/「OTLP/gRPC」两案另写 ADR 推翻本篇。

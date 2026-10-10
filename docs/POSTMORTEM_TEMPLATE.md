@@ -136,11 +136,15 @@
 | Runbook / SLO / 告警阈值 |  | [`OPERATIONS.md`](OPERATIONS.md) §4 / §5 **与** [`deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml)（**必须同改**，规则受 `TestPrometheusRulesReferenceRealMetrics` 校验） |
 | 安全边界 / 已接受风险 |  | [`threat-model.md`](threat-model.md) |
 | 用户可见行为 / 排障 |  | [`user-guide.md`](user-guide.md) |
-| 本复盘存档 | 是 | `docs/archive/incident-YYYYMMDD-<短名>.md` + [`archive/index.md`](archive/index.md) 登记一行 |
+| 本复盘存档 | 是 | 见 §0「存档」行（路径 / 命名 / 索引登记的唯一口径） |
 
 ## 11. 本模板刻意不定义的事（避免发明仓库里没有的规则）
 
+> §0 的「约定」表已给出全部**建议性**口径（时限 / 记录人 / 不追责 / 责任认定 / 存档），
+> 本节只列**本模板有意不规定、交由部署方自定**的事项；理由是同一件事只解释一处，不在此重复。
+
 - **值班轮换与升级链**：仓库不定义，由部署方自定（[`OPERATIONS.md`](OPERATIONS.md) §9.2）。
-- **强制时限与 SLA**：本仓库无 SLA、无商业支持；上文「5 个工作日」只是**建议**。
-- **是否对外公开**：由部署方决定；涉及安全的一律先走私密渠道。
+- **强制时限与 SLA**：**刻意不定义**——口径（含「5 个工作日」的性质）见 §0「时限」行。
+- **是否对外公开**：由部署方决定；安全漏洞先走私密渠道，口径见 §0「不适用」行与
+  [`../.github/SECURITY.md`](../.github/SECURITY.md)。
 - **事故统计看板 / 复盘数量指标**：当前不存在，也不预先承诺数字——沿用 [`compatibility.md`](compatibility.md) §7 的同一口径（原文：「没有固定的时间窗或版本数承诺」）。

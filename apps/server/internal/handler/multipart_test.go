@@ -18,11 +18,11 @@ import (
 // TestMultipartUpload 用假 S3 验证分段上传：init / 分段预签名 / complete / abort。
 func TestMultipartUpload(t *testing.T) {
 	var (
-		mu            sync.Mutex
-		initCalls     int
-		completeCalls int
-		abortCalls    int
-		completedBody string
+		mu              sync.Mutex
+		initCalls       int
+		completeCalls   int
+		abortCalls      int
+		completedBodies []string
 	)
 	s3fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -38,7 +38,7 @@ func TestMultipartUpload(t *testing.T) {
 			mu.Unlock()
 			b, _ := io.ReadAll(r.Body)
 			mu.Lock()
-			completedBody = string(b)
+			completedBodies = append(completedBodies, string(b))
 			mu.Unlock()
 			io.WriteString(w, `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Location>http://x/b/big.bin</Location><Bucket>b</Bucket><Key>big.bin</Key><ETag>"etag"</ETag></CompleteMultipartUploadResult>`)
 		case r.Method == http.MethodDelete && q.Get("uploadId") != "": // AbortMultipartUpload
@@ -95,18 +95,27 @@ func TestMultipartUpload(t *testing.T) {
 		t.Fatalf("part = %+v, want partNumber=1 and url containing uploadId/partNumber", partResp)
 	}
 
-	// complete：汇总分段
-	rr3 := doJSON(t, h, "POST", "/api/accounts/"+acc.ID+"/multipart/complete",
-		`{"key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":"\"e1\""}]}`)
-	if rr3.Code != http.StatusOK {
-		t.Fatalf("complete status = %d, body=%s", rr3.Code, rr3.Body.String())
+	// complete：汇总分段。etag 引号口径统一（2026-10-10）：客户端可能提交 S3 原始形态
+	// （浏览器 PUT 的 `ETag` 响应头，带引号）或本服务 `/multipart/parts` 返回的去引号形态；
+	// handler 统一去引号后转发，故两种输入的完成 XML 都必须是 `<ETag>e1</ETag>`。
+	for i, etag := range []string{`"\"e1\""`, `"e1"`} {
+		rr3 := doJSON(t, h, "POST", "/api/accounts/"+acc.ID+"/multipart/complete",
+			`{"key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":`+etag+`}]}`)
+		if rr3.Code != http.StatusOK {
+			t.Fatalf("complete 用例 %d（etag=%s）status = %d, body=%s", i, etag, rr3.Code, rr3.Body.String())
+		}
 	}
 	mu.Lock()
-	if completeCalls != 1 {
-		t.Fatalf("completeCalls = %d, want 1", completeCalls)
+	if completeCalls != 2 {
+		t.Fatalf("completeCalls = %d, want 2", completeCalls)
 	}
-	if !strings.Contains(completedBody, "<PartNumber>1</PartNumber>") || !strings.Contains(completedBody, "e1") {
-		t.Fatalf("completed body = %s", completedBody)
+	if len(completedBodies) != 2 {
+		t.Fatalf("completedBodies = %d 条, want 2", len(completedBodies))
+	}
+	for i, body := range completedBodies {
+		if !strings.Contains(body, "<PartNumber>1</PartNumber>") || !strings.Contains(body, "<ETag>e1</ETag>") {
+			t.Fatalf("第 %d 次 complete 的 XML = %s（etag 口径应统一为去引号形态 <ETag>e1</ETag>）", i+1, body)
+		}
 	}
 	mu.Unlock()
 
@@ -131,5 +140,9 @@ func TestMultipartUpload(t *testing.T) {
 	}
 	if rr6 := doJSON(t, h, "POST", "/api/accounts/"+acc.ID+"/multipart/complete", `{"key":"x","parts":[{"partNumber":1,"etag":"e"}]}`); rr6.Code != http.StatusBadRequest {
 		t.Fatalf("complete without uploadId = %d, want 400", rr6.Code)
+	}
+	// 只有引号、去引号后为空 → 400（不能把空 etag 转发给 S3）
+	if rr7 := doJSON(t, h, "POST", "/api/accounts/"+acc.ID+"/multipart/complete", `{"key":"x","uploadId":"u","parts":[{"partNumber":1,"etag":"\"\""}]}`); rr7.Code != http.StatusBadRequest {
+		t.Fatalf("complete with quote-only etag = %d, want 400", rr7.Code)
 	}
 }

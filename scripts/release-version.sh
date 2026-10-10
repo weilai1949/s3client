@@ -104,3 +104,16 @@ if ! grep -q "^## \[$DISPLAY\]" CHANGELOG.md; then
 fi
 
 echo "Done. Files updated under $ROOT"
+
+# 发版前人工复核清单（脚本无法自动判定的部分，在此**显式列出**；由
+# apps/server/agent_evals_gate_test.go 的 TestReleaseScriptRemindsMetricLedgerReview 钉住本段存在——
+# 删掉提醒等于「发版时对账」这一约定悄悄消失）。2026-10-10 交接快照 §5 未做第 4 项收口。
+cat <<'REMINDER'
+
+发版前人工复核（脚本无法自动判定）：
+  1. docs/AGENT_EVALS.md §四 度量表 —— 与 CHANGELOG.md 本次版本条目逐条对账，缺失行按 PR 模板
+     「AI 度量」勾选口径补登（表行数 ⇄ 「当前状态：N 条已回填」由门禁机械校验）。
+  2. docs/FEATURES.md / docs/KNOWN_ISSUES.md —— 本版本段的台账行是否已归位（发版前复审节奏）。
+  3. docs/archive/index.md —— 冻结件计数与目录由门禁机械校验，人只需确认「该冻的批次已冻」。
+
+REMINDER

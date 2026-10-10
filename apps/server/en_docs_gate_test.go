@@ -9,7 +9,7 @@ package main
 //     的直接链接，管不到「英文页之间是否互相可达」）；
 //   - 根 `README.md` 变更后英文翻译快照里的关键事实（版本号 / 端点计数）是否跟着变。
 //
-// 断言范围（只做这四件事）：
+// 断言范围（只做这五件事）：
 //   - (a) `docs/en/` 下每个页面（`index.md` 除外，它是根 README 的快照、源在仓库根）都
 //     声明中文源（`**Source (Chinese SSOT)**:` + 相对链接）与源修订（`**Source revision**:` +
 //     hash + 日期），且源文件存在于 `docs/` 下、不在 `docs/en/` 内；
@@ -17,15 +17,20 @@ package main
 //     `docs/README.md` 到达（复用 `doc_index_gate_test.go` 的 `navTargets` 口径）；
 //   - (c) `docs/en/index.md` 仍跟随根 `README.md`：版本字面量与「N 个 `/api/*` 端点」机械一致，
 //     且链回根 README（SSOT 回指）；
-//   - (d) 扫描面自检阈值：英文页数 / 导航链接数低于基线即红灯，防「空扫变绿」。
+//   - (d) 扫描面自检阈值：英文页数 / 导航链接数低于基线即红灯，防「空扫变绿」；
+//   - (e) **源修订过期提醒**（2026-10-10 交接快照 §5 未做第 14 项）：每个英文页声明的
+//     `Source revision` 短 hash 必须真实存在于本仓历史，且**日期不得早于中文源最后一次提交的
+//     日期**——中文源改了、快照修订行没跟上即红灯（`git log -1 --format=%cs -- <源>`）。
+//     按「日期」而非「hash 相等」判定，因为同一 PR 里无法把该 PR 自身的 commit hash 写进自己
+//     （自指不可满足）；日期粒度下「同 PR 把修订日期推到当天」即可满足。
 //
 // 另有一条**翻译完整性**校验：已翻译页必须保留中文源的每个相对链接目标（路径 / ADR 链接逐字保留）；
 // 漏译整段往往同时漏链，因此这条能把「只翻了一半」变成红灯。
 //
 // 已知盲区（刻意不做）：
 //   - **不校验正文语义等价**——那是自然语言，属人工审查；本门禁只钉结构与可机械推导的事实。
-//   - **不校验 `Source revision` 是否过期**——git 历史与工作区内容的口径难以在单测里稳定复现；
-//     漂移处理靠「同 PR 更新」的人工纪律 + 本节 (c) 的两条机械比对（见 `docs/i18n.md` §7.4）。
+//   - **不校验 `Source revision` 的 hash 是否「最新」**（自指不可满足，见断言 e 说明）：只校验
+//     它存在于历史、且日期不早于源的最后提交日期；「源没变但 hash 抄错成另一个真实提交」仍需人工。
 //   - **不校验英文页之间的锚点**——`doc_link_gate_test.go` 已全仓校验链接与锚点，本门禁不重复。
 //
 // 变异验证（复核步骤，实测见任务报告）：
@@ -38,6 +43,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -71,6 +77,8 @@ const (
 	minRootReadmeLinkTargets    = 20
 	minEnIndexLinkTargets       = 15
 	minEnScanSurfaceLinkTargets = 20
+	// minEnRevisionChecked 是源修订新鲜度校验（断言 e）的扫描面阈值（实测 2 个英文页声明修订）。
+	minEnRevisionChecked = 2
 )
 
 var (
@@ -315,6 +323,71 @@ func TestEnDocsScanSurfaceIsNotCollapsed(t *testing.T) {
 		t.Fatalf("%s 下全部英文页只解析到 %d 个链接目标（阈值 %d）：链接解析口径已失效或被误缩窄",
 			enDocsDir, total, minEnScanSurfaceLinkTargets)
 	}
+}
+
+// enGitOutput 在仓库根执行 git 子命令并返回去空白 stdout。
+// `rev-parse --git-dir` 失败视为「非 git 工作区」，由调用方决定跳过；其余失败由调用方报错。
+func enGitOutput(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoRoot(t)
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// TestEnDocsRevisionTracksSourceCommits 断言 e：英文页的 `Source revision` 可追溯到真实历史，
+// 且日期不早于中文源的最后一次提交——中文源改了而翻译快照的修订行没跟上即红灯（机械提醒）。
+//
+// 为什么按日期而非 hash 相等：同一 PR 无法把自身 commit hash 写进自己（自指不可满足）；
+// 日期粒度下「同 PR 把 `Source revision` 日期推到当天」即可满足，且能拦住跨天漂移。
+func TestEnDocsRevisionTracksSourceCommits(t *testing.T) {
+	t.Parallel()
+
+	if _, err := enGitOutput(t, "rev-parse", "--git-dir"); err != nil {
+		t.Skipf("非 git 工作区（%v）：跳过源修订新鲜度检查；CI（fetch-depth: 0）会实跑", err)
+	}
+
+	files := enDocsMarkdownFiles(t)
+	checked := 0
+	for _, rel := range files {
+		if rel == enIndexFile {
+			continue // index.md 的源在仓库根，且按历史约定不声明 Source revision
+		}
+		text := readEnDocsFile(t, rel)
+		m := enRevisionRe.FindStringSubmatch(text)
+		if m == nil {
+			continue // 缺声明 / 格式错由 TestEnDocsDeclareChineseSource 点名，不重复报
+		}
+		hash, declared := m[1], m[2]
+		src := enDeclaredSource(t, rel, text)
+		if src == "" {
+			continue
+		}
+		if _, err := enGitOutput(t, "cat-file", "-e", hash+"^{commit}"); err != nil {
+			t.Errorf("%s 声明的 `Source revision` `%s` 在本仓历史中不存在（hash 打错或历史被改写）：%v",
+				rel, hash, err)
+			continue
+		}
+		last, err := enGitOutput(t, "log", "-1", "--format=%cs", "--", src)
+		if err != nil {
+			t.Fatalf("读取中文源 %s 的最后提交日期失败: %v", src, err)
+		}
+		if last == "" {
+			continue // 源尚无提交历史（未跟踪 / 新文件未提交），无历史可比
+		}
+		checked++
+		if declared < last {
+			t.Errorf("%s 的 `Source revision` 日期 %s 早于中文源 %s 的最后提交日期 %s——"+
+				"中文源已在其后变更，同 PR 更新该页的 `Source revision`（短 hash + 日期），"+
+				"并复核译文是否需要同步（docs/i18n.md §7.4）",
+				rel, declared, src, last)
+		}
+	}
+	if checked < minEnRevisionChecked {
+		t.Fatalf("只校验到 %d 个英文页的源修订新鲜度（阈值 %d）：git 口径或修订声明解析已失效",
+			checked, minEnRevisionChecked)
+	}
+	t.Logf("源修订新鲜度校验 %d 个英文页", checked)
 }
 
 // enFirstCapture 返回 re 在 text 中的第一个捕获组；未命中即 Fatal——措辞漂移会让门禁静默失效。

@@ -10,10 +10,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出全部账号 */
+        /**
+         * 列出全部账号
+         * @description 列出全部账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         get: operations["listAccounts"];
         put?: never;
-        /** 新建账号 */
+        /**
+         * 新建账号
+         * @description 新建账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：201。
+         */
         post: operations["createAccount"];
         delete?: never;
         options?: never;
@@ -30,7 +36,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 用表单凭证预览桶（不落库） */
+        /**
+         * 用表单凭证预览桶（不落库）
+         * @description 用表单凭证预览桶（不落库）。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         post: operations["previewBuckets"];
         delete?: never;
         options?: never;
@@ -45,12 +54,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取账号详情 */
+        /**
+         * 获取账号详情
+         * @description 获取账号详情。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         get: operations["getAccount"];
-        /** 更新账号 */
+        /**
+         * 更新账号
+         * @description 更新账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         put: operations["updateAccount"];
         post?: never;
-        /** 删除账号 */
+        /**
+         * 删除账号
+         * @description 删除账号。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         delete: operations["deleteAccount"];
         options?: never;
         head?: never;
@@ -66,9 +84,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 创建桶 */
+        /**
+         * 创建桶
+         * @description 创建桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。
+         */
         post: operations["createBucket"];
-        /** 删除空桶 */
+        /**
+         * 删除空桶
+         * @description 删除空桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。
+         */
         delete: operations["deleteBucket"];
         options?: never;
         head?: never;
@@ -82,7 +106,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶属性（区域 / 创建时间 / 版本控制） */
+        /**
+         * 桶属性（区域 / 创建时间 / 版本控制）
+         * @description 桶属性（区域 / 创建时间 / 版本控制）。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。
+         */
         get: operations["getBucketInfo"];
         put?: never;
         post?: never;
@@ -100,7 +127,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 开关桶版本控制（Enabled / Suspended） */
+        /**
+         * 开关桶版本控制（Enabled / Suspended）
+         * @description 开关桶版本控制（Enabled / Suspended）。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。
+         */
         put: operations["putBucketVersioning"];
         post?: never;
         delete?: never;
@@ -116,12 +146,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶 CORS 规则列表 */
+        /**
+         * 桶 CORS 规则列表
+         * @description 桶 CORS 规则列表。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getBucketCors"];
-        /** 配置 CORS（rules 空数组=删除） */
+        /**
+         * 配置 CORS（rules 空数组=删除）
+         * @description 配置 CORS（rules 空数组=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putBucketCors"];
         post?: never;
-        /** 删除 CORS */
+        /**
+         * 删除 CORS
+         * @description 删除 CORS。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         delete: operations["deleteBucketCors"];
         options?: never;
         head?: never;
@@ -135,12 +174,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶服务端加密（SSE） */
+        /**
+         * 桶服务端加密（SSE）
+         * @description 桶服务端加密（SSE）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getBucketEncryption"];
-        /** 配置 SSE */
+        /**
+         * 配置 SSE
+         * @description 配置 SSE。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putBucketEncryption"];
         post?: never;
-        /** 删除 SSE 配置 */
+        /**
+         * 删除 SSE 配置
+         * @description 删除 SSE 配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         delete: operations["deleteBucketEncryption"];
         options?: never;
         head?: never;
@@ -154,9 +202,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶 Object Lock 配置 */
+        /**
+         * 桶 Object Lock 配置
+         * @description 桶 Object Lock 配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getObjectLock"];
-        /** 设置桶默认保留策略（桶须创建时启用 Object Lock） */
+        /**
+         * 设置桶默认保留策略（桶须创建时启用 Object Lock）
+         * @description 设置桶默认保留策略（桶须创建时启用 Object Lock）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putObjectLock"];
         post?: never;
         delete?: never;
@@ -172,12 +226,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶策略（JSON 字符串） */
+        /**
+         * 桶策略（JSON 字符串）
+         * @description 桶策略（JSON 字符串）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getBucketPolicy"];
-        /** 配置桶策略（policy=空=删除） */
+        /**
+         * 配置桶策略（policy=空=删除）
+         * @description 配置桶策略（policy=空=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putBucketPolicy"];
         post?: never;
-        /** 删除桶策略 */
+        /**
+         * 删除桶策略
+         * @description 删除桶策略。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         delete: operations["deleteBucketPolicy"];
         options?: never;
         head?: never;
@@ -191,12 +254,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶标签 */
+        /**
+         * 桶标签
+         * @description 桶标签。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getBucketTags"];
-        /** 配置桶标签（空数组=删除） */
+        /**
+         * 配置桶标签（空数组=删除）
+         * @description 配置桶标签（空数组=删除）。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putBucketTags"];
         post?: never;
-        /** 删除桶标签 */
+        /**
+         * 删除桶标签
+         * @description 删除桶标签。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         delete: operations["deleteBucketTags"];
         options?: never;
         head?: never;
@@ -210,12 +282,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 桶静态网站托管配置 */
+        /**
+         * 桶静态网站托管配置
+         * @description 桶静态网站托管配置。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         get: operations["getBucketWebsite"];
-        /** 配置静态网站托管 */
+        /**
+         * 配置静态网站托管
+         * @description 配置静态网站托管。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         put: operations["putBucketWebsite"];
         post?: never;
-        /** 删除静态网站托管 */
+        /**
+         * 删除静态网站托管
+         * @description 删除静态网站托管。分组：桶设置：SSE / CORS / 静态网站 / 策略 / 标签（docs/api.md「对象」下的桶配置小节）。成功状态码：200。
+         */
         delete: operations["deleteBucketWebsite"];
         options?: never;
         head?: never;
@@ -229,7 +310,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出账号下全部桶 */
+        /**
+         * 列出账号下全部桶
+         * @description 列出账号下全部桶。分组：桶：列出 / 创建 / 删除桶与桶属性、版本控制开关（docs/api.md「账号」下的桶小节）。成功状态码：200。
+         */
         get: operations["listBuckets"];
         put?: never;
         post?: never;
@@ -248,7 +332,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 单文件复制（不删源） */
+        /**
+         * 单文件复制（不删源）
+         * @description 单文件复制（不删源）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["copyObject"];
         delete?: never;
         options?: never;
@@ -265,7 +352,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 批量复制（同步） */
+        /**
+         * 批量复制（同步）
+         * @description 批量复制（同步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["copyObjects"];
         delete?: never;
         options?: never;
@@ -282,7 +372,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 批量复制（异步，SSE 进度） */
+        /**
+         * 批量复制（异步，SSE 进度）
+         * @description 批量复制（异步，SSE 进度）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。
+         */
         post: operations["copyObjectsAsync"];
         delete?: never;
         options?: never;
@@ -299,7 +392,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 递归复制前缀（同步流式） */
+        /**
+         * 递归复制前缀（同步流式）
+         * @description 递归复制前缀（同步流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["copyPrefix"];
         delete?: never;
         options?: never;
@@ -316,7 +412,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 递归复制前缀（异步） */
+        /**
+         * 递归复制前缀（异步）
+         * @description 递归复制前缀（异步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。
+         */
         post: operations["copyPrefixAsync"];
         delete?: never;
         options?: never;
@@ -333,7 +432,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 批量删除（≤1000 keys） */
+        /**
+         * 批量删除（≤1000 keys）
+         * @description 批量删除（≤1000 keys）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["deleteObjects"];
         delete?: never;
         options?: never;
@@ -350,7 +452,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 撤销删除标记（一键还原已删除对象） */
+        /**
+         * 撤销删除标记（一键还原已删除对象）
+         * @description 撤销删除标记（一键还原已删除对象）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。
+         */
         post: operations["restoreDeleteMarker"];
         delete?: never;
         options?: never;
@@ -367,7 +472,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 递归删除前缀（同步流式） */
+        /**
+         * 递归删除前缀（同步流式）
+         * @description 递归删除前缀（同步流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["deletePrefix"];
         delete?: never;
         options?: never;
@@ -384,7 +492,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 递归删除前缀（异步） */
+        /**
+         * 递归删除前缀（异步）
+         * @description 递归删除前缀（异步）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：202。
+         */
         post: operations["deletePrefixAsync"];
         delete?: never;
         options?: never;
@@ -401,7 +512,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 流式 ZIP 打包下载（≤1000 个） */
+        /**
+         * 流式 ZIP 打包下载（≤1000 个）
+         * @description 流式 ZIP 打包下载（≤1000 个）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["downloadZip"];
         delete?: never;
         options?: never;
@@ -416,7 +530,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象元数据 */
+        /**
+         * 对象元数据
+         * @description 对象元数据。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         get: operations["headObject"];
         put?: never;
         post?: never;
@@ -433,9 +550,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 生命周期规则（桶级） */
+        /**
+         * 生命周期规则（桶级）
+         * @description 生命周期规则（桶级）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         get: operations["getLifecycle"];
-        /** 写入生命周期规则（空规则=删除） */
+        /**
+         * 写入生命周期规则（空规则=删除）
+         * @description 写入生命周期规则（空规则=删除）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         put: operations["putLifecycle"];
         post?: never;
         delete?: never;
@@ -453,7 +576,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 新建空文件夹（PUT 空对象） */
+        /**
+         * 新建空文件夹（PUT 空对象）
+         * @description 新建空文件夹（PUT 空对象）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["mkdirObject"];
         delete?: never;
         options?: never;
@@ -470,7 +596,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 中止分段上传 */
+        /**
+         * 中止分段上传
+         * @description 中止分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。
+         */
         post: operations["multipartAbort"];
         delete?: never;
         options?: never;
@@ -487,7 +616,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 完成分段上传 */
+        /**
+         * 完成分段上传
+         * @description 完成分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。
+         */
         post: operations["multipartComplete"];
         delete?: never;
         options?: never;
@@ -504,7 +636,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 初始化分段上传 */
+        /**
+         * 初始化分段上传
+         * @description 初始化分段上传。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。
+         */
         post: operations["multipartInit"];
         delete?: never;
         options?: never;
@@ -521,7 +656,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 预签名单段 PUT URL */
+        /**
+         * 预签名单段 PUT URL
+         * @description 预签名单段 PUT URL。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。
+         */
         post: operations["multipartPart"];
         delete?: never;
         options?: never;
@@ -536,7 +674,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列已上传分段（断点续传对齐） */
+        /**
+         * 列已上传分段（断点续传对齐）
+         * @description 列已上传分段（断点续传对齐）。分组：分段上传：初始化 / 分段预签名 / 完成 / 中止（docs/api.md「分段上传」）。成功状态码：200。
+         */
         get: operations["multipartParts"];
         put?: never;
         post?: never;
@@ -553,9 +694,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象 ACL */
+        /**
+         * 对象 ACL
+         * @description 对象 ACL。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         get: operations["getObjectAcl"];
-        /** 设置对象 ACL */
+        /**
+         * 设置对象 ACL
+         * @description 设置对象 ACL。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         put: operations["putObjectAcl"];
         post?: never;
         delete?: never;
@@ -571,9 +718,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象法定保留状态 */
+        /**
+         * 对象法定保留状态
+         * @description 对象法定保留状态。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         get: operations["getObjectLegalHold"];
-        /** 设置对象法定保留（ON/OFF） */
+        /**
+         * 设置对象法定保留（ON/OFF）
+         * @description 设置对象法定保留（ON/OFF）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         put: operations["putObjectLegalHold"];
         post?: never;
         delete?: never;
@@ -589,9 +742,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象保留期（Object Lock） */
+        /**
+         * 对象保留期（Object Lock）
+         * @description 对象保留期（Object Lock）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         get: operations["getObjectRetention"];
-        /** 设置对象保留期（Object Lock） */
+        /**
+         * 设置对象保留期（Object Lock）
+         * @description 设置对象保留期（Object Lock）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         put: operations["putObjectRetention"];
         post?: never;
         delete?: never;
@@ -607,9 +766,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象标签 */
+        /**
+         * 对象标签
+         * @description 对象标签。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         get: operations["getObjectTags"];
-        /** 设置对象标签（空数组=清空） */
+        /**
+         * 设置对象标签（空数组=清空）
+         * @description 设置对象标签（空数组=清空）。分组：对象元数据：HTTP 头、ACL 与对象标签（docs/api.md「对象」下的权限 / 标签小节）。成功状态码：200。
+         */
         put: operations["putObjectTags"];
         post?: never;
         delete?: never;
@@ -625,7 +790,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列对象（含公共前缀 / 分页） */
+        /**
+         * 列对象（含公共前缀 / 分页）
+         * @description 列对象（含公共前缀 / 分页）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         get: operations["listObjects"];
         put?: never;
         post?: never;
@@ -644,7 +812,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 生成预签名 URL */
+        /**
+         * 生成预签名 URL
+         * @description 生成预签名 URL。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["presign"];
         delete?: never;
         options?: never;
@@ -659,7 +830,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象代理下载 / 预览（流式） */
+        /**
+         * 对象代理下载 / 预览（流式）
+         * @description 对象代理下载 / 预览（流式）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         get: operations["proxyObject"];
         put?: never;
         post?: never;
@@ -678,7 +852,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 重命名 / 移动（copy+delete，可跨桶） */
+        /**
+         * 重命名 / 移动（copy+delete，可跨桶）
+         * @description 重命名 / 移动（copy+delete，可跨桶）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["renameObject"];
         delete?: never;
         options?: never;
@@ -695,7 +872,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 编辑 HTTP 头 / 元数据（CopyObject+REPLACE） */
+        /**
+         * 编辑 HTTP 头 / 元数据（CopyObject+REPLACE）
+         * @description 编辑 HTTP 头 / 元数据（CopyObject+REPLACE）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["setHeaders"];
         delete?: never;
         options?: never;
@@ -712,7 +892,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 切换对象存储类型 */
+        /**
+         * 切换对象存储类型
+         * @description 切换对象存储类型。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["changeStorageClass"];
         delete?: never;
         options?: never;
@@ -727,7 +910,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 存储分析与成本洞察（按存储类 / 前缀聚合） */
+        /**
+         * 存储分析与成本洞察（按存储类 / 前缀聚合）
+         * @description 存储分析与成本洞察（按存储类 / 前缀聚合）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         get: operations["storageReport"];
         put?: never;
         post?: never;
@@ -746,7 +932,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 连通性检测（200+ok 表示通；ok=false 含 error） */
+        /**
+         * 连通性检测（200+ok 表示通；ok=false 含 error）
+         * @description 连通性检测（200+ok 表示通；ok=false 含 error）。分组：账号：多账号 S3 凭据 / 端点 / 默认桶的增删改查与连通性测试（docs/api.md「账号」）。成功状态码：200。
+         */
         post: operations["testAccount"];
         delete?: never;
         options?: never;
@@ -761,7 +950,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 列出桶内全部删除标记（分页游标） */
+        /**
+         * 列出桶内全部删除标记（分页游标）
+         * @description 列出桶内全部删除标记（分页游标）。分组：回收站：列出删除标记与彻底清除（docs/api.md「回收站」）。成功状态码：200。
+         */
         get: operations["listTrash"];
         put?: never;
         post?: never;
@@ -780,7 +972,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 彻底清除某 key 的全部版本+标记 */
+        /**
+         * 彻底清除某 key 的全部版本+标记
+         * @description 彻底清除某 key 的全部版本+标记。分组：回收站：列出删除标记与彻底清除（docs/api.md「回收站」）。成功状态码：200。
+         */
         post: operations["purgeTrashObject"];
         delete?: never;
         options?: never;
@@ -797,7 +992,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 端到端校验和验证（本地重算与存储端比对） */
+        /**
+         * 端到端校验和验证（本地重算与存储端比对）
+         * @description 端到端校验和验证（本地重算与存储端比对）。分组：对象：列举 / 复制 / 移动 / 删除 / 打包下载 / 预签名 / 存储类型（docs/api.md「对象」）。成功状态码：200。
+         */
         post: operations["verifyChecksum"];
         delete?: never;
         options?: never;
@@ -815,7 +1013,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** 删除指定版本 */
+        /**
+         * 删除指定版本
+         * @description 删除指定版本。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。
+         */
         delete: operations["deleteObjectVersion"];
         options?: never;
         head?: never;
@@ -831,7 +1032,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 把历史版本恢复为当前（复制回 key） */
+        /**
+         * 把历史版本恢复为当前（复制回 key）
+         * @description 把历史版本恢复为当前（复制回 key）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。
+         */
         post: operations["restoreObjectVersion"];
         delete?: never;
         options?: never;
@@ -846,7 +1050,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 对象版本列表（含删除标记） */
+        /**
+         * 对象版本列表（含删除标记）
+         * @description 对象版本列表（含删除标记）。分组：对象版本：版本列表 / 删除指定版本 / 回滚 / 还原删除标记（docs/api.md「对象版本列表」等小节）。成功状态码：200。
+         */
         get: operations["listObjectVersions"];
         put?: never;
         post?: never;
@@ -863,7 +1070,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 健康检查（含 store 状态与版本） */
+        /**
+         * 健康检查（含 store 状态与版本）
+         * @description 健康检查（含 store 状态与版本）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
+         */
         get: operations["health"];
         put?: never;
         post?: never;
@@ -880,7 +1090,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免） */
+        /**
+         * Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）
+         * @description Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
+         */
         get: operations["metrics"];
         put?: never;
         post?: never;
@@ -899,7 +1112,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 同步迁移（流式） */
+        /**
+         * 同步迁移（流式）
+         * @description 同步迁移（流式）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         post: operations["migrate"];
         delete?: never;
         options?: never;
@@ -916,7 +1132,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 异步迁移（SSE 进度） */
+        /**
+         * 异步迁移（SSE 进度）
+         * @description 异步迁移（SSE 进度）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：202。
+         */
         post: operations["migrateAsync"];
         delete?: never;
         options?: never;
@@ -931,7 +1150,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 异步任务清单（含重启后中断的任务） */
+        /**
+         * 异步任务清单（含重启后中断的任务）
+         * @description 异步任务清单（含重启后中断的任务）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         get: operations["migrateJobs"];
         put?: never;
         post?: never;
@@ -948,7 +1170,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 查询迁移任务状态 */
+        /**
+         * 查询迁移任务状态
+         * @description 查询迁移任务状态。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         get: operations["migrateJobStatus"];
         put?: never;
         post?: never;
@@ -967,7 +1192,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 取消迁移任务 */
+        /**
+         * 取消迁移任务
+         * @description 取消迁移任务。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         post: operations["migrateJobCancel"];
         delete?: never;
         options?: never;
@@ -982,7 +1210,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 迁移任务 SSE 进度事件 */
+        /**
+         * 迁移任务 SSE 进度事件
+         * @description 迁移任务 SSE 进度事件。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         get: operations["migrateJobEvents"];
         put?: never;
         post?: never;
@@ -1001,7 +1232,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 增量同步（按 ETag / size+mtime 比对，仅复制差异对象） */
+        /**
+         * 增量同步（按 ETag / size+mtime 比对，仅复制差异对象）
+         * @description 增量同步（按 ETag / size+mtime 比对，仅复制差异对象）。分组：跨账号迁移与作业：同步 / 异步迁移、增量同步、任务清单 / 进度 / 取消（docs/api.md「跨账号迁移」）。成功状态码：200。
+         */
         post: operations["migrateSync"];
         delete?: never;
         options?: never;
@@ -1016,7 +1250,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1） */
+        /**
+         * OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1）
+         * @description OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
+         */
         get: operations["openapi"];
         put?: never;
         post?: never;
@@ -1033,10 +1270,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 计划任务清单（最新在前） */
+        /**
+         * 计划任务清单（最新在前）
+         * @description 计划任务清单（最新在前）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。
+         */
         get: operations["listSchedules"];
         put?: never;
-        /** 创建计划（cron 定时增量同步） */
+        /**
+         * 创建计划（cron 定时增量同步）
+         * @description 创建计划（cron 定时增量同步）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：201。
+         */
         post: operations["createSchedule"];
         delete?: never;
         options?: never;
@@ -1052,10 +1295,16 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 整体替换计划（保留 id/createdAt/运行态） */
+        /**
+         * 整体替换计划（保留 id/createdAt/运行态）
+         * @description 整体替换计划（保留 id/createdAt/运行态）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。
+         */
         put: operations["updateSchedule"];
         post?: never;
-        /** 删除计划（冻结的计划一并移除） */
+        /**
+         * 删除计划（冻结的计划一并移除）
+         * @description 删除计划（冻结的计划一并移除）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：200。
+         */
         delete: operations["deleteSchedule"];
         options?: never;
         head?: never;
@@ -1071,7 +1320,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}） */
+        /**
+         * 立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}）
+         * @description 立即触发一次（不改自动排期；进度经 /api/migrate/jobs/{id}）。分组：计划任务：cron 定时增量同步的增删改查与立即触发（docs/api.md「计划任务」）。成功状态码：202。
+         */
         post: operations["runScheduleNow"];
         delete?: never;
         options?: never;
@@ -3585,7 +3837,7 @@ export interface operations {
                  *       "parts": [
                  *         {
                  *           "partNumber": 1,
-                 *           "etag": "\"e1\""
+                 *           "etag": "e1"
                  *         }
                  *       ]
                  *     }

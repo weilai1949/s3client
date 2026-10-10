@@ -373,7 +373,7 @@ var apiExamples = map[string]openapi.OpExample{
 		},
 	},
 	"POST /api/accounts/{id}/multipart/complete": {
-		Request: ex(`{"bucket":"my-bucket","key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":"\"e1\""}]}`),
+		Request: ex(`{"bucket":"my-bucket","key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":"e1"}]}`),
 		Responses: map[string]json.RawMessage{
 			"200": ex(`{"completed":"big.bin"}`),
 		},

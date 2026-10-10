@@ -23,6 +23,10 @@ package main
 //   3. TestFeaturesOpenClaimsCarryTimeAnchor：`docs/FEATURES.md`（**已完成**台账）中出现
 //      「仍开放 / 仍未处置」的行必须自带日期（时点锚）；否则读者会把章节写作时点的状态
 //      当成当前事实。
+//   4. TestDocPageDateClaimNotStale（2026-10-10 交接快照 §5 未做第 10 项）：页头的**时点声明**
+//      （`最后更新：YYYY-MM-DD` / `统计时点：YYYY-MM-DD` / `盘点时点`）不得**早于**文内最新的
+//      **时点锚**（`上一轮更新` / `复测` / `实跑` / `归档日期` / `评审时点` 等声明式短语旁的日期）——
+//      堵「正文改了、页头日期没动」的日期滞后。
 //
 // 扫描范围与刻意不做的（盲区，避免后来者误判覆盖面）：
 //   - 断言 1 排除**历史 / 时点台账**：`docs/archive/**`（归档冻结）、`docs/FEATURES.md` 与
@@ -34,13 +38,20 @@ package main
 //   - 断言 1 不校验裸编号与 `#a–#b` 范围引用（无 `§三` 前缀无法区分编号空间）；
 //   - 断言 3 只认「仍开放 / 仍未处置」两种措辞；行内有日期即通过，**不校验日期本身是否正确
 //     （那需要人工读上下文）。
+//   - 断言 4 只认**声明式时点锚**（短语旁 12 字内的日期），**刻意不扫正文里的普通日期**——
+//     示例载荷（如 `retainUntilDate: 2031-02-03`、`Version: "2012-10-17"`）与计划性未来日期
+//     （如「下次审查 2027-03-29」）都不是内容新鲜度声明，扫进来会大面积误报；因此
+//     「正文写了个新日期但旁边没有时点短语」仍是盲区（当前 8 篇声明页 / 51 处锚，实测无漂移）；
+//     另排除 `CHANGELOG.md`——其历史条目里的「最后更新」是**叙述**（记录当年把哪篇文档的
+//     页头推到哪天），不是它自己的页头声明。
 //
 // 变异验证（2026-10-10 实跑，复核命令：
-// `cd apps/server && go test . -run 'TestOpenStatusRoadmapRefs|TestOperationsTraceRow|TestFeaturesOpenClaims' -count=1 -v`）：
+// `cd apps/server && go test . -run 'TestOpenStatusRoadmapRefs|TestOperationsTraceRow|TestFeaturesOpenClaims|TestDocPageDateClaimNotStale' -count=1 -v`）：
 //   - 把 §4.3 的 trace 行改回 `未接入（… §三 3.2 #11 ⬜）` → 断言 1 与 2 双红；
 //   - 把 §4.3 的 trace 行改成引用 `§三 3.2 #99 ⬜` → 断言 1 红（编号不在表内）；
 //   - 删掉 FEATURES 任一「仍开放 / 仍未处置」行里的日期 → 断言 3 红；
-//   - 还原后三条全绿。
+//   - 把 KNOWN_ISSUES 页头 `最后更新：2026-10-10` 改成 `2026-10-08` → 断言 4 红（文内锚 2026-10-09/10）；
+//   - 还原后四条全绿。
 //
 // 相关：`doc_link_gate_test.go`（链到没有）、`doc_number_gate_test.go`（数字对不对）、
 // `doc_ci_drift_gate_test.go`（文档引用的 CI 事实真不真）——四者分别管
@@ -70,6 +81,10 @@ const (
 	// docStatusMinLiveEntries 是 ROADMAP §3.1 + §3.2 现存条目数的下限
 	//（实测 6：#1 / #2 / #4 / #9 / #15 / #16）。
 	docStatusMinLiveEntries = 4
+	// docStatusMinDateClaimDocs / docStatusMinDateAnchors 是断言 4 的扫描面自检阈值
+	//（实测 2026-10-10：8 篇页头时点声明、51 处文内时点锚）。
+	docStatusMinDateClaimDocs = 5
+	docStatusMinDateAnchors   = 25
 )
 
 var (
@@ -84,6 +99,13 @@ var (
 	docStatusDateRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 	// docStatusLiveRowRe 匹配 ROADMAP 表格的数字首列行（`| 4 | …`）。
 	docStatusLiveRowRe = regexp.MustCompile(`^\|\s*(\d+)\s*\|`)
+	// docStatusDateClaimRe 匹配页头**时点声明**（最后更新 / 统计时点 / 盘点时点 + 日期）。
+	docStatusDateClaimRe = regexp.MustCompile(`(?:最后更新|统计时点|盘点时点)[^\d\n]{0,8}(\d{4}-\d{2}-\d{2})`)
+	// docStatusDateAnchorRe 匹配文内的**声明式时点锚**（时点短语 + 12 字内的日期）。
+	// 只认声明式短语，刻意不扫普通正文日期（示例载荷 / 计划性未来日期会误报）。
+	docStatusDateAnchorRe = regexp.MustCompile(
+		`(?:最后更新|上一轮更新|上一轮|统计时点|盘点时点|写作时点|复核时点|复测|实跑|归档日期|评审时点|评审日期|冻结|收口)` +
+			`[^\d\n]{0,12}(\d{4}-\d{2}-\d{2})`)
 )
 
 // roadmapLiveEntries 解析 ROADMAP §3.1 + §3.2 表内的现存条目编号集合。
@@ -238,4 +260,47 @@ func docStatusIsHistoricalLedger(rel string) bool {
 		return true
 	}
 	return rel == docStatusFeatures || rel == "CHANGELOG.md"
+}
+
+// TestDocPageDateClaimNotStale 断言 4：页头时点声明不得早于文内最新时点锚——
+// 「正文改了、页头日期没动」的日期滞后（本批修过的四类正属此类）必须被机械拦住。
+func TestDocPageDateClaimNotStale(t *testing.T) {
+	t.Parallel()
+
+	claimDocs, anchors := 0, 0
+	for _, rel := range repoMarkdownFiles(t) {
+		if strings.HasPrefix(rel, "docs/archive/") || rel == "CHANGELOG.md" {
+			// 归档 = 冻结不回写；CHANGELOG 的历史条目里「最后更新」是**叙述**（记录当年把
+			// 哪篇文档的页头推到哪天），不是它自己的页头声明——按历史台账排除。
+			continue
+		}
+		text := readRepoFile(t, rel)
+		claim := docStatusDateClaimRe.FindStringSubmatch(text)
+		if claim == nil {
+			continue
+		}
+		claimDocs++
+		maxAnchor := ""
+		for _, m := range docStatusDateAnchorRe.FindAllStringSubmatch(text, -1) {
+			anchors++
+			if m[1] > maxAnchor { // ISO 日期字典序即时间序
+				maxAnchor = m[1]
+			}
+		}
+		if maxAnchor > claim[1] {
+			t.Errorf("%s 页头时点声明「%s」早于文内最新时点锚 %s——"+
+				"正文已更新但页头日期未同步（改完正文必须把页头日期推到当天）",
+				rel, claim[1], maxAnchor)
+		}
+	}
+
+	if claimDocs < docStatusMinDateClaimDocs {
+		t.Fatalf("扫描面塌缩：全仓只解析到 %d 篇带页头时点声明的文档（基线 ≥%d）——"+
+			"声明措辞或扫描面被改坏", claimDocs, docStatusMinDateClaimDocs)
+	}
+	if anchors < docStatusMinDateAnchors {
+		t.Fatalf("扫描面塌缩：全仓只解析到 %d 处文内时点锚（基线 ≥%d）——"+
+			"锚短语集合被改坏", anchors, docStatusMinDateAnchors)
+	}
+	t.Logf("页头时点声明 %d 篇，文内时点锚 %d 处", claimDocs, anchors)
 }

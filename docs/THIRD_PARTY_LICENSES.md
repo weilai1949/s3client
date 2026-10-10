@@ -2,7 +2,7 @@
 
 > ⚙️ **本文件由脚本自动生成，请勿手工编辑。**
 > 生成命令：`./scripts/gen-third-party-licenses.sh`（改依赖后必须重新生成，否则门禁红灯）。
-> 生成时间：2026-10-01；Go 模块 **43** 个 · Rust crates **428** 个 · 前端运行时包 **1** 个。
+> 生成时间：2026-10-10；Go 模块 **43** 个 · Rust crates **428** 个 · 前端运行时包 **1** 个。
 > Rust 数据来源：cargo metadata（权威 license 字段）。
 >
 > ⚠️ **性质说明**：许可证名是**机械识别**的结果（Go：模块内 `LICENSE`/`COPYING` 文本匹配；
@@ -19,37 +19,34 @@
 
 | 许可证 | Go 模块 | Rust crates | npm 运行时包 |
 |---|---:|---:|---:|
-| `MIT OR Apache-2.0` | 0 | 201 | 0 |
+| `Apache-2.0 OR MIT` | 0 | 255 | 0 |
 | `MIT` | 3 | 99 | 1 |
-| `Apache-2.0 OR MIT` | 0 | 32 | 0 |
 | `BSD-3-Clause` | 21 | 2 | 0 |
 | `Apache-2.0` | 19 | 2 | 0 |
-| `MIT/Apache-2.0` | 0 | 18 | 0 |
+| `Apache-2.0 OR MIT OR Zlib` | 0 | 20 | 0 |
 | `Unicode-3.0` | 0 | 18 | 0 |
-| `Zlib OR Apache-2.0 OR MIT` | 0 | 17 | 0 |
-| `Unlicense OR MIT` | 0 | 9 | 0 |
+| `MIT OR Unlicense` | 0 | 11 | 0 |
 | `MPL-2.0` | 0 | 5 | 0 |
-| `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | 0 | 3 | 0 |
-| `Apache-2.0/MIT` | 0 | 3 | 0 |
-| `BSD-3-Clause OR MIT OR Apache-2.0` | 0 | 2 | 0 |
-| `MIT OR Apache-2.0 OR LGPL-2.1-or-later` | 0 | 2 | 0 |
-| `MIT OR Apache-2.0 OR Zlib` | 0 | 2 | 0 |
-| `Unlicense/MIT` | 0 | 2 | 0 |
-| `(MIT OR Apache-2.0) AND Unicode-3.0` | 0 | 1 | 0 |
-| `0BSD OR MIT OR Apache-2.0` | 0 | 1 | 0 |
-| `Apache-2.0 / MIT` | 0 | 1 | 0 |
+| `Apache-2.0 OR Apache-2.0 WITH LLVM-exception OR MIT` | 0 | 3 | 0 |
+| `Apache-2.0 OR BSD-3-Clause OR MIT` | 0 | 2 | 0 |
+| `Apache-2.0 OR LGPL-2.1-or-later OR MIT` | 0 | 2 | 0 |
+| `(Apache-2.0 OR MIT) AND Unicode-3.0` | 0 | 1 | 0 |
+| `0BSD OR Apache-2.0 OR MIT` | 0 | 1 | 0 |
 | `Apache-2.0 AND MIT` | 0 | 1 | 0 |
+| `Apache-2.0 OR CC0-1.0 OR MIT-0` | 0 | 1 | 0 |
 | `Apache-2.0 WITH LLVM-exception` | 0 | 1 | 0 |
 | `BSD-3-Clause AND MIT` | 0 | 1 | 0 |
-| `BSD-3-Clause/MIT` | 0 | 1 | 0 |
-| `CC0-1.0 OR MIT-0 OR Apache-2.0` | 0 | 1 | 0 |
+| `BSD-3-Clause OR MIT` | 0 | 1 | 0 |
 | `ISC` | 0 | 1 | 0 |
-| `MIT OR Zlib OR Apache-2.0` | 0 | 1 | 0 |
 | `Zlib` | 0 | 1 | 0 |
+
+> 汇总按**规范化 SPDX 表达式**归并（`/` ≡ ` OR `、同级操作数排序去重、括号与 `WITH` 例外保留），
+> 因此 `MIT OR Apache-2.0` / `Apache-2.0 OR MIT` / `MIT/Apache-2.0` 等**同义写法合并为一行**；
+> §2–§4 逐条给出各依赖的**原始**声明值。
 
 > ⚠️ 下列许可表达式含 copyleft 类**关键词**，需人工阅读原文确认义务（**这不是合规结论**）：
 > - `MPL-2.0`（Rust 5）
-> - `MIT OR Apache-2.0 OR LGPL-2.1-or-later`（Rust 2）
+> - `Apache-2.0 OR LGPL-2.1-or-later OR MIT`（Rust 2）
 
 ## 2. Go 服务端依赖（随二进制分发）
 

@@ -362,6 +362,11 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
   [`docs/en/` navigation page](README.md), and [`architecture.md`](architecture.md). **Every other doc is
   Chinese-only** — the selection and priority order are defined by the coverage policy in
   [`docs/i18n.md`](../i18n.md) §7 (中文).
+- **Deliberately not translated** (time-point ledgers, frozen history and decision originals — they change
+  too fast for a translation snapshot to stay honest, so they stay Chinese-only by design):
+  [`FEATURES.md`](../FEATURES.md), [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md), [`ROADMAP.md`](../ROADMAP.md),
+  [`CHANGELOG.md`](../../CHANGELOG.md), the [`archive/`](../archive/index.md) snapshots, and the
+  [`decisions/`](../decisions/index.md) ADRs. Rationale and the full priority table: [`docs/i18n.md`](../i18n.md) §7.2 (中文).
 - The **machine-readable contracts** are English-friendly and can be consumed directly:
   [`docs/api/openapi.json`](../api/openapi.json) (OpenAPI 3.0.3) and
   [`docs/api/accounts.schema.json`](../api/accounts.schema.json) (JSON Schema 2020-12).

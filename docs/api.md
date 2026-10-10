@@ -11,6 +11,96 @@
 通用码：`400`（请求错误）、`401`（未鉴权 / token 过期）、`403`（token 作用域越权 / Origin 不允许）、`404`（未找到）、`413`（请求体超 16 MB 上限）、`429`（每 IP 120 次/分钟限速，`S3C_TRUSTED_PROXIES` 下才采信 `X-Forwarded-For`）、`500`（服务端错误）。其中 `401 / 413 / 429 / 500` 由中间件 / 兜底统一产生，已在注册完成后**逐 operation 接线**进机器可读契约（`applyUniversalResponses`，门禁 `TestOpenAPIUniversalResponsesAreWiredPerOperation`）；`400 / 403 / 404` 按端点语义选择性声明（400 / 404 复用共享组件，403 由作用域中间件与 CORS 产生、逐端点含义不同）。端点特有码（`409` 冲突 / `412` 条件不满足 / `416` 越界 Range / `503` 上游不可用等）在各端点小节标注。  
 S3 错误码与用户消息对照见 [`docs/errors.md`](./errors.md)。
 
+## 目录
+
+> 全文导航（小节标题即锚点）；机器可读契约见 [`api/openapi.json`](api/openapi.json)，错误码对照见 [`errors.md`](errors.md)。
+
+- [健康检查](#健康检查)
+- [指标](#指标)
+- [账号](#账号)（10 个小节）
+
+<details>
+<summary>账号的小节索引</summary>
+
+- [列出](#列出)
+- [创建](#创建)
+- [获取](#获取)
+- [更新](#更新)
+- [删除](#删除)
+- [预览桶（不落库）](#预览桶不落库)
+- [连通性测试](#连通性测试)
+- [列出桶](#列出桶)
+- [创建桶](#创建桶)
+- [删除桶](#删除桶)
+
+</details>
+- [对象](#对象)（40 个小节）
+
+<details>
+<summary>对象的小节索引</summary>
+
+- [列出对象](#列出对象)
+- [存储分析与成本洞察](#存储分析与成本洞察)
+- [对象详情](#对象详情)
+- [校验对象内容（端到端校验和）](#校验对象内容端到端校验和)
+- [新建文件夹](#新建文件夹)
+- [重命名 / 移动](#重命名--移动)
+- [复制对象（单文件，跨桶）](#复制对象单文件跨桶)
+- [批量复制 / 移动（所选文件）](#批量复制--移动所选文件)
+- [删除文件夹（递归）](#删除文件夹递归)
+- [复制文件夹（递归）](#复制文件夹递归)
+- [设置对象 HTTP 头](#设置对象-http-头)
+- [对象权限（ACL）](#对象权限acl)
+- [对象标签（Tagging）](#对象标签tagging)
+- [对象保留期（Object Lock 保留）](#对象保留期object-lock-保留)
+- [法定保留（Legal Hold）](#法定保留legal-hold)
+- [桶属性（区域 / 创建时间 / 版本控制）](#桶属性区域--创建时间--版本控制)
+- [桶版本控制开关](#桶版本控制开关)
+- [桶服务端加密（SSE）](#桶服务端加密sse)
+- [桶 CORS 规则](#桶-cors-规则)
+- [桶静态网站托管](#桶静态网站托管)
+- [桶策略](#桶策略)
+- [桶标签](#桶标签)
+- [桶 Object Lock 配置（WORM 默认保留）](#桶-object-lock-配置worm-默认保留)
+- [对象版本列表（ListObjectVersions）](#对象版本列表listobjectversions)
+- [删除指定版本](#删除指定版本)
+- [版本回滚（恢复某版本为当前）](#版本回滚恢复某版本为当前)
+- [一键还原已删除对象（恢复删除标记）](#一键还原已删除对象恢复删除标记)
+- [切换对象存储类型（StorageClass）](#切换对象存储类型storageclass)
+- [回收站（列出删除标记）](#回收站列出删除标记)
+- [彻底清除（永久删除对象）](#彻底清除永久删除对象)
+- [生命周期规则（前缀过期删除）](#生命周期规则前缀过期删除)
+- [批量下载（ZIP 打包）](#批量下载zip-打包)
+- [安全代理（下载 / 预览）](#安全代理下载--预览)
+- [生成签名](#生成签名)
+- [分段上传（大文件直传）](#分段上传大文件直传)
+- [删除对象（批量）](#删除对象批量)
+- [跨账号迁移](#跨账号迁移)
+- [增量同步（按 ETag / size+mtime 比对，仅复制差异对象）](#增量同步按-etag--sizemtime-比对仅复制差异对象)
+- [计划任务（cron 定时增量同步）](#计划任务cron-定时增量同步)
+- [API 契约（OpenAPI 3.0）](#api-契约openapi-30)
+
+</details>
+- [请求示例（curl）](#请求示例curl)（11 个小节）
+
+<details>
+<summary>请求示例（curl）的小节索引</summary>
+
+- [accounts](#accounts)
+- [buckets](#buckets)
+- [bucket-settings](#bucket-settings)
+- [objects](#objects)
+- [object-meta](#object-meta)
+- [multipart](#multipart)
+- [versions](#versions)
+- [trash](#trash)
+- [migrate](#migrate)
+- [schedules](#schedules)
+- [system](#system)
+
+</details>
+- [静态资源](#静态资源)
+
 ## 健康检查
 
 ```
@@ -637,10 +727,10 @@ POST /api/accounts/{id}/multipart/part
 {"bucket":"B(可选)","key":"big.bin","uploadId":"UPLOAD123","partNumber":1,"expiresIn":3600}
 200 {"partNumber":1,"url":"https://...X-Amz-Signature=...","expiresIn":3600}
 ```
-浏览器 PUT 到 `url` 后需读取响应头 `ETag`（要求 Bucket CORS 暴露 `ETag`）。
+浏览器 PUT 到 `url` 后需读取响应头 `ETag`（要求 Bucket CORS 暴露 `ETag`）；该响应头是 S3 原始形态（**带引号**，如 `"e1"`）。
 ```
 POST /api/accounts/{id}/multipart/complete
-{"bucket":"B(可选)","key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":"\"e1\""}]}
+{"bucket":"B(可选)","key":"big.bin","uploadId":"UPLOAD123","parts":[{"partNumber":1,"etag":"e1"}]}
 200 {"completed":"big.bin"}
 ```
 ```
@@ -649,6 +739,11 @@ POST /api/accounts/{id}/multipart/abort
 200 {"aborted":true}
 ```
 `partNumber` 范围 1–10000；`parts` 需按段号对应各自 `etag`；失败时应调用 `abort` 清理。
+
+**`etag` 引号口径（统一为去引号）**：本服务返回的 `etag` 一律是**去引号**形态（`multipart/parts`、
+对象列表、版本列表皆同，见 `s3wrap` 的 `ListParts` / `UploadPart`）；`complete` 的入参**两种形态都接受**——
+去引号形态，或浏览器 PUT 分段后直接回传的 `ETag` 响应头（S3 原始带引号形态），服务端转发前统一去掉首尾引号
+（只有引号的空 `etag` 返回 400）。
 
 续传前对齐服务端真实清单（只读；刷新 / 断电 / 重选同一文件后，前端据此跳过已上传段、只补缺段）：
 ```

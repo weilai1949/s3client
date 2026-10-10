@@ -181,36 +181,40 @@
 
 > 本小节只写**能从源码 / CI 文件逐条核实**的事实，核实不了的组合一律标「❓ 未验证」，不做推断。
 > 证据等级沿用 [`OPERATIONS.md`](OPERATIONS.md) §1.1 的思路，并在表格里逐格标注：
-> **「代码 / CI 文件」**= 有文件与行号可查；**「构建目标推导」**= 由 Vite / TypeScript 的默认构建目标
+> **「代码 / CI 文件」**= 有文件与**符号**（配置键 / 脚本名 / 函数名 / 选择器 / 包名）可查；
+> **「构建目标推导」**= 由 Vite / TypeScript 的默认构建目标
 > 推得的最低版本区间，**未逐版本实测**；**「上游行为」**= Tauri / GitHub runner 的默认行为，本仓库
 > 未显式配置。与源码冲突时**以源码为准**，发现漂移按 [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 同步修正。
+>
+> **本表引用符号、不写行号**（2026-10-10 起）：行号随重构漂移，符号（如 `projects` / `ZIP_BLOB_MAX_BYTES` /
+> `:focus-visible`）可直接 grep 定位；`apps/server/doc_number_gate_test.go` 的
+> `TestCompatibilityMatrixCitesSymbolsNotLineNumbers` 机械守住这条口径。
 
 #### Web 端浏览器
 
-| 平台 / 产品形态 | 支持状态 | 依据（文件与行号） | 备注 |
+| 平台 / 产品形态 | 支持状态 | 依据（文件与符号） | 备注 |
 |---|---|---|---|
-| Chromium 系桌面浏览器（Chrome / Edge） | ✅ 已实现并验证 | 两套 Playwright **仅**跑 `chromium`（[`../apps/web/playwright.config.ts`](../apps/web/playwright.config.ts) 21–26 行、[`../apps/web/playwright.real.config.ts`](../apps/web/playwright.real.config.ts) 32–37 行）；`pnpm e2e:install` 只装 chromium（[`../apps/web/package.json`](../apps/web/package.json) 18 行） | **唯一有自动化覆盖的浏览器**。`showSaveFilePicker` 可用（[`../apps/web/src/api/download.ts`](../apps/web/src/api/download.ts) 53–66 行）→ ZIP 打包下载走**流式落盘**，不受 500MB 兜底上限约束 |
-| Firefox（桌面） | ⚠️ 部分（全站未实测） | 无 Playwright firefox 项目；`showSaveFilePicker` 缺失时走 blob 兜底（[`../apps/web/src/api/download.ts`](../apps/web/src/api/download.ts) 68–85 行），且 >500MB 或大小未知且 >50 个对象时**拒绝**（同文件 5、69–75 行）；其余依赖均为通用能力：XHR 上传（[`../apps/web/src/api/upload.ts`](../apps/web/src/api/upload.ts) 19 行）、`fetch` 流读 SSE（[`../apps/web/src/api/jobs.ts`](../apps/web/src/api/jobs.ts) 的 `subscribeMigrateEvents`，45–72 行）、`sessionStorage` / `localStorage`（[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 30–89 行） | **全站功能没有 Firefox 实测证据**；ZIP 下载能力有降级路径，语法基线见下方「构建目标推导」段 |
-| Safari（macOS / iOS） | ⚠️ 部分（全站未实测） | 无 Playwright webkit 项目；ZIP 下载走 blob 兜底（同上）；`:focus-visible` 需 Safari ≥15.4（[`../apps/web/src/styles.css`](../apps/web/src/styles.css) 186–194 行，旧版无键盘焦点轮廓——可达性降级而非功能故障）；flex `gap` 需 Safari ≥14.1（同文件多处使用） | **未实测**；Safari <14.1 / <15.4 属「构建目标推导」之外的不保证 |
-| 移动端浏览器（iOS / Android） | ❓ 未验证 | 有 `viewport` meta（[`../apps/web/index.html`](../apps/web/index.html) 5 行）与 `@media (max-width: 900px)` 断点（[`../apps/web/src/styles.css`](../apps/web/src/styles.css) 617 行），但 E2E 只用 Desktop Chrome 视口、无触屏用例 | **不承诺移动端可用**；按桌面浏览器对待属推测 |
-| 旧浏览器 / IE / 禁用 JS | ❌ 不支持 | 入口是 `<script type="module">`（[`../apps/web/index.html`](../apps/web/index.html) 13 行）；Vue 3 依赖原生 `Proxy`（IE 无）；构建配置没有 legacy / polyfill 插件（[`../apps/web/vite.config.ts`](../apps/web/vite.config.ts)） | 构建产物为 ES2020 语法基线（见下），旧浏览器无法解析 / 运行 |
-| 浏览器存储被禁（隐私模式 / 站点数据被清） | ⚠️ 部分 | 存储读写全部走 try/catch 降级（[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 22–28、64–89、280–288 行）；Token 默认 `sessionStorage`（同文件 6–8 行头注释） | 界面可用、请求可发；「跨会话保留」失效、设置不持久 |
+| Chromium 系桌面浏览器（Chrome / Edge） | ✅ 已实现并验证 | 两套 Playwright 配置的 `projects` 都只有 `{ name: 'chromium' }`（[`../apps/web/playwright.config.ts`](../apps/web/playwright.config.ts) · [`../apps/web/playwright.real.config.ts`](../apps/web/playwright.real.config.ts)）；`package.json` 的 `e2e:install` 脚本只装 chromium（[`../apps/web/package.json`](../apps/web/package.json)） | **唯一有自动化覆盖的浏览器**。`showSaveFilePicker` 可用（[`../apps/web/src/api/download.ts`](../apps/web/src/api/download.ts) 的 `downloadZipToDisk`）→ ZIP 打包下载走**流式落盘**，不受 `ZIP_BLOB_MAX_BYTES`（500MB）兜底上限约束 |
+| Firefox（桌面） | ⚠️ 部分（全站未实测） | 无 Playwright firefox `projects` 项；`showSaveFilePicker` 缺失时走 blob 兜底（[`../apps/web/src/api/download.ts`](../apps/web/src/api/download.ts) 的 `downloadZipToDisk`），且 `contentLength > ZIP_BLOB_MAX_BYTES` 或长度缺失且 `keys.length > 50` 时**拒绝**（同函数的 blob 兜底分支）；其余依赖均为通用能力：XHR 上传（[`../apps/web/src/api/upload.ts`](../apps/web/src/api/upload.ts) 的 `directUpload` → `XMLHttpRequest`）、`fetch` 流读 SSE（[`../apps/web/src/api/jobs.ts`](../apps/web/src/api/jobs.ts) 的 `subscribeMigrateEvents`）、`sessionStorage` / `localStorage`（[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 的 `tokenPersistent` / `readToken` / `writeToken`） | **全站功能没有 Firefox 实测证据**；ZIP 下载能力有降级路径，语法基线见下方「构建目标推导」段 |
+| Safari（macOS / iOS） | ⚠️ 部分（全站未实测） | 无 Playwright webkit `projects` 项；ZIP 下载走 blob 兜底（同上）；`:focus-visible` 规则需 Safari ≥15.4（[`../apps/web/src/styles.css`](../apps/web/src/styles.css) 的 `:focus-visible` 选择器，旧版无键盘焦点轮廓——可达性降级而非功能故障）；flex `gap` 需 Safari ≥14.1（同文件多处使用） | **未实测**；Safari <14.1 / <15.4 属「构建目标推导」之外的不保证 |
+| 移动端浏览器（iOS / Android） | ❓ 未验证 | 有 `viewport` meta（[`../apps/web/index.html`](../apps/web/index.html)）与 `@media (max-width: 900px)` 断点（[`../apps/web/src/styles.css`](../apps/web/src/styles.css)），但 E2E 只用 Desktop Chrome 视口、无触屏用例 | **不承诺移动端可用**；按桌面浏览器对待属推测 |
+| 旧浏览器 / IE / 禁用 JS | ❌ 不支持 | 入口是 `<script type="module">`（[`../apps/web/index.html`](../apps/web/index.html)）；Vue 3 依赖原生 `Proxy`（IE 无）；构建配置没有 legacy / polyfill 插件（[`../apps/web/vite.config.ts`](../apps/web/vite.config.ts) 无相关插件） | 构建产物为 ES2020 语法基线（见下），旧浏览器无法解析 / 运行 |
+| 浏览器存储被禁（隐私模式 / 站点数据被清） | ⚠️ 部分 | 存储读写全部走 try/catch 降级（[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 的 `tokenPersistent` / `readToken` / `writeToken` / `readServerToken` 均在 `try` 块内）；Token 默认 `sessionStorage`（同文件 `storage.ts` 头注释与 `readToken` / `writeToken`） | 界面可用、请求可发；「跨会话保留」失效、设置不持久 |
 
 **语法与特性基线（构建目标推导，未逐版本实测）**：`vite.config.ts` 未覆盖 `build.target` → Vite 6 默认
-`'modules'`（≈ES2020 语法基线）；`tsconfig.json` 的 `target` / `lib` 均为 ES2021（[`../apps/web/tsconfig.json`](../apps/web/tsconfig.json)
-3、14 行）。据此**建议**的最低版本：Chrome ≥87 / Edge ≥88 / Firefox ≥78 / Safari ≥14——**建议值**，
+`'modules'`（≈ES2020 语法基线）；`tsconfig.json` 的 `target` / `lib` 均为 ES2021（[`../apps/web/tsconfig.json`](../apps/web/tsconfig.json)）。据此**建议**的最低版本：Chrome ≥87 / Edge ≥88 / Firefox ≥78 / Safari ≥14——**建议值**，
 由构建默认值推导，**不是逐版本实测结论**。代码里可核实的运行期特性：`String.prototype.replaceAll`
-（ES2021，[`../apps/web/src/i18n/index.ts`](../apps/web/src/i18n/index.ts) 69 行）、`crypto.randomUUID`
-（**有降级兜底**，[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 110 行）、
-`matchMedia('(prefers-color-scheme: dark)')`（[`../apps/web/src/theme.ts`](../apps/web/src/theme.ts) 9 行）。
+（ES2021，[`../apps/web/src/i18n/index.ts`](../apps/web/src/i18n/index.ts) 的 `tf()`）、`crypto.randomUUID`
+（**有降级兜底**，[`../apps/web/src/api/storage.ts`](../apps/web/src/api/storage.ts) 的 `newId()`）、
+`matchMedia('(prefers-color-scheme: dark)')`（[`../apps/web/src/theme.ts`](../apps/web/src/theme.ts) 的模块级 `mq` 常量）。
 
 #### 桌面端操作系统
 
-| 平台 / 产品形态 | 支持状态 | 依据（文件与行号） | 备注 |
+| 平台 / 产品形态 | 支持状态 | 依据（文件与符号） | 备注 |
 |---|---|---|---|
-| Windows（NSIS `.exe`） | ✅ 已实现（构建产物） | 发布矩阵 `windows-latest` + `--bundles nsis`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml) 38–40、147 行）；窗口尺寸下限见 [`../apps/desktop/src-tauri/tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json) 的 `windows.minWidth/minHeight` | 产物架构 = runner 原生架构，**未显式 pin Rust target**（「上游行为」，以 Release 页 `SHA256SUMS` 为准）；**未签名** → SmartScreen 拦截（现状见 §8 与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §一 #25） |
-| macOS（`.dmg`） | ✅ 已实现（构建产物） | 发布矩阵 `macos-latest` + `--bundles dmg`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml) 44–46、147 行） | 产物架构 = `macos-latest` 当时指向的原生架构（「上游行为」，未 pin）；**未签名、未公证** → Gatekeeper（§8）；**Intel x64 是否被覆盖 ❓ 未验证**（workflow 没有独立的 x64 目标） |
-| Linux x64 桌面（`.deb`，Debian 系） | ✅ 已实现（构建产物） | 发布矩阵 `ubuntu-22.04` + `--bundles deb`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml) 41–43、147 行）；构建期安装 `libwebkit2gtk-4.1-dev`（[`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) 376 / 414 行） | Tauri 2 运行时依赖 **WebKitGTK 4.1**（「上游要求」）→ Ubuntu 22.04+ / Debian 12+ 预期可用，**未在矩阵实测**；只产 `.deb`，无 rpm / AppImage；Fedora / Arch / ARM ❓ 未验证 |
+| Windows（NSIS `.exe`） | ✅ 已实现（构建产物） | 发布矩阵 `matrix.include` 中 `platform: windows-latest` + `bundles: nsis`，打包参数 `--bundles ${{ matrix.bundles }}`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)）；窗口尺寸下限见 [`../apps/desktop/src-tauri/tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json) 的 `windows.minWidth/minHeight` | 产物架构 = runner 原生架构，**未显式 pin Rust target**（「上游行为」，以 Release 页 `SHA256SUMS` 为准）；**未签名** → SmartScreen 拦截（现状见 §8 与 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §一 #25） |
+| macOS（`.dmg`） | ✅ 已实现（构建产物） | 发布矩阵 `matrix.include` 中 `platform: macos-latest` + `bundles: dmg`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)） | 产物架构 = `macos-latest` 当时指向的原生架构（「上游行为」，未 pin）；**未签名、未公证** → Gatekeeper（§8）；**Intel x64 是否被覆盖 ❓ 未验证**（workflow 没有独立的 x64 目标） |
+| Linux x64 桌面（`.deb`，Debian 系） | ✅ 已实现（构建产物） | 发布矩阵 `matrix.include` 中 `platform: ubuntu-22.04` + `bundles: deb`（[`../.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)）；构建期安装 `libwebkit2gtk-4.1-dev`（[`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) 的 `apt-get install` 行） | Tauri 2 运行时依赖 **WebKitGTK 4.1**（「上游要求」）→ Ubuntu 22.04+ / Debian 12+ 预期可用，**未在矩阵实测**；只产 `.deb`，无 rpm / AppImage；Fedora / Arch / ARM ❓ 未验证 |
 
 > 桌面端**功能面与 Web 端完全一致**（同一套前端、无 Tauri IPC，见 [`user-guide.md`](user-guide.md) 十、桌面端）；
 > 桌面壳内嵌浏览器引擎为 Tauri 2 平台默认（Windows WebView2 / macOS WKWebView / Linux WebKitGTK），

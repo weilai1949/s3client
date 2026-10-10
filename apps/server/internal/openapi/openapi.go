@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -296,6 +297,14 @@ func (r *Registry) buildSpec() ([]byte, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// 分组说明按 tag 名索引，供未显式声明 description 的 operation 合成说明（见 describeOp）。
+	tagDesc := make(map[string]string, len(r.tags))
+	for _, t := range r.tags {
+		if t.Description != "" {
+			tagDesc[t.Name] = t.Description
+		}
+	}
+
 	paths := make(map[string]any, len(r.paths))
 	pathKeys := make([]string, 0, len(r.paths))
 	for p := range r.paths {
@@ -312,7 +321,7 @@ func (r *Registry) buildSpec() ([]byte, error) {
 		sort.Strings(methodKeys)
 		for _, m := range methodKeys {
 			op := ops[m]
-			entry[strings.ToLower(m)] = renderOp(op)
+			entry[strings.ToLower(m)] = renderOp(op, tagDesc)
 		}
 		paths[p] = entry
 	}
@@ -338,13 +347,17 @@ func (r *Registry) buildSpec() ([]byte, error) {
 	return json.Marshal(doc)
 }
 
-func renderOp(op Op) map[string]any {
+func renderOp(op Op, tagDesc map[string]string) map[string]any {
 	out := map[string]any{}
 	if op.Summary != "" {
 		out["summary"] = op.Summary
 	}
-	if op.Description != "" {
-		out["description"] = op.Description
+	desc := op.Description
+	if desc == "" {
+		desc = describeOp(op, tagDesc)
+	}
+	if desc != "" {
+		out["description"] = desc
 	}
 	if op.OperationID != "" {
 		out["operationId"] = op.OperationID
@@ -372,6 +385,42 @@ func renderOp(op Op) map[string]any {
 	if len(op.Responses) > 0 {
 		out["responses"] = renderResponses(op.Responses)
 	}
+	return out
+}
+
+// describeOp 为未显式声明 Description 的 operation 合成一段说明。
+//
+// 内容全部取自**已声明的契约事实**（summary / 所属 tag 的说明 / 声明的 2xx 成功码），
+// 因此不需要任何人工维护的散文，也不会与契约漂移；显式 `Op.Description` 优先级更高。
+// 目的：此前 84 个 operation 全无 description，Swagger UI 与代码生成器只看得到一句 summary
+// （2026-10-10 交接快照 §5 未做第 8 项）。
+func describeOp(op Op, tagDesc map[string]string) string {
+	var b strings.Builder
+	if op.Summary != "" {
+		b.WriteString(op.Summary + "。")
+	}
+	if len(op.Tags) > 0 {
+		if d := tagDesc[op.Tags[0]]; d != "" {
+			b.WriteString("分组：" + d + "。")
+		}
+	}
+	if codes := successCodes(op.Responses); len(codes) > 0 {
+		b.WriteString("成功状态码：" + strings.Join(codes, " / ") + "。")
+	}
+	return b.String()
+}
+
+// successCodes 返回 operation 声明的 2xx 状态码（升序）；非数字（如 `default`）不计入。
+func successCodes(resps map[string]Response) []string {
+	out := make([]string, 0, len(resps))
+	for code := range resps {
+		n, err := strconv.Atoi(code)
+		if err != nil || n < 200 || n > 299 {
+			continue
+		}
+		out = append(out, code)
+	}
+	sort.Strings(out)
 	return out
 }
 

@@ -5,13 +5,14 @@
 > 不改写历史结论**；后续处置写进 [`FEATURES.md`](../FEATURES.md) 与
 > [`CHANGELOG.md`](../../CHANGELOG.md)，本目录只保留原文。
 >
-> 命名与存放约定见 [`DEVELOPMENT.md`](../DEVELOPMENT.md) §4；当前**已归档 7 份**（见下表）。
+> 命名与存放约定见 [`DEVELOPMENT.md`](../DEVELOPMENT.md) §4；当前**已归档 8 份**（见下表）。
 > **归档触发规则**：时点性文档在引用收敛后即按下方「归档操作」`git mv` 归档；**已填写的事故复盘**
 > 在事件闭环、行动项登记完成后同样按「四步」冻结——**首例即当时唯一待归档项，已于 2026-09-30 执行**
 > （[`incident-20260916-presign-empty-url.md`](incident-20260916-presign-empty-url.md)，即
 > [`POSTMORTEM_TEMPLATE.md`](../POSTMORTEM_TEMPLATE.md) 的首份已填写实例）；
 > **批次交接快照**（`handoff-YYYYMMDD.md`）在批次全部收口后同 PR 冻结——首例
-> [`handoff-20260930.md`](handoff-20260930.md) 已于 2026-10-08 执行；
+> [`handoff-20260930.md`](handoff-20260930.md) 已于 2026-10-08 执行，
+> [`handoff-20261010.md`](handoff-20261010.md) 已于 2026-10-10 执行（收口提交 `dd9ab88` 之后）；
 > **代码评审快照**（`code-review-YYYY-MM-DD.md`）在处置状态表**全部闭环**后同 PR 冻结——
 > 先例 [`code-review-2026-09-24.md`](code-review-2026-09-24.md) 已于 2026-09-28 执行，
 > [`code-review-2026-10-09.md`](code-review-2026-10-09.md) 已于 2026-10-10 执行。
@@ -34,6 +35,7 @@
 | [incident-20260916-presign-empty-url.md](incident-20260916-presign-empty-url.md) | `docs/incident-20260916-presign-empty-url.md` | 2026-09-30 | **首份已填写的事故复盘**（near-miss 示例，按 [`POSTMORTEM_TEMPLATE.md`](../POSTMORTEM_TEMPLATE.md) §1–§10 填写）：`b3b287c`（2026-09-05 为达 100% 覆盖率删除被误判「不可达」的预签名错误分支）→ 签名失败回 `200 {"url":""}`；2026-09-16 评估实测发现（`ASSESSMENT` L1 / `KNOWN_ISSUES` #23），2026-09-17 `5954bfa` 统一 `writePresignResult` + 源码门禁 `TestPresignErrorsNotSwallowed` 闭环，2026-09-19 `0fbd560` 收口 #23 余项；正文字段全挂 git 取证，**未编造运行期数据** |
 | [handoff-20260930.md](handoff-20260930.md) | `docs/handoff-20260930.md` | 2026-10-08 | **首份批次交接快照**（2026-09-30 中断优化批次的断点记录）：所记四条目 `ROADMAP` #19 / `KNOWN_ISSUES` #70 / `ROADMAP` #18 / #17 已于 2026-10-01 **全部收口**（§2 表），快照冻结为「执行到哪、还剩什么」的历史原文（含当时实跑的门禁数字与踩坑记录）；当前待办一律以 [`ROADMAP.md`](../ROADMAP.md) §三 3.2 与 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 为准 |
 | [code-review-2026-10-09.md](code-review-2026-10-09.md) | `docs/code-review-2026-10-09.md` | 2026-10-10 | **2026-10-09 全仓五轴代码评审**（结论 `Request changes` → 收口）：C1 / C2（CI 两个平台的 Go job 构造性红灯——缺 `apps/web/node_modules` 前置、浅克隆致 `changelog_tag` 必红）与 R1–R10 **全部修复**，O1–O12 **全部闭环**（转登记 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #72–#83，逐条证据见 [`FEATURES.md`](../FEATURES.md) §BZ–§CD）；§1 门禁实测数字为**评审时点快照**，正文不回写。**读正文注意**：其 §8 末条停在同日**中间态**「仅剩 O1 / O3–O8 开放」——终态（全部闭环）以本行与 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 编号台账为准 |
+| [handoff-20261010.md](handoff-20261010.md) | `docs/handoff-20261010.md` | 2026-10-10 | **第二份批次交接快照**（2026-10-10 全 docs 通读问题清单收口批次的断点记录）：该批 24 组问题已于当日全部执行完毕并提交 `dd9ab88`（唯一 Go 生产变更 = OpenAPI 通用状态码逐 operation 接线，另含三道门禁扩面），快照冻结「执行到哪、还剩什么」的原文（§5 未做清单 14 项 + 5 条踩坑），正文不回写；台账见 [`FEATURES.md`](../FEATURES.md) §CI，当前待办一律以 [`ROADMAP.md`](../ROADMAP.md) §三 3.2 与 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 为准 |
 
 > `docs/` 下（本目录之外）的文档均为**活跃文档**，须随代码同步维护
 > （§4 文档同步门禁）。本目录约定随归档实践持续生效。

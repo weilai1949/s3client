@@ -19,10 +19,13 @@ package handler
 //     其余状态码（409 / 412 / 416 / 501 / 503 / 201 / 202 …）必须逐端点显式声明。
 
 import (
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/weilai1949/s3client/apps/server/internal/openapi"
 )
 
 // statusConstCodes 把源码中出现的 `http.StatusXxx` 常量映射为数字状态码。
@@ -195,6 +198,67 @@ func TestOpenAPIUniversalResponsesAreWiredPerOperation(t *testing.T) {
 			t.Errorf("components.responses.%s 零引用——孤儿共享响应，契约消费者（codegen / Swagger UI）看不到它",
 				name)
 		}
+	}
+}
+
+// TestApplyUniversalResponsesInitializesNilResponseMap 覆盖「注册时一个响应都没声明」的兜底分支：
+// 生产注册表里每个 operation 都至少声明一个响应，故该分支只有本测试能触达——缺了它
+// `applyUniversalResponses` 的 `op.Responses == nil` 初始化会成为 `count==0` 覆盖盲区，
+// 而这一分支正是「新端点忘了声明响应也不会静默丢掉 429/500/401」的保证。
+func TestApplyUniversalResponsesInitializesNilResponseMap(t *testing.T) {
+	t.Parallel()
+
+	r := openapi.New("t", "1.0.0")
+	r.Operation("get", "/api/no-responses", openapi.Op{Summary: "未声明任何响应"})
+	r.Operation("post", "/api/with-body", openapi.Op{
+		Summary: "带请求体",
+		Request: &openapi.Request{Content: openapi.MediaType{Schema: openapi.Str()}},
+	})
+	r.Operation("get", "/api/no-auth", openapi.Op{Summary: "匿名端点", NoAuth: true})
+	applyUniversalResponses(r)
+
+	b, err := r.MarshalJSON()
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	paths, _ := doc["paths"].(map[string]any)
+	respKeys := func(path, method string) map[string]bool {
+		t.Helper()
+		item, _ := paths[path].(map[string]any)
+		if item == nil {
+			t.Fatalf("paths.%s 缺失", path)
+		}
+		op, _ := item[method].(map[string]any)
+		if op == nil {
+			t.Fatalf("%s %s 缺失", method, path)
+		}
+		resps, _ := op["responses"].(map[string]any)
+		out := map[string]bool{}
+		for k := range resps {
+			out[k] = true
+		}
+		return out
+	}
+
+	// nil Responses 的端点：429 / 500（全端点）+ 401（非 NoAuth）必须补挂；无请求体故无 413。
+	got := respKeys("/api/no-responses", "get")
+	for _, want := range []string{"429", "500", "401"} {
+		if !got[want] {
+			t.Errorf("无响应声明的端点未补挂通用状态码 %s（%v）——nil Responses 的兜底失效", want, got)
+		}
+	}
+	if got["413"] {
+		t.Errorf("无请求体的端点不应补挂 413（%v）", got)
+	}
+	if !respKeys("/api/with-body", "post")["413"] {
+		t.Error("带请求体的端点未补挂 413")
+	}
+	if respKeys("/api/no-auth", "get")["401"] {
+		t.Error("NoAuth 豁免端点不应补挂 401（health / metrics 匿名可读）")
 	}
 }
 

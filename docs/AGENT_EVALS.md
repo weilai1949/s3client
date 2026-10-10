@@ -9,14 +9,15 @@
 > [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)）。
 > 本文件的**结构不变量**（GT 集 ≥ 3 条、评测脚本非空壳、AI_POLICY 回引、披露字段集一致）由
 > [`../apps/server/agent_evals_gate_test.go`](../apps/server/agent_evals_gate_test.go) 钉住；
-> **评分卡打分与台账回填没有机械保证——属人工评审**（单人维护：评审人即维护者本人）。
+> **评分卡打分与「某次改动算不算实质性 AI 贡献」没有机械保证——属人工评审**（单人维护：评审人即维护者本人）；
+> 但**台账回填的一致性**已机械化（§四：表行数 ⇄ 状态行条数、PR 模板勾选项、发版脚本复核清单）。
 
 ## 一、为什么需要（效果证据 vs 过程约束）
 
 [`AI_POLICY.md`](AI_POLICY.md) 的披露 / 权限矩阵 / DoD 都是**过程约束**：它们证明「流程走了」，
 证明不了「输出是对的」——同一份 DoD 可以逐项打勾、门禁全绿，但把 API 契约改坏或把文档写失真。
 本文件补上缺失的另一半：**用一组可复现的黄金任务和统一评分卡，让「AI 是否值得信任」从印象变成测量**。
-基线事实（盘点时点 2026-10-10）：本仓库已有 **30+ 道机械门禁**（包根 `apps/server/*_gate_test.go` 27 道 +
+基线事实（盘点时点 2026-10-10）：本仓库已有 **30+ 道机械门禁**（包根 `apps/server/*_gate_test.go` 29 道 +
 子包 `error_echo` / `migrate_sync` / `sync_list` 等 3 道 + 前端 `a11y_gate` / `deadcode_gate` / `generated.gate` 3 道；
 2026-09-30 盘点时为 20+），但**没有任何针对 AI 产出质量的评测任务集与度量口径**。
 
@@ -134,15 +135,22 @@ AI 生成 / 辅助比例的**自报告估计值**，只服务「改进 AI 使用
 | — | — | — | — | — | — |
 
 > ⚠️ **当前状态（2026-10-10）：0 条已回填**——本表自 2026-09-30 建立以来尚无 PR 走完「披露 → 回填」流程
-> （期间 8 个批次均为本地直提）。这本身是待改进项：回填动作当前**无门禁强制**，只靠下方机制约定。
+> （期间 9 个批次均为本地直提）。「某次改动是否属于**实质性** AI 贡献」无法机械判定，因此回填动作本身
+> 仍需人工；但与之相关的三处已由 [`../apps/server/agent_evals_gate_test.go`](../apps/server/agent_evals_gate_test.go) 机械钉住
+> （2026-10-10 交接快照 §5 未做第 4 项）：**①表行数 ⇄ 本状态行的「N 条已回填」**（回填一行必须同改状态行）、
+> **②PR 模板「AI 度量」勾选项存在且点名 §四**、**③`scripts/release-version.sh` 印出「发版前人工复核」清单**
+> （含本表与 `CHANGELOG.md` 对账）。
 
 > **初始状态（如实声明）**：建立时基线（2026-09-30），**无历史台账**——此前未逐 PR 沉淀披露数据，
 > 不追溯编造（照 [DEVELOPMENT.md](DEVELOPMENT.md) §4 登记表「不追溯编造历史日期」纪律）。从本次起记录。
 
 **回填机制（谁、什么时机）**：
 
-1. **PR 收口时**：由贡献者按 PR 披露块更新一行（工具 / 任务类型 / 门禁结果 / 返工次数）；评分列由维护者按 §三 打分。
-2. **版本发版前**：维护者复核本表完整性（与 `CHANGELOG.md` 该版本条目对账，缺失行补登）。
+1. **PR 收口时**：由贡献者按 PR 披露块更新一行（工具 / 任务类型 / 门禁结果 / 返工次数），**并同步改本表上方的
+   「当前状态：N 条已回填」**（两者由 `TestAgentEvalsMetricLedgerIsSelfConsistent` 机械对账）；评分列由维护者按 §三 打分。
+2. **版本发版前**：维护者复核本表完整性（与 `CHANGELOG.md` 该版本条目对账，缺失行补登）——该动作已写进
+   [`../scripts/release-version.sh`](../scripts/release-version.sh) 收尾印出的「发版前人工复核」清单
+   （`TestReleaseScriptRemindsMetricLedgerReview` 钉住，删提醒即红灯）。
 3. **评测（按需）**：每次实跑 GT 后另在 §六 评测台账登记一行（PR 度量表只记真实交付的 PR）。
 
 ## 五、运行方式
@@ -213,5 +221,6 @@ scripts/evals/run-golden-task.sh --json /tmp/gt1.json GT-1
 | [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) | 机器可读黄金任务集（§二，GT-1..GT-4 的判据与五维锚点） |
 | [`../scripts/evals/run-golden-task.sh`](../scripts/evals/run-golden-task.sh) | GT 判据执行器（§五，按 id 实跑并输出 `EVAL_RESULT`） |
 | [`../apps/server/agent_evals_gate_test.go`](../apps/server/agent_evals_gate_test.go) | 本文件与脚本的结构不变量门禁 |
-| [`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) | 「AI 使用披露」块载体（含占比字段，度量披露来源） |
+| [`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md) | 「AI 使用披露」块 + 「AI 度量」勾选项载体（披露字段与回填入口，两处均由门禁钉住） |
+| [`../scripts/release-version.sh`](../scripts/release-version.sh) | 发版脚本（收尾印出「发版前人工复核」清单，含本表与 `CHANGELOG.md` 对账） |
 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 评测不通过项的去向（问题唯一来源） |

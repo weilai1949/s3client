@@ -20,88 +20,28 @@
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-10（补齐 §四 编号台账缺失的 **#72 / #74 / #75 / #77 / #78** 五行合并行——
-> 这五个编号在 §二 叙述与页头「已闭环移除」清单里早已登记，但 §四 表此前漏行，代码注释引用 `#74` 会查空；
-> 另订正 #47–#59 的「唯一来源」指针（落地后转 FEATURES，只指 ROADMAP 会查空）。存量未变）：
+> 最后更新：2026-10-10（§四 编号台账补齐 **#72 / #74 / #75 / #77 / #78** 五行合并行——这五个编号在 §二 叙述与
+> 页头「已闭环移除」清单里早已登记，§四 表此前漏行会让代码注释里对 `#74` 的引用查空；另订正 #47–#59 的
+> 「唯一来源」指针（只指 ROADMAP 会查空）。**存量未变**）。
 >
-> 上一轮：2026-10-09（第三批次：**#76 / #79 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CD）：
-> **#76** 前端结构性重复收敛——`newRowKey` 的 7 份逐字复制提取为 `src/rowKey.ts` 的
-> `createRowKey` 工厂；虚拟滚动管线（ObjectList / MigratePanel / VersionsDialog /
-> RecycleBinPanel 的 4 份）提取为 `src/composables/useVirtualRows.ts`，各组件只传响应式数组；
-> **#79** OpenAPI 契约漂移收口——新增「handler 直接写出的状态码必须声明」门禁
-> （`openapi_status_declared_test.go`）并补齐 migrate jobs 404 / trash 409 / copy 409 /
-> 异步端点 503 / proxy 400+416 等缺失声明；`putObjectLock` 用新增的 `anyOf` 表达
-> days/years 二选一；`bucket` 从全部请求体 required 移除（handler 经 `bucketOr` 回退账号
-> 默认桶，与共享 Bucket query 参数「可省略」一致）并新增门禁，重生成 `docs/api/openapi.json`
-> 与前端 `schema.d.ts`。
-> 故 §二 当前存量 = **#63（➖ 已决策）**——**2026-10-09 评审的 O1–O12（#72–#83）已全部闭环移除**。
+> **闭环批次索引**（本文件只收**未闭环**项，故历史批次不复述细节；逐条处置证据在
+> [`FEATURES.md`](FEATURES.md)，编号在 §四 台账）：
 >
-> 上一轮更新：2026-10-09（第二批次：**#72 / #74 / #75 / #77 / #78 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CC）：
-> **#72** 数据面 `UNSIGNED-PAYLOAD` 收窄为只在**带 stream 的请求**注入（无 body 的
-> GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名；此前无条件注入），`http://` endpoint 的
-> 残留载荷完整性风险记入 [`threat-model.md`](threat-model.md) §6.2；
-> **#74** 前端传输层新增 `ApiError{status, body}`（错误响应归一携带 HTTP 状态与已解析体），
-> 成功响应的非 JSON body 由 `request` 边界校验上抛；`jobs.ts` SSE 失败改抛 `ApiError`；
-> **#75** `generated.gate.test.ts` 补双向穷尽性断言：生产源码 `opPath('<id>')` 引用的 opId
-> 必须存在，且未被引用的 opId 必须正好等于 8 个「前端不消费」白名单；
-> **#77** 右键菜单关闭还原来源焦点、Escape 改走 `useKeydownStack`（LIFO，删掉
-> `useObjectBrowser` 的独立 window Escape 监听）、「⋯」触发器补 `aria-haspopup`/`aria-expanded`；
-> **#78** i18n 覆盖测试补「模板 / 数据驱动键逐个有定义」断言（堵 `storageReport.kind.${kind}`
-> 等盲区），并清理 3 处硬编码可见文案（`AccessKey ID/Secret`、批量标签「替换」）。
-> 故 §二 当前存量 = **#63（➖ 已决策）+ #76 / #79（⬜ 开放）**。
+> | 日期 | 闭环并移除 | 证据 |
+> |---|---|---|
+> | 2026-10-10 | 本轮无编号闭环；§四 台账补 #72 / #74 / #75 / #77 / #78 五行（存量未变） | §四（本文件） |
+> | 2026-10-09 | #76 前端结构性重复收敛（`rowKey.ts` / `useVirtualRows.ts`） · #79 OpenAPI 状态码声明门禁 | [`FEATURES.md`](FEATURES.md) §CD |
+> | 2026-10-09 | #72 数据面 `UNSIGNED-PAYLOAD` 收窄 · #74 前端 `ApiError` · #75 `generated.gate` 穷尽性 · #77 右键菜单 a11y · #78 i18n 盲区 | §CC |
+> | 2026-10-09 | #73 `s3wrap` 导出面降级 · #80 计划校验定值文案 · #81 accounts 创建面收口 · #83 散点缺陷 12 处（+`s3c_persist_failures_total`） | §CA |
+> | 2026-10-09 | #82 R10 评审残留（`make check` 补项 / E2E 触发面 / DEVELOPMENT 漂移） | §CB |
+> | 2026-10-08 | #71 两批：仓库 slug → 产品名全量统一（**推翻原 ➖「维持现状」决策**） | §BO / §BP |
+> | 2026-09-30 | #69 CHANGELOG ↔ git tag 台账 · #70 `NormalizeEndpoint` 幂等修复（**推翻 ➖**） | §BE / §BK |
+> | 2026-09-29 | #65–#68 死代码门禁改 TS AST · GitLab SAST 实跑 · 可访问性三处 · nginx 跨层日志关联 | §AO / §AP / §AQ |
+> | 2026-09-28 | #60–#64 前端测试拆分 · `SameEndpoint` 纳入 `useSSL` · 批量删除编排下沉 · 三路复审 19 条 | §AB–§AJ |
 >
-> 上一轮更新：2026-10-09（**#73 / #80 / #81 / #82 / #83 已闭环并移除**；#73/#80/#81/#83 证据见 [`FEATURES.md`](FEATURES.md) §CA，#82 见 §CB）：
-> **#73** `s3wrap` 4 个签名带 AWS SDK 类型、仅供包内调用的转换函数降为小写（`fromS3Object` /
-> `formatBuckets` / `describeACL` / `granteeLabel`），收窄 SDK 类型外泄入口；
-> **#80** 计划校验错误不再透传 `err.Error()`——`service` 新增类型化 `ScheduleValidationError`
-> （`Msg` 固定、`Cause` 仅落日志），handler 改走 `ScheduleValidationMessage`，`error_echo_gate`
-> 增加对 `writeErr(..., 400, x.Error())` 形态的捕获与正则自检；
-> **#81** `POST /api/accounts`（创建账号，无路径 `{id}` 可判）对 `accounts` 作用域 token
-> 一律 403（`reason=accounts_create`）——堵住「`accounts:[A]` 的 token 铸造任意新账号」的
-> 凭证面；`GET /api/accounts`（列表，返回不含 `SecretKey` 的 `AccountView`）语义在
-> [`threat-model.md`](threat-model.md) 最小权限节明确；
-> **#83** 散点缺陷群 12 处全部修复（2 处漏包 `wrapObjectTooLarge`、`PurgeObject` 遮蔽 `out`、
-> `dialContextSSRF` 可返回 `(nil,nil)`、`store` / `sqlite` 吞 `encryptAESGCM` 错误、
-> `atomicfile` 固定 `.tmp` 并发互删、storage_report 金额未取整、`Scheduler.List` O(n²) 选择排序、
-> 损坏 `schedules.json` 静默丢弃后被空列表覆盖、非法 cron 停摆不写 `LastError`、`Job.Total`
-> 无锁读、计划/任务落盘 `Save` 失败被静默——**新增 `s3c_persist_failures_total` 指标**）；
-> **#82** R10 评审残留闭环——`make check` 补 `govulncheck` / 前端 `pnpm lint` / `go build ./...`，
-> 真 RustFS Go E2E 的 PR 触发面从 `internal/s3wrap/**` 放宽到 `apps/server/**`，DEVELOPMENT
-> 的 `perf-budget`（真实 job id 为 `bench`）/ 覆盖率排除项 / 触发事件 job 计数三处漂移修正，
-> 并加机械门禁防回退（`doc_ci_drift_gate_test.go` + `TestMakefileCheckMirrorsCIStaticGates` +
-> `TestRustFSE2ETriggersCoverWholeBackend`），证据见 [`FEATURES.md`](FEATURES.md) §CB。
-> 故 §二 当前存量 = **#63（➖ 已决策）+ #72 / #74–#79（⬜ 开放）**。
->
-> 上一轮更新：2026-10-08（**#71 已闭环并移除**，同日分两批完成，**推翻原 ➖「维持现状」决策**）：
-> **① 仓库 slug 统一**——`github.com/weilai1949/s3clinet` → `…/s3client`（`apps/server/go.mod` 模块路径 +
-> 全仓 Go import + 全部仓库 URL：`.github/SECURITY.md` / `ISSUE_TEMPLATE/config.yml` / `SUPPORT.md` /
-> `CONTRIBUTING.md` / `AI_POLICY.md` / `docs/en/index.md` / `accounts.schema.json` `$id` /
-> Grafana 面板链接 / 根 `README.md` Release 链接），对齐 `git remote` / `.well-known/security.txt` /
-> `CITATION.cff` 既有取值，证据见 [`FEATURES.md`](FEATURES.md) **§BO**；
-> **② 产品名统一（同日第二批）**——品牌 / 运行时 / 监控命名空间**一并**改为 `s3client`：文档与英文快照标题、
-> OpenAPI `title: "s3client API"`（已重生成 `openapi.json` 与前端 `schema.d.ts`）、启动日志 `msg="s3client server"`、
-> 单写者锁文件 `.s3client.lock`（原 `.s3clinet.lock`，**行为变更**）、二进制 `s3client-server`、镜像与
-> `container_name` `s3client/server` 系、Cargo 包与 Tauri `productName` / `identifier`、npm `s3client-web` /
-> `s3client-desktop`、E2E 环境变量 `S3CLIENT_E2E` / `S3CLIENT_{ENDPOINT,ACCESS_KEY,SECRET_KEY}`、
-> 记录规则 `s3client:*` 与告警 `S3Client*`、`deploy/{prometheus,grafana}/s3client.*` 与
-> `deploy/nginx/conf.d/s3client-*.conf` 文件名，证据见 [`FEATURES.md`](FEATURES.md) **§BP**。
-> **仍保留旧写法的只有两处（历史不回写）**：`CHANGELOG.md` 历史条目（**只修正**指向改名文件的路径链接，
-> 叙述里的旧名照旧）与 `docs/archive/` 冻结件。
->
-> 上一轮更新：2026-09-30（**#70 已闭环并移除**：`NormalizeEndpoint` 幂等修复——推翻原 ➖ 决策、
-> 按登记内写死的修法（先切分 host/path，再对 host `TrimSpace`）落地，TDD 先红后绿 + 变异验证 +
-> 两目标各 10s 有界 fuzz PASS，证据见 [`FEATURES.md`](FEATURES.md) §BK。同日 **#69 已闭环并移除**：
-> CHANGELOG 顶部新增「tag ↔ 版本段对应关系（唯一台账）」，
-> 3 个时间戳 tag 定性为**同日内部快照**（打在 feat/fix 提交上、非 release 提交、当日被 rc0/rc1 取代，
-> 无独立版本段）；反向补齐 5 个「有段无 tag」的历史段登记；`[1.0.0]` 段日期按 tag 事实修正为
-> 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go` +
-> `scripts/release-version.sh` 硬检查，证据见 [`FEATURES.md`](FEATURES.md) §BE。产品功能缺陷仍为零。
-> 前一日记录保持原文——2026-09-29 文档覆盖矩阵收口时新开 #65–#68 四条，**均为写文档时实测发现**：
-> 门禁口径 / CI 覆盖 / 可访问性 / 日志关联。同日晚些时候 **#65–#68 已全部闭环并移除**：
-> #65 / #67 / #68 各补了机械门禁（证据见 [`FEATURES.md`](FEATURES.md) §AO / §AP），
-> #66 的 GitLab SAST 以**实跑通过**（非 `--list`）闭环并推翻了它自己登记的「无法本地验证」
-> 这一理由（证据见 §AQ；发现项 triage 见 [`threat-model.md`](threat-model.md) §7）。
-> 仓内技术债不再为零，产品功能缺陷仍为零。
+> **当前存量**：§一 **#25（⛔ 外部阻塞）** · §二 **#63（➖ 已决策）**；产品功能缺陷为零，仓内技术债不再为零
+> （分类归零凭证见 §三）。**更早的逐条叙述按「细节已在 FEATURES 台账」收敛——不是删除历史**：
+> 原文仍在对应 `FEATURES.md` 小节与 §四 编号台账的「处置」列。
 
 ## 目录
 

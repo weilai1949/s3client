@@ -3,6 +3,7 @@ package openapi
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -44,7 +45,7 @@ func TestRenderOp_Full(t *testing.T) {
 			"200": {Description: "ok", JSON: Obj()},
 		},
 	}
-	out := renderOp(op)
+	out := renderOp(op, nil)
 	if out["summary"] != "s" {
 		t.Errorf("summary = %v", out["summary"])
 	}
@@ -80,7 +81,7 @@ func TestRenderOp_Full(t *testing.T) {
 
 // TestRenderOp_Empty 覆盖 renderOp 的所有空 / 假分支（空 Op、nil Request、空 Responses）。
 func TestRenderOp_Empty(t *testing.T) {
-	out := renderOp(Op{})
+	out := renderOp(Op{}, nil)
 	if len(out) != 0 {
 		t.Errorf("empty op produced keys: %v", out)
 	}
@@ -89,13 +90,119 @@ func TestRenderOp_Empty(t *testing.T) {
 	opNilContent := Op{
 		Request: &Request{Required: false},
 	}
-	out2 := renderOp(opNilContent)
+	out2 := renderOp(opNilContent, nil)
 	rb := out2["requestBody"].(map[string]any)
 	if rb["required"] != false {
 		t.Errorf("requestBody.required = %v", rb["required"])
 	}
 	if rb["content"] == nil {
 		t.Error("requestBody.content key missing (should be empty map)")
+	}
+}
+
+// TestDescribeOp 覆盖合成说明的各分支：显式 description 优先、摘要 / 分组 / 2xx 三个来源的组合，
+// 以及「三处都为空 → 不产生 description 键」的兜底。
+func TestDescribeOp(t *testing.T) {
+	tagDesc := map[string]string{"objects": "对象：列举 / 复制 / 删除（docs/api.md「对象」）"}
+
+	// 显式 Description 优先，不被合成内容覆盖。
+	explicit := renderOp(Op{Summary: "s", Description: "手写说明", Tags: []string{"objects"}}, tagDesc)
+	if explicit["description"] != "手写说明" {
+		t.Errorf("显式 description 被覆盖：%v", explicit["description"])
+	}
+
+	// 摘要 + 分组 + 2xx（201 与 200 升序；500 / default 不计入）。
+	full := renderOp(Op{
+		Summary: "上传对象",
+		Tags:    []string{"objects"},
+		Responses: map[string]Response{
+			"201": {Description: "created"}, "200": {Description: "ok"},
+			"500": {Description: "err"}, "default": {Description: "other"},
+		},
+	}, tagDesc)
+	want := "上传对象。分组：对象：列举 / 复制 / 删除（docs/api.md「对象」）。成功状态码：200 / 201。"
+	if full["description"] != want {
+		t.Errorf("合成 description = %q, want %q", full["description"], want)
+	}
+
+	// 无 tag、只有摘要：不因缺分组说明而失败。
+	if got := describeOp(Op{Summary: "仅摘要"}, nil); got != "仅摘要。" {
+		t.Errorf("summary-only = %q", got)
+	}
+	// tag 存在但未声明说明 / 只有非 2xx 响应：只剩摘要。
+	if got := describeOp(Op{Summary: "s", Tags: []string{"objects"}, Responses: map[string]Response{"404": {}}}, nil); got != "s。" {
+		t.Errorf("tag-without-description = %q", got)
+	}
+	// 三处皆空：返回空串（renderOp 因此不写 description 键）。
+	if got := describeOp(Op{}, nil); got != "" {
+		t.Errorf("empty op description = %q, want empty", got)
+	}
+	if _, ok := renderOp(Op{Tags: []string{"objects"}}, nil)["description"]; ok {
+		t.Error("空 summary / 无 responses 的 op 不应产生 description 键")
+	}
+	// successCodes 的非数字状态码分支。
+	if codes := successCodes(map[string]Response{"default": {}}); len(codes) != 0 {
+		t.Errorf("successCodes(default) = %v, want empty", codes)
+	}
+}
+
+// TestForEachOperationRewritesEveryOp 覆盖 ForEachOperation 的整体路径：遍历全部已注册
+// operation（多 path × 多 method）、把 f 的返回值写回、并使已缓存的规范失效。
+// 该函数是 handler.applyUniversalResponses 的唯一入口（84 个 operation 的通用状态码靠它统一补挂），
+// 此前包内无测试覆盖其函数体——`make test-cover` 的 `count==0` 检查会红灯。
+func TestForEachOperationRewritesEveryOp(t *testing.T) {
+	r := New("t", "1.0.0")
+	r.Operation("get", "/a", Op{Summary: "a"})
+	r.Operation("post", "/a", Op{Summary: "a2"})
+	r.Operation("get", "/b", Op{Summary: "b"})
+
+	// 先 marshal 一次，让规范进入缓存，验证 ForEachOperation 会置空缓存。
+	if _, err := r.MarshalJSON(); err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	seen := map[string]bool{}
+	r.ForEachOperation(func(method, path string, op Op) Op {
+		seen[method+" "+path] = true
+		op.Summary += "!"
+		return op
+	})
+	if len(seen) != 3 {
+		t.Fatalf("遍历到 %d 个 operation，期望 3（%v）", len(seen), seen)
+	}
+	for _, want := range []string{"GET /a", "POST /a", "GET /b"} {
+		if !seen[want] {
+			t.Errorf("未遍历到 %s（method 应已大写归一）", want)
+		}
+	}
+
+	// 返回值必须写回且缓存已失效：重新 marshal 能读到改写结果。
+	b, err := r.MarshalJSON()
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	paths, _ := doc["paths"].(map[string]any)
+	if paths == nil {
+		t.Fatal("规范缺少 paths")
+	}
+	for _, p := range []string{"/a", "/b"} {
+		item, _ := paths[p].(map[string]any)
+		if item == nil {
+			t.Fatalf("paths.%s 缺失", p)
+		}
+		for _, m := range []string{"get", "post"} {
+			op, _ := item[m].(map[string]any)
+			if op == nil {
+				continue
+			}
+			if s, _ := op["summary"].(string); !strings.HasSuffix(s, "!") {
+				t.Errorf("%s %s 的 summary = %q，未写回 f 的返回值", m, p, s)
+			}
+		}
 	}
 }
 

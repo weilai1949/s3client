@@ -192,7 +192,65 @@ def tally(items):
     return t
 
 
-go_t, rust_t, npm_t = tally(l[1] for l in go_lic), tally(c["license"] for c in rust), tally(n["license"] for n in npm)
+# ---------------------------------------------------------------- SPDX 表达式规范化
+# 目的：同一许可证集合的**同义写法**必须归并成一行（历史实测 `MIT OR Apache-2.0` /
+# `Apache-2.0 OR MIT` / `MIT/Apache-2.0` / `Apache-2.0/MIT` / `Apache-2.0 / MIT` 被拆成五行，
+# 使「按许可证看依赖分布」失真）。规则：
+#   - `/` 是 cargo 体系里的 OR 分隔符 → 统一成 ` OR `；
+#   - 按 SPDX 优先级（WITH > AND > OR）递归规范，括号保留；
+#   - 同级操作数（OR / AND）**去重 + 字典序排序**——两者都满足交换律与幂等；
+#   - `X WITH 例外` 作为一个原子保留（不规范 `WITH` 左右顺序）；
+#   - `UNKNOWN…` 原样返回（它不是 SPDX 表达式）。
+# 门禁侧同一规则见 apps/server/third_party_licenses_gate_test.go 的 canonicalSpdx（两处同改）。
+def _split_top(s, sep):
+    out, depth, cur, i = [], 0, [], 0
+    while i < len(s):
+        c = s[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+        if depth == 0 and s.startswith(sep, i):
+            out.append("".join(cur).strip())
+            cur = []
+            i += len(sep)
+            continue
+        cur.append(c)
+        i += 1
+    out.append("".join(cur).strip())
+    return out
+
+
+def _sorted_join(parts, sep):
+    uniq = sorted({p for p in parts if p})
+    return sep.join(uniq)
+
+
+def _canon_atom(s):
+    s = s.strip()
+    if s.startswith("(") and s.endswith(")"):
+        return "(" + _canon_or(s[1:-1]) + ")"
+    return " ".join(s.split())
+
+
+def _canon_and(s):
+    return _sorted_join([_canon_atom(p) for p in _split_top(s, " AND ")], " AND ")
+
+
+def _canon_or(s):
+    return _sorted_join([_canon_and(p) for p in _split_top(s, " OR ")], " OR ")
+
+
+def canonical_spdx(expr):
+    if not expr or expr.startswith("UNKNOWN"):
+        return expr
+    s = re.sub(r"\s*/\s*", " OR ", expr.strip())
+    return _canon_or(" ".join(s.split()))
+
+
+go_t = tally(canonical_spdx(l[1]) for l in go_lic)
+rust_t = tally(canonical_spdx(c["license"]) for c in rust)
+npm_t = tally(canonical_spdx(n["license"]) for n in npm)
 licenses = sorted(set(go_t) | set(rust_t) | set(npm_t), key=lambda k: (-(go_t.get(k, 0) + rust_t.get(k, 0) + npm_t.get(k, 0)), k))
 unknown = [k for k in licenses if k.startswith("UNKNOWN")]
 today = datetime.date.today().isoformat()
@@ -222,6 +280,10 @@ w("| 许可证 | Go 模块 | Rust crates | npm 运行时包 |")
 w("|---|---:|---:|---:|")
 for k in licenses:
     w(f"| `{k}` | {go_t.get(k, 0)} | {rust_t.get(k, 0)} | {npm_t.get(k, 0)} |")
+w("")
+w("> 汇总按**规范化 SPDX 表达式**归并（`/` ≡ ` OR `、同级操作数排序去重、括号与 `WITH` 例外保留），")
+w("> 因此 `MIT OR Apache-2.0` / `Apache-2.0 OR MIT` / `MIT/Apache-2.0` 等**同义写法合并为一行**；")
+w("> §2–§4 逐条给出各依赖的**原始**声明值。")
 w("")
 if unknown:
     w(f"> ⚠️ 本清单有 **{len(unknown)}** 类 `UNKNOWN` 条目（合计 "
