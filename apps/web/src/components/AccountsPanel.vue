@@ -322,6 +322,8 @@ watch(accountFormRequest, () => startCreate())
           <input type="checkbox" v-model="form.useSSL" /> {{ t('accounts.useSSL') }}
         </label>
       </div>
+      <!-- 明文端点告知（A5，threat-model §6.2）：服务端只打 WARN 不拦截，这里是面向填表人的同一句提示。 -->
+      <p v-if="!form.useSSL" class="use-ssl-warn">{{ t('accounts.useSSLWarn') }}</p>
       <div class="row">
         <button class="btn sm" :disabled="saving" @click="submit">{{ editingId ? t('common.save') : t('accounts.saveLogin') }}</button>
         <button class="btn secondary sm" @click="showForm = false">{{ t('common.cancel') }}</button>
@@ -404,5 +406,13 @@ watch(accountFormRequest, () => startCreate())
 .bucket-row input {
   min-width: 140px;
   flex: 1;
+}
+/* 明文端点提示（threat-model §6.2）：它是**提示**不是报错，用次级色，
+   不把整个表单染成报警态（勾上 TLS 即消失）。 */
+.use-ssl-warn {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: -6px 0 12px;
 }
 </style>

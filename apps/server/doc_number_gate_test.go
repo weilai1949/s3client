@@ -9,6 +9,9 @@ package main
 // 本门禁把「可机械推导的叙述性数字」钉在源码上：
 //   - 端点总数：以 `apps/server/internal/handler/routes.go` 的 `mux.HandleFunc` 注册数为准，
 //     校验 README / docs 中「N 个 `/api/*` 端点」的 N。
+//   - 配置项总数：以 `internal/config` 生产代码抽取的 `S3C_*` 变量数为准（复用
+//     config_doc_gate_test.go 的 `configEnvVarsFromSource`），校验 README 中
+//     「N 个 `S3C_*` 变量」的 N——2026-10-10 实测该数字停在 18，而真值为 22。
 //
 // 断言范围（刻意不做的事）：
 //   - 只校验**登记在 docNumberClaims 里**的数字声明。md 里其它叙述性数字（测试用例数、覆盖率、
@@ -71,6 +74,13 @@ var docNumberClaims = []docNumberClaim{
 		file: "docs/FEATURES.md",
 		re:   regexp.MustCompile(`\| REST 端点 \| \*\*(\d+)\*\* 个`),
 		got:  apiRouteCountFromSource,
+	},
+	{
+		// docs/CONFIGURATION.md 的「全量」口径由 config_doc_gate_test.go 保证；这里只钉
+		// README 转述的那个数字，防止新增配置项后 README 继续停在旧值。
+		file: "README.md",
+		re:   regexp.MustCompile("(\\d+) 个 `S3C_\\*` 变量"),
+		got:  func(t *testing.T) int { return len(configEnvVarsFromSource(t)) },
 	},
 }
 

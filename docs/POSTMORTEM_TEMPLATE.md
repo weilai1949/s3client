@@ -64,7 +64,7 @@
 
 | 证据 | 已留存 | 位置 / 命令 |
 |---|---|---|
-| `/api/health` 响应体 | ☐ | `curl -sS http://127.0.0.1:8080/api/health` |
+| `/api/health` 响应体 | ☐ | `curl -sS http://127.0.0.1:5000/api/health` |
 | `/api/metrics` 全文 | ☐ | 需 `S3C_EXPOSE_METRICS=1`；未开启就注明「端点默认 404」 |
 | 最近 15 分钟 server 日志 | ☐ | `docker compose logs --since 15m server` |
 | nginx 访问日志 | ☐ | `docker compose logs nginx \| grep 'req=<id>'`（字段 `rid=` / `req=` 的区别见 §3.3） |

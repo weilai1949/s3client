@@ -1,9 +1,12 @@
 # 全仓代码质量评审（2026-10-09）
 
-> **状态**：**活跃文档**（非归档）。结论绑定提交 `e965e54`（评审期间工作区的在途改动已于评审结束前
-> 落为 `5f0d555`——该提交只改 Go 工具链版本、`e2e-real` 用例与文档，**未触碰本报告涉及的任何代码与门禁**）。
-> 文中 `file:line` 与门禁数字均为**评审时点快照**；未闭环项见 §4/§5，全部闭环后按
-> [`archive/index.md`](archive/index.md)「归档操作」四步 `git mv` 冻结。
+> **状态**：**已归档**（2026-10-10，按 [`index.md`](index.md)「归档操作」四步 `git mv` 冻结——§2 状态表
+> C1–C2 / R1–R10 / O1–O12 **全部闭环**，收口证据见 [`../FEATURES.md`](../FEATURES.md) §BZ–§CD 与
+> [`../../CHANGELOG.md`](../../CHANGELOG.md) `[Unreleased]` 同日各批次）。结论绑定提交 `e965e54`
+> （评审期间工作区的在途改动已于评审结束前落为 `5f0d555`——该提交只改 Go 工具链版本、`e2e-real`
+> 用例与文档，**未触碰本报告涉及的任何代码与门禁**）。
+> 文中 `file:line` 与门禁数字均为**评审时点快照**，**不回写、不改写历史结论**；当前事实以
+> [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) · [`../ROADMAP.md`](../ROADMAP.md) · [`../FEATURES.md`](../FEATURES.md) 为准。
 >
 > **范围**：全仓代码——`apps/server` Go 后端（288 个 `.go`，生产约 1.6 万行）、`apps/web` Vue 3 + TS
 > 前端（143 个 `.ts` + 40 个 `.vue`，生产约 2.1 万行）；含门禁、CI 与文档一致性，不含文档文风评审。
@@ -51,7 +54,7 @@
 | R8 | Required（契约） | `multipartParts` 手写路径绕过生成契约 + 注释失效 | ✅ 已修（本批次） |
 | R9 | Required（测试） | e2e OpenAPI 断言不可能失败 | ✅ 已修（本批次，落地口径见 §8 回写） |
 | R10 | Required（工程） | 门禁清单/CI 路径过滤/文档漂移（详见 §5 O11） | ✅ **已全部闭环**（2026-10-09 同日第二批，#82）：工具链残留已解除（本机 go1.26.9）+ `make check` 补项 / 真 RustFS E2E 路径过滤放宽到 `apps/server/**` / DEVELOPMENT 三处漂移修正 + 三道防回退门禁 |
-| O1–O12 | Optional | 载荷完整性、契约漂移、重复实现、可访问性、i18n 等 | ✅ **全部闭环**（O1/O3/O4/O6/O7 → #72/#74/#75/#77/#78，见 [`FEATURES.md`](FEATURES.md) §CC；O2/O9/O10/O11/O12 → #73/#80/#81/#82/#83；O5/O8 → #76/#79，见 §CD）。2026-10-09 评审的 Optional 项已归零 |
+| O1–O12 | Optional | 载荷完整性、契约漂移、重复实现、可访问性、i18n 等 | ✅ **全部闭环**（O1/O3/O4/O6/O7 → #72/#74/#75/#77/#78，见 [`FEATURES.md`](../FEATURES.md) §CC；O2/O9/O10/O11/O12 → #73/#80/#81/#82/#83；O5/O8 → #76/#79，见 §CD）。2026-10-09 评审的 Optional 项已归零 |
 
 > 状态由 **2026-10-09 修复批次**回写（逐条落地与例外口径见 §8 末尾「本批次回写」）；§1 门禁数字仍为评审时点快照，不改写。
 
@@ -183,7 +186,7 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
 
 | 编号 | 位置 | 问题与建议 |
 |---|---|---|
-| O1 | `s3wrap/client.go:120-143` | `UNSIGNED-PAYLOAD` **无条件**注入数据面，且 `RequestChecksumCalculation=WhenRequired`：PutObject/UploadPart/Copy 的载荷既无 SigV4 完整性也无 SDK 校验和；对已放行的 `http://` endpoint 可被中间人改写。建议按「带 body 的操作」收窄，或对 http endpoint 强制显式开关，并在 [`threat-model.md`](threat-model.md) 记一笔。 |
+| O1 | `s3wrap/client.go:120-143` | `UNSIGNED-PAYLOAD` **无条件**注入数据面，且 `RequestChecksumCalculation=WhenRequired`：PutObject/UploadPart/Copy 的载荷既无 SigV4 完整性也无 SDK 校验和；对已放行的 `http://` endpoint 可被中间人改写。建议按「带 body 的操作」收窄，或对 http endpoint 强制显式开关，并在 [`threat-model.md`](../threat-model.md) 记一笔。 |
 | O2 | `s3wrap/s3wrap_dto.go:23/40/55/69` | 4 个导出函数签名带 AWS SDK 类型，但只在 s3wrap 内调用 → 降为小写，避免给下一个 handler 作者留下「合法」的 SDK 依赖入口。 |
 | O3 | `web/src/api/http.ts:47-61` | 传输层丢弃 HTTP status（只拼进 message），调用方无法区分 401/403/404/409/412/501——而本轮新功能正需要（Object Lock 409 vs 501、copy 412）；`res.json() as Promise<T>` 对不可信响应零校验。建议 `ApiError{status, body}` + 边界校验（或从 `operations[...]['responses'][200]` 派生类型）。 |
 | O4 | `web/src/api/generated.gate.test.ts:38` | 只有 `>= 60`（实际 84），无「`s3api` 覆盖 `operations` 全部 opId」的穷尽性断言 → 删掉一个 spec 路径再重新生成仍全绿。 |
@@ -232,9 +235,9 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
 3. 修 cron DST（R3）——优先「绝对时间轴 + 本地字段回验」，修正注释；
 4. 修落盘乱序（R5）与前端竞态（R6），补并发 / 乱序回归测试；
 5. 清死类型（R7）、契约绕过（R8）、不可失败断言（R9），再按 §5 表收口结构性重复与文档漂移；
-6. 未闭环项在收口后登记进 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（开放技术债）/
-   [`ROADMAP.md`](ROADMAP.md) §三（排期项），并同步 [`../CHANGELOG.md`](../CHANGELOG.md)
-   `[Unreleased]`；本报告在引用收敛后按 [`archive/index.md`](archive/index.md)「归档操作」冻结。
+6. 未闭环项在收口后登记进 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)（开放技术债）/
+   [`ROADMAP.md`](../ROADMAP.md) §三（排期项），并同步 [`../CHANGELOG.md`](../../CHANGELOG.md)
+   `[Unreleased]`；本报告已按 [`index.md`](index.md)「归档操作」冻结。
 
 **本批次回写（2026-10-09，同日并行批次之一）**：
 
@@ -245,8 +248,8 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
   （4879 / 3251 / 1229 / 4213）** / `pnpm build` OK；mock Playwright **21 passed + 1 skipped**
   （跳过项即 R9 的条件跳过）；`make e2e-real` 真后端 + 真 RustFS **5 passed**（含新增
   「OpenAPI 规范 200 + JSON spec」真断言）。
-- **O1–O12** 按第 6 条全部登记为 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#72–#83**——12 条均属
-  技术债 / 缺陷，按「同一事项只登记一处」（[`DEVELOPMENT.md`](DEVELOPMENT.md) §4）不进 ROADMAP §三；
+- **O1–O12** 按第 6 条全部登记为 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **#72–#83**——12 条均属
+  技术债 / 缺陷，按「同一事项只登记一处」（[`DEVELOPMENT.md`](../DEVELOPMENT.md) §4）不进 ROADMAP §三；
   ROADMAP §四门禁基线已同步本轮实测值。
 - **R10**：工具链残留解除——CI 侧随 `5f0d555` 收口，本机已装 `/usr/local/go1.26.9`（与 CI 同版本），
   本批全部 Go 门禁在该版本下复跑；「门禁清单 / CI 路径过滤 / 文档漂移」半边先并入 O11（#82）登记，
@@ -259,7 +262,7 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
     改为四面板各自内联 `loadSeq` 守卫。
   - **R9**：采建议的「条件跳过」方案，但真断言不消失——静态预览无后端（确定性 502/503）时跳过，
     其余状态严格断言 200 + JSON + openapi 字段；常驻真断言迁入
-    [`../apps/web/e2e-real/real-backend.spec.ts`](../apps/web/e2e-real/real-backend.spec.ts)
+    [`../apps/web/e2e-real/real-backend.spec.ts`](../../apps/web/e2e-real/real-backend.spec.ts)
     （`scripts/e2e-real.sh` 补 `S3C_EXPOSE_OPENAPI=1`——生产默认 404 不暴露规范）。
   - **R7**：除删 `types.ts` 三个死类型外，连带把 `deadcode_gate.test.ts` 声明的「类型导出」盲区
     升级为真断言（原「类型维度无机械保证」一并收口）；新口径扫出的生成物
@@ -270,7 +273,7 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
 
 **第二批回写（2026-10-09，同日并行批次）**：
 
-- **R10 残留（= [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #82 / 本报告 §5 O11）全部闭环**：
+- **R10 残留（= [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #82 / 本报告 §5 O11）全部闭环**：
   ① `make check` 补齐 CI `server` / `web` job 的三道静态门禁（新增 `build` / `web-lint` 目标 +
   `govulncheck`，聚合项逐条对齐）；② 真 RustFS Go E2E 的 PR 触发面由
   `apps/server/internal/s3wrap/**` 放宽到 `apps/server/**`（GitHub `e2e.yml` 与 GitLab
@@ -281,5 +284,6 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
 - 同批并行批次另闭环 **O2 / O9 / O10 / O12**（`KNOWN_ISSUES` #73 / #80 / #81 / #83）。
 - 至此 Optional 仅剩 **O1 / O3–O8**（#72 / #74–#79）开放；**C1–C2 与 R1–R10 全部闭环**。
 
-- 本报告仍为活跃文档（状态表已回写），按第 6 条在引用收敛后执行
-  [`archive/index.md`](archive/index.md)「归档操作」冻结。
+- **2026-10-10 已归档**：状态表与本节回写完成后，按第 6 条执行 [`index.md`](index.md)「归档操作」
+  `git mv` 冻结为历史快照；当前开放项以 [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 与
+  [`../ROADMAP.md`](../ROADMAP.md) 为准。

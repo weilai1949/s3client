@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
@@ -43,6 +44,7 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to create account")
 		return
 	}
+	h.warnPlaintextEndpoints(created)
 	h.audit(r, auditAccountCreate, "id", created.ID, "name", created.Name)
 	h.writeJSON(w, http.StatusCreated, created.View())
 }
@@ -87,11 +89,46 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeInternalErr(w, err, "failed to update account")
 		return
 	}
+	h.warnPlaintextEndpoints(updated)
 	h.clients.evict(id)
 	h.audit(r, auditAccountUpdate, "id", id)
 	h.writeJSON(w, http.StatusOK, updated.View())
 }
 
+// warnPlaintextEndpoints 对**明文 http://** 的账号端点打一条 WARN（A5，威胁模型 §6.2）。
+//
+// 背景：数据面签名对带 body 的 `PutObject` / `UploadPart` 用 `UNSIGNED-PAYLOAD`
+// （流式 body 无法预读哈希），明文链路上这些载荷可被中间人改写——残留风险本体只能靠
+// TLS 消除，本服务**不拦截**（自托管刚需，ADR-003 同口径），但不能让它**无感知**：
+// 与 `main.go` 里 `cfg.StorePlaintextWarning()` 的「明文落盘告警」同一口径——只提示、
+// 不改变行为。前端在「使用 HTTPS/TLS」勾选框旁同步给出同一句提示（docs/threat-model.md §6.2）。
+//
+// 判定走 `s3wrap.NormalizeEndpoint`（端点归一化的**唯一**实现）：裸端点按 `useSSL` 补全
+// scheme，故「没写 scheme + 未勾 TLS」同样算明文。`publicEndpoint` 单独判——浏览器直传的
+// 预签名 PUT 走它，明文链路下同样无完整性保护。日志只记 id / name / 端点，**不记任何密钥**。
+func (h *Handler) warnPlaintextEndpoints(a *model.Account) {
+	var plain []string
+	if isPlaintextEndpoint(a.Endpoint, a.UseSSL) {
+		plain = append(plain, "endpoint")
+	}
+	if a.PublicEndpoint != "" && isPlaintextEndpoint(a.PublicEndpoint, a.UseSSL) {
+		plain = append(plain, "publicEndpoint")
+	}
+	if len(plain) == 0 {
+		return
+	}
+	h.log.Warn("明文 http:// 端点：带 body 的请求缺少 SigV4 载荷完整性（threat-model §6.2）——建议勾选「使用 HTTPS/TLS」或在反向代理处终止 TLS",
+		"fields", strings.Join(plain, ","),
+		"id", a.ID, "name", a.Name,
+		"endpoint", a.Endpoint, "publicEndpoint", a.PublicEndpoint)
+}
+
+// isPlaintextEndpoint 判定归一化后的端点是否为明文 http（scheme 大小写不敏感）。
+func isPlaintextEndpoint(endpoint string, useSSL bool) bool {
+	return strings.HasPrefix(s3wrap.NormalizeEndpoint(endpoint, useSSL), "http://")
+}
+
+// deleteAccount 删除账号。
 func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if err := h.store.Delete(id); err != nil {

@@ -131,6 +131,16 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "# TYPE s3c_volume_free_bytes gauge\n")
 			fmt.Fprintf(w, "s3c_volume_free_bytes %s\n", strconv.FormatFloat(free, 'f', -1, 64))
 		}
+		// 数据卷 inode（OPERATIONS.md §4.3 原「仍无内置指标」项）：与容量序列同一开关、
+		// 同一失败口径——statfs 取不到（平台不支持 / 目录不存在）就不发序列。
+		if total, freeInodes, ok := volumeInodes(h.dataDir); ok {
+			fmt.Fprintf(w, "# HELP s3c_volume_inode_total Filesystem inode capacity on the volume holding S3C_DATA_DIR\n")
+			fmt.Fprintf(w, "# TYPE s3c_volume_inode_total gauge\n")
+			fmt.Fprintf(w, "s3c_volume_inode_total %s\n", strconv.FormatFloat(total, 'f', -1, 64))
+			fmt.Fprintf(w, "# HELP s3c_volume_inode_free Free filesystem inodes on the volume holding S3C_DATA_DIR\n")
+			fmt.Fprintf(w, "# TYPE s3c_volume_inode_free gauge\n")
+			fmt.Fprintf(w, "s3c_volume_inode_free %s\n", strconv.FormatFloat(freeInodes, 'f', -1, 64))
+		}
 	}
 	// 在册异步任务数（ROADMAP #18 指标②）：与 JobRegistry 的在册上限同口径
 	// （只数未终结任务），逼近上限时按 OPERATIONS.md §4.2 告警。

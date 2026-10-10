@@ -1,7 +1,7 @@
 package main
 
 // doc_ci_drift_gate_test.go —— 「文档里引用的 CI 事实必须与配置文件一致」的源码门禁
-// （背景：docs/code-review-2026-10-09.md §5 O11 / KNOWN_ISSUES #82，2026-10-09）。
+// （背景：docs/archive/code-review-2026-10-09.md §5 O11 / KNOWN_ISSUES #82，2026-10-09）。
 //
 // 评审点名的三处 DEVELOPMENT 漂移此前**无门禁**，只能靠人肉比对：
 //   - 「CI 双平台一致性」表把 perf.yml 的 job 写成不存在的 `perf-budget`（真实 id 是

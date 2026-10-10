@@ -226,12 +226,12 @@ describe('isTauri / defaultBase / newId', () => {
     }
   })
 
-  it('defaultBase() Tauri → http://127.0.0.1:8080', async () => {
+  it('defaultBase() Tauri → http://127.0.0.1:5000', async () => {
     const orig = location.hostname
     Object.defineProperty(location, 'hostname', { value: 'tauri.localhost', configurable: true })
     try {
       const { api } = await loadApi()
-      expect(api.base).toBe('http://127.0.0.1:8080')
+      expect(api.base).toBe('http://127.0.0.1:5000')
     } finally {
       Object.defineProperty(location, 'hostname', { value: orig, configurable: true })
     }

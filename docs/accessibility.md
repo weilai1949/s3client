@@ -287,7 +287,7 @@ const stack: KeydownHandler[] = []
    现引入 `@axe-core/playwright`（**devDependency**，只进 E2E，不动 `dependencies`——不违反
    前端「运行时仅 `vue`」的 [ADR-004](decisions/0004-minimal-frontend-deps.md)）并新增
    [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)：在**真实 Chromium + 真实构建产物**
-   下对 4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题初始态）跑
+   下对 5 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 对象网格视图 / 深色主题初始态）跑
    WCAG 2.0 + 2.1 的 A / AA 规则集，**serious / critical 违规即红灯**；另有一条
    「注入已知违规必须被报出」的自检用例，防止扫描器失效后静默全绿。CI 由既有
    [`.github/workflows/e2e-playwright.yml`](../.github/workflows/e2e-playwright.yml) 的
@@ -304,7 +304,7 @@ const stack: KeydownHandler[] = []
    也不构成任何合规声明（见 §4 第 1 条）。
 3. **没有做屏幕阅读器实测**：无 NVDA / JAWS / VoiceOver / TalkBack 的实测记录或截图证据。
 4. ~~**没有对比度自动检测**~~ ✅ **已于 2026-09-30 部分闭环**：渲染态的对比度现由
-   `e2e/a11y.spec.ts` 的 axe `color-contrast` 规则自动检测（浅色 + 深色初始态等 4 个状态），
+   `e2e/a11y.spec.ts` 的 axe `color-contrast` 规则自动检测（浅色 + 深色初始态等 5 个状态），
    并已据此修掉 2 组实测不达标的 token（`--ok` 2.55:1 → 4.95:1、`--danger` 4.41:1 → 5.91:1，
    token 公式值，见 §5.5）。**静态 token 表（§5.5）仍保留且仍须维护**：axe 不评估它无法解析的背景
    （`--brand` 渐变上的白字）与**未出现在被扫描状态里**的配对，两份互补而非替代；
@@ -335,8 +335,13 @@ const stack: KeydownHandler[] = []
    `aria-multiselectable`~~ ✅ **已于 2026-09-30 修复（ROADMAP §三 #17③）**——15 张表全部带
    sr-only `<caption>`，四张有行选中的表声明行 `aria-selected`（见 §1.6，源码门禁 + 行为断言 +
    组件级 axe 三重钉；`aria-multiselectable` 经 axe 判定在原生 `<table>` 上**非法**，刻意不用）。
-   **仍未做**：网格视图的单元格是 `role="button"`，
-   其名称依赖单元格内文本节点，未加 `aria-label`（不在 #17 范围内，RTL 与正式审计同批按需另行立项）。
+   ~~**仍未做**：网格视图的单元格是 `role="button"`，其名称依赖单元格内文本节点，未加 `aria-label`~~
+   ✅ **2026-10-10 经 axe 判定为非缺陷，且该态此后受 CI 约束**：`e2e/a11y.spec.ts` 新增第 5 个扫描态
+   「对象网格视图」（`installObjectsStub` 桩出账号 + 对象 → 切网格），axe 的 `button-name` /
+   `aria-allowed-attr` 等规则对单元格文本节点（文件名 + 大小）派生的可访问名**判定通过**，
+   该态 **0 违规**（阻塞级与非阻塞级均无）——因此**刻意不加** `aria-label`：它会覆盖文本内容、
+   丢掉大小这类上下文，并造出第二事实源。此前四个扫描态都不含网格视图，故这条「仍未做」
+   一直没被机械判定过；现在判定完成，回归（如去掉 `tabindex`、改成无名称的纯图标格）即红灯点名。
 10. ~~**表单标签依赖 `aria-label` 而非可见 `<label>`**~~ ✅ **已于 2026-09-30 修复
     （ROADMAP §三 #17③）**：可见控件全部有可关联标签，三种形态与剩余例外见 §1.6。
 11. **没有 RTL / 从右到左布局支持**，也没有多语言之外的区域格式（日期 / 数字）本地化测试。
@@ -378,7 +383,7 @@ const stack: KeydownHandler[] = []
 | `composables/useKeydownStack.test.ts`（9 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
 | Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
-| **`e2e/a11y.spec.ts`（5 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：4 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / 深色主题初始态）的 **serious / critical 违规必须为 0**；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
+| **`e2e/a11y.spec.ts`（6 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：5 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
 | **`src/a11y_axe.test.ts`（6 例，vitest-axe + axe-core）** | **2026-09-30 起（#17④）组件级**：对**挂载后的组件 DOM** 跑同一套 WCAG 2.0 / 2.1 A + AA 规则集，覆盖 E2E 到不了的边界态（`ModalDialog` 带 footer / `ConfirmDialog` 危险态 / `PromptDialog` 带校验失败 / `Toasts` 成功+失败堆叠 / `ObjectList` 带 caption 与选中行）；**serious / critical 即红灯**，非阻塞项打印供人工判断；另 1 例「注入 `image-alt` 必须被报出」空跑自检。**不判对比度**（happy-dom 无 CSS 级联，显式关掉 `color-contrast`） | `cd apps/web && pnpm test src/a11y_axe.test.ts` |
 
 > 以上命令均为 `apps/web/package.json` 的既有脚本（`test` = `vitest run`、`build` = `vue-tsc --noEmit && vite build`、
@@ -400,7 +405,7 @@ axe 无法解析的背景（渐变）上的对比度。
 
 - ~~在 Playwright E2E 里跑 `@axe-core/playwright`，覆盖真实浏览器下的对比度与结构规则~~ ✅
   **已于 2026-09-30 完成**：即 [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts)
-  （4 个界面状态 + 1 条有效性自检，见 §5.2；CI 由既有 `e2e-playwright.yml` 覆盖）；
+  （5 个界面状态 + 1 条有效性自检，见 §5.2；CI 由既有 `e2e-playwright.yml` 覆盖）；
 - ~~引入 `vitest-axe` 对组件测试**挂载后的 DOM** 做规则集扫描（能与现有 happy-dom 测试并列跑）~~ ✅
   **已于 2026-09-30 完成**（ROADMAP §三 #17④）：即 [`apps/web/src/a11y_axe.test.ts`](../apps/web/src/a11y_axe.test.ts)
   （`vitest-axe` **仅 devDependency**，`dependencies` 仍只有 `vue`，不违 ADR-004）。与 E2E 版互补：

@@ -97,7 +97,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 
 | 默认值 | 位置 |
 |---|---|
-| 回环绑定 `127.0.0.1:8080` | `config.go` `FromEnv`（`S3C_ADDR` 默认值） |
+| 回环绑定 `127.0.0.1:5000` | `config.go` `FromEnv`（`S3C_ADDR` 默认值） |
 | 非回环监听强制 `S3C_TOKEN`（否则拒绝启动） | `config.go` `Validate`（`ErrTokenRequiredNonLoopback`） |
 | token 最短 16 字符 | `config.go` `MinTokenLength` |
 | 可选 token 作用域（`S3C_TOKEN_SCOPES` 非法即拒绝启动；未登记 token 保持全权） | `config.go` `parseTokenScopes` / `validateTokenScopes`、`handler/scope.go` |
@@ -276,7 +276,7 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 - `/api/metrics` 开启后免鉴权（内网 scrape 用途，见 §2；勿直接暴露公网）。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。
-- **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。
+- **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。**2026-10-10 把「无感知」降为「有告知」**（风险本体不变，仍需 TLS）：① 服务端在**创建 / 更新**账号时，若 `endpoint` 或 `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后是明文 `http://`，打一条 WARN（`handler/accounts.go` `warnPlaintextEndpoints`，与 `main.go` 的明文落盘告警同口径，**日志只记 id / 名称 / 端点，不含密钥**）；② 前端「使用 HTTPS/TLS」未勾选时在勾选框下给出同一句提示（`AccountsPanel.vue`，`accounts.useSSLWarn`）。两侧各由测试钉住：`internal/handler/accounts_plaintext_test.go` 三条（含「HTTPS 不打 WARN」防噪声、「日志不含 secretKey」）+ `src/components/AccountsPanel.test.ts`「明文端点提示」用例。
 
 ---
 

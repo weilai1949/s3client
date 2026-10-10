@@ -32,7 +32,7 @@
 
 ## 2. 服务形态速查
 
-一句话：**Go 后端（默认 `127.0.0.1:8080`）+ 可选 nginx 单 worker 反向代理（容器内 `:8080`）+ 文件型账号存储**，
+一句话：**Go 后端（默认 `127.0.0.1:5000`）+ 可选 nginx 单 worker 反向代理（容器内 `:5000`）+ 文件型账号存储**，
 三者都由 [`docker-compose.yml`](../docker-compose.yml) / [`docker-compose.prod.yml`](../docker-compose.prod.yml) /
 [`docker-compose.tls.yml`](../docker-compose.tls.yml) 编排；对象数据不在本机，全部在 S3 上游。
 
@@ -40,8 +40,8 @@
 
 | 组件 | 进程 / 端点 | 信号与关停 | 日志位置 |
 |---|---|---|---|
-| Go 后端 | 默认 `127.0.0.1:8080`（`S3C_ADDR`）；容器内 `0.0.0.0:8080`，非 root 用户 `app`（uid 1000） | `SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（上限 `S3C_SHUTDOWN_TIMEOUT`） | 容器：`docker compose logs server`（json-file，10m × 3 或 5）；本机：`.run/server.log` |
-| nginx | 单 worker 反向代理 / 静态托管；compose 发布 `127.0.0.1:8080:8080` | `SIGQUIT` 优雅停止；`nginx -s reload` 热加载 | `docker compose logs nginx` |
+| Go 后端 | 默认 `127.0.0.1:5000`（`S3C_ADDR`）；容器内 `0.0.0.0:5000`，非 root 用户 `app`（uid 1000） | `SIGTERM` → 取消异步任务 → `http.Server.Shutdown`（上限 `S3C_SHUTDOWN_TIMEOUT`） | 容器：`docker compose logs server`（json-file，10m × 3 或 5）；本机：`.run/server.log` |
+| nginx | 单 worker 反向代理 / 静态托管；compose 发布 `127.0.0.1:5000:5000` | `SIGQUIT` 优雅停止；`nginx -s reload` 热加载 | `docker compose logs nginx` |
 | 账号存储 | 文件型：`accounts.json` / `accounts.db` / `accounts.json.enc`（取决于 `S3C_STORE_DRIVER`）+ `jobs.json` 任务清单 + `schedules.json` 计划任务（0600） + `shutdown.json` 上次关停耗时 | 随进程退出释放 `flock` | 不单独打日志，错误由后端日志承载 |
 
 ## 3. 可观测性
@@ -68,7 +68,7 @@ GET /api/health        # 免鉴权（withAuth 显式豁免），响应恒带 X-R
 - `/api/health` 是**免鉴权**端点（Docker 探针需要），`version` 暴露属已接受项（[`threat-model.md`](threat-model.md) §6.2）。
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/health   # 200 / 503
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health   # 200 / 503
 ```
 
 ### 3.2 指标全清单
@@ -97,7 +97,8 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_build_info{version="..."}` | gauge | 构建版本（恒为 1，版本在标签里） | 升级后核对版本是否与预期 tag 一致 |
 | `s3c_store_up` | gauge | 账号存储可达性：1 / 0 | `== 0` 持续 1 分钟即告警（沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议） |
 | `s3c_store_write_failures_total` | counter | **账号库写入失败次数**（落盘 / SQL 写入出错、写操作已回滚；重复 ID、NotFound 这类业务拒绝**不计数**） | 15 分钟内有增量即告警（critical，见 §4.2）——`json` / `encrypted` 驱动唯一的主动存储故障信号 |
-| `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | **数据卷容量**：`S3C_DATA_DIR` 所在文件系统总字节 / 本进程可用字节 | 剩余占比 < 20% 持续 10 分钟告警（见 §4.2）；**序列缺失 = 取不到**（见下方口径） |
+| `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | **数据卷容量**：`S3C_DATA_DIR` 所在文件系统总字节 / 本进程可用字节 | 剩余占比 < 20% 持续 10 分钟告警（`S3ClientVolumeSpaceLow`，见 §4.2）；**序列缺失 = 取不到**（见下方口径） |
+| `s3c_volume_inode_total` / `s3c_volume_inode_free` | gauge | **数据卷 inode**：同一文件系统的 inode 总数 / 空闲数（statfs `Files` / `Ffree`；Windows 与 Linux / macOS / FreeBSD 之外的平台**不发序列**） | 空闲占比 < 20% 持续 10 分钟告警（`S3ClientVolumeInodeLow`，见 §4.2）；序列缺失的平台按 §4.3 外部采集 |
 | `s3c_jobs_active` | gauge | **在册（未终结）异步任务数**，与 `JobRegistry` 上限同口径（上限 256） | `>= 230` 持续 10 分钟告警（见 §4.2） |
 | `s3c_persist_failures_total` | counter | **计划 / 任务清单落盘（`Save`）失败次数**（内存态保真、失败降级；此前为静默，KNOWN_ISSUES #83） | 有增量即查（磁盘满 / 只读）；与 `s3c_store_write_failures_total` 区分——后者只覆盖账号库 |
 | `s3c_last_shutdown_duration_seconds` | gauge | **上一次优雅关停耗时**（由 `data/shutdown.json` 在启动时载入；0 = 尚无记录） | 与 `S3C_SHUTDOWN_TIMEOUT`（默认 30s）对比，逼近即说明关停吃紧 |
@@ -125,16 +126,18 @@ HTTP 请求 `s3c_http_request_duration_seconds`：`"0.005"`、`"0.01"`、`"0.025
 
 **2026-09-30 观测缺口已全部补齐**（原「账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、
 卷 / 磁盘容量、优雅关停耗时」五项，现均为上表内置指标；补齐记录见 [`ROADMAP.md`](ROADMAP.md)
-空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL）。仍**只能**外部采集的观测面只剩两类：
-**inode 用量**与**跨服务 trace**（见 §4.3）。
+空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL）。**2026-10-10 起连 inode 用量也已内置**
+（`s3c_volume_inode_total` / `s3c_volume_inode_free`），仍**只能在服务外完成**的观测面
+只剩一类：**跨服务 trace 的采集端**（span 导出已内置 §3.4，采集 / 存储仍在服务外，见 §4.3）。
 
-> **卷容量序列缺失 ≠ 容量为 0**：`s3c_volume_*` 只在 statfs / `GetDiskFreeSpaceExW` 取到结果时输出。
+> **卷容量 / inode 序列缺失 ≠ 数值为 0**：`s3c_volume_*` 只在 statfs / `GetDiskFreeSpaceExW`
+> 取到结果时输出。
 > 平台不支持（Linux / macOS / FreeBSD / Windows 之外）、`S3C_DATA_DIR` 未传给 `/api/metrics`
 > 或 statfs 失败（路径不存在）时**不发序列**，此时按 §4.3 用宿主 `node_exporter` / `df` 采集。
 
 ```bash
 # 只取关键几行
-curl -sS http://127.0.0.1:8080/api/metrics | grep -E '^s3c_(store_up|ssrf_deny_private|stream_interrupted_total|s3_call_errors_total)'
+curl -sS http://127.0.0.1:5000/api/metrics | grep -E '^s3c_(store_up|ssrf_deny_private|stream_interrupted_total|s3_call_errors_total)'
 ```
 
 ### 3.3 日志
@@ -154,7 +157,7 @@ curl -sS http://127.0.0.1:8080/api/metrics | grep -E '^s3c_(store_up|ssrf_deny_p
 `X-Request-ID` 去日志里 grep 同值**即可定位单次请求：
 
 ```bash
-curl -sS -D- -o /dev/null http://127.0.0.1:8080/api/accounts | grep -i x-request-id
+curl -sS -D- -o /dev/null http://127.0.0.1:5000/api/accounts | grep -i x-request-id
 # 容器（S3C_LOG_JSON=1）
 docker compose logs --since 15m server | grep '"req":"<上面拿到的 id>"'
 ```
@@ -215,7 +218,10 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 > `rule_files` 即可用。它与本节**必须同改**：该文件由
 > `repo_infra_gate_test.go` 的 `TestPrometheusRulesReferenceRealMetrics` 机械校验
 > ——引用的每个 `s3c_*` 指标必须真实存在于发射点、每个 `code` 取值必须在 `s3wrap` 白名单内
-> （白名单外的码会被折叠成 `other`，写进表达式即**永不命中**且 Prometheus 不报错）。
+> （白名单外的码会被折叠成 `other`，写进表达式即**永不命中**且 Prometheus 不报错）；
+> §4.2 表与规则文件的**告警集合**另由 `doc_alert_drift_gate_test.go` 的
+> `TestOperationsAlertTableMatchesRulesFile` 双向钉住（表行 ⇔ `- alert:` 名等集，
+> 少一行或多一条即红灯，2026-10-10 起）。
 > **SLO 仪表盘已随仓库分发**：[`deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json)
 > （2026-09-30 新增）。Grafana → **Dashboards → New → Import** → 上传该 JSON → 数据源选你的 Prometheus 即可；
 > 盘上的 `s3client:*` 记录规则与本节表格同源（**本节与 rules.yml 必须同改**），面板在规则未加载时也各有等价的原始表达式。
@@ -242,34 +248,47 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 
 ### 4.2 建议告警规则
 
+> 本表与 [`deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml) **一一对应**：
+> 第一列的告警名就是规则文件里的 `alert:` 名。两者由
+> `apps/server/doc_alert_drift_gate_test.go` 的 `TestOperationsAlertTableMatchesRulesFile`
+> **双向钉住**（表行 ⇔ alert 集合必须相等，2026-10-10 起）——此前两边各 13 条纯属巧合：
+> 表里多一条外部探测项、规则里多一条 `S3ClientZipPartialFailures`，谁也没发现。
+
 | 告警 | 表达式（Prometheus 语法） | 建议阈值（**未强制**） | 为什么这样定 |
 |---|---|---|---|
-| 账号存储掉线 | `s3c_store_up == 0` | `for: 1m` | 硬失败设计下此时写操作全在拒绝；沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议 |
-| 健康探测失败 | 外部黑盒探测 `/api/health` | 连续 3 次失败（30s 间隔） | 覆盖 503 与进程 / 端口级故障 |
-| 5xx 比例升高 | 见 §4.1 服务端错误率 | `> 1%` 持续 10 分钟 | 与 SLO（0.5%）留一倍缓冲，避免抖动误报 |
-| 凭据类上游错误 | `increase(s3c_s3_call_errors_total{code=~"SignatureDoesNotMatch\|InvalidAccessKeyId\|AccessDenied"}[15m]) > 0` | 立即 | 账号密钥 / 桶策略漂移，不修则全账号不可用 |
-| 上游限流 / 过载 | `increase(s3c_s3_call_errors_total{code=~"SlowDown\|ServiceUnavailable\|RequestTimeout"}[15m])` | `> 5` | 上游按量限流，继续加压会放大失败 |
-| 上游不可达 | `increase(s3c_s3_call_errors_total{code="transport"}[15m])` | `> 0` | DNS / 连接层问题（区别于 S3 业务错误码） |
-| 流式中断 | `increase(s3c_stream_interrupted_total[15m]) > 0` | 立即 | 客户端主动断开不计入，故有增量即真实中断 |
-| 进程重启 | `resets(s3c_uptime_seconds[15m]) > 0` | 立即 | 指标为进程级、重启清零；非计划重启需查因 |
-| 内存逼近上限 | `s3c_go_memstats_alloc_bytes` | > 容器上限的 80%（server 512M → 约 410M） | 容器内存上限由 compose 强制 |
-| 账号库写入失败 | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
-| 在册任务逼近上限 | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
-| 数据卷剩余空间 | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
-| HTTP 延迟升高 | `s3client:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
+| 账号存储掉线 `S3ClientAccountStoreDown` | `s3c_store_up == 0` | `for: 1m` | 硬失败设计下此时写操作全在拒绝；沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议 |
+| 5xx 比例升高 `S3ClientHigh5xxRatio` | 见 §4.1 服务端错误率 | `> 1%` 持续 10 分钟 | 与 SLO（0.5%）留一倍缓冲，避免抖动误报 |
+| 凭据类上游错误 `S3ClientCredentialErrors` | `increase(s3c_s3_call_errors_total{code=~"SignatureDoesNotMatch\|InvalidAccessKeyId\|AccessDenied"}[15m]) > 0` | 立即 | 账号密钥 / 桶策略漂移，不修则全账号不可用 |
+| 上游限流 / 过载 `S3ClientUpstreamThrottling` | `increase(s3c_s3_call_errors_total{code=~"SlowDown\|ServiceUnavailable\|RequestTimeout"}[15m])` | `> 5` | 上游按量限流，继续加压会放大失败 |
+| 上游不可达 `S3ClientUpstreamUnreachable` | `increase(s3c_s3_call_errors_total{code="transport"}[15m])` | `> 0` | DNS / 连接层问题（区别于 S3 业务错误码） |
+| 流式中断 `S3ClientStreamInterrupted` | `increase(s3c_stream_interrupted_total[15m]) > 0` | 立即 | 客户端主动断开不计入，故有增量即真实中断 |
+| ZIP 打包失败 `S3ClientZipPartialFailures` | `increase(s3c_zip_partial_failures_total[1h]) > 0 or increase(s3c_zip_failed_total[1h]) > 0` | 立即 | 部分失败意味着导出的压缩包**缺对象**（比整体失败更隐蔽），有增量即查 |
+| 进程重启 `S3ClientProcessRestarted` | `resets(s3c_uptime_seconds[15m]) > 0` | 立即 | 指标为进程级、重启清零；非计划重启需查因 |
+| 内存逼近上限 `S3ClientMemoryNearLimit` | `s3c_go_memstats_alloc_bytes` | > 容器上限的 80%（server 512M → 约 410M） | 容器内存上限由 compose 强制 |
+| 账号库写入失败 `S3ClientStoreWriteFailures` | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
+| 在册任务逼近上限 `S3ClientJobsNearCapacity` | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
+| 数据卷剩余空间 `S3ClientVolumeSpaceLow` | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
+| 数据卷 inode 耗尽 `S3ClientVolumeInodeLow` | `s3c_volume_inode_free / s3c_volume_inode_total < 0.2` | `for: 10m` | inode 耗尽与字节耗尽**互不等价**（大量小文件场景先耗 inode），此时 `mkdir` / 落盘同样失败；序列缺失的平台按 §4.3 外部采集 |
+| HTTP 延迟升高 `S3ClientHTTPLatencyHigh` | `s3client:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
+
+> **表外项**（不属 Prometheus 规则，故刻意不在 `rules.yml`）：外部黑盒探测 `/api/health`
+> 连续 3 次失败（30s 间隔）即告警——探针由宿主 / 负载均衡侧配置，对应 §4.1「服务可用性」SLI；
+> 进程 / 端口级故障的进程侧信号另见 `S3ClientProcessRestarted`。
 
 ### 4.3 必须靠外部采集的观测面（本服务不提供指标）
 
 | 关注点 | 现状 | 建议做法（**建议值**） |
 |---|---|---|
-| 数据卷 **inode**（容量本身已内置 `s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30） | 仍无内置指标 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；卷字节使用率直接用 §4.2 的 S3ClientVolumeSpaceLow |
+| 数据卷 **inode**（`s3c_volume_inode_total` / `s3c_volume_inode_free`，2026-10-10 已内置） | **仅在序列缺失的平台**：Windows 无 inode 概念、Linux / macOS / FreeBSD 之外无免依赖 statfs 实现 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；有序列的平台直接用 §4.2 的 `S3ClientVolumeInodeLow` |
 | 数据卷容量（**仅在序列缺失的平台**：Linux / macOS / FreeBSD / Windows 之外） | 该平台 `volumeUsage` 无免依赖实现 → 不发序列 | 宿主 `node_exporter` / `df -h` 采集，卷使用率 > 80% 告警 |
 | 账号库可写性（`json` / `encrypted`） | **主动探针仍无**（`Ping` 恒 nil）；但**写入失败已内置计数** `s3c_store_write_failures_total`（事后信号，2026-09-30） | 用 §4.2 的 S3ClientStoreWriteFailures（critical）+ 5xx 比例 + `msg="handler error"` 日志三者交叉确认（R-3） |
-| 跨服务 trace | 未接入（[`ROADMAP.md`](ROADMAP.md) §三 3.2 #11 ⬜） | 现阶段用 `X-Request-ID` + nginx 日志关联 |
+| 跨服务 trace | **导出已内置、采集端在服务外**（§3.4 OTel tracing：W3C `traceparent` + OTLP/HTTP JSON，`S3C_OTEL_ENDPOINT` 留空 = 关闭） | 设 `S3C_OTEL_ENDPOINT=http://<collector>:4318` 指向 OTLP/HTTP JSON 采集端（配置与失败模式见 §3.4）；未开启时用 `X-Request-ID` + nginx 日志关联 |
 
 > 2026-09-30 起，本表原有的「数据卷**容量** / 在册异步任务数 / 优雅关停耗时」三项已由内置指标补齐
 > （`s3c_volume_*`、`s3c_jobs_active`、`s3c_last_shutdown_duration_seconds`，见 §3.2 与 §4.2），
-> 补齐记录见 [`ROADMAP.md`](ROADMAP.md) 空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL。
+> 补齐记录见 [`ROADMAP.md`](ROADMAP.md) 空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL；
+> 2026-10-10 起**数据卷 inode** 亦已内置（`s3c_volume_inode_total` / `s3c_volume_inode_free`，
+> 本表只保留「序列缺失平台」的外部采集口径）。
 
 ## 5. Runbook（故障处置）
 
@@ -280,9 +299,9 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 通用取证顺序（后续每条 Runbook 的「判据」都基于这套命令）：
 
 ```bash
-curl -sS -o /dev/null -w 'health=%{http_code}\n' http://127.0.0.1:8080/api/health
-curl -sS http://127.0.0.1:8080/api/metrics | grep -E '^s3c_'          # 需 S3C_EXPOSE_METRICS=1
-make status                                                          # 本机 PID + health(8080) / web(1949)
+curl -sS -o /dev/null -w 'health=%{http_code}\n' http://127.0.0.1:5000/api/health
+curl -sS http://127.0.0.1:5000/api/metrics | grep -E '^s3c_'          # 需 S3C_EXPOSE_METRICS=1
+make status                                                          # 本机 PID + health(5000) / web(1949)
 docker compose -f docker-compose.prod.yml logs --since 15m server     # 容器部署
 docker compose -f docker-compose.prod.yml ps
 ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机默认 ./data；容器内为 /data；目录 0700 / 文件 0600
@@ -459,7 +478,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 **处置步骤**：
 1. 给该 Bucket 的 CORS 规则加上 `ExposeHeaders: ["ETag"]`——界面走「桶 CORS」，
    API 走 `PUT /api/accounts/{id}/bucket/cors`（body 的 `rules[].exposeHeaders`）。`rules` 传空数组会**删除全部规则**，改完先 `GET` 确认。
-2. 复核 `allowedOrigins` 含实际页面 Origin（如 `http://127.0.0.1:8080`），`allowedMethods` 含 `PUT`。
+2. 复核 `allowedOrigins` 含实际页面 Origin（如 `http://127.0.0.1:5000`），`allowedMethods` 含 `PUT`。
 3. 重试上传（前一次的残留分段已被 abort）。
 4. 参考各厂商矩阵（[`../README.md`](../README.md)）：RustFS / MinIO / AWS S3 / 阿里 OSS / 腾讯 COS
    **都要求在 CORS 暴露 `ETag`**，其中只有 RustFS 有自动化真对端 E2E。
@@ -525,7 +544,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 **判据**：
 1. 仓库自带 nginx 配置为**单 worker**（`worker_processes 1`，`worker_connections 1024`），与单后端一对一，
    reload 时新 worker 接管、旧 worker 处理完在途请求后退出；
-2. compose 中 nginx 发布 `127.0.0.1:8080:8080`，`stop_signal: SIGQUIT`，`stop_grace_period: 30s`；
+2. compose 中 nginx 发布 `127.0.0.1:5000:5000`，`stop_signal: SIGQUIT`，`stop_grace_period: 30s`；
 3. 若出现 502：先看 nginx 错误日志与 `nginx -t` 输出，再看后端 `/api/health`（后端才是根因时按 R-1 / R-3）。
 
 **处置步骤**：
@@ -540,7 +559,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
    ```
 3. 变更后验证：
    ```bash
-   curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/health   # 期望 200
+   curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health   # 期望 200
    ```
    并抽查一条流式路径（大文件下载 / ZIP）未被截断——这依赖 `proxy_buffering off` 与
    `proxy_read_timeout 3600s` 没被改小。
@@ -620,16 +639,16 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 1. 健康与版本：
    ```bash
-   curl -sS http://127.0.0.1:8080/api/health          # 200 且 store.ok=true
+   curl -sS http://127.0.0.1:5000/api/health          # 200 且 store.ok=true
    ```
 2. 账号清单（数量与 `secretSet` 是否为 `true`）：
    ```bash
-   curl -sS -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts
+   curl -sS -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:5000/api/accounts
    # 需要计数时装了 jq 可用：| jq '.accounts | length'
    ```
 3. **逐个账号做真实连通性测试**（会真的用 `secretKey` 连 S3，是「密钥解密正确」的最强证据）：
    ```bash
-   curl -sS -X POST -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts/<id>/test
+   curl -sS -X POST -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:5000/api/accounts/<id>/test
    # 期望 {"ok":true,...}；ok:false 时响应体内带 error 文案（HTTP 仍 200）
    ```
 4. 核对 `s3c_build_info{version="..."}` 与实际部署版本一致（前后端版本匹配）。
@@ -671,7 +690,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 2. **用旧 key 启动一次，抄下非敏感字段**（`endpoint` / `region` / `accessKey` / `bucket` / `pathStyle` /
    `useSSL` / `publicEndpoint`）作为重录对照——key 换掉后旧库就再也读不出来了：
    ```bash
-   curl -sS -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts
+   curl -sS -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:5000/api/accounts
    ```
    > `secretKey` **不会**出现在响应里；它必须来自你的密钥来源（步骤 2 解决的是「别漏账号、别抄错字段」）。
 3. **换 key 并重录**（按账号量选一种）：
@@ -680,7 +699,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
    - **新目录对拷**：把数据目录切到一个新目录，写入新 key 后重录，确认无误再切换挂载。
 4. **逐账号验证**（同 §6.4 第 3 步的最强证据——密钥真能解密并连上 S3）：
    ```bash
-   curl -sS -X POST -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:8080/api/accounts/<id>/test
+   curl -sS -X POST -H "Authorization: Bearer $S3C_TOKEN" http://127.0.0.1:5000/api/accounts/<id>/test
    ```
 5. **确认完成**：`/api/health` 200 且 `store.ok=true`；`s3c_store_up 1`（`sqlite` 才有实时意义，§3.1）；
    `GET /api/accounts` 账号数与轮换前一致且每条 `secretSet=true`；每个账号 `test` 返回 `ok:true`；
@@ -834,7 +853,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 | 关注点 | 说明 | 建议做法 |
 |---|---|---|
-| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；**inode 仍需宿主采集** | 字节剩余 < 20% 告警（§4.2 S3ClientVolumeSpaceLow）；inode > 80% 告警（§4.3） |
+| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；inode 使用率已内置（`s3c_volume_inode_total` / `s3c_volume_inode_free`，2026-10-10），**仅在序列缺失的平台需宿主采集** | 字节剩余 < 20% 告警（§4.2 `S3ClientVolumeSpaceLow`）；inode 空闲 < 20% 告警（§4.2 `S3ClientVolumeInodeLow`） |
 | 账号库写放大 | `json` / `encrypted` **每次写盘重写整个文件**（全量快照 + 原子替换）；`sqlite` 为行级更新 | 账号数达到数百时优先 `sqlite`（**建议**，代码未设阈值） |
 | `jobs.json` 增长 | 受 TTL 控制（30 分钟 / 7 天），但大批量任务期间会持续写入 | 无需清理；异常增长按 R-8 排查 |
 | 日志占用 | 由 compose 的 json-file 轮转限制硬上限；本机 `.run/*.log` **不轮转** | 本机部署建议外部 `logrotate`（**建议**） |

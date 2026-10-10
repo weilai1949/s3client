@@ -26,7 +26,7 @@ S3C_STORE_DRIVER=encrypted
 S3C_STORE_KEY=<强密钥>
 
 # 监听：经 nginx 反向代理时绑定 0.0.0.0
-S3C_ADDR=0.0.0.0:8080
+S3C_ADDR=0.0.0.0:5000
 
 # 日志：结构化输出便于采集
 S3C_LOG_JSON=1
@@ -52,6 +52,12 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+> **根 `.env` 只承载 compose 会用到的键**（`docker-compose*.yml` 里 `${VAR}` 插值的变量，见根
+> [`.env.example`](../.env.example)）。compose 的 `environment:` 是**显式白名单**且未用 `env_file:`——
+> `S3C_SSRF_DENY_PRIVATE` / `S3C_TRUSTED_PROXIES` 这类服务端专属项写进 `.env` **不会进入容器**；
+> 需要时请用 `docker run -e` / systemd 注入，或自行把该键加入 compose 白名单（口径见
+> [`CONFIGURATION.md`](CONFIGURATION.md) §1）。
+
 > **单实例约束**：账号存储是文件型的（`json` / `sqlite`），异步任务表在内存中，因此服务启动时对
 > `S3C_DATA_DIR` 加 `flock` 单写者锁（`.s3client.lock`）。同一数据卷起第二个实例会立即失败并报
 > `data dir … is already in use`——不要为同一 `/data` 卷编排多副本；水平扩容需先替换外部存储（未立项）。
@@ -76,12 +82,12 @@ docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 
 ```bash
 # 一键（server + web + 可选 nginx）
-make dev            # server(8081) + web(5173)
-make dev-nginx      # 加 nginx(8080)
+make dev            # server(5000) + web(1949)
+make dev-nginx      # Go(5001) + nginx(5000)
 
 # 分开跑
-cd apps/server && go run .      # 后端 127.0.0.1:8080
-cd apps/web && pnpm dev         # 前端 5173（Vite 代理到后端）
+cd apps/server && go run .      # 后端 127.0.0.1:5000
+cd apps/web && pnpm dev         # 前端 127.0.0.1:1949（Vite 代理到后端）
 ```
 
 ## 5. 桌面端分发
@@ -99,7 +105,7 @@ cd apps/web && pnpm dev         # 前端 5173（Vite 代理到后端）
 ### 6.1 健康检查
 
 ```bash
-curl http://127.0.0.1:8080/api/health
+curl http://127.0.0.1:5000/api/health
 # {"status":"ok","version":"v1.0.0","time":"...","store":{"ok":true}}
 # store 探测失败返回 503（不做降级，见 ADR-002）
 ```
@@ -120,7 +126,7 @@ curl http://127.0.0.1:8080/api/health
 
 ### 6.3 指标
 
-`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`（存储可达性，掉线为 0）、`s3c_store_write_failures_total`（账号库写入失败，`json` / `encrypted` 驱动唯一的主动故障信号）、`s3c_volume_size_bytes` / `s3c_volume_free_bytes`（数据卷容量）、`s3c_jobs_active`（在册异步任务数）、`s3c_last_shutdown_duration_seconds`（上次关停耗时）、`s3c_ssrf_deny_private`（SSRF 生效策略 0/1）与 `s3c_stream_interrupted_total`（流式传输中断计数）。完整清单见 [`OPERATIONS.md`](OPERATIONS.md) §3.2；`s3c_stream_interrupted_total` 用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
+`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`（存储可达性，掉线为 0）、`s3c_store_write_failures_total`（账号库写入失败，`json` / `encrypted` 驱动唯一的主动故障信号）、`s3c_volume_size_bytes` / `s3c_volume_free_bytes` / `s3c_volume_inode_total` / `s3c_volume_inode_free`（数据卷容量与 inode，取不到时不发序列）、`s3c_jobs_active`（在册异步任务数）、`s3c_last_shutdown_duration_seconds`（上次关停耗时）、`s3c_ssrf_deny_private`（SSRF 生效策略 0/1）与 `s3c_stream_interrupted_total`（流式传输中断计数）。完整清单见 [`OPERATIONS.md`](OPERATIONS.md) §3.2；`s3c_stream_interrupted_total` 用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
 
 > **`/api/metrics` 不受 `S3C_TOKEN` 保护**：即使配置了 token，只要 `S3C_EXPOSE_METRICS=1`，该端点无需 `Authorization` 头即返回 200（有意为内网 Prometheus 免 token scrape）。代价是**匿名可读**（版本、存储可达性、S3 上游调用统计等运行信息）。请只在**内网 / 反向代理鉴权之后**暴露，切勿把开启 metrics 的实例直接放上公网。
 

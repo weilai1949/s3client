@@ -20,7 +20,7 @@ s3client 提供 Web 端与 Tauri 2 桌面端。桌面端有两条技术路线：
 ## Decision
 
 桌面端采用 **B/S 架构，不使用 Tauri IPC**：无 command、无插件调用，`withGlobalTauri` 关闭，
-capabilities 为空权限集，前端通过 HTTP 访问后端（本地 `http://127.0.0.1:8080` 或用户在「服务器」设置中配置的远程后端）。
+capabilities 为空权限集，前端通过 HTTP 访问后端（本地 `http://127.0.0.1:5000` 或用户在「服务器」设置中配置的远程后端）。
 
 ## Alternatives Considered
 

@@ -6,6 +6,8 @@
 # `apps/server/repo_infra_gate_test.go` 的 `TestPrometheusRulesReferenceRealMetrics`
 # 机械校验：① 引用的每个 `s3c_*` 指标都真实存在于发射点；② 每个 `code` 取值都在
 # `s3wrap` 的错误码白名单内（白名单外的码会被折叠成 `other`，写进表达式即永不命中）。
+# 「与 OPERATIONS.md §4.2 的告警表是不是同一套」由 `doc_alert_drift_gate_test.go` 的
+# `TestOperationsAlertTableMatchesRulesFile` 双向钉住（表行 ⇔ `- alert:` 名等集）。
 #
 # 用法：挂进 Prometheus 的 `rule_files`，例如
 #   rule_files:
@@ -195,7 +197,23 @@ groups:
           summary: "数据卷剩余空间 < 20%"
           description: >-
             当前 {{ $value | humanizePercentage }}。卷写满会让账号库落盘直接失败
-            （联动 s3c_store_write_failures_total）。inode 本服务不提供，仍用宿主 node_exporter。
+            （联动 s3c_store_write_failures_total）。inode 耗尽另看 S3ClientVolumeInodeLow。
+
+      - alert: S3ClientVolumeInodeLow
+        # 数据卷 inode（2026-10-10 起内置 s3c_volume_inode_total / s3c_volume_inode_free，
+        # 此前只能靠宿主采集）：inode 耗尽与字节耗尽互不等价——大量小文件场景先耗尽
+        # inode，此时 mkdir / 落盘同样失败。
+        # total 为 0 的文件系统（极少数伪文件系统）会让除法得 NaN，告警天然不触发，属可接受退化。
+        expr: s3c_volume_inode_free / s3c_volume_inode_total < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "数据卷可用 inode < 20%"
+          description: >-
+            当前 {{ $value | humanizePercentage }}。用 find / df -i 定位小文件热点并清理，
+            或换用 inode 更充裕的文件系统。序列缺失（Windows / 其它平台、statfs 失败）时
+            按 OPERATIONS.md §4.3 用宿主 node_exporter / df -i 采集。
 
       - alert: S3ClientHTTPLatencyHigh
         # HTTP p95（记录规则 s3client:http_latency_p95:rate5m）：含流式端点，长尾天然存在，

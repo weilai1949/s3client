@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url'
  * 重新生成（需先 `pnpm build`）：
  *   cd apps/web && pnpm exec playwright test screenshots.spec.ts
  * 本地开发态：
- *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:5173 pnpm exec playwright test screenshots.spec.ts
+ *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:1949 pnpm exec playwright test screenshots.spec.ts
  */
 
 // apps/web/e2e → apps/web → apps → 仓库根

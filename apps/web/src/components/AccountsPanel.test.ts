@@ -477,6 +477,31 @@ describe('AccountsPanel', () => {
     expect(w.find('.modal-stub').exists()).toBe(false)
   })
 
+  it('明文端点提示：useSSL 未勾选时展示，勾选 TLS 后消失（A5，threat-model §6.2）', async () => {
+    // 服务端对明文 http:// 端点只打 WARN 不拦截（见 handler 的 warnPlaintextEndpoints），
+    // 前端必须给出**同一句**告知，否则风险只存在于运维日志里、填表的人完全无感知。
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] })
+    const w = mountPanel()
+    await flushPromises()
+    await findButton(w, 'accounts.add').trigger('click')
+    await nextTick()
+
+    const hint = w.find('.use-ssl-warn')
+    expect(hint.exists(), 'useSSL 未勾选时应展示明文端点提示').toBe(true)
+    expect(hint.text()).toBe('accounts.useSSLWarn')
+
+    // 勾选「使用 HTTPS/TLS」→ 提示消失（提示只描述明文风险，勾了 TLS 就不该再挂在那）。
+    const boxes = w.findAll('input[type="checkbox"]')
+    await boxes[1].setValue(true)
+    await nextTick()
+    expect(w.find('.use-ssl-warn').exists(), '勾选 TLS 后提示应消失').toBe(false)
+
+    // 取消勾选 → 提示回来（可逆，不靠一次性标记）。
+    await boxes[1].setValue(false)
+    await nextTick()
+    expect(w.find('.use-ssl-warn').exists(), '取消勾选后提示应恢复').toBe(true)
+  })
+
   it('异步提交防重复：在途时双击「保存登录」只发一次 createAccount', async () => {
     vi.mocked(s3api.createAccount).mockImplementationOnce(() => new Promise<never>(() => {})) // 请求挂起
     const w = mountPanel()

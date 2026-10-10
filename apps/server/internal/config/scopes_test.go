@@ -23,7 +23,7 @@ func scopeFromEnv(t *testing.T, token, raw string) Config {
 	t.Helper()
 	t.Setenv("S3C_TOKEN", token)
 	t.Setenv("S3C_TOKEN_SCOPES", raw)
-	t.Setenv("S3C_ADDR", "127.0.0.1:8080")
+	t.Setenv("S3C_ADDR", "127.0.0.1:5000")
 	t.Setenv("S3C_STORE_DRIVER", "json")
 	t.Setenv("S3C_STORE_KEY", "")
 	// 明文闸与本测试无关，显式 opt-in 隔离宿主环境（如 CI 注入的 S3C_*）。

@@ -16,8 +16,9 @@ import AxeBuilder from '@axe-core/playwright'
  * 空跑防护：`axe 有效性自检` 用例故意注入一个必然违规的 DOM，断言 axe 真的能报出来——
  * 否则「0 违规」可能只是扫描器没生效。
  *
- * 界面状态：本 spec 只桩 `/api/health` 与 `/api/accounts`（口径同 screenshots.spec.ts），
- * 因此扫的是「全新安装、尚未添加账号」的真实初始态，不掺入「无法连接后端」这类环境噪声。
+ * 界面状态：前四态只桩 `/api/health` 与 `/api/accounts`（口径同 screenshots.spec.ts），
+ * 因此扫的是「全新安装、尚未添加账号」的真实初始态，不掺入「无法连接后端」这类环境噪声；
+ * **网格视图**一态另用 `installObjectsStub` 桩出账号 + 对象（否则进不了对象面板）。
  */
 
 test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' })
@@ -35,7 +36,10 @@ function formatViolations(violations: { id: string; impact?: string | null; help
     .join('\n')
 }
 
-/** 桩：健康检查通过 + 账号列表为空（形状逐字取自 docs/api.md）。 */
+/**
+ * 桩：健康检查通过 + 账号列表为空（形状逐字取自 docs/api.md）。
+ * 网格态用例另用 installObjectsStub（见下方）。
+ */
 async function installMinimalStub(page: Page): Promise<void> {
   await page.route('**/api/health', (route) =>
     route.fulfill({
@@ -48,6 +52,65 @@ async function installMinimalStub(page: Page): Promise<void> {
     if (route.request().method() !== 'GET') return route.continue()
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accounts: [] }) })
   })
+}
+
+/**
+ * 桩：一个带默认桶的账号 + 三个对象（形状逐字取自 `model.AccountView` 与 `docs/api.md` 的
+ * `GET /api/accounts/{id}/objects`）。有账号且账号带默认桶时，应用会直接进对象面板并列出对象
+ * ——这是进入**网格视图**的最短路径（口径同 `features.spec.ts`）。
+ */
+async function installObjectsStub(page: Page): Promise<void> {
+  const account = {
+    id: 'acc-1',
+    name: 'account-1',
+    endpoint: 'http://127.0.0.1:9000',
+    publicEndpoint: '',
+    region: 'us-east-1',
+    accessKey: 'AKIAEXAMPLE',
+    secretSet: true,
+    bucket: 'photos',
+    pathStyle: true,
+    useSSL: false,
+    createdAt: '2024-01-02T00:00:00.000Z',
+    updatedAt: '2024-01-02T00:00:00.000Z',
+  }
+  const objects = [
+    { key: 'img/logo.png', size: 2048, lastModified: '2024-03-01T10:00:00.000Z', etag: 'e1', contentType: 'image/png', storageClass: 'STANDARD', isDir: false },
+    { key: 'data.csv', size: 120, lastModified: '2024-03-02T10:00:00.000Z', etag: 'e2', contentType: 'text/csv', storageClass: 'STANDARD', isDir: false },
+    { key: 'readme.txt', size: 14, lastModified: '2024-03-03T10:00:00.000Z', etag: 'e3', contentType: 'text/plain', storageClass: 'STANDARD', isDir: false },
+  ]
+  await page.route('**/api/health', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', version: 'v1.0.0', time: new Date().toISOString(), store: { ok: true } }),
+    }),
+  )
+  await page.route((url) => url.pathname === '/api/accounts', (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accounts: [account] }) })
+  })
+  await page.route((url) => url.pathname === '/api/accounts/acc-1/buckets', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ buckets: [{ name: 'photos', creationDate: '2024-01-02T00:00:00.000Z' }] }),
+    }),
+  )
+  await page.route((url) => url.pathname === '/api/accounts/acc-1/bucket-info', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ bucket: 'photos', region: 'us-east-1', createdAt: '2024-01-02T00:00:00.000Z', versioning: '' }),
+    }),
+  )
+  await page.route((url) => url.pathname === '/api/accounts/acc-1/objects', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ objects, commonPrefixes: ['img/'], isTruncated: false, nextToken: '' }),
+    }),
+  )
 }
 
 /** 打开首屏并确认「渲染成功、无后端错误横幅」，再返回。 */
@@ -69,6 +132,12 @@ async function scanPage(page: Page, label: string): Promise<void> {
   expect(results.passes.length, `${label}：axe 没有产出任何通过项，扫描面疑似为空`).toBeGreaterThan(5)
 
   const blocking = results.violations.filter((v) => BLOCKING_IMPACTS.has(v.impact ?? ''))
+  // moderate / minor 不阻塞 CI，但按本文件口径**必须打印出来供人工判断**——
+  // 静默丢弃会让它们无限累积，「0 阻塞」也就分不清是真干净还是没人看。
+  const nonBlocking = results.violations.filter((v) => !BLOCKING_IMPACTS.has(v.impact ?? ''))
+  if (nonBlocking.length > 0) {
+    console.log(`${label}：${nonBlocking.length} 个非阻塞级违规（不阻塞 CI）：\n${formatViolations(nonBlocking)}`)
+  }
   expect(
     blocking,
     `${label}：出现 ${blocking.length} 个 serious/critical 无障碍违规：\n${formatViolations(blocking)}`,
@@ -103,6 +172,20 @@ test('a11y：服务器设置面板（无 serious/critical 违规）', async ({ p
   await expect(page.getByRole('button', { name: /全部检测|Probe all/ })).toBeVisible()
   await page.waitForLoadState('networkidle')
   await scanPage(page, '服务器设置面板')
+})
+
+test('a11y：对象网格视图（无 serious/critical 违规）', async ({ page }) => {
+  // A4（2026-10-10）：accessibility §4.9 记「网格单元格 role=button、名称靠文本节点派生，
+  // 未加 aria-label」，但 axe 此前**四个扫描态都不含网格视图**——网格态从没被扫过，
+  // 真伪未判。本用例补上该状态，先让 axe 判定（TDD：先红后判），成立才改组件。
+  await installObjectsStub(page)
+  await openClean(page)
+  // 确认真的进了对象面板并列出对象（网格视图只在对象面板里存在）。
+  await expect(page.locator('tbody')).toContainText('readme.txt')
+  // 切到网格视图：该按钮的可访问名来自 aria-label（切换视图 / Toggle view）。
+  await page.getByRole('button', { name: /切换视图|Toggle view/ }).click()
+  await expect(page.locator('.grid-item').first()).toBeVisible()
+  await scanPage(page, '对象网格视图')
 })
 
 test('a11y：深色主题初始态（无 serious/critical 违规）', async ({ page }) => {

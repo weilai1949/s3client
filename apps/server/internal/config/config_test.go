@@ -59,8 +59,8 @@ func TestFromEnvDefaults(t *testing.T) {
 		t.Setenv(k, "")
 	}
 	cfg := FromEnv()
-	if cfg.Addr != "127.0.0.1:8080" {
-		t.Errorf("Addr = %q, want 127.0.0.1:8080", cfg.Addr)
+	if cfg.Addr != "127.0.0.1:5000" {
+		t.Errorf("Addr = %q, want 127.0.0.1:5000", cfg.Addr)
 	}
 	if cfg.DataDir != "./data" {
 		t.Errorf("DataDir = %q, want ./data", cfg.DataDir)
@@ -181,7 +181,7 @@ func TestFromEnvOTelDefaults(t *testing.T) {
 	t.Setenv("S3C_OTEL_SERVICE_NAME", "")
 	// 隔离宿主环境：Validate 只看 OTel 之外的既有闸门是否通过。
 	t.Setenv("S3C_TOKEN", "")
-	t.Setenv("S3C_ADDR", "127.0.0.1:8080")
+	t.Setenv("S3C_ADDR", "127.0.0.1:5000")
 	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	cfg := FromEnv()
 	if cfg.OTelEndpoint != "" {
@@ -203,7 +203,7 @@ func TestFromEnvOTelOverrides(t *testing.T) {
 	t.Setenv("S3C_OTEL_ENDPOINT", "http://collector:4318")
 	t.Setenv("S3C_OTEL_SERVICE_NAME", "s3client-prod")
 	t.Setenv("S3C_TOKEN", "")
-	t.Setenv("S3C_ADDR", "127.0.0.1:8080")
+	t.Setenv("S3C_ADDR", "127.0.0.1:5000")
 	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "1")
 	for _, c := range []struct {
 		in   string

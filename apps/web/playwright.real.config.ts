@@ -12,7 +12,7 @@ import { defineConfig, devices } from '@playwright/test'
  *   - **串行执行**：账号 / 桶 / 对象都写在共享的后端 store 与同一个 RustFS 上，
  *     并行会互相干扰。
  *
- * `PLAYWRIGHT_BASE_URL` 缺省指向真实后端 http://127.0.0.1:8080。
+ * `PLAYWRIGHT_BASE_URL` 缺省指向真实后端 http://127.0.0.1:5000。
  */
 export default defineConfig({
   testDir: './e2e-real',
@@ -24,7 +24,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8080',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

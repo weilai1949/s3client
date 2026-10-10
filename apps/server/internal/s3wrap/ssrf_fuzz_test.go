@@ -42,7 +42,7 @@ func FuzzNormalizeEndpoint(f *testing.F) {
 		{"http://[fd00:ec2::254]/", false},
 		{"http://100.100.100.200/", false},
 		{"münchen.de", false},
-		{"http://user:pass@Host:8080/a/B/", true},
+		{"http://user:pass@Host:5000/a/B/", true},
 		{"http://host/%zz", false},
 		{"?x=1", false},
 		{"#frag", false},
@@ -151,7 +151,7 @@ func FuzzValidateEndpoint(f *testing.F) {
 		"http://[fd00:ec2::254]/",
 		"münchen.de",
 		"http:///x",
-		"http://:8080",
+		"http://:5000",
 		"file:///etc/passwd",
 		"http://user@metadata.google.internal",
 	} {

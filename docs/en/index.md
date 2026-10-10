@@ -127,7 +127,7 @@ variables always win over files.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `S3C_ADDR` | `127.0.0.1:8080` | Listen address; loopback is safer. Remote access needs `0.0.0.0:8080` (then **`S3C_TOKEN` is required**) |
+| `S3C_ADDR` | `127.0.0.1:5000` | Listen address; loopback is safer. Remote access needs `0.0.0.0:5000` (then **`S3C_TOKEN` is required**) |
 | `S3C_DATA_DIR` | `./data` | Data directory (account store + single-writer lock file `.s3client.lock`) |
 | `S3C_TOKEN` | empty | When set, all `/api/*` require `Authorization: Bearer <token>`; **required on non-loopback binds** (suggest `openssl rand -hex 32`, min 16 chars); comma-separated for token rotation |
 | `S3C_STORE_DRIVER` | `json` | Account store: `json` / `sqlite` / `encrypted` |
@@ -161,7 +161,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 # Server only (external S3)
 docker build -f apps/server/Dockerfile -t s3client/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
-docker run -d --name s3client -p 127.0.0.1:8080:8080 \
+docker run -d --name s3client -p 127.0.0.1:5000:5000 \
   -e S3C_TOKEN="$(openssl rand -hex 32)" \
   -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
   -v s3c-data:/data s3client/server:v1.0.0
@@ -171,9 +171,9 @@ docker run -d --name s3client -p 127.0.0.1:8080:8080 \
 > the store-key hard failure (the process logs a WARN).
 
 > The service binds `127.0.0.1` by default, so port mapping should only publish to loopback
-> (`127.0.0.1:8080:8080`); for external access, put it behind a reverse proxy/TLS before exposing `0.0.0.0`.
+> (`127.0.0.1:5000:5000`); for external access, put it behind a reverse proxy/TLS before exposing `0.0.0.0`.
 
-Access: Web `http://127.0.0.1:8080` (via **nginx**, `worker_processes 1` reverse-proxying the Go backend);
+Access: Web `http://127.0.0.1:5000` (via **nginx**, `worker_processes 1` reverse-proxying the Go backend);
 RustFS console `http://127.0.0.1:9001` (credentials from `RUSTFS_*` in `.env` — do not ship default
 passwords to production).
 
@@ -189,7 +189,7 @@ make restart-docker          # or ./scripts/graceful-restart.sh docker
 # Local dev (server + web, PIDs in .run/)
 make dev                     # start
 make restart-all             # reload nginx → restart server → restart web
-make dev-nginx               # Go :8081 + nginx :8080 (single worker)
+make dev-nginx               # Go :5001 + nginx :5000 (single worker)
 make stop && make status
 ```
 
@@ -232,11 +232,11 @@ corruption).
 ### Option 2 — local
 
 ```bash
-# 1) Go backend (default :8080, serves apps/web/dist)
+# 1) Go backend (default :5000, serves apps/web/dist)
 cd apps/server && go run .
 
 # 2) Web frontend (dev)
-cd apps/web && pnpm install && pnpm dev     # proxies /api → 127.0.0.1:8080
+cd apps/web && pnpm install && pnpm dev     # proxies /api → 127.0.0.1:5000
 pnpm build                            # dist/, hosted by the Go backend
 
 # 3) Desktop (Tauri 2)
@@ -245,8 +245,8 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-Open `http://127.0.0.1:8080` (same-origin) for the web UI. The desktop app sets the API base to
-`http://127.0.0.1:8080` on first start; when the backend lives on another host, change it under
+Open `http://127.0.0.1:5000` (same-origin) for the web UI. The desktop app sets the API base to
+`http://127.0.0.1:5000` on first start; when the backend lives on another host, change it under
 "Server" (top right) and configure the Token there too.
 
 ## Testing

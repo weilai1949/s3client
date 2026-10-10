@@ -46,7 +46,7 @@ done
 # （一致性由 repo_infra_gate_test.go 的 TestRustFSImageIsConsistentlyPinned 守住）。
 RUSTFS_IMAGE="${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-rc.3}"
 RUSTFS_PORT="${RUSTFS_PORT:-9000}"
-SERVER_PORT="${SERVER_PORT:-8080}"
+SERVER_PORT="${SERVER_PORT:-5000}"
 RUSTFS_ACCESS_KEY="${RUSTFS_ACCESS_KEY:-rustfsadmin}"
 RUSTFS_SECRET_KEY="${RUSTFS_SECRET_KEY:-rustfsadmin}"
 # 外部对端模式：调用方给出完整 endpoint（如 GitLab service 的 http://rustfs:9000）。

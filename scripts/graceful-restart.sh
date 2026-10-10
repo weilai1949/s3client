@@ -33,12 +33,13 @@ restart_server() {
   graceful_stop server "$t"
   cd "$ROOT/apps/server"
   if [[ ! -x ./s3client-server ]]; then
-    go mod tidy
+    # 不跑 `go mod tidy`（同 run-dev.sh：每次都会静默改写 go.mod/go.sum，与 Makefile `server`
+    # 目标口径相悖）；依赖不一致时 `go build` 会显式报错，同步请显式执行 `make tidy`。
     go build -o s3client-server .
   fi
   # shellcheck disable=SC1091
   [[ -f .env ]] && set -a && source .env && set +a
-  export S3C_ADDR="${S3C_ADDR:-127.0.0.1:8080}"
+  export S3C_ADDR="${S3C_ADDR:-127.0.0.1:5000}"
   ./s3client-server >>"$RUN_DIR/server.log" 2>&1 &
   write_pid server $!
   wait_http "http://127.0.0.1:${S3C_ADDR##*:}/api/health" 30
@@ -48,7 +49,14 @@ restart_server() {
 restart_web() {
   graceful_stop web 15
   cd "$ROOT/apps/web"
-  pnpm dev >>"$RUN_DIR/web.log" 2>&1 &
+  # 与 run-dev.sh 同口径：直接 exec vite，使 .run/web.pid 记录 vite 本身而非 pnpm 包装
+  # 进程（否则 validated_pid 会把存活的 vite 误判为「PID 已被复用」而拒绝停止）。
+  # 背景与不变量见 apps/server/dev_scripts_gate_test.go 文件头。
+  [[ -x ./node_modules/.bin/vite ]] || {
+    echo "[web] 未找到 ./node_modules/.bin/vite，请先在 apps/web 执行 pnpm install" >&2
+    exit 1
+  }
+  ./node_modules/.bin/vite --strictPort >>"$RUN_DIR/web.log" 2>&1 &
   write_pid web $!
   wait_http "http://127.0.0.1:1949/" 60
   echo "[web] 已优雅重启 pid=$(read_pid web)"
@@ -100,7 +108,7 @@ restart_docker() {
     docker compose up -d nginx
     reload_nginx
   fi
-  wait_http "http://127.0.0.1:8080/api/health" 90
+  wait_http "http://127.0.0.1:5000/api/health" 90
   echo "[docker] 已滚动重启"
 }
 
@@ -121,7 +129,7 @@ cmd_status() {
       echo "$name: stopped"
     fi
   done
-  curl -sf --max-time 2 "http://127.0.0.1:8080/api/health" && echo "health(8080): ok" || echo "health(8080): fail"
+  curl -sf --max-time 2 "http://127.0.0.1:5000/api/health" && echo "health(5000): ok" || echo "health(5000): fail"
   curl -sf --max-time 2 "http://127.0.0.1:1949/" >/dev/null && echo "web(1949): ok" || echo "web(1949): fail"
 }
 

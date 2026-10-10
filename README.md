@@ -85,11 +85,11 @@ docker-compose.yml   一键起 server + RustFS
 所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
 `.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源，且路径不存在 / 不可读时**拒绝启动**，不静默回退默认值）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
-**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 18 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
+**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 22 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `S3C_ADDR` | `127.0.0.1:8080` | 监听地址；回环更安全，需远程改为 `0.0.0.0:8080`（此时**必须**设 `S3C_TOKEN`） |
+| `S3C_ADDR` | `127.0.0.1:5000` | 监听地址；回环更安全，需远程改为 `0.0.0.0:5000`（此时**必须**设 `S3C_TOKEN`） |
 | `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3client.lock`） |
 | `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换 |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
@@ -118,7 +118,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 # 仅运行服务端（外部 S3）
 docker build -f apps/server/Dockerfile -t s3client/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
-docker run -d --name s3client -p 127.0.0.1:8080:8080 \
+docker run -d --name s3client -p 127.0.0.1:5000:5000 \
   -e S3C_TOKEN="$(openssl rand -hex 32)" \
   -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
   -v s3c-data:/data s3client/server:v1.0.0
@@ -126,9 +126,9 @@ docker run -d --name s3client -p 127.0.0.1:8080:8080 \
 
 > 本地仅联调、明确接受明文落盘时，可 `S3C_ALLOW_PLAINTEXT_STORE=1` 绕过存储密钥硬失败（进程会打 WARN）。
 
-> 服务默认只绑定 `127.0.0.1`，因此端口映射建议仅发布到回环地址（`127.0.0.1:8080:8080`）；如需外部访问，请置于反向代理/TLS 之后再暴露到 `0.0.0.0`。
+> 服务默认只绑定 `127.0.0.1`，因此端口映射建议仅发布到回环地址（`127.0.0.1:5000:5000`）；如需外部访问，请置于反向代理/TLS 之后再暴露到 `0.0.0.0`。
 
-访问：Web `http://127.0.0.1:8080`（经 **nginx**，`worker_processes 1` 反向代理 Go 后端）；RustFS 控制台 `http://127.0.0.1:9001`（凭据见 `.env` 中 `RUSTFS_*`，勿用默认口令上生产）。
+访问：Web `http://127.0.0.1:5000`（经 **nginx**，`worker_processes 1` 反向代理 Go 后端）；RustFS 控制台 `http://127.0.0.1:9001`（凭据见 `.env` 中 `RUSTFS_*`，勿用默认口令上生产）。
 
 TLS 终止示例见 `deploy/nginx/conf.d/s3client-tls.example.conf`。
 
@@ -142,7 +142,7 @@ make restart-docker          # 或 ./scripts/graceful-restart.sh docker
 # 本地开发（server + web，PID 在 .run/）
 make dev                     # 启动
 make restart-all             # reload nginx → 重启 server → 重启 web
-make dev-nginx               # Go :8081 + nginx :8080（单 worker）
+make dev-nginx               # Go :5001 + nginx :5000（单 worker）
 make stop && make status
 ```
 
@@ -174,11 +174,11 @@ make stop && make status
 ### 方式二：本地
 
 ```bash
-# 1) Go 后端（默认 :8080，托管 apps/web/dist）
+# 1) Go 后端（默认 :5000，托管 apps/web/dist）
 cd apps/server && go run .
 
 # 2) Web 前端（开发）
-cd apps/web && pnpm install && pnpm dev     # 代理 /api → 127.0.0.1:8080
+cd apps/web && pnpm install && pnpm dev     # 代理 /api → 127.0.0.1:5000
 pnpm build                            # 产物 dist/，由 Go 后端托管
 
 # 3) 桌面端（Tauri 2）
@@ -187,7 +187,7 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
-Web 端直接访问 `http://127.0.0.1:8080`（同源）即可。桌面端打开后前端自动把 API 基址设为 `http://127.0.0.1:8080`；后端在其他主机时可到右上角「Server」修改并保存，也可在此配置 Token。
+Web 端直接访问 `http://127.0.0.1:5000`（同源）即可。桌面端打开后前端自动把 API 基址设为 `http://127.0.0.1:5000`；后端在其他主机时可到右上角「Server」修改并保存，也可在此配置 Token。
 
 ## 测试
 

@@ -38,7 +38,7 @@ function resetForm() {
 function startCreate() {
   resetForm()
   form.name = t('server.defaultName')
-  form.base = 'http://127.0.0.1:8080'
+  form.base = 'http://127.0.0.1:5000'
   showForm.value = true
   error.value = ''
 }

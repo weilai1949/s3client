@@ -105,7 +105,7 @@ describe('api gaps: token/servers 分支', () => {
       const { api } = await loadApi()
       const list = api.listServers()
       expect(list[0].name).toBe('server.localBackend')
-      expect(list[0].base).toBe('http://127.0.0.1:8080')
+      expect(list[0].base).toBe('http://127.0.0.1:5000')
     } finally {
       Object.defineProperty(location, 'hostname', { value: orig, configurable: true })
     }
@@ -165,7 +165,7 @@ describe('api gaps: token/servers 分支', () => {
       api.deleteServer(list[0].id)
       const list2 = api.listServers()
       expect(list2[0].name).toBe('server.localBackend')
-      expect(list2[0].base).toBe('http://127.0.0.1:8080')
+      expect(list2[0].base).toBe('http://127.0.0.1:5000')
     } finally {
       Object.defineProperty(location, 'hostname', { value: orig, configurable: true })
     }

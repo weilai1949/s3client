@@ -19,6 +19,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -128,5 +129,84 @@ func TestAiPolicyClaimsMatchRepoState(t *testing.T) {
 		if !strings.Contains(string(b), "AGENTS.md") {
 			t.Error(".github/copilot-instructions.md 未指向 AGENTS.md：指针文件失去唯一价值")
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// A2/A6（2026-10-10 文档「明确没做」盘点）：AI_POLICY §11 把「不自动合并 PR /
+// 不自动删分支或数据」如实标为「⚠️ 人工」——实测 `.github/workflows/`、`.gitlab-ci.yml`
+// 与 `scripts/` 里零命中自动合并 / 删分支 / 特权触发，但**零命中只是现状，没有任何门禁**
+// 阻止下一个改动把 `gh pr merge` 或 `pull_request_target` 加进来。本断言把该政策条款
+// 从「人工承诺」升级为「代码强制」，并**双向钉**：政策 §11 必须回指本测试名，
+// 仓库侧出现禁用模式即红灯。
+// ---------------------------------------------------------------------------
+
+// ciForbiddenRe 匹配「自动合并 / 自动删分支 / 特权触发」形态。
+// 只扫 CI 载体（GitHub workflow / GitLab CI / scripts），不扫文档——文档里讨论这些
+// 模式的段落（含 AI_POLICY 自己）是合法引用。
+var ciForbiddenRe = mustCompileForbidden()
+
+func mustCompileForbidden() *regexp.Regexp {
+	return regexp.MustCompile(
+		`gh pr merge|` + // GitHub CLI 自动合并
+			`enable-auto-merge|` + // peter-evans/enable-auto-merge 等 action
+			`mergify|` + // Mergify 配置 / app
+			`merge_when_pipeline_succeeds|` + // GitLab 自动合并
+			`auto_merge|` + // GitLab auto-merge API
+			`pull_request_target|` + // 特权触发（fork PR 亦可写 token）
+			`git push --delete|` + // 删远端分支
+			`git branch -D|` + // 强删本地分支
+			`delete-branch`) // 删分支 action
+}
+
+// minCIScannedFiles 是扫描面自检基线：10 个 GitHub workflow + 1 个 .gitlab-ci.yml
+// + 9 个 scripts/*.sh = 20（低于 18 即读取口径塌缩）。
+const minCIScannedFiles = 18
+
+// TestNoAutoMergeOrPrivilegedCITriggers 断言仓库 CI 载体不含自动合并 / 自动删分支 /
+// 特权触发模式，且 AI_POLICY §11 对应行已回指本测试名（双向钉）。
+func TestNoAutoMergeOrPrivilegedCITriggers(t *testing.T) {
+	t.Parallel()
+	root := repoRoot(t)
+
+	// ① 收集全部 CI 载体：GitHub workflows + GitLab CI + scripts 下的 shell。
+	files := append([]string{}, ciWorkflowFiles(t)...)
+	for _, rel := range []string{filepath.Join(".gitlab-ci.yml")} {
+		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
+			t.Fatalf("缺少 %s: %v", rel, err)
+		}
+		files = append(files, filepath.Join(root, rel))
+	}
+	scripts, err := filepath.Glob(filepath.Join(root, "scripts", "*.sh"))
+	if err != nil {
+		t.Fatalf("glob scripts/*.sh: %v", err)
+	}
+	files = append(files, scripts...)
+
+	if len(files) < minCIScannedFiles {
+		t.Fatalf("扫描面塌缩：只收集到 %d 个 CI 载体文件（基线 ≥%d）——"+
+			"workflow / scripts 目录结构变化需同步本门禁", len(files), minCIScannedFiles)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("读取 %s: %v", f, err)
+		}
+		for i, line := range strings.Split(string(b), "\n") {
+			if ciForbiddenRe.MatchString(line) {
+				rel, _ := filepath.Rel(root, f)
+				t.Errorf("%s:%d 命中「自动合并 / 自动删分支 / 特权触发」禁用模式——"+
+					"AI_POLICY §3 禁止档（自动合并 PR、自动删分支或数据须人类执行）：\n  %s",
+					rel, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+
+	// ② 双向钉：政策 §11 的对应行必须回指本测试名，否则「升级为代码强制」的说法无载体。
+	policy := readRepoFile(t, filepath.Join("docs", "AI_POLICY.md"))
+	testName := "TestNoAutoMergeOrPrivilegedCITriggers"
+	if !strings.Contains(policy, testName) {
+		t.Errorf("docs/AI_POLICY.md §11 未回指 %s："+
+			"「不自动合并 PR / 不自动删分支」的覆盖强度声明必须与门禁一一对应", testName)
 	}
 }

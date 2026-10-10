@@ -79,7 +79,7 @@ docs/          文档（命名二分，与 AGENTS.md / docs/DEVELOPMENT.md §4 �
                `ROADMAP.md` `POSTMORTEM_TEMPLATE.md` `THIRD_PARTY_LICENSES.md`（`README.md` 属
                工具固定名 = 本目录落地页）；内容文档小写 = `api.md` `architecture.md` `data-model.md`
                `errors.md` `threat-model.md` `user-guide.md` `compatibility.md` `glossary.md` `i18n.md`
-               `accessibility.md`（时点性批次交接快照与代码评审快照同用小写——当前 `code-review-2026-10-09.md`，收口后归档入 `archive/`）；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
+               `accessibility.md`（时点性批次交接快照与代码评审快照同用小写——`code-review-2026-09-24.md`、`code-review-2026-10-09.md` 收口后均归档入 `archive/`）；子目录 `api/`（机器可读契约）· `en/`（英文快照）·
                `decisions/`（ADR）· `archive/`（冻结归档）
 deploy/        nginx 反代配置 + prometheus/s3client.rules.yml（告警规则，对应 OPERATIONS §4） + grafana/（SLO 仪表盘 JSON）
 scripts/       开发、发版、E2E 脚本 + evals/（AI 黄金任务集与 runner）

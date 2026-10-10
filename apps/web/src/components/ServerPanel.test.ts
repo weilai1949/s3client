@@ -181,7 +181,7 @@ describe('ServerPanel', () => {
     await findButton(w, 'server.add').trigger('click')
     expect(w.find('.modal-stub').exists()).toBe(true)
     expect((w.find('input[placeholder="server.namePh"]').element as HTMLInputElement).value).toBe('server.defaultName')
-    expect((w.find('input[placeholder="server.basePh"]').element as HTMLInputElement).value).toBe('http://127.0.0.1:8080')
+    expect((w.find('input[placeholder="server.basePh"]').element as HTMLInputElement).value).toBe('http://127.0.0.1:5000')
     await findButton(w, 'common.cancel').trigger('click')
     expect(w.find('.modal-stub').exists()).toBe(false)
   })

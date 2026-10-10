@@ -44,20 +44,20 @@ func TestParseLevel(t *testing.T) {
 }
 
 // TestIsLoopbackAddr 回环判定：显式回环与无法解析按回环处理；
-// 无 host（":8080"，net.Listen 绑 [::] 全接口）必须按**非**回环处理（C2）。
+// 无 host（":5000"，net.Listen 绑 [::] 全接口）必须按**非**回环处理（C2）。
 func TestIsLoopbackAddr(t *testing.T) {
 	cases := []struct {
 		in   string
 		want bool
 	}{
-		{"127.0.0.1:8080", true},
+		{"127.0.0.1:5000", true},
 		{"127.0.0.1:", true},
-		{"[::1]:8080", true},
-		{"::1:8080", true},
-		{":8080", false},      // 未指定 host = 绑定全部网卡，等价 0.0.0.0（C2）
+		{"[::1]:5000", true},
+		{"::1:5000", true},
+		{":5000", false},      // 未指定 host = 绑定全部网卡，等价 0.0.0.0（C2）
 		{"not an addr", true}, // 解析失败本就无法监听，按回环避免误报
-		{"0.0.0.0:8080", false},
-		{"192.168.1.5:8080", false},
+		{"0.0.0.0:5000", false},
+		{"192.168.1.5:5000", false},
 	}
 	for _, c := range cases {
 		if got := config.IsLoopbackAddr(c.in); got != c.want {
@@ -93,7 +93,7 @@ func TestRunHealthcheck(t *testing.T) {
 	}
 
 	// IPv6 回环字面量：[::1]:port 是合法且被 IsLoopbackAddr 认可的回环监听地址
-	// （因此允许不设 token），但旧实现拼出 "http://::1:8080/api/health"——url.Parse 直接
+	// （因此允许不设 token），但旧实现拼出 "http://::1:5000/api/health"——url.Parse 直接
 	// 报 invalid port，健康检查恒为 1，容器 HEALTHCHECK 会把健康服务判死并反复重启。
 	var v6Addr string
 	if ln, err := net.Listen("tcp", "[::1]:0"); err != nil {

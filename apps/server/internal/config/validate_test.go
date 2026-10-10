@@ -12,23 +12,23 @@ func TestValidate(t *testing.T) {
 		cfg     Config
 		wantErr error
 	}{
-		{"loopback no token ok", Config{Addr: "127.0.0.1:8080", Token: ""}, nil},
-		{"empty host no token rejected", Config{Addr: ":8080", Token: ""}, ErrTokenRequiredNonLoopback},
-		{"empty host with token ok", Config{Addr: ":8080", Token: strings.Repeat("a", MinTokenLength)}, nil},
-		{"non-loopback no token rejected", Config{Addr: "0.0.0.0:8080", Token: ""}, ErrTokenRequiredNonLoopback},
-		{"non-loopback with token ok", Config{Addr: "0.0.0.0:8080", Token: strings.Repeat("a", MinTokenLength)}, nil},
-		{"short token rejected (loopback)", Config{Addr: "127.0.0.1:8080", Token: "short"}, ErrShortToken},
-		{"short token rejected (non-loopback)", Config{Addr: "0.0.0.0:8080", Token: "short"}, ErrShortToken},
-		{"multi token shortest applies", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + ",short"}, ErrShortToken},
-		{"multi token all long ok", Config{Addr: "127.0.0.1:8080", Token: strings.Repeat("a", MinTokenLength) + "," + strings.Repeat("b", MinTokenLength+5)}, nil},
-		{"empty token piece ignored in shortest", Config{Addr: "127.0.0.1:8080", Token: "," + strings.Repeat("a", MinTokenLength)}, nil},
+		{"loopback no token ok", Config{Addr: "127.0.0.1:5000", Token: ""}, nil},
+		{"empty host no token rejected", Config{Addr: ":5000", Token: ""}, ErrTokenRequiredNonLoopback},
+		{"empty host with token ok", Config{Addr: ":5000", Token: strings.Repeat("a", MinTokenLength)}, nil},
+		{"non-loopback no token rejected", Config{Addr: "0.0.0.0:5000", Token: ""}, ErrTokenRequiredNonLoopback},
+		{"non-loopback with token ok", Config{Addr: "0.0.0.0:5000", Token: strings.Repeat("a", MinTokenLength)}, nil},
+		{"short token rejected (loopback)", Config{Addr: "127.0.0.1:5000", Token: "short"}, ErrShortToken},
+		{"short token rejected (non-loopback)", Config{Addr: "0.0.0.0:5000", Token: "short"}, ErrShortToken},
+		{"multi token shortest applies", Config{Addr: "127.0.0.1:5000", Token: strings.Repeat("a", MinTokenLength) + ",short"}, ErrShortToken},
+		{"multi token all long ok", Config{Addr: "127.0.0.1:5000", Token: strings.Repeat("a", MinTokenLength) + "," + strings.Repeat("b", MinTokenLength+5)}, nil},
+		{"empty token piece ignored in shortest", Config{Addr: "127.0.0.1:5000", Token: "," + strings.Repeat("a", MinTokenLength)}, nil},
 		// S3C_STORE_KEY 最短长度校验（已闭环：FEATURES.md §M）：短口令会被 Argon2 暴力破解。
-		{"short store key rejected", Config{Addr: "127.0.0.1:8080", StoreKey: "short"}, ErrShortStoreKey},
-		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
+		{"short store key rejected", Config{Addr: "127.0.0.1:5000", StoreKey: "short"}, ErrShortStoreKey},
+		{"short store key rejected (encrypted)", Config{Addr: "127.0.0.1:5000", StoreDriver: "encrypted", StoreKey: "short"}, ErrShortStoreKey},
 		// 安全默认：未显式选择驱动（空串）不触发明文落盘校验，由 json/sqlite 用例单独覆盖。
-		{"empty store key ok (no driver)", Config{Addr: "127.0.0.1:8080", StoreKey: ""}, nil},
-		{"long store key ok", Config{Addr: "127.0.0.1:8080", StoreKey: strings.Repeat("k", MinStoreKeyLength)}, nil},
-		{"json empty key with opt-in ok", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", AllowPlaintextStore: true}, nil},
+		{"empty store key ok (no driver)", Config{Addr: "127.0.0.1:5000", StoreKey: ""}, nil},
+		{"long store key ok", Config{Addr: "127.0.0.1:5000", StoreKey: strings.Repeat("k", MinStoreKeyLength)}, nil},
+		{"json empty key with opt-in ok", Config{Addr: "127.0.0.1:5000", StoreDriver: "json", AllowPlaintextStore: true}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -59,15 +59,15 @@ func TestValidatePlaintextStoreRejected(t *testing.T) {
 		cfg     Config
 		wantErr error
 	}{
-		{"json empty key rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "json"}, ErrPlaintextStoreNotAllowed},
-		{"sqlite empty key rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite"}, ErrPlaintextStoreNotAllowed},
-		{"json opt-in allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", AllowPlaintextStore: true}, nil},
-		{"sqlite opt-in allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite", AllowPlaintextStore: true}, nil},
-		{"json with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "json", StoreKey: key}, nil},
-		{"sqlite with key allowed", Config{Addr: "127.0.0.1:8080", StoreDriver: "sqlite", StoreKey: key}, nil},
-		{"encrypted empty key not this sentinel", Config{Addr: "127.0.0.1:8080", StoreDriver: "encrypted"}, nil},
+		{"json empty key rejected", Config{Addr: "127.0.0.1:5000", StoreDriver: "json"}, ErrPlaintextStoreNotAllowed},
+		{"sqlite empty key rejected", Config{Addr: "127.0.0.1:5000", StoreDriver: "sqlite"}, ErrPlaintextStoreNotAllowed},
+		{"json opt-in allowed", Config{Addr: "127.0.0.1:5000", StoreDriver: "json", AllowPlaintextStore: true}, nil},
+		{"sqlite opt-in allowed", Config{Addr: "127.0.0.1:5000", StoreDriver: "sqlite", AllowPlaintextStore: true}, nil},
+		{"json with key allowed", Config{Addr: "127.0.0.1:5000", StoreDriver: "json", StoreKey: key}, nil},
+		{"sqlite with key allowed", Config{Addr: "127.0.0.1:5000", StoreDriver: "sqlite", StoreKey: key}, nil},
+		{"encrypted empty key not this sentinel", Config{Addr: "127.0.0.1:5000", StoreDriver: "encrypted"}, nil},
 		// R4:未知驱动值不再放行——Open 曾把它静默当 json,绕过明文落盘闸,现在启动即失败。
-		{"unknown driver rejected", Config{Addr: "127.0.0.1:8080", StoreDriver: "pgsql"}, ErrUnknownStoreDriver},
+		{"unknown driver rejected", Config{Addr: "127.0.0.1:5000", StoreDriver: "pgsql"}, ErrUnknownStoreDriver},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestValidateStoreDriverWhitelist(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			cfg := Config{Addr: "127.0.0.1:8080", StoreDriver: c.driver, StoreKey: c.storeKey, AllowPlaintextStore: c.optin}
+			cfg := Config{Addr: "127.0.0.1:5000", StoreDriver: c.driver, StoreKey: c.storeKey, AllowPlaintextStore: c.optin}
 			err := cfg.Validate()
 			if c.wantErr == nil {
 				if err != nil {
@@ -180,14 +180,14 @@ func TestIsLoopbackAddr(t *testing.T) {
 		addr string
 		want bool
 	}{
-		{"127.0.0.1:8080", true},
-		{"::1:8080", true},
-		{"[::1]:8080", true},
-		{":8080", false}, // 空 host 实际绑定 [::] 全部接口，必须按非回环处理（C2）
-		{"0.0.0.0:8080", false},
-		{"[::]:8080", false},
-		{"192.168.1.1:8080", false},
-		{"localhost:8080", false}, // 非 IP 视为非回环
+		{"127.0.0.1:5000", true},
+		{"::1:5000", true},
+		{"[::1]:5000", true},
+		{":5000", false}, // 空 host 实际绑定 [::] 全部接口，必须按非回环处理（C2）
+		{"0.0.0.0:5000", false},
+		{"[::]:5000", false},
+		{"192.168.1.1:5000", false},
+		{"localhost:5000", false}, // 非 IP 视为非回环
 	}
 	for _, c := range cases {
 		if got := IsLoopbackAddr(c.addr); got != c.want {

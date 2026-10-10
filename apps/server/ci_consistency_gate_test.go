@@ -1,7 +1,7 @@
 package main
 
 // ci_consistency_gate_test.go —— 「CI 必须给仓库门禁提供可复现前置」的源码门禁
-// （背景：docs/code-review-2026-10-09.md §3 C1 / C2，2026-10-09）。
+// （背景：docs/archive/code-review-2026-10-09.md §3 C1 / C2，2026-10-09）。
 //
 // 评审发现：仓库宣称的「全绿门禁」在两个 CI 平台的 Go job 上是**构造性红灯**，
 // 且被本地环境掩盖——本地 checkout 有 .git 全量历史 + node_modules，CI 都没有：

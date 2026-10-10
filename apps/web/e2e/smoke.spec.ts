@@ -18,14 +18,20 @@ test('SPA 渲染：顶栏 + 无账号空状态', async ({ page }) => {
 
 test('OpenAPI 规范可被前端获取', async ({ request }) => {
   // 评审 R9：原断言接受 `[200,404,500,502,503]` 且仅在 200 分支校验 content-type——
-  // 端点彻底坏掉也绿（永真断言）。静态预览把 /api 代理到 127.0.0.1:8080：无后端时
-  // 确定性返回 503（本套用例的常态），此时**条件跳过**；一旦代理打到了真实后端
-  //（任意其它状态码 = 有真进程应答），必须 200 + JSON 合法 spec。
+  // 端点彻底坏掉也绿（永真断言）。本套用例常态是**没起后端**（vite preview 静态产物），
+  // 此时**条件跳过**；一旦有真进程应答，必须 200 + JSON 合法 spec。
   // 「真实后端模式断言 200 + JSON」的常驻版本在 e2e-real/real-backend.spec.ts
   //（配合 scripts/e2e-real.sh 的 S3C_EXPOSE_OPENAPI=1）。
   const res = await request.get('/api/openapi.json', { failOnStatusCode: false })
+  // 「有没有真后端应答」的判据（2026-10-10 实测校正，后端默认端口 8080 → 5000 之后）：
+  // 本服务**每个响应**都回写 `X-Request-ID`（`withRequestID` 中间件覆盖全部路由，含 404 / 5xx，
+  // 见 OPERATIONS.md §3.3）；而 vite 的代理在目标**拒绝连接**时是自己应答的——
+  // `res.writeHead(500, { 'Content-Type': 'text/plain' })` + 空 body，不带该头。
+  // 旧口径按状态码猜（注释写「确定性返回 503」，实测 500）会被 vite 版本与代理拓扑影响，
+  // 且真实后端的 404 恰好也是 `text/plain`，故改用这个头作判据：它来自后端本身，不会漂移。
+  const answeredByBackend = Boolean(res.headers()['x-request-id'])
   test.skip(
-    res.status() === 503 || res.status() === 502,
+    !answeredByBackend,
     '静态预览无后端（/api 代理无目标）——真实契约断言见 e2e-real/real-backend.spec.ts',
   )
   expect(res.status(), '有后端应答时 /api/openapi.json 必须可用').toBe(200)

@@ -246,7 +246,8 @@ Human sponsor: @<维护者>
 | 评分卡打分、度量台账回填、评测结果好坏 | **无机械保证**——属人工评审（单人维护：评审人即维护者本人；回填时机见 AGENT_EVALS §四） | ⚠️ 人工 |
 | 机器可读契约、配置 SSOT、文档数字与链接、文档导航覆盖、第三方许可证、死代码 | `TestCommittedOpenAPISpecMatchesRuntime` · `config_doc_gate` · `doc_number_gate` · `doc_link_gate` · `doc_index_gate` · `third_party_licenses_gate` · `deadcode_gate` | **代码强制** |
 | §3 权限矩阵的「需确认 / 禁止」档 | **无机械保证**——靠代理与人读本政策 + PR 评审；本仓库未接入自动审批或权限网关 | ⚠️ 人工 |
-| 「进入发布模式需人类授权」「不自动合并 PR / 不自动删分支或数据」 | **无机械保证**（仓库侧未配置约束 bot 权限的分支保护策略即代码） | ⚠️ 人工 |
+| 「不自动合并 PR / 不自动删分支或数据」 | `TestNoAutoMergeOrPrivilegedCITriggers`：扫 `.github/workflows/*` + `.gitlab-ci.yml` + `scripts/*.sh`，命中 `gh pr merge` / `enable-auto-merge` / `mergify` / `merge_when_pipeline_succeeds` / `auto_merge` / `pull_request_target` / `git push --delete` / `git branch -D` / `delete-branch` 任一即红灯（2026-10-10 实测零命中，此前纯靠人工） | **代码强制** |
+| 「进入发布模式需人类授权」 | **无机械保证**——发布由人打 tag 触发，「谁算人 / 是否授权」无法在仓库侧判定；分支保护策略亦为仓库外设置 | ⚠️ 人工 |
 | §6「代理不得读取密钥」 | 仓库侧无强制手段：真实 `S3C_*` / 凭据不在库内，`.gitignore` 只防误提交 | ⚠️ 人工 |
 
 **刻意不引入的 AI 工具文件**（避免「没有消费者的事实源」）：

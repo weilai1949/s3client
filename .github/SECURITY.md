@@ -35,7 +35,7 @@
 
 本项目的安全模型，详见 [threat-model.md](../docs/threat-model.md)。关键默认值：
 
-- **默认回环绑定** `127.0.0.1:8080`；非回环监听必须配置 `S3C_TOKEN`（否则拒绝启动）
+- **默认回环绑定** `127.0.0.1:5000`；非回环监听必须配置 `S3C_TOKEN`（否则拒绝启动）
 - **Bearer 鉴权**：常量时间比较、多 token 轮换、最短 16 字符
 - **SSRF 防护**：创建时 + 拨号期双重校验（禁云元数据/链路本地）、禁重定向、禁代理
 - **CSRF 防护**：CORS 白名单外 Origin 直接 403 + 请求体 `Content-Type` **非空**时必须为 `application/json`（缺省放行，仍受 JSON 解码器约束，见 [threat-model.md](../docs/threat-model.md) 边界 A）

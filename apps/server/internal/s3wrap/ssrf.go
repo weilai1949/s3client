@@ -49,7 +49,7 @@ func ValidateEndpoint(endpoint string) error {
 		return fmt.Errorf("invalid endpoint URL: %w", err)
 	}
 	if u.Hostname() == "" {
-		// 解析成功但无主机名（如 "http://:8080"、"file:///..."）：此分支曾与解析失败共用
+		// 解析成功但无主机名（如 "http://:5000"、"file:///..."）：此分支曾与解析失败共用
 		// 一个 %w 包装，err 为 nil 时产出 "invalid endpoint URL: %!w(<nil>)" 污染错误串
 		// （review Nit）。无主机名的端点必然连不上，fail-closed 拒绝。
 		return fmt.Errorf("invalid endpoint URL: %q (missing host)", endpoint)

@@ -103,7 +103,7 @@ export function isTauri(): boolean {
 }
 
 export function defaultBase(): string {
-  return isTauri() ? 'http://127.0.0.1:8080' : ''
+  return isTauri() ? 'http://127.0.0.1:5000' : ''
 }
 
 function newId(): string {

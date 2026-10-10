@@ -204,7 +204,7 @@ func TestAccCORSWildcardOrigin(t *testing.T) {
 // TestAccCORSTrustedDefaultOrigin 安全默认：localhost/127.0.0.1/tauri 协议免白名单放行。
 func TestAccCORSTrustedDefaultOrigin(t *testing.T) {
 	h := accNewHandler(t, &accStubStore{}, nil, "")
-	for _, origin := range []string{"http://localhost:5173", "https://127.0.0.1:3000", "tauri://localhost"} {
+	for _, origin := range []string{"http://localhost:1949", "https://127.0.0.1:5000", "tauri://localhost"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/accounts", nil)
 		req.Header.Set("Origin", origin)
 		rr := httptest.NewRecorder()
@@ -218,7 +218,7 @@ func TestAccCORSTrustedDefaultOrigin(t *testing.T) {
 	}
 	// 预检（OPTIONS）也放行 204
 	req := httptest.NewRequest(http.MethodOptions, "/api/accounts", nil)
-	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Origin", "http://localhost:1949")
 	rr := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rr, req)
 	if rr.Code != http.StatusNoContent {
@@ -232,7 +232,7 @@ func TestAccIsTrustedDefaultOrigin(t *testing.T) {
 		origin string
 		want   bool
 	}{
-		{"http://localhost:3000", true},
+		{"http://localhost:5000", true},
 		{"https://tauri.localhost", true},
 		{"tauri://localhost", true},    // 自定义协议
 		{"ftp://localhost", false},     // 非 http(s) scheme

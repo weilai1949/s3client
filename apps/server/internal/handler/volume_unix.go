@@ -26,3 +26,19 @@ func volumeUsage(path string) (size, free float64, ok bool) {
 	blockSize := float64(st.Bsize)
 	return blockSize * float64(st.Blocks), blockSize * float64(st.Bavail), true
 }
+
+// volumeInodes 返回 path 所在文件系统的 inode（i 节点）总数与空闲数（statfs 的
+// Files / Ffree）。语义与 volumeUsage 一致：失败返回 ok=false，调用方**不输出**序列
+// ——inode 总数为 0 时 `free/total` 是 0/0 = NaN，告警会静默不触发，故宁可不发序列。
+//
+// Windows 没有对等的 inode 概念（volume_windows.go 恒 ok=false），运维按
+// OPERATIONS.md §4.3 用宿主 node_exporter / df -i 采集。值同样走 float64：
+// 三平台的 Files / Ffree 分别为 uint64，统一浮点避免整型换算溢出判定（gosec G115），
+// 而 inode 数量级远低于字节数，float64 精度绰绰有余。
+func volumeInodes(path string) (total, free float64, ok bool) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return 0, 0, false
+	}
+	return float64(st.Files), float64(st.Ffree), true
+}

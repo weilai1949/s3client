@@ -6,13 +6,20 @@
 > 真值来源：`apps/server/internal/config/config.go` 的 `FromEnv` / `Validate`。
 >
 > **两份 `.env.example` 的口径分工**（避免「同名两份、内容各半」的漂移）：
-> - 根 [`.env.example`](../.env.example) = **compose / 本地联调**变量：compose 实际透传的
->   `${S3C_*}` 与 RustFS 联调凭据，**只列这些**——因此它**不**包含本节全部可选项；
+> - 根 [`.env.example`](../.env.example) = **compose / 本地联调**变量：三个 `docker-compose*.yml`
+>   里以 `${VAR}` 插值的键（含 `GOPROXY` / `NPM_REGISTRY` 构建参数与 `S3C_IMAGE_TAG`）与
+>   RustFS 联调凭据，**只列这些**——因此它**不**包含本节全部可选项；
 > - [`apps/server/.env.example`](../apps/server/.env.example) = **服务端全量可选项**示例（含
 >   `S3C_EXPOSE_METRICS` / `S3C_EXPOSE_OPENAPI` / `S3C_CSP_CONNECT_SRC` 等）。
 >
 > 「同 PR 同步」指**相应的那一份**：新增 compose 透传项改根文件，新增服务端可选项改
 > `apps/server/.env.example`，两者语义不同故不互相复制。
+>
+> ⚠️ compose 的 `environment:` 是**显式白名单**（且未用 `env_file:`）：根 `.env` 只被用于
+> compose 文件里的 `${VAR}` 插值，**未写进白名单的 `S3C_*` 即使出现在根 `.env` 也不会进入容器**。
+> 需要 `S3C_SSRF_DENY_PRIVATE` / `S3C_TRUSTED_PROXIES` 这类服务端专属项时，请直接用
+> `docker run -e` / systemd 注入，或自行把该键加入 compose 白名单。三个 compose 文件与根
+> `.env.example` 的这层双向一致性由 `apps/server/env_example_gate_test.go` 守住。
 
 ## 1. 配置来源与优先级
 
@@ -27,7 +34,11 @@
 | 2 | 进程工作目录 `.env` | 历史默认，本地开发习惯 |
 | 3 | 可执行文件同目录 `.env` | systemd / 双击启动时 CWD 往往不是安装目录 |
 
-`.env` 解析规则：忽略空行与 `#` 注释行；按第一个 `=` 切分；值两侧的成对单/双引号会被剥除。
+`.env` 解析规则：忽略空行与**行首** `#` 注释行；按第一个 `=` 切分；值两端的单/双引号会被剥除。
+⚠️ `#` **只在行首**才是注释——**不要写行内注释**：`S3C_LOG_LEVEL=info # 说明` 的值会是整串
+`info # 说明`（`S3C_TOKEN` 则会带着注释一起被当作口令），说明请单独成行。
+两份 `.env.example` 均不示范该写法，由 [`../apps/server/env_example_gate_test.go`](../apps/server/env_example_gate_test.go)
+的 `TestEnvExamplesAvoidInlineComments` 机械钉住。
 
 > **只有显式 `S3C_ENV_FILE` 是 fail-closed 的**：该路径不存在 / 不可读时进程**拒绝启动**
 > （`ErrInvalidEnvFile`），不会静默回退默认值。否则写在该文件里的加固项（`S3C_TOKEN`、
@@ -42,7 +53,7 @@
 | 变量 | 默认值 | 取值 / 约束 | 说明 |
 |---|---|---|---|
 | `S3C_ENV_FILE` | 空 | 路径 | 显式指定 `.env` 路径；设置后为唯一来源，且路径不存在 / 不可读时**拒绝启动** |
-| `S3C_ADDR` | `127.0.0.1:8080` | `host:port` | 监听地址。回环更安全；需远程访问改 `0.0.0.0:8080`，此时**必须**同时设 `S3C_TOKEN` |
+| `S3C_ADDR` | `127.0.0.1:5000` | `host:port` | 监听地址。回环更安全；需远程访问改 `0.0.0.0:5000`，此时**必须**同时设 `S3C_TOKEN` |
 | `S3C_DATA_DIR` | `./data` | 目录路径 | 数据目录：`accounts.json` / `accounts.db` / `accounts.json.enc`，任务清单 `jobs.json`，计划任务 `schedules.json`（0600），上次关停耗时 `shutdown.json`，以及单写者锁文件 `.s3client.lock` |
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
@@ -96,7 +107,7 @@ CSP `connect-src` 收窄 + 不信任 `X-Forwarded-For` + 可选 token 作用域�
 
 | 设置项 | 存储键 | 说明 |
 |---|---|---|
-| API 基址 | `s3c.apiBase` | 后端地址。桌面端打开后自动设为 `http://127.0.0.1:8080`，可改 |
+| API 基址 | `s3c.apiBase` | 后端地址。桌面端打开后自动设为 `http://127.0.0.1:5000`，可改 |
 | Bearer Token | `s3c.token` | **默认存 `sessionStorage`**（关标签即清）；勾选「跨会话保留」（`s3c_token_persistent`）才写 `localStorage`。`SecretKey` 任何情况下都不落 localStorage |
 | 多服务器 | `s3c.servers` / `s3c.activeServerId` | 服务器列表与当前选中项 |
 | 当前账号 | `s3c.currentAccountId` | 上次选中的账号 |

@@ -57,12 +57,12 @@ func TestValidateEndpointGaps(t *testing.T) {
 	}
 }
 
-// TestValidateEndpointEmptyHostCleanError 空主机名（如 "http://:8080"、"file:///..."）
+// TestValidateEndpointEmptyHostCleanError 空主机名（如 "http://:5000"、"file:///..."）
 // 解析成功但无 host：必须 fail-closed 且错误串干净。此前该分支与解析失败共用
 // `fmt.Errorf("...: %w", err)`，err 为 nil 时产出 "invalid endpoint URL: %!w(<nil>)"
 // 污染日志与 API 错误体（review Nit）。
 func TestValidateEndpointEmptyHostCleanError(t *testing.T) {
-	for _, endpoint := range []string{"http://:8080", "file:///etc/passwd"} {
+	for _, endpoint := range []string{"http://:5000", "file:///etc/passwd"} {
 		err := ValidateEndpoint(endpoint)
 		if err == nil {
 			t.Fatalf("ValidateEndpoint(%q) 应 fail-closed，got nil", endpoint)

@@ -127,7 +127,7 @@ func TestFromEnvLogJSONVariants(t *testing.T) {
 
 // TestFromEnvAllFields 单条用例覆盖全部环境变量与解析结果（含 StoreKey 与 CORS 分隔）。
 func TestFromEnvAllFields(t *testing.T) {
-	t.Setenv("S3C_ADDR", "0.0.0.0:8081")
+	t.Setenv("S3C_ADDR", "0.0.0.0:5001")
 	t.Setenv("S3C_DATA_DIR", "/var/lib/s3c")
 	t.Setenv("S3C_STATIC_DIR", "/opt/web")
 	t.Setenv("S3C_REGION", "cn-hangzhou")
@@ -140,7 +140,7 @@ func TestFromEnvAllFields(t *testing.T) {
 	t.Setenv("S3C_ALLOW_PLAINTEXT_STORE", "on")
 	t.Setenv("S3C_SHUTDOWN_TIMEOUT", "12")
 	cfg := FromEnv()
-	if cfg.Addr != "0.0.0.0:8081" {
+	if cfg.Addr != "0.0.0.0:5001" {
 		t.Errorf("Addr = %q", cfg.Addr)
 	}
 	if cfg.DataDir != "/var/lib/s3c" || cfg.StaticDir != "/opt/web" || cfg.Region != "cn-hangzhou" {

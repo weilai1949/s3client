@@ -9,3 +9,9 @@ package handler
 func volumeUsage(string) (size, free float64, ok bool) {
 	return 0, 0, false
 }
+
+// volumeInodes 同 volumeUsage：本平台无免依赖实现，恒 ok=false，调用方不发 inode 序列
+// （运维按 OPERATIONS.md §4.3 外部采集 inode 用量）。
+func volumeInodes(string) (total, free float64, ok bool) {
+	return 0, 0, false
+}

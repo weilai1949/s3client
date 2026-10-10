@@ -65,7 +65,7 @@
 | 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，含编号台账与闭环凭证） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
-| 看最近一次全仓代码评审 | [`code-review-2026-10-09.md`](code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**活跃文档**，闭环后归档）：门禁实测数字 + 逐条 `file:line` 证据与复现口径 + 处置计划 |
+| 看最近一次全仓代码评审 | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结）：门禁实测数字 + 逐条 `file:line` 证据与复现口径 + 处置计划 |
 | 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查 / 事故复盘 / 批次交接类**时点性文档**的归档索引（只读、不回写；含首份已填写复盘 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 与已收口批次快照 [`handoff-20260930.md`](archive/handoff-20260930.md)） |
 
 ## 机器可读面（给工具与 AI）
@@ -74,7 +74,7 @@
 |---|---|---|
 | API 契约 | [`api/openapi.json`](api/openapi.json) | golden 比对（`TestCommittedOpenAPISpecMatchesRuntime`）+ 鉴权表达（`openapi_auth_test.go`） |
 | 账号库格式 | [`api/accounts.schema.json`](api/accounts.schema.json) | 反射比对 `model.Account`（`TestAccountStoreSchemaMatchesModel`） |
-| 告警规则 | [`../deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`） |
+| 告警规则 | [`../deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml) | 指标 / `code` 取值真实性（`TestPrometheusRulesReferenceRealMetrics`）+ 与 [`OPERATIONS.md`](OPERATIONS.md) §4.2 告警表**双向等集**（`TestOperationsAlertTableMatchesRulesFile`，表行 ⇔ `- alert:` 名） |
 | 供应链评分 / PR 依赖审查 | [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml) · [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | 全 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住；口径见 [`threat-model.md`](threat-model.md) §5.5 |
 | 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`）+ 超大文档体量预警（`llms_size_gate_test.go`：目标 >200 KB 必须就地标 `⚠️ 超大`） |
 | 代理硬约束 | [`../AGENTS.md`](../AGENTS.md) | 本页 + `AGENTS.md` 命名约定两处同步 |

@@ -199,7 +199,7 @@ func parseLevel(s string) slog.Level {
 // runHealthcheck 探测自身健康端点，用于容器 HEALTHCHECK（-healthcheck 子命令）：
 // GET http://<host>:<port>/healthPath，3 秒超时；200 → 0，连接失败 / 非 200 → 1。
 //
-// 地址取 S3C_ADDR：通配 host（如 ":8080"，服务绑全接口）时探测回退 127.0.0.1——回环上
+// 地址取 S3C_ADDR：通配 host（如 ":5000"，服务绑全接口）时探测回退 127.0.0.1——回环上
 // 同一端口必可达，避免把探测打到外部网卡地址。SplitHostPort 失败（地址缺端口，如
 // "no-port-in-here"）时
 // "no-port-in-here"）时 host 与 port 均为空串：host 置 127.0.0.1、port 为空拼出
@@ -212,8 +212,8 @@ func runHealthcheck() int {
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		host = "127.0.0.1"
 	}
-	// IPv6 字面量必须经 JoinHostPort 加方括号：直接拼 "::1:8080" 会产出
-	// "http://::1:8080/api/health"，url.Parse 报 invalid port → client.Get 失败 → 恒返回 1，
+	// IPv6 字面量必须经 JoinHostPort 加方括号：直接拼 "::1:5000" 会产出
+	// "http://::1:5000/api/health"，url.Parse 报 invalid port → client.Get 失败 → 恒返回 1，
 	// 让健康的容器被 HEALTHCHECK 判死并反复重启（[::1]:port 是 IsLoopbackAddr 认可的合法
 	// 回环监听地址、允许不设 token，属于会真实用到的一类配置）。
 	base := fmt.Sprintf("http://%s%s", net.JoinHostPort(host, port), healthPath)

@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-09（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18）、§BG AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）、§BH 门禁实跑回填与 §BG 结构归位、§BI 第二轮收口（ROADMAP ✅ 行移出 / §AU 注记 / 评估缺口补登记 / §四 复测）、§BJ ROADMAP #19 文档可读性与流程机械化（mermaid 时序图 / 超大体量预警 / 复审到期门禁 / PR 模板 ADR 勾选）、§BK KNOWN_ISSUES #70 闭环（`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）、§BL ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘）、§BM ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾）、§BN ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁）、§BO KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client`，推翻 ➖「维持现状」决策）、§BP KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一，含锁文件 / 镜像 / 指标命名空间）、§BQ ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点）、§BR ROADMAP #11 零依赖 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关）、§BS ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`）、§BT ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock）、§BU ROADMAP #6 计划任务（cron 定时增量备份）、§BV ROADMAP #7 FinOps 存储分析与成本看板（全栈：聚合端点 83→84 + 独立「成本看板」Tab）、§BW Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（断言前返回列表 + 清桶走对象级批量删除）+ 本文件 e965e54 重复章节去重、§BX e2e-real `seedAccountAndBucket` 失败泄漏修复（登记簿判空清理 + 建桶失败快诊 + 限速节流）、§BY s3wrap E2E 清桶强删路径（Object Lock 锁定版本根治共享实例残留桶泄漏）、§BZ 全仓代码评审批次（C1–C2 + R1–R9 全修 + O1–O12 登记 #72–#83）、§CA KNOWN_ISSUES #73 / #80 / #81 / #83 闭环（s3wrap 导出面降级 / 计划校验定值文案 + 回显门禁 / accounts 创建面收口 / 散点缺陷群 12 处）、§CB KNOWN_ISSUES #82 闭环（R10 残留：`make check` 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移 + 防回退门禁）、§CC KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环（数据面 UNSIGNED-PAYLOAD 收窄 / 前端 ApiError / generated.gate 穷尽性 / 右键菜单 a11y / i18n 盲区与硬编码文案）、§CD KNOWN_ISSUES #76 / #79 闭环（newRowKey ×7 + 虚拟滚动 ×4 canonical 化 / OpenAPI 状态码与 bucket-required 门禁；2026-10-09 评审 O1–O12 归零））
+> 最后更新：2026-10-10（`v1.0.0` 之后的 Unreleased 区间；含分支状态审查 P0 / §三 / P1 / P2 四轮处置 + §7.4 门禁盲区收尾 + §AA 全仓代码审查处置 + §AB KNOWN_ISSUES #60–#63 收口 + §AJ #64 闭环 + §AK 前端测试与宿主 `NODE_ENV` 解耦 + §AR 补齐事故复盘模板、§AS 文档失真收口（11 处 + Dependabot 路径）、§AT 文档缺口收口（链接/锚点门禁 + 登记表 + 子树 AGENTS + 隐私）、§AU 接口契约表达鉴权（security/tags）、§AV 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`）、§AW 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验）、§AX AI 时代层收口（AI 治理机械保证 + Copilot 指针入口）+ 2026-09-30 文档基线补缺与导航收口（§AY–§BF 共八节）：§AY 客户端支持矩阵（浏览器 / 桌面 OS）、§AZ ADR 覆盖补足（8 篇 + 取舍表门禁）、§BA 供应链收口（Scorecard + Dependency Review）、§BB AI 产出效果证据层（评测 + 度量）、§BC 英文文档入口（docs/en/index.md）、§BD 导航收口残留（命名两处分叉 + `docs_naming_gate`）、§BE 状态台账 #69 收口（CHANGELOG ↔ git tag 一致性）、§BF docs 内待修项收口（对比度静态核查 + 改进项登记 ROADMAP #17/#18）、§BG AI 时代文档补强（六路并行：P0 效果证据 / P1 机器可读 / P2 元信息）、§BH 门禁实跑回填与 §BG 结构归位、§BI 第二轮收口（ROADMAP ✅ 行移出 / §AU 注记 / 评估缺口补登记 / §四 复测）、§BJ ROADMAP #19 文档可读性与流程机械化（mermaid 时序图 / 超大体量预警 / 复审到期门禁 / PR 模板 ADR 勾选）、§BK KNOWN_ISSUES #70 闭环（`NormalizeEndpoint` 幂等修复，推翻 ➖ 决策）、§BL ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘）、§BM ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾）、§BN ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + diff 门禁）、§BO KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client`，推翻 ➖「维持现状」决策）、§BP KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一，含锁文件 / 镜像 / 指标命名空间）、§BQ ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点）、§BR ROADMAP #11 零依赖 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关）、§BS ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`）、§BT ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock）、§BU ROADMAP #6 计划任务（cron 定时增量备份）、§BV ROADMAP #7 FinOps 存储分析与成本看板（全栈：聚合端点 83→84 + 独立「成本看板」Tab）、§BW Go 工具链 1.26.6 → 1.26.9（10 个可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（断言前返回列表 + 清桶走对象级批量删除）+ 本文件 e965e54 重复章节去重、§BX e2e-real `seedAccountAndBucket` 失败泄漏修复（登记簿判空清理 + 建桶失败快诊 + 限速节流）、§BY s3wrap E2E 清桶强删路径（Object Lock 锁定版本根治共享实例残留桶泄漏）、§BZ 全仓代码评审批次（C1–C2 + R1–R9 全修 + O1–O12 登记 #72–#83）、§CA KNOWN_ISSUES #73 / #80 / #81 / #83 闭环（s3wrap 导出面降级 / 计划校验定值文案 + 回显门禁 / accounts 创建面收口 / 散点缺陷群 12 处）、§CB KNOWN_ISSUES #82 闭环（R10 残留：`make check` 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移 + 防回退门禁）、§CC KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环（数据面 UNSIGNED-PAYLOAD 收窄 / 前端 ApiError / generated.gate 穷尽性 / 右键菜单 a11y / i18n 盲区与硬编码文案）、§CD KNOWN_ISSUES #76 / #79 闭环（newRowKey ×7 + 虚拟滚动 ×4 canonical 化 / OpenAPI 状态码与 bucket-required 门禁；2026-10-09 评审 O1–O12 归零）、§CE 2026-10-10 根 `.env.example` ⇔ compose 透传面双向一致（新增双向门禁 / README 配置项计数 18 → 22）、§CF 2026-10-10 `make dev` 受管 web PID 指向修复 + 启动流程去自动 tidy（新增门禁）、§CG 2026-10-10 两处文档状态漂移收口（悬空 `ROADMAP #11` 引用 / trace 观测面自相矛盾 / FEATURES 无锚点开放陈述；新增状态陈述门禁）、§CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描判定为非缺陷 / 明文 `http://` 端点告知））
 
 ## 目录
 
@@ -17,7 +17,7 @@
   - [9. 存储驱动与数据安全](#9-存储驱动与数据安全) · [10. 服务端安全与鉴权](#10-服务端安全与鉴权)
   - [11. API 与契约](#11-api-与契约) · [12. 前端体验与无障碍](#12-前端体验与无障碍)
   - [13. 桌面端](#13-桌面端) · [14. 部署、CI 与工程化](#14-部署ci-与工程化)
-- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性） · BF 2026-09-30 docs 内待修项收口（文档失真 + 对比度静态核查 + 改进项登记 SSOT） · BG 2026-09-30 AI 时代文档补强（六路并行：效果证据 / 机器可读 / 元信息） · BH 2026-09-30 门禁实跑回填与 §BG 结构归位 · BI 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 + 评估缺口补登记） · BJ 2026-09-30 ROADMAP #19 文档可读性与流程机械化（mermaid / 体量预警 / 复审到期门禁 / PR ADR 勾选） · BK 2026-09-30 KNOWN_ISSUES #70 闭环（NormalizeEndpoint 幂等修复） · BL 2026-09-30 ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘） · BM 2026-09-30 ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾） · BN 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + 生成物新鲜度门禁） · BO 2026-10-08 KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client` + 全仓 import / 仓库 URL） · BP 2026-10-08 KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一 + 5 文件改名 + 生成物重生成） · BQ 2026-10-08 ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点） · BR 2026-10-08 ROADMAP #11 零依赖 OTLP tracing（traceparent + OTLP/HTTP JSON，默认关） · BS 2026-10-08 ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`） · BT 2026-10-08 ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock） · BU 2026-10-08 ROADMAP #6 计划任务（cron 定时增量备份） · BV 2026-10-08 ROADMAP #7 FinOps 存储分析与成本看板（全栈） · BW 2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（含本文件去重） · BX 2026-10-09 e2e-real seed 失败泄漏修复（登记簿判空清理 + 建桶失败快诊 + 限速节流） · BY 2026-10-09 s3wrap E2E 清桶强删路径（Object Lock 锁定版本根治共享实例残留桶泄漏） · BZ 2026-10-09 全仓代码评审批次（C1–C2 + R1–R9 全修 + O1–O12 登记 #72–#83） · CA 2026-10-09 KNOWN_ISSUES #73 / #80 / #81 / #83 闭环（s3wrap 导出面降级 / 计划校验定值文案 + 回显门禁 / accounts 创建面收口 / 散点缺陷群 12 处） · CB 2026-10-09 KNOWN_ISSUES #82 闭环（R10 残留：make check 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移） · CC 2026-10-09 KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环（UNSIGNED-PAYLOAD 收窄 / 前端 ApiError / generated.gate 穷尽性 / 右键菜单 a11y / i18n 盲区与硬编码文案） · CD 2026-10-09 KNOWN_ISSUES #76 / #79 闭环（newRowKey + 虚拟滚动 canonical 化 / OpenAPI 状态码与 bucket-required 门禁；评审 O1–O12 归零）
+- [二、已完成修复与优化](#二已完成修复与优化) — A 本轮增量 · B 驱动去重明细 · C 全方位评估 58 项 · D v1.0.0-rc1 评估 21 项 · E Optional/Nit 长尾 · F 历史版本全量台账（0.1.0→v1.0.0-rc1） · G Unreleased · H–Z 各轮处置台账 · AA 2026-09-24 全仓代码审查处置 · AB 2026-09-28 KNOWN_ISSUES #60–#63 收口 · AC 2026-09-28 DEVELOPMENT.md §7 历史技术债收口 · AD 2026-09-28 三路五轴复审（闭环 4 条 + 15 条转 #64） · AE 2026-09-28 破坏性操作审计覆盖补齐 · AF 2026-09-28 前端四条（sticky error / DestDialog 并发 / signing 死状态） · AG 2026-09-28 config 三条（显式 env 文件 fail-closed / 关停超时上界 / 数据目录 0700） · AH 2026-09-28 s3wrap 两条（metadata 值控制字符 / IDN 端点） · AI 2026-09-28 前端另四条（代次守卫 / 追加重置滚动 / loadingAll / 桶列举标志） · AJ 2026-09-28 KNOWN_ISSUES #64 闭环（`store.Open` json 分支丢 `storeKey`） · AK 2026-09-29 前端测试与宿主 `NODE_ENV` 解耦（`vite.config.ts` 隔离 + `vite_env_guard.test.ts` 守卫） · AL 2026-09-29 对照通用 AGENTS.md 模板补齐代理治理与配置 SSOT · AM 2026-09-29 文档命名规则收敛为「元文档大写 / 内容文档小写」 · AN 2026-09-29 文档覆盖矩阵收口（11 个新文档 + 3 项供应链门禁 + 机器可读契约 + 性能基线） · AO 2026-09-29 死代码门禁改用 TS AST 判定引用 · AP 2026-09-29 可访问性三处 + nginx 跨层日志关联 · AQ 2026-09-29 供应链收口（桌面 SBOM + cosign）+ 告警规则 + 账号库 Schema · AR 2026-09-29 补齐事故复盘模板（`docs/POSTMORTEM_TEMPLATE.md`） · AS 2026-09-29 文档失真收口（11 处「文档与实现 / 自身不一致」+ Dependabot 路径失效） · AT 2026-09-29 文档缺口收口（链接/锚点门禁 + 文档登记表 + ADR 模板 + 子树 AGENTS + 隐私声明） · AU 2026-09-29 接口契约表达鉴权（文档级 security + 逐端点豁免 + tags 分组） · AV 2026-09-29 元信息/导航收口（docs 落地页 + 导航覆盖门禁 + `.gitattributes`） · AW 2026-09-29 安全与供应链收口（自动生成许可证清单 + 依赖覆盖门禁 + 产物核验指南） · AX 2026-09-29 AI 时代层收口（AI 治理机械保证 + Copilot 指针入口） · AY 2026-09-30 客户端支持矩阵收口 · AZ 2026-09-30 ADR 覆盖补足（8 篇 + 覆盖门禁） · BA 2026-09-30 供应链收口（Scorecard + Dependency Review） · BB 2026-09-30 AI 产出效果证据层收口 · BC 2026-09-30 英文文档入口（docs/en/index.md） · BD 2026-09-30 导航收口残留（命名两处分叉 + `docs_naming_gate`） · BE 2026-09-30 状态台账 #69 收口（CHANGELOG ↔ tag 一致性） · BF 2026-09-30 docs 内待修项收口（文档失真 + 对比度静态核查 + 改进项登记 SSOT） · BG 2026-09-30 AI 时代文档补强（六路并行：效果证据 / 机器可读 / 元信息） · BH 2026-09-30 门禁实跑回填与 §BG 结构归位 · BI 2026-09-30 第二轮收口（ROADMAP ✅ 行移出 + 评估缺口补登记） · BJ 2026-09-30 ROADMAP #19 文档可读性与流程机械化（mermaid / 体量预警 / 复审到期门禁 / PR ADR 勾选） · BK 2026-09-30 KNOWN_ISSUES #70 闭环（NormalizeEndpoint 幂等修复） · BL 2026-09-30 ROADMAP #18 可观测性补全（五个观测指标 + 告警规则 + 仪表盘） · BM 2026-09-30 ROADMAP #17 可访问性补强（焦点陷阱 / 统一播报 / 表格与可见标签 / 组件级 vitest-axe / 对比度修色收尾） · BN 2026-10-01 ROADMAP #10 OpenAPI → 前端类型 / 客户端代码生成（schema-first + 生成物新鲜度门禁） · BO 2026-10-08 KNOWN_ISSUES #71 闭环（仓库 slug 统一 `github.com/weilai1949/s3client` + 全仓 import / 仓库 URL） · BP 2026-10-08 KNOWN_ISSUES #71 第二批（产品名 `s3clinet` → `s3client` 全量统一 + 5 文件改名 + 生成物重生成） · BQ 2026-10-08 ROADMAP #8 大文件体验（上传断点续传 + 下载并行分段，71 端点） · BR 2026-10-08 ROADMAP #11 零依赖 OTLP tracing（traceparent + OTLP/HTTP JSON，默认关） · BS 2026-10-08 ROADMAP #13 Token 作用域与最小权限（`S3C_TOKEN_SCOPES`） · BT 2026-10-08 ROADMAP #5 S3 新协议特性（条件写 / 端到端校验和 / Object Lock） · BU 2026-10-08 ROADMAP #6 计划任务（cron 定时增量备份） · BV 2026-10-08 ROADMAP #7 FinOps 存储分析与成本看板（全栈） · BW 2026-10-09 Go 工具链 1.26.6 → 1.26.9（10 可达 stdlib 漏洞归零）+ e2e-real 用例幂等化（含本文件去重） · BX 2026-10-09 e2e-real seed 失败泄漏修复（登记簿判空清理 + 建桶失败快诊 + 限速节流） · BY 2026-10-09 s3wrap E2E 清桶强删路径（Object Lock 锁定版本根治共享实例残留桶泄漏） · BZ 2026-10-09 全仓代码评审批次（C1–C2 + R1–R9 全修 + O1–O12 登记 #72–#83） · CA 2026-10-09 KNOWN_ISSUES #73 / #80 / #81 / #83 闭环（s3wrap 导出面降级 / 计划校验定值文案 + 回显门禁 / accounts 创建面收口 / 散点缺陷群 12 处） · CB 2026-10-09 KNOWN_ISSUES #82 闭环（R10 残留：make check 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移） · CC 2026-10-09 KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环（UNSIGNED-PAYLOAD 收窄 / 前端 ApiError / generated.gate 穷尽性 / 右键菜单 a11y / i18n 盲区与硬编码文案） · CD 2026-10-09 KNOWN_ISSUES #76 / #79 闭环（newRowKey + 虚拟滚动 canonical 化 / OpenAPI 状态码与 bucket-required 门禁；评审 O1–O12 归零） · CE 2026-10-10 根 `.env.example` ⇔ compose 透传面双向一致（+ 双向门禁）+ README 配置项计数订正 · CF 2026-10-10 `make dev` 受管 web PID 指向修复 + 启动流程去自动 tidy（+ 门禁） · CG 2026-10-10 两处文档状态漂移收口（悬空 `ROADMAP #11` 引用 / trace 观测面自相矛盾 / FEATURES 无锚点开放陈述）（+ 状态陈述门禁） · CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描 / 明文 `http://` 端点告知）（+ 一道门禁）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -574,7 +574,8 @@
 > 来源：2026-09-19 分支状态审查 [`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md) 的架构项 A1–A3 与
 > 浏览器 E2E 空转用例（已在审查文档中销项——该文档按约定只保留**未闭环**的发现）。归档证据即本表。
 > 该审查登记的 P0/P1 缺陷（B1 SSE 自旋、B2 SyncKeys 前缀、F1 白名单 crash、R1 CI docker job、
-> §7.2 契约幻影字段等）**仍未处置**，不在本节范围内。
+> §7.2 契约幻影字段等）**在本节写作时点（2026-09-19）仍未处置**，不在本节范围内——
+> 其后由 §Q（P0）、§R（§三 正确性）、§S（P1）逐节闭环，归档审查亦记「P0 / P1 全部清零」。
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
@@ -590,7 +591,8 @@
 
 > 来源：[`docs/archive/review-2026-09-19.md`](archive/review-2026-09-19.md)。该审查登记的 P0 已全部处置并从审查文档移除
 > （该文档只保留未闭环发现）；本表即归档证据，逐条改动见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
-> 剩余的 P1/P2 发现仍开放。
+> 剩余的 P1/P2 发现**在本节写作时点（2026-09-19）仍开放**——其后 P1 由 §S（2026-09-19）、
+> P2 由 §T（2026-09-20）与 §U（2026-09-22）全部闭环，归档审查记「P2 已清零」。
 
 | # | 条目 | 状态 | 实现与验证 |
 |---|------|------|------------|
@@ -1677,6 +1679,7 @@ functions 1095 / lines 3503）。
 | `s3c_jobs_active` | gauge | **未终结**任务数，与 `JobRegistry` 在册上限（256）同口径 | `service/job.go` `JobRegistry.ActiveCount()`（锁内复用 `runningCountLocked`）；`job_cap_test.go` `TestJobRegistryActiveCount` |
 | `s3c_http_request_duration_seconds` | histogram | 桶上界 `0.005 … 30` + `+Inf`；`+Inf` 与 `_count` 都取 `s3c_http_requests_total`（同一次 `recordHTTPMetric` 记录，结构上不会漂移） | `handler/metrics.go` `recordHTTPMetric(status, dur)`；`middleware.go` 的 `withLogging` 传入 `dur`（计数与直方图同源）；`metrics_test.go` `TestMetricsHTTPDurationHistogram` |
 | `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | `S3C_DATA_DIR` 的 statfs / `GetDiskFreeSpaceExW`；**取不到就不发序列**（平台不支持 / 目录未配置 / statfs 失败），不用 0 冒充 | 新增 `volume_unix.go`（`linux \|\| darwin \|\| freebsd`，`syscall.Statfs`）、`volume_windows.go`（kernel32 延迟绑定——标准库 `syscall` **没有**该 API，`golang.org/x/sys` 违 ADR-004）、`volume_other.go`（恒 `ok=false`） |
+| `s3c_volume_inode_total` / `s3c_volume_inode_free` | gauge | 同一 statfs 的 `Files` / `Ffree`；**口径与容量序列一致**——取不到就不发序列（0 会让 `free/total` = 0/0 = NaN，告警静默失效）。2026-10-10 补上，收口 OPERATIONS §4.3 原「仍无内置指标」行 | `volume_unix.go` `volumeInodes()`、`volume_windows.go`（Windows 无 inode 概念 → 恒 `ok=false`）、`volume_other.go`（恒 `ok=false`）；`metrics.go` 在 `h.dataDir != ""` 内输出；`metrics_test.go` `TestMetricsVolumeInodes` |
 | `s3c_last_shutdown_duration_seconds` | gauge | **上一次**关停耗时：关停在进程退出前发生、scrape 赶不上 → 落盘 `data/shutdown.json` `{"durationUs":N}`，**下次启动载入**后暴露；0 = 尚无记录（单位取微秒，避免亚毫秒关停截断成 0 与「无记录」撞车） | 新增 `handler/shutdown_metric.go`（`LoadLastShutdown` / `RecordShutdown`）；`main.go` 在 `srv.Shutdown` 返回后 `RecordShutdown`；`main_test.go` `TestMainServerSubprocess` 断言子进程退出后文件存在且 `durationUs ∈ (0, 5e6)` |
 
 **告警与仪表盘**（同批落地，两道既有门禁同步钉住「引用的指标必须真实发射」）：
@@ -2122,7 +2125,7 @@ functions 1095 / lines 3503）。
 
 ### §BX 2026-10-09 e2e-real `seedAccountAndBucket` 失败泄漏账号/桶修复（含建桶失败快诊 + 限速节流）
 
-> 来源：评审批次之后**新发现**（不在 [`code-review-2026-10-09.md`](code-review-2026-10-09.md) 内）——
+> 来源：评审批次之后**新发现**（不在 [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) 内）——
 > `e2e-real/real-backend.spec.ts` 两个用例把 `seedAccountAndBucket(...)` 放在 `try` **之外**：seed 在
 > 建桶步骤抛错时不会返回，`finally` 根本不执行，账号/桶就留在真实后端与 RustFS 上（失败运行留垃圾的机制）。
 > 与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目同一 commit。
@@ -2175,7 +2178,7 @@ functions 1095 / lines 3503）。
 
 ### §BZ 2026-10-09 全仓代码评审批次：C1–C2 + R1–R9 全修 + O1–O12 登记
 
-> 来源：[`code-review-2026-10-09.md`](code-review-2026-10-09.md)（2026-10-09 全仓五轴评审）——
+> 来源：[`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)（2026-10-09 全仓五轴评审）——
 > 2 Critical + 10 Required 当日全修、每项附行为级回归测试；12 条 Optional 登记入
 > [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#72–#83**（全属技术债 / 缺陷，按「同一事项只登记一处」不进 ROADMAP）。
 > 评审快照状态表与 §8 已回写；与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` 同日条目同一 commit。
@@ -2215,7 +2218,8 @@ functions 1095 / lines 3503）。
 ### §CA 2026-10-09 KNOWN_ISSUES #73 / #80 / #81 / #83 闭环（评审 Optional 项收口）
 
 > 来源：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #73 / #80 / #81 / #83（2026-10-09 全仓评审 O2 / O9 / O10 / O12）。
-> 同批 **#72 / #74–#79** 仍开放（前端传输层 / 契约漂移 / 重复实现 / a11y / i18n 等；#82 见 §CB）。
+> 同批 **#72 / #74–#79** 在本节写作时点（2026-10-09）仍开放（前端传输层 / 契约漂移 / 重复实现 / a11y / i18n 等；#82 见 §CB）——
+> 同日分两批闭环：#72 / #74 / #75 / #77 / #78 见 §CC，#76 / #79 见 §CD。
 
 | # | 项 | 改动 |
 |---|---|---|
@@ -2252,7 +2256,7 @@ functions 1095 / lines 3503）。
 >
 > **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（§二 移除 #82 行 + 台账 + 头部摘要）、
 > [`DEVELOPMENT.md`](DEVELOPMENT.md)（三处漂移 + 门禁清单）、
-> [`code-review-2026-10-09.md`](code-review-2026-10-09.md)（R10 状态回写）、
+> [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)（R10 状态回写）、
 > [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、本节 + 头部摘要 + 目录行。
 
 ### §CC 2026-10-09 KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环（评审 Optional 项第二批）
@@ -2276,7 +2280,7 @@ functions 1095 / lines 3503）。
 >
 > **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（§二 移除 5 行 + 台账 + 头部摘要）、
 > [`threat-model.md`](threat-model.md) §6.2（#72 残留风险）、[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
-> [`code-review-2026-10-09.md`](code-review-2026-10-09.md)（O 状态回写）、本节 + 头部摘要 + 目录行。
+> [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)（O 状态回写）、本节 + 头部摘要 + 目录行。
 
 ### §CD 2026-10-09 KNOWN_ISSUES #76 / #79 闭环（评审 Optional 项第三批；O1–O12 归零）
 
@@ -2297,7 +2301,83 @@ functions 1095 / lines 3503）。
 > **文档同步**：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（§二 移除末两行 + 台账 + 头部）、
 > [`api.md`](api.md)（Object Lock 请求体二选一 / bucket 可省略口径已一致，核对无需改）、
 > [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
-> [`code-review-2026-10-09.md`](code-review-2026-10-09.md)（O 状态归零回写）、本节 + 头部摘要 + 目录行。
+> [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)（O 状态归零回写）、本节 + 头部摘要 + 目录行。
+
+---
+
+### §CE 2026-10-10 根 `.env.example` ⇔ compose 透传面双向一致（新增门禁）+ README 配置项计数订正
+
+> **来源**：核对「本地 `.env` 是否缺环境变量」时，把根 `.env.example` 与三个 `docker-compose*.yml`
+> 的 `${VAR}` 插值面做集合比对，发现**双向漂移**（漏 7 / 多 3）；顺带抓到 README 的配置项计数停在 18。
+
+| # | 项 | 改动 | 证据 |
+|---|---|---|---|
+| 1 | 根 `.env.example` 漏列 compose 实际插值项 | 补 `S3C_REGION` / `S3C_LOG_LEVEL` / `S3C_CORS_ORIGINS` / `S3C_SHUTDOWN_TIMEOUT` / `S3C_IMAGE_TAG` + 构建参数 `GOPROXY` / `NPM_REGISTRY`；按「必填 / 可选覆盖 / RustFS 凭据」分区重排 | 三文件 `${VAR}` 插值集共 14 键，改前根模板只覆盖 7 个 |
+| 2 | 根 `.env.example` 列了 compose **不透传**项 | 移除 `S3C_ALLOW_PLAINTEXT_STORE` / `S3C_TRUSTED_PROXIES` / `S3C_SSRF_DENY_PRIVATE`，改为注释指引 `apps/server/.env.example` | compose `environment:` 是显式白名单且无 `env_file:`，写进根 `.env` 不生效；`docker-compose.yml` 明文存储注释同步订正为「需加入 `environment:` 白名单」 |
+| 3 | README 配置项计数陈旧 | 「含全部 18 个 `S3C_*` 变量」→ **22** | 与 `internal/config` 读取数、[`CONFIGURATION.md`](CONFIGURATION.md) 表格一致 |
+| 4 | 防回退门禁（TDD 先红后绿） | 新增 [`env_example_gate_test.go`](../apps/server/env_example_gate_test.go)：双向断言（compose 每个 `${VAR}` 必须在根模板有落脚点 + 根模板每个赋值行都必须是 compose 插值项）；`doc_number_gate_test.go` 的 `docNumberClaims` 新增 README「N 个 `S3C_*` 变量」声明（真值复用 `configEnvVarsFromSource`） | 先红：根模板漏 7 / 多 3、README 18≠22；后绿；`go test .` 全部门禁通过 |
+| 5 | 模板未在文件内说明「只填未注释项」与行内注释陷阱 | 两份 `.env.example` 顶部补用法说明（`#` 仅行首是注释；`S3C_LOG_LEVEL=info # 说明` 的值是整串 `info # 说明`）；[`CONFIGURATION.md`](CONFIGURATION.md) §1 同步解析规则 | 新增 `TestEnvExamplesAvoidInlineComments`（两份模板）；**变异验证**：注入 `S3C_LOG_LEVEL=info # mutation-check` → 红并点名 `.env.example:53`，还原 → 绿 |
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、[`CONFIGURATION.md`](CONFIGURATION.md) §1
+> （补「显式白名单」口径）、[`DEPLOYMENT.md`](DEPLOYMENT.md) §2.2、[`../README.md`](../README.md) 配置段、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 门禁清单、本节 + 头部摘要 + 目录行。
+
+---
+
+### §CF 2026-10-10 `make dev` 受管 web PID 指向修复 + 启动流程去自动 tidy（新增门禁）
+
+> **来源**：`make dev` 打印 `[web] 警告: pid=… 存活但不是预期的 'vite' 进程（PID 已被复用？）`，
+> 随后 Vite 静默落到 1950；每次启动泄漏一个 vite 进程（实测两条 vite 链并存）。
+
+| # | 项 | 改动 | 证据 |
+|---|---|---|---|
+| 1 | 受管 web 记录的是 pnpm 包装进程，与 `expected_process_pattern web=vite` 失配 | `run-dev.sh` / `graceful-restart.sh` 改为直接启动 `./node_modules/.bin/vite`（该 shim 末行 `exec node …/vite/bin/vite.js`，不换 PID） | 实际进程链 `pnpm.mjs → pnpm.cjs → vite.js`；实测 SIGTERM 包装进程可级联杀链，故问题纯在**身份校验失配**而非信号传播 |
+| 2 | 端口被占时 Vite 静默换端口，`wait_http 1949` 被旧实例「骗过」 | 启动加 `--strictPort`（显式失败）；`graceful-restart.sh` 增 `.bin/vite` 缺失预检 | 修复前 1949 / 1950 各一条 vite 链；修复后 1949 单一 owner = `.run/web.pid` 所指进程、1950 空闲 |
+| 3 | 防回退门禁（TDD 先红后绿） | 新增 [`dev_scripts_gate_test.go`](../apps/server/dev_scripts_gate_test.go) 的 `TestManagedWebServerRecordsVitePid`（4 条断言） | 修复前红（两脚本各 3 条点名）；修复后绿；真实 `make dev` 无告警、`/api/health` ok |
+| 4 | 启动流程每次自动 `go mod tidy`，静默改写提交文件 | `run-dev.sh` / `graceful-restart.sh` 移除全部 `go mod tidy`，依赖同步只留显式 `make tidy`（`go build` 默认 `-mod=readonly`：不一致会显式报错） | 改动前每次 `make dev` 删 `go.sum` 6 行；改动后 `make dev` 前后 `go.mod` / `go.sum` sha256 **完全一致**；门禁 `TestDevScriptsLeaveDependencySyncToExplicitTargets` 先红（两脚本点名）后绿 |
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 门禁清单、本节 + 头部摘要 + 目录行。
+
+---
+
+### §CG 2026-10-10 两处文档状态漂移收口（悬空 `ROADMAP #11` 引用 + trace 观测面自相矛盾；新增状态陈述门禁）
+
+> **来源**：全 docs「未处理问题」盘点时**实测发现**（非评审登记项）——既有文档门禁只钉
+> 「链接可达 / 叙述性数字 / CI 事实」，**状态陈述**无机械校验，两处漂移全绿潜伏。
+
+| # | 项 | 改动 | 证据 |
+|---|---|---|---|
+| 1 | `OPERATIONS.md` §4.3 trace 行写 `未接入（ROADMAP §三 3.2 #11 ⬜）`——#11 已于 2026-10-08 落地转空号（本文件 §BR），**同文件 §3.4 就是已实现的 OTel tracing**：悬空编号 + 自相矛盾 | 该行改为「导出已内置、采集端在服务外（§3.4，`S3C_OTEL_ENDPOINT` 留空 = 关闭）」+ 配置指引；§3.2 尾部「仍只能外部采集的观测面」两句同步为「trace 的**采集端**（span 导出已内置 §3.4）」 | 运维照旧行配不出 trace；门禁断言 1+2 上线即红 |
+| 2 | `FEATURES.md` §P / §Q / §CA 三处章节头注在 2026-10-10 修复前用**无日期锚的现在时**写「仍未处置 / 仍开放」，与同文件闭环章节矛盾 | 三行补**日期时点锚** + 闭环指针（§P→§Q/§R/§S、§Q→§S/§T/§U、§CA→§CC/§CD），原文事实不改写 | FEATURES 是**已完成**台账，无锚点历史状态会被读成现状；门禁断言 3 上线即红（3 行点名） |
+| 3 | 防回退门禁（TDD 先红后绿，三条断言均带扫描面自检基线） | 新增 [`doc_status_drift_gate_test.go`](../apps/server/doc_status_drift_gate_test.go)：① 带 ⬜/⏳/未排期/未接入 的 `§三 #N` 引用 ⇒ 必须指向 ROADMAP §3.1/§3.2 现存条目（历史出处指针与三类时点台账除外）；② `OPERATIONS.md` §3.4 存在时 trace 行不得写「未接入」且必须点名 `S3C_OTEL_ENDPOINT`；③ `FEATURES.md` 的开放陈述行必须带日期（格式 `YYYY-MM-DD`，如 2026-10-10） | 先红（两处漂移 + FEATURES 三行）后绿；**变异验证**三轮：改回旧文案 → 1+2 双红、改引 `#99 ⬜` → 1 红、删日期锚 → 3 红，还原全绿；全量 `go test ./...` 10/10 包 **100.0%**（`count==0` 零块）、`golangci-lint` **0 issues** |
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 门禁清单、本节 + 头部摘要 + 目录行。
+
+---
+
+### §CH 2026-10-10 A 组六项「可机械优化」收口（inode 指标内置 + 三道门禁 + 网格态 a11y + 明文端点告知）
+
+> **来源**：全 docs「明确没做 / 无机械保证」盘点归类出的 **A 组**——仓内闭环、有先例可循，
+> 指令 A1–A6（A6 与 A2 同一门禁文件，全并入 A2）。原则不变：**TDD 先红后绿**，
+> 把「文档里的一句话」换成「跑得起来的断言」或「真实存在的信号」。
+
+| # | 项 | 改动 | 证据 / 门禁 |
+|---|---|---|---|
+| A1 | `OPERATIONS.md` §4.3「数据卷 **inode** 仍无内置指标」 | `internal/handler` 新增 `volumeInodes()`（`volume_unix.go` 取 statfs `Files` / `Ffree`、`volume_windows.go` 恒 `ok=false`——Windows 无 inode 概念、`volume_other.go` 恒 `ok=false`），`/api/metrics` 发 `s3c_volume_inode_total` / `s3c_volume_inode_free`，**沿用「取不到就不发序列」口径**（总数为 0 会让 `free/total` = 0/0 = NaN，告警静默失效）；`OPERATIONS.md` §3.2 表 + §3.2 尾注 + §4.3 行转「仅序列缺失平台」+ §10.2 资源表、`api.md` 指标清单、`DEPLOYMENT.md` 同步；`rules.yml` 新增告警 `S3ClientVolumeInodeLow`（空闲 < 20% 持续 10 分钟）+ §4.2 对应行 | `metrics_test.go` `TestMetricsVolumeInodes`（三态：未配目录 / 正常 / statfs 失败）先红后绿；`TestPrometheusRulesReferenceRealMetrics` 校新指标真实发射；四平台 `GOOS=darwin/freebsd/windows/openbsd go build` 全过 |
+| A2 / A6 | `AI_POLICY.md` §11「不自动合并 PR / 不自动删分支或数据」原标 **⚠️ 人工**、**且无门禁守着**（零命中只是现状） | 新增 `TestNoAutoMergeOrPrivilegedCITriggers`：扫 `.github/workflows/*` + `.gitlab-ci.yml` + `scripts/*.sh`，命中 `gh pr merge` / `enable-auto-merge` / `mergify` / `merge_when_pipeline_succeeds` / `auto_merge` / `pull_request_target` / `git push --delete` / `git branch -D` / `delete-branch` 任一即红；**双向钉**：§11 必须回指测试名。A6 的「禁止类」可机检部分并入本条，§11 对应行改 **代码强制**；「进入发布模式需人类授权」等仓库外判定项仍如实标 ⚠️ 人工 | `ai_governance_gate_test.go`（含扫描面自检 `minCIScannedFiles=18`）；`docs/AI_POLICY.md` §11 回指 |
+| A3 | `OPERATIONS.md` §4.2 表 ⇔ `rules.yml` 双向同步此前**只靠人工**：实测表 13 行 = 13 条 alert **纯属巧合**——表多「健康探测失败」（外部黑盒探测，不属 Prometheus 规则）、规则多 `S3ClientZipPartialFailures`，两边集合根本不同 | §4.2 每行第一列补**反引号 alert 名**；外部探测项移入表外注记（保住阈值信息）；补 `S3ClientZipPartialFailures` 行；新增 `doc_alert_drift_gate_test.go` 断言「表行 ⇔ `- alert:` 双向等集」（各带 ≥13 条扫描面基线）；§4 导语与 `rules.yml` 头注同步登记该门禁 | `TestOperationsAlertTableMatchesRulesFile`：上线即红并**点名漂移**（表无 `S3ClientZipPartialFailures`、规则多两条），补行 + 加名后转绿；`DEVELOPMENT.md` §3 门禁清单登记 |
+| A4 | `accessibility.md` §4 第 9 条「网格单元格 `role=button` 无 `aria-label`」**从没被 axe 扫过**（四个扫描态都不含网格视图），真伪未判 | `e2e/a11y.spec.ts` 新增第 5 个扫描态「对象网格视图」（`installObjectsStub` 桩出带默认桶的账号 + 3 个对象 → 切网格）；同批把文件头承诺的「非阻塞级违规打印供人工判断」真正接上（此前代码直接丢弃）。**判定结果：axe 0 违规（阻塞级与非阻塞级均无）→ 非缺陷，不改组件**——`button-name` 认可文本节点派生的可访问名，加 `aria-label` 反而会覆盖「文件名 + 大小」并造出第二事实源 | `pnpm exec playwright test a11y.spec.ts` **6 passed**；`accessibility.md` §4.9 由「仍未做」转「已判定 + 受 CI 约束」，§4 第 2 / 4 条与 §5.2 / §5.3 状态数 4 → 5 |
+| A5 | `threat-model.md` §6.2 `http://` 载荷完整性**残留**（本体只能靠 TLS）且账号创建 / 更新时**零提示** | 对齐 `main.go` 明文落盘告警先例：`handler/accounts.go` 新增 `warnPlaintextEndpoints`——`endpoint` / `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后为 `http://` 即打 WARN（创建 + 更新两路；日志只记 id / 名称 / 端点，**不含密钥**）；前端 `AccountsPanel.vue` 在「使用 HTTPS/TLS」**未勾选**时于勾选框下给出同一句提示（`accounts.useSSLWarn`，中英双语），勾选即消失 | `accounts_plaintext_test.go` 三条（显式 `http://` / 大小写 scheme / 裸端点 + `useSSL=false` 打 WARN，`https://` 与裸端点 + `useSSL=true` **不打**（防噪声），更新路径与 `publicEndpoint` 各一条，外加「日志不含 `secretKey` 哨兵」）；`AccountsPanel.test.ts`「明文端点提示」用例断言展示 / 勾选消失 / 取消恢复 |
+| 相邻 | **上一批遗留**：后端默认端口 8080 → 5000 之后，`e2e/smoke.spec.ts` 的「无后端 → 条件跳过」判据失效——旧口径按状态码猜（注释写 503），而 vite 代理在目标拒绝连接时实测回 **500 + `text/plain` + 空 body**（vite 源码 `res.writeHead(500, …)`），于是 `pnpm e2e` 在**没起后端的常态下**必然红灯；更糟的是真实后端的 404 恰好也是 `text/plain`，按 content-type 猜会把「端点坏了」误判成「没后端」 | 改用**后端自己写的头**作判据：`X-Request-ID`（`withRequestID` 中间件覆盖全部路由，含 404 / 5xx，见 `OPERATIONS.md` §3.3）——vite 自己应答时不带该头。判据来自后端而非代理实现，不随 vite 版本漂移 | **双向实测**：不起后端 → `1 skipped`（原本红）；起后端但未开 `S3C_EXPOSE_OPENAPI` → `1 failed`（R9 严格断言**未被削弱**）；随后关后端复跑 → `22 passed + 1 skipped` |
+
+> **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 门禁清单（`doc_alert_drift_gate_test.go`）、
+> [`AI_POLICY.md`](AI_POLICY.md) §11（A2/A6）、[`OPERATIONS.md`](OPERATIONS.md) §3.2 / §4.2 / §4.3 / §10.2、
+> [`api.md`](api.md)、[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`threat-model.md`](threat-model.md) §6.2、
+> [`user-guide.md`](user-guide.md)、[`accessibility.md`](accessibility.md) §4 / §5.2 / §5.3、
+> 本节 + 头部摘要 + 目录行。
 
 ---
 

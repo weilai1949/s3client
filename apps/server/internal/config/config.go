@@ -131,7 +131,7 @@ func loadDotEnv() error {
 
 // Config 汇总服务端配置。所有项均可通过环境变量覆盖，并内置安全默认值。
 type Config struct {
-	Addr                string                // 监听地址，默认回环 127.0.0.1:8080（更安全）
+	Addr                string                // 监听地址，默认回环 127.0.0.1:5000（更安全）
 	DataDir             string                // 数据目录，存放账号持久化文件
 	StaticDir           string                // Web 静态资源目录
 	Region              string                // 账号缺省 region
@@ -219,7 +219,7 @@ func FromEnv() Config {
 		envErr = ratioErr
 	}
 	return Config{
-		Addr:                envOr("S3C_ADDR", "127.0.0.1:8080"),
+		Addr:                envOr("S3C_ADDR", "127.0.0.1:5000"),
 		DataDir:             envOr("S3C_DATA_DIR", "./data"),
 		StaticDir:           envOr("S3C_STATIC_DIR", "../web/dist"),
 		Region:              envOr("S3C_REGION", "us-east-1"),
@@ -266,7 +266,7 @@ func splitList(s string) []string {
 
 // IsLoopbackAddr 判断监听地址是否**仅**绑定本机回环（127.0.0.1 / ::1）。
 //
-// 空 host（如 ":8080"）不算回环：net.Listen 会把它绑到 [::]——全部网卡，
+// 空 host（如 ":5000"）不算回环：net.Listen 会把它绑到 [::]——全部网卡，
 // 与 0.0.0.0 等价；历史上把它判为回环会让最常见的通配写法绕过「非回环必须
 // 设 S3C_TOKEN」的安全闸，账号管理 API 无鉴权暴露到所有接口（C2）。
 // SplitHostPort 解析失败（缺端口）时该地址本就无法监听，按回环处理避免误报。

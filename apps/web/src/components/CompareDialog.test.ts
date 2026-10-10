@@ -8,7 +8,7 @@ vi.mock('../api', () => ({
   s3api: {
     presign: vi.fn(async () => ({ url: 'https://cdn.test/v', method: 'GET' })),
   },
-  api: { base: 'http://localhost:8080', token: '' },
+  api: { base: 'http://localhost:5000', token: '' },
 }))
 
 vi.mock('../i18n', () => ({

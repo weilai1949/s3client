@@ -123,7 +123,7 @@
 
 任一版本发布前必须全绿（实测状态；**2026-10-09 复测**（同日 ROADMAP §三 **#5**「条件写 / 端到端校验和 /
 Object Lock」+ #6「计划任务」+ #7「FinOps 存储分析与成本看板」三批 **+ 全仓评审修复批次（C1–C2 + R1–R9，
-见 [`code-review-2026-10-09.md`](code-review-2026-10-09.md)）** 共四批合并态全量重跑；后端仍 **10 包**）：
+见 [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)）** 共四批合并态全量重跑；后端仍 **10 包**）：
 `gofmt -l` 干净 / `go vet` 0 告警 / `golangci-lint` **0 issues** / `go test ./...` **10/10 包** /
 `go build` OK / `make test-cover` **10/10 包 100.0%（`count==0` 零块）** / `govulncheck` **0 可达**，
 与前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` 均 exit 0 / `pnpm test`

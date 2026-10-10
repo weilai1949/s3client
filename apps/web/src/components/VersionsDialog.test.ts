@@ -22,7 +22,7 @@ vi.mock("../api", () => ({
     deleteObjectVersion: vi.fn(async () => ({ deleted: "v1" })),
     restoreDeleteMarker: vi.fn(async () => ({ restored: "dm1" })),
   },
-  api: { base: "http://localhost:8080" },
+  api: { base: "http://localhost:5000" },
 }));
 
 vi.mock("../store", () => ({ toasts: [], toast: vi.fn() }));

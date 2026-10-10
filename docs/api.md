@@ -1,6 +1,6 @@
 # REST API 参考
 
-后端默认监听 `127.0.0.1:8080`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
+后端默认监听 `127.0.0.1:5000`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
 
 > **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：可为单个 token 声明 `readonly` / `prefixes` / `accounts` / `expiresAt`（字段缺省即不限制）。`readonly` 下仅放行 GET / HEAD，其余方法（含能铸造写 URL 的预签名 `POST`）一律 `403`；`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`）下请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 越界返回 `403`，桶级操作需该桶的整桶授权；`accounts` 下路径 `{id}` 越界返回 `403`；`expiresAt` 过期返回 `401`。另有两条**端点级闸**（请求不携带可判定的桶/账号引用，通用判定落空，对受限 token 整体拒绝）：`POST /api/accounts/preview-buckets` 用调用方自带 endpoint/凭据由服务端拨号（SSRF 拨号面），声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 `403`（仅 `expiresAt` 的不受影响）；`/api/migrate/jobs*`（列取 / 状态 / 取消 / 事件流）的任务记录不带归属、无法按桶细判，声明了 `prefixes` / `accounts` 的 token 一律 `403`（`readonly` 读放行——本就可读全量桶）。**未在 `S3C_TOKEN_SCOPES` 中登记的 token 保持全权**（向后兼容）。越权写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs`），过期写 `auth.denied`（`reason=token_expired`）；审计与响应均**不含 token 明文**。配置格式与 fail-closed 规则见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
@@ -30,6 +30,7 @@ Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设�
 - `s3c_store_up`：账号存储可达性（1 / 0）。store 掉线时 `/api/health` 返回 503 且本指标为 0——硬失败不降级（ADR-002），建议据此告警。
 - `s3c_store_write_failures_total`：账号库写入失败次数（落盘 / SQL 写入出错，业务拒绝不计数）——`json` / `encrypted` 驱动唯一的主动存储故障信号。
 - `s3c_volume_size_bytes` / `s3c_volume_free_bytes`：`S3C_DATA_DIR` 所在文件系统总容量与可用字节；取不到时**不输出该序列**（平台不支持 / statfs 失败）。
+- `s3c_volume_inode_total` / `s3c_volume_inode_free`：同一文件系统的 inode 总数与空闲数（statfs `Files` / `Ffree`）；Windows 与 Linux / macOS / FreeBSD 之外的平台，或 statfs 失败时同样**不输出该序列**。
 - `s3c_jobs_active`：在册（未终结）异步任务数，上限 256（与 `JobRegistry` 同口径）。
 - `s3c_last_shutdown_duration_seconds`：上一次优雅关停耗时（启动时从 `data/shutdown.json` 载入；0 = 尚无记录）。
 - `s3c_http_request_duration_seconds`：HTTP 请求延迟直方图（含流式端点）；`+Inf` 桶恒等于 `s3c_http_requests_total`。
@@ -845,10 +846,10 @@ OpenAPI 3.0 规范，作为 84 个 `/api/*` 端点的契约单一来源；**经�
 
 ## 请求示例（curl）
 
-以下示例假设后端监听 `127.0.0.1:8080`，且已设置 `S3C_TOKEN`（未设置 token 时无需 `Authorization` 头）。先导出变量：
+以下示例假设后端监听 `127.0.0.1:5000`，且已设置 `S3C_TOKEN`（未设置 token 时无需 `Authorization` 头）。先导出变量：
 
 ```bash
-export BASE="http://127.0.0.1:8080"
+export BASE="http://127.0.0.1:5000"
 export S3C_TOKEN="<Bearer Token>"
 export ACCOUNT_ID="<账号 UUID，见 GET /api/accounts 返回的 id>"
 ```

@@ -31,6 +31,57 @@
 
 ## [Unreleased]
 
+### 新增（2026-10-10 A 组「可机械优化」六项：内置卷 inode 指标 + 三道门禁 + 网格态 a11y 扫描 + 明文端点告知）
+
+- **A1 数据卷 inode 指标内置**（[`docs/OPERATIONS.md`](docs/OPERATIONS.md) §4.3 原「仍无内置指标」行）：`internal/handler` 新增 `volumeInodes()`——`volume_unix.go` 取 statfs `Files` / `Ffree`（`linux || darwin || freebsd`，四平台 `GOOS` 交叉编译实测通过）、`volume_windows.go` 恒 `ok=false`（Windows 无 inode 概念）、`volume_other.go` 恒 `ok=false`；`/api/metrics` 新增 `s3c_volume_inode_total` / `s3c_volume_inode_free`，**沿用「取不到就不发序列」口径**（inode 总数为 0 时 `free/total` = 0/0 = NaN，告警会静默失效，故宁可不发）。同步 `OPERATIONS.md` §3.2 指标表 + §3.2 尾注（「只能服务外完成的观测面」inode 一项移出）+ §4.3 行转「仅在序列缺失的平台」+ §10.2 资源表、[`docs/api.md`](docs/api.md) 指标清单、[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)；[`deploy/prometheus/s3client.rules.yml`](deploy/prometheus/s3client.rules.yml) 新增告警 `S3ClientVolumeInodeLow`（空闲占比 < 20% 持续 10 分钟——inode 耗尽与字节耗尽**互不等价**，大量小文件场景先耗 inode）。
+- **A3 告警表 ⇔ 规则文件改为机械双向同步**：`OPERATIONS.md` §4.2 此前每行只有中文标题，表 13 行 = `rules.yml` 13 条 alert **纯属巧合**——实测表里多一条「健康探测失败」（外部黑盒探测，不属 Prometheus 规则）、规则里多一条 `S3ClientZipPartialFailures`，谁也没发现。现每行第一列补**反引号 alert 名**，外部探测项移入表外注记（阈值信息不丢），补上 ZIP 行；新增 [`apps/server/doc_alert_drift_gate_test.go`](apps/server/doc_alert_drift_gate_test.go) 的 `TestOperationsAlertTableMatchesRulesFile` 断言「表行 ⇔ `- alert:` 名**双向等集**」，两侧各带 ≥13 条扫描面自检基线。
+- **A2 / A6 AI 政策条款由「人工承诺」升级为「代码强制」**：[`docs/AI_POLICY.md`](docs/AI_POLICY.md) §11「不自动合并 PR / 不自动删分支或数据」此前标 ⚠️ 人工**且无任何门禁**（`.github/workflows/` 零命中只是现状）。新增 `TestNoAutoMergeOrPrivilegedCITriggers`（同文件 `ai_governance_gate_test.go`）：扫 `.github/workflows/*` + `.gitlab-ci.yml` + `scripts/*.sh`，命中 `gh pr merge` / `enable-auto-merge` / `mergify` / `merge_when_pipeline_succeeds` / `auto_merge` / `pull_request_target` / `git push --delete` / `git branch -D` / `delete-branch` 任一即红灯，并**双向钉**政策回指测试名；A6 中「禁止类」可机检的部分并入本条。仓库外才能判定的项（发布授权、权限网关）仍如实标 ⚠️ 人工。
+- **A4 网格视图纳入 axe 扫描，判定为非缺陷**：[`accessibility.md`](docs/accessibility.md) §4 第 9 条「网格单元格 `role=button` 无 `aria-label`」此前**四个扫描态都不含网格视图**，从未被机械判定。`apps/web/e2e/a11y.spec.ts` 新增第 5 个扫描态「对象网格视图」（`installObjectsStub` 桩出带默认桶的账号 + 3 个对象 → 切网格），实跑 axe **0 违规**（阻塞级与非阻塞级均无）→ `button-name` 认可文本节点派生的可访问名，故**刻意不加** `aria-label`（会覆盖「文件名 + 大小」并造出第二事实源）；同批把文件头承诺的「非阻塞级违规打印供人工判断」真正接上（此前直接丢弃）。
+- **A5 明文 `http://` 端点由「无感知」降为「有告知」**（风险本体仍需 TLS，见 [`docs/threat-model.md`](docs/threat-model.md) §6.2）：`handler/accounts.go` 新增 `warnPlaintextEndpoints`——创建 / 更新账号时，`endpoint` 或 `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后为 `http://` 即打 WARN（与 `main.go` 明文落盘告警同口径，**日志只记 id / 名称 / 端点，不含密钥**）；前端 `AccountsPanel.vue` 在「使用 HTTPS/TLS」未勾选时于勾选框下给出同一句提示（`accounts.useSSLWarn`，中英双语），勾选即消失；`docs/user-guide.md` 字段表同步。
+- **相邻遗留修复（上一批端口 8080 → 5000 的连带红灯）**：`apps/web/e2e/smoke.spec.ts` 的「无后端 → 条件跳过」判据是按**状态码**猜的（注释写「确定性返回 503」），但 vite 的代理在目标**拒绝连接**时实测自己回 **500 + `text/plain` + 空 body**（vite 源码 `res.writeHead(500, { 'Content-Type': 'text/plain' })`）——端口改为 5000、无进程监听后，`pnpm e2e` 在**没起后端的常态下**必然红灯（`有后端应答时 /api/openapi.json 必须可用 Expected: 200, Received: 500`）。改用**后端自己写的响应头** `X-Request-ID` 判定「是否有真进程应答」（`withRequestID` 中间件覆盖全部路由，含 404 / 5xx，见 `docs/OPERATIONS.md` §3.3；vite 自己应答时不带该头），判据不再依赖代理实现与状态码取值。**双向实测**：不起后端 → `1 skipped`（原为红）；起后端但未开 `S3C_EXPOSE_OPENAPI=1` → `1 failed`，评审 R9 的严格断言**未被削弱**；关掉后端复跑全套 → `22 passed + 1 skipped`。
+- **验证**：全部新增断言**先红后绿**（A3 上线即点名两处真实漂移、A5 四条正例 + 三条反例、A4 先跑 axe 再定性）。全量门禁复跑：`go vet` / `gofmt -l` 干净、`golangci-lint run` **0 issues**、`go test ./...` 全绿、`make test-cover` 无 `count==0` 块；前端 `pnpm lint` / `pnpm typecheck` / `pnpm typecheck:e2e` / `pnpm test`（83 文件 1292 例）/ `pnpm test:coverage`（四指标 100%）/ `pnpm build` 干净；`pnpm exec playwright test a11y.spec.ts` **6 passed**。
+
+### 修复（2026-10-10 两处文档状态漂移：悬空 `ROADMAP #11` 引用 + 自相矛盾的 trace 观测面）
+
+- **症状与根因**：[`docs/OPERATIONS.md`](docs/OPERATIONS.md) §4.3 把「跨服务 trace」写成 `未接入（ROADMAP §三 3.2 #11 ⬜）`——但 **#11（OTel tracing）已于 2026-10-08 落地并按 §六 第 1 条移出转空号**（[`docs/FEATURES.md`](docs/FEATURES.md) §BR），同文件 §3.4 就是已实现的 OTel tracing 小节：一处**悬空编号** + 一处**同文件自相矛盾**，运维照旧行配置配不出 trace。既有文档门禁只钉「链接可达 / 叙述性数字 / CI 事实」，**状态陈述**（某条目还开着 / 某能力未接入）无任何机械校验，故两处漂移全绿潜伏。
+- **正文修复**：§4.3 trace 行改为「导出已内置、采集端在服务外（§3.4，`S3C_OTEL_ENDPOINT` 留空 = 关闭）」并点名开关与配置指引；同文件 §3.2 尾部「仍只能外部采集的观测面」两句同步为「跨服务 trace 的**采集端**（span 导出已内置 §3.4）」。
+- **同批修复**（同类「现在时开放陈述无时点锚」）：[`docs/FEATURES.md`](docs/FEATURES.md) §P / §Q / §CA 三处章节头注的「仍未处置 / 仍开放」补**日期时点锚**与闭环指针（§P→§Q/§R/§S、§Q→§S/§T/§U、§CA→§CC/§CD）——FEATURES 是**已完成**台账，无锚点的历史状态会被读成现状。
+- **防回退门禁**（TDD 先红后绿）：新增 [`apps/server/doc_status_drift_gate_test.go`](apps/server/doc_status_drift_gate_test.go) 三条断言——① 带 ⬜/⏳/未排期/未接入 标记的 `§三 #N` 引用必须指向 ROADMAP §3.1/§3.2 **现存**条目（不带标记的历史出处指针允许指向空号，`docs/archive/`、FEATURES、CHANGELOG 三类时点台账排除在外）；② `OPERATIONS.md` 存在 §3.4 时，trace 行不得写「未接入」且必须点名 `S3C_OTEL_ENDPOINT`；③ `FEATURES.md` 的「仍开放 / 仍未处置」行必须带 `YYYY-MM-DD` 时点锚。三者均带扫描面自检基线（引用 ≥20 处 / 开放标记 ≥4 处 / FEATURES 开放陈述 ≥3 行），防正则塌缩后静默全绿；[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §3 门禁清单同步登记。
+- **验证**：三条断言先红（精确点名上述两处漂移 + FEATURES 三行）后绿；**变异验证**三轮——① trace 行改回旧文案 → 断言 1+2 双红；② 改成引用不存在的 `#99 ⬜` → 断言 1 红；③ 删掉 FEATURES 日期锚 → 断言 3 红；还原后全绿。全量门禁：`go vet` / `go build` 0 告警、`go test ./...` **10/10 包全绿且每包 100.0% statements（`count==0` 零块）**、`gofmt -l` 干净、`golangci-lint run` **0 issues**。
+
+### 修复（2026-10-10 `make dev` 受管 web 进程「PID 被误判复用 → 拒绝停止」）
+
+- **症状**：`make dev` 打印 `[web] 警告: pid=… 存活但不是预期的 'vite' 进程（PID 已被复用？），视为陈旧 PID 文件，删除且不 kill`，随后 Vite 报 `Port 1949 is in use, trying another one...` 静默落到 **1950**；而 `wait_http 1949` 因旧实例仍在响应而通过——报「已就绪」但实际不在 1949，且**每次 `make dev` 泄漏一个 vite 进程**（实测 `ps` 中两条 vite 链并存）。
+- **根因**：`run-dev.sh` / `graceful-restart.sh` 用 `pnpm dev &` 后 `write_pid web $!`，而 `$!` 是 **pnpm 包装进程**（实际链 `pnpm.mjs → pnpm.cjs → vite.js`）；`scripts/lib/process.sh` 的 `expected_process_pattern web` 只认关键字 `vite`，故 `validated_pid` 把「存活且确属本次启动的 vite」误判为 PID 复用而拒绝停止。信号传播本身正常（实测 SIGTERM 包装进程会级联杀掉整条链），问题纯在**身份校验失配**。
+- **修法**：两个脚本改为直接启动 `./node_modules/.bin/vite --strictPort`——该 pnpm 生成的 sh shim 末行 `exec node …/vite/bin/vite.js` 不换 PID，故 `.run/web.pid` 记录的就是 vite 本身、命令行含 `vite` 与校验口径一致，信号直达 vite；`--strictPort` 把「端口被占 → 静默换端口」变成显式失败（`apps/web` 的 `dev` 脚本本就是裸 `vite`，二者等价）；`graceful-restart.sh` 另加 `.bin/vite` 缺失预检。
+- **防回退门禁**（TDD 先红后绿）：新增 [`apps/server/dev_scripts_gate_test.go`](apps/server/dev_scripts_gate_test.go) 的 `TestManagedWebServerRecordsVitePid`——钉住 (1) `process.sh` 对 web 的预期名仍为 `vite`、(2) `apps/web` 的 `dev` 脚本为裸 `vite`、(3) 两个受管脚本以 `./node_modules/.bin/vite --strictPort` 启动、(4) 不再出现 `pnpm dev`。
+- **同批修复（依赖同步口径对齐）**：`run-dev.sh` 与 `graceful-restart.sh` 启动流程里的 `go mod tidy` **全部移除**——实测每次 `make dev` 都会改写 `apps/server/go.sum`（删 6 行），与 `Makefile` `server` 目标注释「不在每次启动时跑 go mod tidy，避免依赖被无意识升级导致开发与 CI 漂移」的口径相悖。`go build` 默认 `-mod=readonly`：依赖不一致会**显式报错**而非静默改写提交文件；依赖同步统一走显式 `make tidy`。验证：`make dev` 前后 `apps/server/go.mod` / `go.sum` 的 sha256 **完全一致**。门禁同文件新增 `TestDevScriptsLeaveDependencySyncToExplicitTargets`（两脚本不得出现 `go mod tidy`，且 Makefile 必须保留显式 `tidy` 目标）。
+- **验证**：修复前门禁红（两脚本各 3 条点名）；修复后 `bash scripts/graceful-restart.sh web` 连续两次均为「发送 SIGTERM → 已停止」且无告警，1949 单一 vite、1950 空闲；真实 `make dev` 输出 `[web] 已停止 / 已启动 pid=… http://127.0.0.1:1949`，`/api/health` ok。
+
+### 修复（2026-10-10 根 `.env.example` ⇔ compose 透传面双向漂移 + README 配置项计数订正）
+
+- **根 [`.env.example`](.env.example)**：按其自述口径（[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) §1：**只列 compose 会用到的变量**，即三个 `docker-compose*.yml` 里 `${VAR}` 插值的键）重排——补 `S3C_REGION` / `S3C_LOG_LEVEL` / `S3C_CORS_ORIGINS` / `S3C_SHUTDOWN_TIMEOUT` / `S3C_IMAGE_TAG` 与构建参数 `GOPROXY` / `NPM_REGISTRY`；移除 compose **并不透传**的 `S3C_ALLOW_PLAINTEXT_STORE` / `S3C_TRUSTED_PROXIES` / `S3C_SSRF_DENY_PRIVATE`（compose `environment:` 是显式白名单且无 `env_file:`，写进根 `.env` 不会生效），并加注释指引服务端全量可选项见 `apps/server/.env.example`。
+- **文档同步**：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) §1 补充「compose `environment:` 是显式白名单」说明；[`README.md`](README.md) 的「含全部 18 个 `S3C_*` 变量」订正为 **22**（真值 = `internal/config` 读取数）；[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §2.2 同步该口径；[`docker-compose.yml`](docker-compose.yml) 明文存储注释补「需同时加入 `environment:` 白名单」。
+- **防回退门禁**（TDD 先红后绿）：新增 [`apps/server/env_example_gate_test.go`](apps/server/env_example_gate_test.go)——双向断言 compose 每个 `${VAR}` 必须在根模板有落脚点、且根模板每个赋值行都必须是 compose 插值项；[`apps/server/doc_number_gate_test.go`](apps/server/doc_number_gate_test.go) 的 `docNumberClaims` 新增 README「N 个 `S3C_*` 变量」声明（真值复用 `configEnvVarsFromSource`）；[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §3 门禁清单同步登记。
+- **模板用法说明**：两份 `.env.example` 顶部补「只填**未注释**的必填项」与「`#` 仅在**行首**才是注释、**不要写行内注释**——`S3C_LOG_LEVEL=info # 说明` 的值会是整串 `info # 说明`」；[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) §1 同步该解析规则（含 `TestEnvExamplesAvoidInlineComments` 指引）。
+- **验证**：新门禁先红（根模板漏 7 / 多 3；README 18≠22）后绿；行内注释门禁**变异验证**（注入 `S3C_LOG_LEVEL=info # mutation-check` → 红并点名行号，还原 → 绿）；`go test .`（含全部门禁）ok。
+
+### 变更（2026-10-10 后端默认端口 8080 → 5000，全链路同步）
+
+- **默认监听**：`S3C_ADDR` 默认由 `127.0.0.1:8080` 改为 `127.0.0.1:5000`（`apps/server/internal/config/config.go`）；`apps/server/.env.example`、`Dockerfile`（`ENV` / `EXPOSE` / `HEALTHCHECK`）同步。
+- **本机 nginx 形态**：Go 后端 `8081 → 5001`、nginx 对外 `8080 → 5000`（`scripts/run-dev.sh`、`deploy/nginx/nginx.local.conf`、`conf.d/s3client-local.conf` 及 nginx README）。
+- **Compose / 生产**：server `S3C_ADDR` / `expose`、nginx 发布端口、RustFS 浏览器直传 CORS Origin、`.gitlab-ci.yml` service 侧 CORS 全改 `5000`（`docker-compose.yml`、`docker-compose.prod.yml`、`deploy/nginx/conf.d/s3client-docker.conf`、`s3client-tls.example.conf`、根 `.env.example`）。
+- **前端默认后端**：Tauri `defaultBase`、服务器设置占位与 i18n、Vite 代理目标、Playwright 真实联调基址默认全改 `http://127.0.0.1:5000`（多后端条目仍可任意配置）。
+- **脚本 / E2E**：`scripts/graceful-restart.sh`、`scripts/e2e-real.sh`（`SERVER_PORT` 默认）同步。
+- **前端端口**：本机开发前端固定 `127.0.0.1:1949`（`apps/web/vite.config.ts`、桌面端 `apps/desktop/src-tauri/tauri.conf.json` 的 `devUrl`、`scripts/run-dev.sh` 早已一致）；订正残留的 `5173`——[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 的本地运行示例、`apps/web/e2e/screenshots.spec.ts` 截图用例注释、后端 CORS 信任用例中的 dev Origin fixture。
+- **文档**：[`README.md`](README.md)、[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)（SSOT）、[`docs/api.md`](docs/api.md)、[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、[`docs/OPERATIONS.md`](docs/OPERATIONS.md)、[`docs/POSTMORTEM_TEMPLATE.md`](docs/POSTMORTEM_TEMPLATE.md)、[`docs/threat-model.md`](docs/threat-model.md)、[`docs/user-guide.md`](docs/user-guide.md)、[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)、[`docs/decisions/0001-desktop-no-ipc.md`](docs/decisions/0001-desktop-no-ipc.md)、[`docs/decisions/0003-ssrf-private-allow.md`](docs/decisions/0003-ssrf-private-allow.md)、[`docs/en/index.md`](docs/en/index.md)、[`.github/SECURITY.md`](.github/SECURITY.md) 同步；CHANGELOG / FEATURES / ROADMAP / `archive/` 的**历史记录不改写**。
+- **验证**：Go——`go vet` 0 告警 / `go test ./...` 10/10 包（含全部门禁）ok；前端——`pnpm lint` 0 告警 / `pnpm typecheck:e2e` exit 0 / `pnpm test` 83 文件 1291 例 / `pnpm build` OK。
+
+### 变更（2026-10-10 归档 2026-10-09 全仓代码评审 + 门禁清单补全）
+
+- **归档**：`docs/code-review-2026-10-09.md` 的处置状态表 C1–C2 / R1–R10 / O1–O12 已**全部闭环**，按 [`docs/archive/index.md`](docs/archive/index.md)「归档操作」四步 `git mv` 至 [`docs/archive/code-review-2026-10-09.md`](docs/archive/code-review-2026-10-09.md) 冻结（**不回写、不改写历史结论**）。同 PR 一并完成：① 归档文件内 12 处相对链接按新位置改写、头部「活跃文档」改为「已归档」并指明当前事实来源；② [`docs/archive/index.md`](docs/archive/index.md) 归档清单补行（**第 7 份**）、计数 6 → 7、触发规则补「**代码评审快照**在处置状态表全部闭环后同 PR 冻结」；③ [`docs/README.md`](docs/README.md) 导航行与 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 登记表改标**冻结件**（2026-10-10 归档登记）；④ 命名约定三处（[`AGENTS.md`](AGENTS.md) / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt)）由「当前 `code-review-2026-10-09.md`，闭环后归档」改为「先例 `code-review-2026-09-24.md`、`code-review-2026-10-09.md`，两者均已归档」；⑤ 全仓指向旧路径的链接与两处门禁注释（`ci_consistency_gate_test.go` / `doc_ci_drift_gate_test.go`）同步，`CHANGELOG` / `FEATURES` / `KNOWN_ISSUES` / `ROADMAP` 的历史引用只改**链接目标**、不改写正文结论。
+- **门禁清单补全**：[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §3 补记三道此前漏写的**子包**门禁——`internal/handler/error_echo_gate_test.go`（**错误文案不回显用户输入**）、`internal/handler/migrate_sync_gate_test.go`（`/api/migrate/sync` 源端列举失败必须回错误状态，不得 `200 {scanned:0}`）、`internal/service/sync_list_gate_test.go`（**列举循环必须有界**），并注明它们不在根包「包根 `*_gate_test.go` 全量」口径内。
+
 ### 修复（2026-10-09 KNOWN_ISSUES #73 / #80 / #81 / #83 闭环：评审 Optional 项收口）
 
 来源 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #73 / #80 / #81 / #83（评审 O2 / O9 / O10 / O12）；同批 #72 / #74–#79 / #82 仍开放。
@@ -72,7 +123,7 @@
 
 ### 修复（2026-10-09 全仓代码评审批次：C1–C2 + R1–R9 全修，O1–O12 登记）
 
-来源 [`docs/code-review-2026-10-09.md`](docs/code-review-2026-10-09.md)（状态表与 §8 已回写）。
+来源 [`docs/code-review-2026-10-09.md`](docs/archive/code-review-2026-10-09.md)（状态表与 §8 已回写）。
 
 - **C1** CI Go job 补真实前端依赖前置：GitHub `server` job 加 pnpm/setup-node（与 web job 同 pin：pnpm 9.15.0 / node 26.10.0 + pnpm cache）+ `pnpm install --frozen-lockfile`；GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store/` cache override。根包 `agent_evals` 门禁的判据前置是 `apps/web/node_modules` 存在（gitignore 构建产物，**不 `mkdir` 伪造**）。
 - **C2** 两套 CI 全部 checkout 改深克隆（GitHub 十处 `fetch-depth: 0`，GitLab `GIT_DEPTH: "0"`）——`changelog_tag` 门禁从 `.git` 读 v* tag，浅克隆必红。新增 `apps/server/ci_consistency_gate_test.go` 把两侧 job / 命令 / 版本 pin 逐项一致机械钉住（`gitlab-ci-local` 本地实测可用性见 `docs/DEVELOPMENT.md` §CI 双平台一致性）。
@@ -132,7 +183,7 @@
 
 ### 文档（2026-10-09 全仓代码质量评审快照建档）
 
-- **新增活跃评审文档 [`docs/code-review-2026-10-09.md`](docs/code-review-2026-10-09.md)**：对 `e965e54`
+- **新增活跃评审文档 [`docs/code-review-2026-10-09.md`](docs/archive/code-review-2026-10-09.md)**：对 `e965e54`
   的全仓五轴评审（Go 后端 + Vue/TS 前端；6 路深潜 + 机械门禁**独立复跑**）：结论 **Request changes**
   ——2 Critical（CI 的 Go job 缺 `apps/web/node_modules` 前置、GitHub checkout 浅克隆读不到 tag，
   两处叠加使仓库自述的「全绿门禁」在 CI 上不可复现）+ 10 Required（迁移任务作用域越权、

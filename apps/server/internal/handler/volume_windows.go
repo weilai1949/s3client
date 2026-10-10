@@ -38,3 +38,10 @@ func volumeUsage(path string) (size, free float64, ok bool) {
 	}
 	return float64(total), float64(avail), true
 }
+
+// volumeInodes 恒返回 ok=false：Windows 没有 inode（i 节点）概念，没有与
+// statfs 的 Files / Ffree 对等且免依赖的取法（MFT 条目数需另一套 API，且语义不同）。
+// 调用方不输出 inode 序列，运维按 OPERATIONS.md §4.3 用宿主 node_exporter / df -i 采集。
+func volumeInodes(string) (total, free float64, ok bool) {
+	return 0, 0, false
+}

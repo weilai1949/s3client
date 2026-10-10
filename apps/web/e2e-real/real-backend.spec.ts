@@ -18,7 +18,7 @@ import { randomUUID } from 'node:crypto'
  * 预签名直传是**浏览器 → S3** 的跨源请求，只有真对端 + 真 CORS 才能跑通。
  *
  * 运行前提（由 `scripts/e2e-real.sh` / CI job 提供）：
- *   - `PLAYWRIGHT_BASE_URL` 指向**真实后端**（默认 http://127.0.0.1:8080）；
+ *   - `PLAYWRIGHT_BASE_URL` 指向**真实后端**（默认 http://127.0.0.1:5000）；
  *   - 后端 `S3C_STATIC_DIR` 指向真实构建产物；
  *   - `S3C_TOKEN`：脚本自动生成并注入，**后端 /api 鉴权开启**（生产同构形态），
  *     本文件负责把它带上——API 请求加 Authorization 头、页面预置 sessionStorage；
@@ -30,7 +30,7 @@ import { randomUUID } from 'node:crypto'
  */
 
 /** 后端地址（页面与 /api 同源）。 */
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8080'
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5000'
 /** 真实 S3（RustFS）端点：后端用它签名，浏览器用它直传，二者都必须可达。 */
 const S3_ENDPOINT = process.env.S3CLIENT_ENDPOINT || 'http://127.0.0.1:9000'
 const ACCESS_KEY = process.env.S3CLIENT_ACCESS_KEY || 'rustfsadmin'
