@@ -63,8 +63,10 @@
   已用**可观察行为**补两处测试而非 gap 测试：`TestForEachOperationRewritesEveryOp`（多 path × 多 method 的
   遍历 / 写回 / 缓存失效）、`TestApplyUniversalResponsesInitializesNilResponseMap`（nil `Responses` 也照挂
   429 / 500 / 401，`NoAuth` 不挂 401，无请求体不挂 413）。修后 `make test-cover` **10/10 包 100.0% 且零
-  `count==0` 块、exit 0**。（`docs/FEATURES.md` §CI 那一行的「`count==0` 零块」是上一批的愿望式基线，
-  本批按实测更正，不改写该历史小节。）
+  `count==0` 块、exit 0**。**历史基线一并订正**：[`docs/FEATURES.md`](docs/FEATURES.md) §CI 那一行的
+  「`count==0` 零块」是上一批的愿望式基线，§CI 基线块与第 6 行（新增 `Registry.ForEachOperation` 那行）
+  已加订正注（只标注、不删原文），[`docs/ROADMAP.md`](docs/ROADMAP.md) §四 的复测块与「Go 覆盖率」表行
+  加同源补注——三处口径一致，当前值与 §CJ 实测相同。
 - **SPDX 表达式同义归并**（交接快照 §5 未做第 6 项）：`scripts/gen-third-party-licenses.sh` 新增 `canonical_spdx`（`/` ≡ ` OR `、按 SPDX 优先级 WITH > AND > OR 递归规范、同级操作数排序去重、括号与 `WITH` 例外保留），§1 汇总据此归并——实测 27 行合并为 20 行（`MIT OR Apache-2.0` 201 + `Apache-2.0 OR MIT` 32 + `MIT/Apache-2.0` 18 + `Apache-2.0/MIT` 3 + `Apache-2.0 / MIT` 1 → `Apache-2.0 OR MIT` 255；`AND` 形态仍与 `OR` 形态分行）。新增门禁 `TestThirdPartyLicenseSummaryCanonicalizesSynonyms`（§1 每行必须已规范化 + 无同义重复行 + 规范化样例护栏），**TDD 先红后绿**；清单已用脚本重新生成（生成时间 2026-10-10，Go 43 / Rust 428 / npm 1 不变，`go.sum` 无改动）。
 - **英文页 `Source revision` 过期机械提醒**（交接快照 §5 未做第 14 项）：`en_docs_gate_test.go` 新增 `TestEnDocsRevisionTracksSourceCommits`——声明的短 hash 必须存在于本仓历史，且**日期不得早于中文源最后提交日期**（`git log -1 --format=%cs -- <源>`）；按日期而非 hash 相等判定（同一 PR 无法把自身 commit hash 写进自己），同 PR 把修订日期推到当天即可满足。非 git 工作区显式 `t.Skip`（CI `fetch-depth: 0` 实跑）。**变异验证**：hash 改 `deadbee` → 存在性红灯；日期改 `2026-10-09` → 过期红灯；还原后绿。同批 [`docs/i18n.md`](docs/i18n.md) §7.4 补该断言行，并在 [`docs/en/index.md`](docs/en/index.md)「Scope of English docs」点名**刻意不译清单**（FEATURES / KNOWN_ISSUES / ROADMAP / CHANGELOG / archive / decisions）并对齐 [`docs/en/README.md`](docs/en/README.md) 既有说明。
 

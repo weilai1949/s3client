@@ -2421,7 +2421,7 @@ functions 1095 / lines 3503）。
 | 3 | [`FEATURES.md`](FEATURES.md) §三 唯一无日期「现状表」整节过期（9/9 包 / 76 文件 / go1.26.6 等 6 处与仓库矛盾），与 ROADMAP §四 双基线互相打架 | §三 改为**指针**（「发布前基线唯一来源 = ROADMAP §四」）+ 新增 2026-10-10 全量复测块；只保留 §四 未单列的补充项 | 两处「现状表」漂移的根因处置 |
 | 4 | [`data-model.md`](data-model.md) **安全级缺失**：`json`/`sqlite` 无 `S3C_STORE_KEY` 拒绝启动（`S3C_ALLOW_PLAINTEXT_STORE`）在 SSOT 地图里完全不存在，§3/§4.1 措辞反导向 | §0 补 SSOT 行、§3 补「明文闸」段、§4.1 块引用补警示、§7 fail-closed 表新增一行 | 与 `config.go:339` / `CONFIGURATION.md` §3 / `threat-model.md` 对齐 |
 | 5 | [`api.md`](api.md) + `docs/api/openapi.json` 契约失真（8 中 + 4 低）：「全是 JSON」错、sync `truncated` 语义误导（**重跑仍从头列举、100k 后永远漏**）、漏 `lastError`、429/413 通用码缺席、proxy 漏 `versionId`、`accounts_create` 作用域闸漏登、24h 钳制位置指错 | 逐条改写；**通用状态码 `401/413/429/500` 逐 operation 接线**（见 #6）；补 `s3c_persist_failures_total` 指标 | `api_doc` / `openapi_*` 门禁全绿；黄金契约重生成 |
-| 6 | `components.responses` 三个共享响应（`Unauthorized` / `TooManyRequests` / `InternalError`）**定义后 0 引用**、84 个 operation 无一声明 401/413/429/500（codegen / Swagger UI 看不到） | **TDD 先红后绿**：`TestOpenAPIUniversalResponsesAreWiredPerOperation`（逐 op 通用码 + 孤儿组件双向断言）→ 新增 `Registry.ForEachOperation` + `applyUniversalResponses` 统一补挂 + 新共享组件 `PayloadTooLarge`；`info.description` 的 JSON 例外清单同步订正；重生成 `openapi.json`（+891 行）与前端 `schema.d.ts`（+302 行） | 先红（84 op 全缺 + 3 孤儿）→ 后绿；`pnpm test` 83 文件 1292 例全绿（生成物门禁含内） |
+| 6 | `components.responses` 三个共享响应（`Unauthorized` / `TooManyRequests` / `InternalError`）**定义后 0 引用**、84 个 operation 无一声明 401/413/429/500（codegen / Swagger UI 看不到） | **TDD 先红后绿**：`TestOpenAPIUniversalResponsesAreWiredPerOperation`（逐 op 通用码 + 孤儿组件双向断言）→ 新增 `Registry.ForEachOperation` + `applyUniversalResponses` 统一补挂 + 新共享组件 `PayloadTooLarge`；`info.description` 的 JSON 例外清单同步订正；重生成 `openapi.json`（+891 行）与前端 `schema.d.ts`（+302 行） | 先红（84 op 全缺 + 3 孤儿）→ 后绿；`pnpm test` 83 文件 1292 例全绿（生成物门禁含内）。⚠️ **补注（2026-10-10）**：本行新增的两个函数当时**只有 handler 侧集成断言、无包内单测**，构成 `count==0` 覆盖盲区（见上方订正条 + §CJ 补的两个行为测试） |
 | 7 | [`errors.md`](errors.md)：引用不存在的符号 `s3UserMessageForCode`、漏 429 行、`ErrPartialDelete` 文案不全 | 改为 `service/delete.go` 复用 `s3wrap.UserMessageForCode` 的真实链路；补 429 行（`withRateLimit` 在 `withAuth` 外层）与带计数文案 | 逐条对照 `errors.go` / `ratelimit.go` |
 | 8 | [`architecture.md`](architecture.md) 分层图与真实 import 不符（画了不存在的 `s3wrap→store`、漏 `handler→store` 与 `openapi` 层）、§5 写 `fetch` 实为 XHR、ADR 编号体例分裂 | 分层图改**真实边集**（实测 import 后重画）+ 栈序简化的口径说明；`fetch` → XHR；全仓 `ADR-0013`→`ADR-013`、`ADR-0006`→`ADR-006` 统一（含 `en/`、`OPERATIONS`、`CONFIGURATION`），模板补「文件名四位 / 标题三位」体例 | `grep -rho internal/…` 实测边集；`adr_coverage` / `doc_link` 全绿 |
 | 9 | [`glossary.md`](glossary.md) 分层术语与 architecture / 子树 AGENTS 三处互不一致 + 3 处小瑕疵 | 分层条目改指 architecture §2 权威；`expiresIn` 指针、标签双层语义、`IsTerminalJobStatus` 文件名同步 | 与 #8 同批 |
@@ -2443,12 +2443,23 @@ functions 1095 / lines 3503）。
 
 > **2026-10-10 基线（本批实跑，同步为 [`ROADMAP.md`](ROADMAP.md) §四 当前值）**：后端 `gofmt` 干净 /
 > `go vet` 0 / `golangci-lint` 0 issues / `go test` **10/10 包** / `make test-cover` **10/10 包 100.0%
-> （`count==0` 零块）** / `govulncheck` **0 可达**（21 不可达模块漏洞）；前端 `pnpm lint` 0 /
+> （`count==0` 零块）**〔⚠️ 该格已订正，见下条〕 / `govulncheck` **0 可达**（21 不可达模块漏洞）；前端 `pnpm lint` 0 /
 > `typecheck` + `typecheck:e2e` exit 0 / `gen:api --check` exit 0 / `pnpm test` **83 文件 1292 例** /
 > `test:coverage` **4829 / 3243 / 1218 / 4180 四指标 100%** / `pnpm build` OK（**417.73 kB，gzip 125.30 kB，
 > CSS 33.76 kB**）/ `pnpm e2e` **22 passed + 1 skipped**；真实 E2E 两项——`make e2e-real` **5 passed**
 > （`SERVER_PORT=8081` + 外部共享 RustFS `--no-rustfs`）、`S3CLIENT_E2E=1` **7/7 PASS**；
 > `cargo audit --no-fetch` **0 漏洞**（7 告警）。`pnpm audit` 仍无法实跑（镜像无 audit 端点，沿用 CI）。
+
+> ⚠️ **订正（2026-10-10，用户要求连历史基线一并订正）**：上条基线的 `make test-cover`「**10/10 包 100.0%
+> （`count==0` 零块）**」当格是**愿望式基线**，与本批实际 profile 不符——`internal/openapi` 实测 **97.0%**
+> （`Registry.ForEachOperation` 整个函数体无包内测试），`internal/handler` 另有一个 0 计数块
+> （`applyUniversalResponses` 的 `op.Responses == nil` 兜底分支；该包级仍报「100.0%」，正是
+> [`DEVELOPMENT.md`](DEVELOPMENT.md) §覆盖率门禁强调的「只有 `count==0` 检查能发现」的假绿灯）。
+> 该盲区在**接手本批时处于红灯**（用 `HEAD` 独立 worktree 复现确认，非本批引入），已由 **§CJ** 补
+> `TestForEachOperationRewritesEveryOp` / `TestApplyUniversalResponsesInitializesNilResponseMap`
+> 两个断言外部可见行为的测试后转绿（提交 `55102a9`，实测 10/10 包 100% + 零 0 计数块 + exit 0）。
+> 本处**只标注不改写**：原「本批实跑」叙述保留原文，订正事实以上一条与 §CJ 为准。
+> [`ROADMAP.md`](ROADMAP.md) §四 的同源数字已同步加注（该处是**活文档**，当前值修后为真）。
 
 > **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、[`ROADMAP.md`](ROADMAP.md) §四 /
 > 页头、[`README.md`](README.md)、[`DEPLOYMENT.md`](DEPLOYMENT.md) §6.4 / §7、[`OPERATIONS.md`](OPERATIONS.md) §4.3、

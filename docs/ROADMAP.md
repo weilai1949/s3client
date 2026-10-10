@@ -124,7 +124,9 @@
 任一版本发布前必须全绿（实测状态；**2026-10-10 复测**（§CE–§CH 四批——`.env.example` ⇔ compose 双向一致 /
 `make dev` 进程误判修复 / 两处文档状态漂移收口 / A 组六项机械优化——合并态全量重跑；后端仍 **10 包**）：
 `gofmt -l` 干净 / `go vet` 0 告警 / `golangci-lint` **0 issues** / `go test ./...` **10/10 包** /
-`go build` OK / `make test-cover` **10/10 包 100.0%（`count==0` 零块）** / `govulncheck` **0 可达**（21 个不可达模块漏洞），
+`go build` OK / `make test-cover` **10/10 包 100.0%（`count==0` 零块）**〔⚠️ 2026-10-10 修正：此前
+`internal/openapi` 实测 97.0% 且 `internal/handler` 另有一个 0 计数块，§CJ 补两处行为测试后才是本值〕 /
+`govulncheck` **0 可达**（21 个不可达模块漏洞），
 与前端 `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` 均 exit 0 / `pnpm test`
 **83 文件 1292 例** / `pnpm test:coverage` 四指标 **100%（4829 / 3243 / 1218 / 4180）** / `pnpm build` OK /
 `pnpm gen:api --check` **exit 0** / `pnpm e2e` **22 passed + 1 skipped**（R9 的 OpenAPI 用例在静态预览无后端时条件跳过）/
@@ -141,7 +143,7 @@
 | Go 静态检查 | `go vet ./...` | ✅ 0 告警 |
 | Go lint | `golangci-lint run ./...`（v2.13.2，`errcheck` / `staticcheck` / `govet` / `ineffassign` / `unused` / `gosec` / `nolintlint`） | ✅ 0 issues |
 | Go 测试 | `go test -race -count=1 ./...` | ✅ 10/10 包通过（2026-09-24 §AA 后由 8 包增至 9 包，R11 新增 `internal/atomicfile`；**2026-10-08 §BR** 再增至 10 包，新增 `internal/tracing`；**2026-10-09 三批合并态复测**（#5 + #6 + #7）仍 10/10，无新增包） |
-| Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100%（**2026-10-09 三批合并态复测**：`make test-cover` 10/10 包全绿、`count==0` 零块——§BT 三件套、#6 schedules 与 #7 storage-report 全部入表） |
+| Go 覆盖率 | `make test-cover`（检查 profile 中 `count==0` 语句块） | ✅ 每包 + 汇总均 100.0% statements；CI 硬门禁 100%（**2026-10-09 三批合并态复测**：`make test-cover` 10/10 包全绿、`count==0` 零块——§BT 三件套、#6 schedules 与 #7 storage-report 全部入表。**2026-10-10 补注**：§CI 新增 `Registry.ForEachOperation`（`dd9ab88`）后，10-10 的「零块」口径出现**两处盲区**——`internal/openapi` 97.0%（`ForEachOperation` 整个函数体）与 `internal/handler` 的 `applyUniversalResponses` nil `Responses` 分支（包级仍报「100.0%」，只有 `count==0` 检查能发现）；已由 `55102a9` 补两处行为测试转绿，见 [`FEATURES.md`](FEATURES.md) §CJ） |
 | Go 漏洞 | `govulncheck ./...` | ✅ 0 可达漏洞（go1.26.9；已入 CI 门禁。**2026-10-10 复测**：0 可达 + 21 个不可达模块漏洞。**2026-10-09 复测**：go1.26.6 上扫出 10 个可达 stdlib 漏洞（net/http、net/textproto、crypto/tls，均 go1.26.9 修复），工具链四处同步升级后归 0；另 24 个「被 require 但代码未调用」的模块漏洞不构成可达面。此前 **2026-10-08 复测**：0 可达 + 21 个不可达模块漏洞；**2026-10-01 复测**同结论） |
 | 前端 lint | `pnpm lint`（`eslint src e2e e2e-real`） | ✅ 0 error / 0 warning |
 | 前端类型 | `pnpm typecheck` + `pnpm typecheck:e2e` | ✅ 均 exit 0 |
