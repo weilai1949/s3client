@@ -14,7 +14,7 @@ func registerMultipart(r *openapi.Registry) {
 				"bucket":      openapi.Str(),
 				"key":         openapi.Str(),
 				"contentType": openapi.Str(),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 uploadId", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"uploadId": openapi.Str(), "key": openapi.Str(), "bucket": openapi.Str(),
@@ -31,7 +31,7 @@ func registerMultipart(r *openapi.Registry) {
 				"uploadId":   openapi.Str(),
 				"partNumber": openapi.Int(),
 				"expiresIn":  openapi.Int(),
-			}, "bucket", "key", "uploadId", "partNumber")},
+			}, "key", "uploadId", "partNumber")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresIn", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"partNumber": openapi.Int(), "url": openapi.Str(), "expiresIn": openapi.Int64(),
@@ -47,7 +47,7 @@ func registerMultipart(r *openapi.Registry) {
 				"key":      openapi.Str(),
 				"uploadId": openapi.Str(),
 				"parts":    openapi.Arr(openapi.BuildObj(map[string]*openapi.Schema{"partNumber": openapi.Int(), "etag": openapi.Str()}, "partNumber", "etag")),
-			}, "bucket", "key", "uploadId", "parts")},
+			}, "key", "uploadId", "parts")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"completed": openapi.Str(),
@@ -62,7 +62,7 @@ func registerMultipart(r *openapi.Registry) {
 				"bucket":   openapi.Str(),
 				"key":      openapi.Str(),
 				"uploadId": openapi.Str(),
-			}, "bucket", "key", "uploadId")},
+			}, "key", "uploadId")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"aborted": openapi.Bool(),

@@ -93,7 +93,10 @@ make rust-audit
 > [`CONFIGURATION.md`](CONFIGURATION.md) ⇔ `internal/config` 读取的 `S3C_*` 变量全量）、
 > `deadcode_gate_test.go`（消音式死代码 AST 判定 + `_test.go` 导出符号 + **生产代码导出符号零引用**）、
 > `ci_consistency_gate_test.go`（两套 CI 的 job / 命令 / 版本 pin 逐项一致 + checkout 深克隆与前端依赖
-> 前置——评审 2026-10-09 C1/C2，见下节）；
+> 前置——评审 2026-10-09 C1/C2，见下节；并钉真 RustFS Go E2E 的 PR 触发面覆盖整个后端，
+> `TestRustFSE2ETriggersCoverWholeBackend`——O11 #82）、
+> `doc_ci_drift_gate_test.go`（文档里 **`<workflow>` × `<job id>`** 形式的引用其 job id 必须真实存在——`perf-budget` 事故；
+> 覆盖率排除项必须完整写出——O11 #82）；
 > 前端半边落点是四份：`apps/web/src/deadcode_gate.test.ts`（API 公开面 + **非 API 模块运行期导出 /
 > 孤儿模块 + 类型导出零引用**（`export type` / `interface`——评审 R7 后半区从声明的盲区升级为真断言），
 > 引用计数走 **TS AST**——注释与字符串字面量不算引用）、
@@ -156,7 +159,7 @@ GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store
 | `codeql.yml` · `analyze` | `semgrep-sast`（GitLab 原生 SAST） | 两侧语言覆盖一致（Go + JS/TS）。**都是报告型、非阈值门禁**：CodeQL 用 `security-and-quality` 查询集；GitLab 侧由 `include: template: Jobs/SAST.gitlab-ci.yml` 引入，`semgrep-sast` 继承 `.sast-analyzer` 的 `allow_failure: true`。逐 `uses:` 的 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住 |
 | `scorecard.yml` · `analysis` | **不镜像** | OpenSSF Scorecard 仓库健康度评分：schedule 周六 02:00 UTC + `workflow_dispatch`；顶层 `permissions: read-all`，仅 analysis job 持 `security-events: write` + `id-token: write`（发布到 api.scorecard.dev 所需 OIDC）。GitLab 无等价原生产品（其 SAST / Dependency Scanning 模板分别扫仓库内代码与发布时点全量依赖，均非本检查）——差异登记见 [`threat-model.md`](threat-model.md) §5.5 |
 | `dependency-review.yml` · `dependency-review` | **不镜像** | PR 期依赖 diff 审查（GitHub 依赖图 API）：每个 `pull_request`（含 dependabot PR），`permissions: contents: read`。GitLab 无等价原生产品；未镜像登记见 [`threat-model.md`](threat-model.md) §5.5 |
-| `perf.yml` · `perf-budget` | **不镜像** | 性能预算门禁（`bench_budget_test.go`：分配数 / 字节的确定性断言为主 + 极宽的耗时兜底）+ 原始 benchmark artifact 留存；`push`/`pull_request` 路径命中 + 周一 03:00 UTC schedule + `workflow_dispatch`。GitLab 无等价原生产品；口径与「测什么 / 不测什么」见 [`PERFORMANCE.md`](PERFORMANCE.md) §4.2 |
+| `perf.yml` · `bench` | **不镜像** | 性能预算门禁（`bench_budget_test.go`：分配数 / 字节的确定性断言为主 + 极宽的耗时兜底）+ 原始 benchmark artifact 留存；`push`/`pull_request` 路径命中 + 周一 03:00 UTC schedule + `workflow_dispatch`。GitLab 无等价原生产品；口径与「测什么 / 不测什么」见 [`PERFORMANCE.md`](PERFORMANCE.md) §4.2 |
 | `fuzz.yml` · `fuzz` | **不镜像** | 原生 fuzz 有界轮跑（stdlib `testing.F`，`-fuzztime` 可配，崩溃上传语料）；周一 03:00 UTC schedule + `workflow_dispatch`。**刻意不进 PR 门禁**（不定长会拖合并），PR 侧只跑种子语料。GitLab 无等价原生产品 |
 | `e2e.yml` | `rustfs-e2e` | 真 RustFS 对端 `TestE2E`（GitLab service 容器替代 compose） |
 | `e2e-playwright.yml` | `playwright-e2e` | 构建产物 + vite preview + Playwright chromium |
@@ -184,7 +187,7 @@ GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store
 |---|---|---|
 | push 到 main/develop | `ci.yml` 五个 job（`server`/`web`/`docker`/`desktop`/**`publish`**）+ `codeql.yml` | `server` / `web` / `docker` / `desktop` / **`semgrep-sast`** |
 | pull_request | `ci.yml` 四个 job（**`publish` 不跑**，`if: != 'pull_request'`）+ `codeql.yml` + `dependency-review.yml` + 路径命中时的三个 E2E | 同上 + 命中的 E2E |
-| workflow_dispatch / web | 全部五套（`ci.yml` 含 `desktop-build`，共 7 个）+ `scorecard.yml` + `perf.yml` + `fuzz.yml`（可带 `fuzztime` 输入） | 全部 8 个 + **`semgrep-sast`**（`desktop-build` 为手动） |
+| workflow_dispatch / web | `ci.yml` 全部 **6 个 job**（含 `desktop-build` 与 `publish`）+ `codeql.yml` / `e2e.yml` / `e2e-playwright.yml` / `e2e-real.yml` + `scorecard.yml` / `perf.yml` / `fuzz.yml`（可带 `fuzztime` 输入）；`release-desktop.yml` 需 `tag` 输入 | `server` / `web` / `docker` / `desktop` / `rustfs-e2e` / `playwright-e2e` / `e2e-real`（**7 个自动 job**）+ **`semgrep-sast`**；`desktop-build` 为 manual |
 | schedule | `codeql.yml`（周日）+ `scorecard.yml`（周六）+ 三个 E2E（周一/三/五）+ `perf.yml` / `fuzz.yml`（周一 03:00） | 三个 E2E + **`semgrep-sast`**（周一/三/五） |
 
 > **`semgrep-sast` 不进上表的「本文件各 job 的 rules」体系**：它的 `rules` 来自被 `include` 的
@@ -216,7 +219,11 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 > ⚠️ **关于覆盖率 100% 门禁**：项目 CI 对后端与前端均设有 100% 覆盖率门禁。后端直接检查
 > profile 中是否存在 `count==0` 的语句块，而不是比较 `total` 百分比——后者只有 1 位小数，
 > 99.96% 会被四舍五入显示成 100.0% 而漏过回退。注意 100% 是「达到」而非「自然覆盖」——
-> 前端 `i18n/**` 被排除统计。**写测试请以行为价值为先**（断言外部行为），不要为凑覆盖率而写
+> 前端排除项为 `src/main.ts` / `src/env.d.ts` / `src/**/*.test.ts` / `src/i18n/messages/**`
+> （纯数据字典，另有键完整性门禁）/ `src/assets/**`，见 [`apps/web/AGENTS.md`](../apps/web/AGENTS.md)
+> 与 `apps/web/vite.config.ts`；`src/i18n/index.ts` 的读写与回退逻辑**纳入统计**（由
+> `doc_ci_drift_gate_test.go` 的 `TestDevelopmentDocumentsAllCoverageExclusions` 钉住不漏写）。
+> **写测试请以行为价值为先**（断言外部行为），不要为凑覆盖率而写
 > 与实现耦合的测试；遇到确实不可达的分支，正确做法是**删除死代码**，而不是写 gap 测试把它
 > 「测活」（2026-09 后端冲 100% 时即据此清掉了 `jobsList` 的 nil 兜底）；反之，若某条兜底
 > 能由公开 API 触发（如 `JobProgress.Status` 是 `omitempty`，`Emit` 允许不带状态），则应

@@ -782,29 +782,6 @@ describe("VersionsDialog", () => {
     expect(bodyWrap().scrollTop).toBe(0);
   });
 
-  it("scrollEl 未绑定时空安全早退；绑定后 measureViewport 取实测 clientHeight", async () => {
-    // open=false：弹窗内容未渲染 → scrollEl 为 null
-    const w = mountDialog();
-    const vm = w.vm as unknown as {
-      onListScroll: () => void;
-      measureViewport: () => void;
-      viewportH: number;
-    };
-    vm.onListScroll();
-    vm.measureViewport();
-    expect(vm.viewportH).toBe(480);
-    // 打开后容器绑定：happy-dom clientHeight=0 → 480 兜底，覆写实测值后取真值
-    await openDialog(w);
-    vm.measureViewport();
-    expect(vm.viewportH).toBe(480);
-    Object.defineProperty(bodyWrap(), "clientHeight", {
-      value: 600,
-      configurable: true,
-    });
-    vm.measureViewport();
-    expect(vm.viewportH).toBe(600);
-  });
-
   it("环境无 ResizeObserver 时弹窗列表仍正常渲染（不注册观察者）", async () => {
     vi.stubGlobal("ResizeObserver", undefined);
     try {

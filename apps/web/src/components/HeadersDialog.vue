@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createRowKey } from '../rowKey'
 import { reactive, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
@@ -27,8 +28,7 @@ const contentType = ref('')
 const meta = reactive<{ rowKey: string; key: string; value: string }[]>([])
 
 /** 行稳定键：组件内自增序列（仅需在同一实例的 v-for 内唯一，不使用会碰撞的业务字段）。 */
-let rowSeq = 0
-const newRowKey = () => `row-${++rowSeq}`
+const newRowKey = createRowKey()
 
 watch(() => props.open, (o) => {
   if (!o) return

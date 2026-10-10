@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
 
@@ -136,6 +137,11 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "# HELP s3c_jobs_active Non-terminal async jobs currently registered (registry cap 256)\n")
 	fmt.Fprintf(w, "# TYPE s3c_jobs_active gauge\n")
 	fmt.Fprintf(w, "s3c_jobs_active %d\n", h.migrateJobs.ActiveCount())
+	// 计划 / 任务清单落盘失败（KNOWN_ISSUES #83）：Save 失败仍降级、内存态保真，
+	// 但不再是静默事件——有增量即可查磁盘满 / 只读。
+	fmt.Fprintf(w, "# HELP s3c_persist_failures_total Schedule/job list persistence (Save) failures\n")
+	fmt.Fprintf(w, "# TYPE s3c_persist_failures_total counter\n")
+	fmt.Fprintf(w, "s3c_persist_failures_total %d\n", service.PersistFailureCount())
 	// 最近一次优雅关停耗时（ROADMAP #18 指标⑤）：关停发生在进程退出前，scrape 赶不上，
 	// 故由下一次启动从 shutdown.json 载入后暴露（值为 0 表示尚无记录 / 首次启动）。
 	fmt.Fprintf(w, "# HELP s3c_last_shutdown_duration_seconds Duration of the most recent graceful shutdown, loaded from data/shutdown.json at startup (0 = no record yet)\n")

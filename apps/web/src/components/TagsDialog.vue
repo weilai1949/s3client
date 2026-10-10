@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createRowKey } from '../rowKey'
 import { reactive, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
@@ -24,8 +25,7 @@ const loading = ref(false)
 const saving = ref(false)
 
 /** 行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段）。 */
-let rowSeq = 0
-const newRowKey = () => `row-${++rowSeq}`
+const newRowKey = createRowKey()
 
 watch(() => props.open, async (o) => {
   if (!o) return

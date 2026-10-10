@@ -99,6 +99,7 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_store_write_failures_total` | counter | **账号库写入失败次数**（落盘 / SQL 写入出错、写操作已回滚；重复 ID、NotFound 这类业务拒绝**不计数**） | 15 分钟内有增量即告警（critical，见 §4.2）——`json` / `encrypted` 驱动唯一的主动存储故障信号 |
 | `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | **数据卷容量**：`S3C_DATA_DIR` 所在文件系统总字节 / 本进程可用字节 | 剩余占比 < 20% 持续 10 分钟告警（见 §4.2）；**序列缺失 = 取不到**（见下方口径） |
 | `s3c_jobs_active` | gauge | **在册（未终结）异步任务数**，与 `JobRegistry` 上限同口径（上限 256） | `>= 230` 持续 10 分钟告警（见 §4.2） |
+| `s3c_persist_failures_total` | counter | **计划 / 任务清单落盘（`Save`）失败次数**（内存态保真、失败降级；此前为静默，KNOWN_ISSUES #83） | 有增量即查（磁盘满 / 只读）；与 `s3c_store_write_failures_total` 区分——后者只覆盖账号库 |
 | `s3c_last_shutdown_duration_seconds` | gauge | **上一次优雅关停耗时**（由 `data/shutdown.json` 在启动时载入；0 = 尚无记录） | 与 `S3C_SHUTDOWN_TIMEOUT`（默认 30s）对比，逼近即说明关停吃紧 |
 | `s3c_ssrf_deny_private` | gauge | SSRF 生效策略：1 = 拒绝私网 / 回环 S3 端点 | 与预期配置比对（`S3C_SSRF_DENY_PRIVATE` 是否真的生效） |
 | `s3c_s3_calls_total` | counter | S3 上游 API 调用总数（成功 + 失败） | 作为上游错误率分母 |

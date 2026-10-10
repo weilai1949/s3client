@@ -31,6 +31,45 @@
 
 ## [Unreleased]
 
+### 修复（2026-10-09 KNOWN_ISSUES #73 / #80 / #81 / #83 闭环：评审 Optional 项收口）
+
+来源 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #73 / #80 / #81 / #83（评审 O2 / O9 / O10 / O12）；同批 #72 / #74–#79 / #82 仍开放。
+
+- **#73** `s3wrap` 4 个签名带 AWS SDK 类型、仅供包内调用的转换函数降为小写（`fromS3Object` / `formatBuckets` / `describeACL` / `granteeLabel`），收窄 SDK 类型外泄到 handler 的入口。
+- **#80** 计划校验错误不再透传 `err.Error()`：新增类型化 `service.ScheduleValidationError`（固定 `Msg`、不含用户输入，`Cause` 仅落日志）与 `ScheduleValidationMessage` 通用回退；handler 改用它；`error_echo_gate_test.go` 新增对 `writeErr(..., 400, x.Error())` 形态的匹配与正则自检。
+- **#81** `POST /api/accounts`（创建账号，无 `{id}` 可判）对 `accounts` 作用域 token 一律 403（`reason=accounts_create`）——堵住「`accounts:[A]` 的 token 铸造任意新账号」的凭证面；`GET /api/accounts`（列表，不含 `SecretKey` 的 `AccountView`）语义写入 [`docs/threat-model.md`](docs/threat-model.md) 最小权限节。
+- **#83** 散点缺陷群 12 处全修：`wrapObjectTooLarge` 漏包两处、`PurgeObject` 变量遮蔽、`dialContextSSRF` 可返回 `(nil,nil)`、`store` / `sqlite` 吞 `encryptAESGCM` 错误、`atomicfile` 固定 `.tmp` 并发互删、storage_report 金额未取整、`Scheduler.List` O(n²)、损坏 `schedules.json` 静默丢弃后被空列表覆盖、非法 cron 停摆不写 `LastError`、`Job.Total` 无锁读、计划 / 任务落盘 `Save` 失败静默（新增指标 `s3c_persist_failures_total`，见 [`docs/OPERATIONS.md`](docs/OPERATIONS.md)）。
+- **验证**：Go——`gofmt` 干净 / `go vet` 0 告警 / `go build ./...` OK / `golangci-lint` 0 issues / `go test ./...` 10/10 包 / `go test ./... -coverprofile` 全包 100.0% statements 且 `count==0` 零块。
+
+### 修复（2026-10-09 / 10-10 KNOWN_ISSUES #82 闭环：R10 残留 · `make check` 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移）
+
+来源 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #82（评审 §5 O11，亦即 R10「工具链 / 文档不一致」的残留半边）；同批 #72 / #74–#79 仍开放。
+
+- **`make check` 补全**：`Makefile` 新增 `build`（`go build ./...`）与 `web-lint`（`pnpm lint`）目标；**2026-10-10 再处置补齐 `web-typecheck`（`pnpm typecheck`）与 `web-build`（`pnpm build`）**，`check` 聚合改为 `vet govulncheck lint build test-cover web-lint web-typecheck web-typecheck-e2e web-test-cover web-build`，`.PHONY` 同步——本地聚合入口逐项覆盖 CI `server`（gofmt 除外）与 `web` 两个 job 的全部静态门禁，并**真跑 `make check` exit 0** 复核。
+- **E2E 路径过滤**：真 RustFS Go E2E 的 PR 触发面从 `apps/server/internal/s3wrap/**` 放宽到 `apps/server/**`（GitHub `e2e.yml` 与 GitLab `.e2e-rustfs-trigger` 双侧）——只改 `internal/handler/**` / `service` / `config` 的后端 PR 不再跳过唯一的真 S3 对端门禁。
+- **DEVELOPMENT 三处漂移**：`perf.yml` 的 job 名 `perf-budget`（不存在）→ 真实 id `bench`；覆盖率排除项补全为 `src/main.ts` / `src/env.d.ts` / `src/**/*.test.ts` / `src/i18n/messages/**` / `src/assets/**`（原只写 `i18n/**`）；workflow_dispatch 触发行的 job 计数纠正（`ci.yml` 共 6 个 job；GitLab 7 个自动 job + `semgrep-sast`）。
+- **防回退门禁**：新增 `apps/server/doc_ci_drift_gate_test.go`（文档引用的 CI job id 必须真实存在 + 覆盖率排除项必须完整写出），`repo_infra_gate_test.go` 加 `TestMakefileCheckMirrorsCIStaticGates`，`ci_consistency_gate_test.go` 加 `TestRustFSE2ETriggersCoverWholeBackend`——三道路径门禁均 TDD 先红后绿。
+- **验证**：`go test .`（含全部门禁）ok；`make check` 逐项覆盖 CI `server`（gofmt 除外）与 `web` 两 job 的全部静态门禁。
+
+### 修复（2026-10-09 KNOWN_ISSUES #72 / #74 / #75 / #77 / #78 闭环：评审 Optional 项第二批）
+
+来源 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #72 / #74 / #75 / #77 / #78（评审 O1 / O3 / O4 / O6 / O7）；至此评审 Optional 项仅剩 #76 / #79。
+
+- **#72** 数据面 `UNSIGNED-PAYLOAD` 收窄：`s3wrap/client.go` 仅在请求带 stream（`PutObject` / `UploadPart`）时注入，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名（此前无条件注入，令这些请求也无谓放弃可计算的载荷哈希）；`http://` endpoint 带 body 操作的残留风险记入 [`docs/threat-model.md`](docs/threat-model.md) §6.2。
+- **#74** 前端传输层保留 HTTP 状态：`api/http.ts` 新增导出类 `ApiError{status, body}`（错误响应归一携带状态与已解析体），成功响应的非 JSON body 由 `request` 边界校验上抛 `ApiError`；`api/jobs.ts` 的 SSE 失败改抛 `ApiError`。
+- **#75** `api/generated.gate.test.ts` 补双向穷尽性断言：生产源码 `opPath('<id>')` 引用的 opId 必须存在，且未被引用的 opId 必须正好等于 8 个「前端不消费」白名单（已变异验证）。
+- **#77** 右键菜单 a11y：`ObjectContextMenu.vue` 关闭还原来源焦点、Escape 改走 `useKeydownStack`（LIFO，删掉 `useObjectBrowser.ts` 的独立 window Escape 监听）；`ObjectList.vue` 的「⋯」触发器补 `aria-haspopup` / `aria-expanded`（新增 `ctxEntryKey` prop）。
+- **#78** i18n 覆盖测试补「模板 / 数据驱动键逐个有定义」断言（堵 `storageReport.kind.${kind}` 等盲区），并清理 3 处硬编码可见文案为 key（`accounts.accessKeyId` / `accounts.accessKeySecret` / `batchEdit.tagsReplace`）。
+- **验证**：Go——`gofmt` 干净 / `go vet` 0 告警 / `go build ./...` OK / `golangci-lint` 0 issues / `go test ./...` 10/10 包 / 全包 100.0% statements 且 `count==0` 零块；前端——`pnpm lint` 0 告警 / `pnpm typecheck` exit 0 / `pnpm test:coverage` **82 文件 1290 例、四指标 100%（4895 / 3260 / 1231 / 4230）**。
+
+### 修复（2026-10-09 KNOWN_ISSUES #76 / #79 闭环：评审 Optional 项第三批 · O1–O12 归零）
+
+来源 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #76 / #79（评审 O5 / O8）；至此 2026-10-09 评审的 O1–O12（#72–#83）**全部闭环**。
+
+- **#76** 前端结构性重复收敛：`newRowKey` 的 7 份逐字复制提取为 `src/rowKey.ts` 的 `createRowKey` 工厂；虚拟滚动管线（ObjectList / MigratePanel / VersionsDialog / RecycleBinPanel 的 4 份）提取为 `src/composables/useVirtualRows.ts`，组件只传响应式数组。
+- **#79** OpenAPI 契约漂移收口：新增 `openapi_status_declared_test.go`（handler 直接写出的状态码——含 `h.xxx()` 委托闭包——必须在该 operation 声明，通用码由共享 `components.responses` 放行）并补齐 migrate jobs 404 / trash 409 / 4 个异步端点 503 / proxy 400+416 / copy-object 409；`putObjectLock` 用新增的 `Schema.AnyOf` 表达 days/years 二选一；新增 `TestOpenAPIBucketNotRequiredInRequestBody`，把 `bucket` 从全部请求体 required 移除（对齐 `bucketOr` 回退账号默认桶与共享 Bucket query「可省略」语义）；重生成 `docs/api/openapi.json` 与前端 `schema.d.ts`。
+- **验证**：Go——`gofmt` 干净 / `go vet` 0 告警 / `go build ./...` OK / `golangci-lint` 0 issues / `go test ./...` 10/10 包 / 全包 100.0% statements 且 `count==0` 零块；前端——`pnpm lint` 0 告警 / `pnpm typecheck` exit 0 / `pnpm test:coverage` **83 文件 1291 例、四指标 100%（4829 / 3241 / 1218 / 4180）** / `pnpm gen:api --check` 同步。
+
 ### 修复（2026-10-09 全仓代码评审批次：C1–C2 + R1–R9 全修，O1–O12 登记）
 
 来源 [`docs/code-review-2026-10-09.md`](docs/code-review-2026-10-09.md)（状态表与 §8 已回写）。

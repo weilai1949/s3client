@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { STORAGE_CLASS_VALUES } from '../storageClass'
+import { PROVIDERS, PROVIDER_GROUPS } from '../regions'
 
 // 静态扫描：源码中以字面量形式传给 t()/tf() 的键，必须都能在字典中解析。
 //
@@ -213,6 +215,23 @@ describe('i18n 字面量键覆盖', () => {
       if (!defined.has(key)) missing.push(`${key}  <- ${[...new Set(refs)].join(', ')}`)
     }
     expect(missing.sort()).toEqual([])
+  })
+
+  // 模板字面量 / 数据驱动键落在字面量正则之外（KNOWN_ISSUES #78）：`dynamicKeyPatterns`
+  // 只让它们免于「死键」误判，却不校验其展开值是否**都有定义**——删掉一个仍会有其它值
+  // 匹配同一模式，故潜在缺口不会被现有用例发现。这里按各键族的**取值来源**显式枚举，
+  // 逐键断言有定义，堵上「模板键静默回显原始 key」的盲区。
+  it('动态拼接键（模板 / 数据驱动）逐个都有定义', () => {
+    const defined = definedKeys()
+    const expected = [
+      ...STORAGE_CLASS_VALUES.map((v) => `storage.class.${v}`),
+      ...PROVIDER_GROUPS.map((g) => `provider.group.${g.id}`),
+      ...PROVIDERS.flatMap((p) => [`provider.${p.value}.label`, `provider.${p.value}.desc`]),
+      // 后端 StorageRecommendation.kind 的有限取值（见 internal/service/storage_report.go）。
+      ...['infrequent', 'archive'].map((k) => `storageReport.kind.${k}`),
+    ]
+    const missing = expected.filter((k) => !defined.has(k)).sort()
+    expect(missing, `以下模板 / 数据驱动键未定义（界面会回显原始 key）：${missing.join(', ')}`).toEqual([])
   })
 
   // 中英键数一致由下方「键集合逐键一致」用例断言（集合相等 ⇒ 数量相等），此处只留规模下限。

@@ -32,6 +32,10 @@ func NewFileSchedulePersister(path string) *FileSchedulePersister {
 }
 
 // Load 读取计划清单；文件不存在或为空时返回 (nil, nil)。
+//
+// 解析失败时**不再静默丢弃**：把损坏文件改名为 `<path>.corrupt` 保留现场后返回错误
+// （KNOWN_ISSUES #83）。原实现返回空清单，调度器下一次 Save 会用空列表覆盖损坏
+// 但可能可恢复的内容——一旦发生就永久丢计划清单。
 func (p *FileSchedulePersister) Load() ([]Schedule, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -47,6 +51,8 @@ func (p *FileSchedulePersister) Load() ([]Schedule, error) {
 	}
 	var recs []Schedule
 	if err := json.Unmarshal(b, &recs); err != nil {
+		// 尽力保留现场：改名失败也不改变「降级为空清单」的结果。
+		_ = os.Rename(p.path, p.path+".corrupt")
 		return nil, fmt.Errorf("parse schedule file: %w", err)
 	}
 	return recs, nil

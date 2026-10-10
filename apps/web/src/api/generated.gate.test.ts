@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import { opPath } from './http'
@@ -22,6 +24,43 @@ const genApi = () =>
     cwd: process.cwd(),
     encoding: 'utf8',
   })
+
+/**
+ * 前端**有意不消费**的 spec 操作（KNOWN_ISSUES #75）。分三类：
+ *   - 同步变体已由 async 版取代：`copyObjects` / `copyPrefix` / `deletePrefix` / `migrate` / `migrateSync`；
+ *   - 账号详情由列表 + 编辑态复用：`getAccount`；
+ *   - 供工具 / 运维而非 UI：`metrics` / `openapi`。
+ * spec 增删操作时必须同步本清单或接入 s3api，否则下方穷尽性用例红灯（见 generated.gate.test.ts 头注释）。
+ */
+const unreferencedOperations = new Set([
+  'copyObjects',
+  'copyPrefix',
+  'deletePrefix',
+  'getAccount',
+  'metrics',
+  'migrate',
+  'migrateSync',
+  'openapi',
+])
+
+/** 递归收集 src 下的生产 TS 文件（排除 *.test.ts）。 */
+function productionTsFiles(dir: string, out: string[] = []): string[] {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) productionTsFiles(p, out)
+    else if (e.name.endsWith('.ts') && !e.name.endsWith('.test.ts')) out.push(p)
+  }
+  return out
+}
+
+/** 生产源码里所有 `opPath('<opId>')` 引用的 operationId 集合。 */
+function referencedOperationIds(): Set<string> {
+  const out = new Set<string>()
+  for (const file of productionTsFiles(join(process.cwd(), 'src'))) {
+    for (const m of readFileSync(file, 'utf8').matchAll(/opPath\('([A-Za-z0-9_]+)'/g)) out.add(m[1])
+  }
+  return out
+}
 
 describe('gen:api 产物', () => {
   it('与 docs/api/openapi.json 逐字节一致（过期即红灯）', () => {
@@ -54,5 +93,25 @@ describe('gen:api 产物', () => {
     // 含 `/` 与空格的 id 必须被编码，否则会被当成路径分隔符
     expect(opPath('deleteAccount', { id: 'a/b c' })).toBe('/api/accounts/a%2Fb%20c')
     expect(opPath('migrateJobCancel', { id: 'job-1' })).toBe('/api/migrate/jobs/job-1/cancel')
+  })
+
+  it('穷尽性：source 引用的 opId 必须存在，operations 中未被引用的必须正好是白名单', () => {
+    // 双向穷尽（KNOWN_ISSUES #75）——补上原 `>= 60` 阈值无法覆盖的「删掉一个 spec
+    // 路径再重新生成仍全绿」缺口：
+    //   反向：生产源码 `opPath('X')` 引用的 X 必须仍存在于 operations（spec 删路径后
+    //         的旧引用 = stale ref → 红灯）；
+    //   正向：operations 中未被源码引用的 opId 必须**正好等于**白名单——spec 新增操作
+    //         却忘了接前端、或白名单失真（引用了白名单里的 id / 漏登记）都会红。
+    const referenced = referencedOperationIds()
+    const ids = Object.keys(operations) as OperationId[]
+
+    const stale = [...referenced].filter((id) => !(id in operations)).sort()
+    expect(stale, `source 引用了 spec 中不存在的操作: ${stale.join(', ')}`).toEqual([])
+
+    const unreferenced = ids.filter((id) => !referenced.has(id)).sort()
+    expect(
+      unreferenced,
+      'operations 中未被前端消费的 opId 与白名单不一致——新增 spec 操作要么接 s3api，要么登记到 unreferencedOperations',
+    ).toEqual([...unreferencedOperations].sort())
   })
 })

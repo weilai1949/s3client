@@ -1,6 +1,7 @@
 package service
 
 import (
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -154,12 +155,14 @@ func AggregateStorageReport(items []s3wrap.ObjectItem, prefix string, now time.T
 	}
 
 	for class, ca := range classAggs {
-		cost := float64(ca.size) / float64(reportGib) * storageClassPrice(class)
+		cost := roundCostUsd(float64(ca.size) / float64(reportGib) * storageClassPrice(class))
 		report.MonthlyCost += cost
 		report.ByStorageClass = append(report.ByStorageClass, StorageClassUsage{
 			StorageClass: class, Count: ca.count, Size: ca.size, MonthlyCost: cost,
 		})
 	}
+	// 累加后再取整，消除浮点求和噪声（如 0.30000000000000004），JSON 输出稳定可读。
+	report.MonthlyCost = roundCostUsd(report.MonthlyCost)
 	sort.Slice(report.ByStorageClass, func(i, j int) bool {
 		if report.ByStorageClass[i].Size != report.ByStorageClass[j].Size {
 			return report.ByStorageClass[i].Size > report.ByStorageClass[j].Size
@@ -178,6 +181,7 @@ func AggregateStorageReport(items []s3wrap.ObjectItem, prefix string, now time.T
 	})
 
 	for _, ra := range recAggs {
+		ra.EstimatedMonthlySaving = roundCostUsd(ra.EstimatedMonthlySaving)
 		report.Recommendations = append(report.Recommendations, *ra)
 	}
 	sort.Slice(report.Recommendations, func(i, j int) bool {
@@ -253,4 +257,10 @@ func reportRecommendation(o s3wrap.ObjectItem, class string, now time.Time) *Sto
 // 两个映射表保证 from 的单价严格高于 to，故结果恒为正。
 func reportSaving(size int64, from, to string) float64 {
 	return float64(size) / float64(reportGib) * (storageClassPrice(from) - storageClassPrice(to))
+}
+
+// roundCostUsd 把金额四舍五入到 6 位小数（微美元）：估算值无需更高精度，
+// 取整可消除浮点累加噪声（KNOWN_ISSUES #83），并让 JSON 输出确定、可对比。
+func roundCostUsd(v float64) float64 {
+	return math.Round(v*1e6) / 1e6
 }

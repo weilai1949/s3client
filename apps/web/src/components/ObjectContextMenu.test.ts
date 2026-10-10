@@ -121,6 +121,50 @@ describe('ObjectContextMenu', () => {
     expect(w.text()).toBe('')
   })
 
+  it('关闭后把焦点还原到打开前的元素（KNOWN_ISSUES #77）', async () => {
+    const trigger = document.createElement('button')
+    trigger.textContent = 'trigger'
+    document.body.appendChild(trigger)
+    trigger.focus()
+    const w = await openMenu(fileEntry)
+    expect(document.activeElement?.textContent).toBe('common.download')
+    await w.setProps({ menu: null })
+    await nextTick()
+    expect(document.activeElement).toBe(trigger)
+    trigger.remove()
+  })
+
+  it('打开时无 HTMLElement 焦点 → previousFocus 为空，关闭安全（KNOWN_ISSUES #77）', async () => {
+    Object.defineProperty(document, 'activeElement', { configurable: true, get: () => null })
+    try {
+      const w = await openMenu(fileEntry)
+      await w.setProps({ menu: null })
+      await nextTick()
+      expect(document.activeElement).toBeNull()
+    } finally {
+      delete (document as unknown as { activeElement?: unknown }).activeElement
+    }
+  })
+
+  it('打开来源元素在关闭前被移除 → 不尝试还原（isConnected=false 分支，KNOWN_ISSUES #77）', async () => {
+    const trigger = document.createElement('button')
+    document.body.appendChild(trigger)
+    trigger.focus()
+    const w = await openMenu(fileEntry)
+    trigger.remove()
+    await w.setProps({ menu: null })
+    await nextTick()
+    // 不抛错即通过；焦点不再指向已移除的元素
+    expect(trigger.isConnected).toBe(false)
+  })
+
+  it('Escape 经 LIFO 键栈触发 close（不再用独立 window 监听，KNOWN_ISSUES #77）', async () => {
+    const w = await openMenu(fileEntry)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+    await nextTick()
+    expect(w.emitted('close')).toBeTruthy()
+  })
+
   it('clamps menu position to viewport with 8px margin', async () => {
     const w = await openMenu(fileEntry, -50, -100)
     const style = w.find('.ctx-menu').attributes('style') ?? ''

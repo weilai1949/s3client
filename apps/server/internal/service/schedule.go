@@ -7,7 +7,7 @@ package service
 // NextRunAt 到点触发，触发后复用既有 JobRegistry 的落盘 / SSE / 重启恢复。
 
 import (
-	"fmt"
+	"errors"
 	"time"
 )
 
@@ -37,34 +37,67 @@ type Schedule struct {
 	LastError string `json:"lastError,omitempty"`
 }
 
+// ScheduleValidationError 表示计划参数校验失败（KNOWN_ISSUES #80）。
+//
+// Msg 是**固定**的、不含任何用户输入的客户端文案——handler 只允许把它写进
+// 400 响应正文（`error_echo_gate` 机械守住 err.Error() 直接透传）。
+// Cause 是供服务端日志与排查的详细原因（可能含用户提交的 cron 原文），
+// **不得**用作 HTTP 响应正文。
+type ScheduleValidationError struct {
+	Msg   string
+	Cause error
+}
+
+func (e *ScheduleValidationError) Error() string {
+	if e.Cause != nil {
+		return e.Msg + ": " + e.Cause.Error()
+	}
+	return e.Msg
+}
+
+// Unwrap 暴露底层原因，供 errors.Is/As 继续下钻。
+func (e *ScheduleValidationError) Unwrap() error { return e.Cause }
+
+// ScheduleValidationMessage 返回计划校验失败的固定客户端文案：校验错误取 Msg
+// （不含用户输入），其余错误回退通用文案——绝不把任意 error 正文透传给客户端
+// （KNOWN_ISSUES #80）。handler 因此无需再判断错误种类。
+func ScheduleValidationMessage(err error) string {
+	var ve *ScheduleValidationError
+	if errors.As(err, &ve) {
+		return ve.Msg
+	}
+	return "invalid schedule configuration"
+}
+
 // Validate 校验计划的结构合法性；now 用于判定 cron 是否可触发。
 //
-// 错误信息点名字段（API 直接回传 400 正文），必须包含：
+// 失败一律返回 *ScheduleValidationError：Msg 点名字段但不回显用户输入，
+// Cause 保留解析细节（如非法 cron 原文）仅供日志。校验点：
 //   - 必填：sourceAccountId / sourceBucket / targetAccountId / targetBucket / cron；
 //   - mode ∈ {空, etag, size_mtime, always}（空 = etag，与 syncHandler 同口径）；
 //   - cron 可解析，且在视界内存在下一次触发（拒绝 `0 0 30 2 *` 这类永不可达计划）。
 func (s *Schedule) Validate(now time.Time) error {
 	switch {
 	case s.SourceAccountID == "":
-		return fmt.Errorf("sourceAccountId is required")
+		return &ScheduleValidationError{Msg: "sourceAccountId is required"}
 	case s.SourceBucket == "":
-		return fmt.Errorf("sourceBucket is required")
+		return &ScheduleValidationError{Msg: "sourceBucket is required"}
 	case s.TargetAccountID == "":
-		return fmt.Errorf("targetAccountId is required")
+		return &ScheduleValidationError{Msg: "targetAccountId is required"}
 	case s.TargetBucket == "":
-		return fmt.Errorf("targetBucket is required")
+		return &ScheduleValidationError{Msg: "targetBucket is required"}
 	case s.Cron == "":
-		return fmt.Errorf("cron is required")
+		return &ScheduleValidationError{Msg: "cron is required"}
 	}
 	if s.Mode != "" && s.Mode != CompareETag && s.Mode != CompareSizeTime && s.Mode != CompareAlways {
-		return fmt.Errorf("mode must be etag, size_mtime or always")
+		return &ScheduleValidationError{Msg: "mode must be etag, size_mtime or always"}
 	}
 	c, err := ParseCron(s.Cron)
 	if err != nil {
-		return fmt.Errorf("cron: %w", err)
+		return &ScheduleValidationError{Msg: "cron is invalid", Cause: err}
 	}
 	if c.Next(now).IsZero() {
-		return fmt.Errorf("cron %q never matches within the search horizon", s.Cron)
+		return &ScheduleValidationError{Msg: "cron expression never matches within the search horizon"}
 	}
 	return nil
 }

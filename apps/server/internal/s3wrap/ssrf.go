@@ -124,7 +124,10 @@ func dialContextSSRF(ctx context.Context, network, addr string) (net.Conn, error
 	if err != nil {
 		return nil, err
 	}
-	var last error
+	// last 初始化为非 nil（KNOWN_ISSUES #83）：解析器返回空 IP 列表且无错误时，
+	// 循环不执行——绝不能把 (nil, nil) 交给 net/http（会被当作拿到了空连接）。
+	// 正常路径下循环里的 blocked / dial 错误会覆盖它；非空结果必走其中一支。
+	last := fmt.Errorf("%w: no address resolved for %s", errEndpointBlocked, host)
 	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	for _, ipa := range ips {
 		if isBlockedIP(ipa.IP) {
@@ -138,7 +141,7 @@ func dialContextSSRF(ctx context.Context, network, addr string) (net.Conn, error
 		}
 		last = err
 	}
-	// dialContextSSRF 仅在「DNS/连接失败时 err != nil」分支被调用；last 必非 nil。
+	// dialContextSSRF 仅在「DNS/连接失败时 err != nil」分支被调用；last 恒非 nil。
 	return nil, last
 }
 

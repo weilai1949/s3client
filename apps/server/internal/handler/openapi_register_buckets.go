@@ -58,7 +58,7 @@ func registerBuckets(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"status": openapi.EnumStr("Enabled", "Suspended"),
-			}, "bucket", "status")},
+			}, "status")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"versioning": openapi.Str(),

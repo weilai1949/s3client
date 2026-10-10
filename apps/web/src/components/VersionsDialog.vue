@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
 import { fmtDate, fmtSize } from '../format'
-import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
+import { ROW_HEIGHT } from '../virtualList'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import CompareDialog from './CompareDialog.vue'
@@ -46,47 +47,12 @@ const truncatedPages = ref(0)
 /* 版本大列表窗口化：仅渲染可视区 + overscan，避免上万条版本冻结弹窗（review Nit：大表无虚拟滚动）。
    行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
    此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。 */
-const scrollEl = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const viewportH = ref(DEFAULT_VIEWPORT_H)
+const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(computed(() => rows.value))
 
-const windowed = computed(() => {
-  const win = virtualWindow(rows.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
-  return { ...win, items: rows.value.slice(win.start, win.end) }
-})
-
-function onListScroll() {
-  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
-}
-
-function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
-}
-
-let resizeObs: ResizeObserver | undefined
-
-// 弹窗内容随 open/loading 才渲染，scrollEl 的 ref 绑定晚于 onMounted：
-// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（同 ObjectList/MigratePanel）。
-watch(scrollEl, (el) => {
-  resizeObs?.disconnect()
-  resizeObs = undefined
-  if (!el || typeof ResizeObserver === 'undefined') return
-  measureViewport()
-  resizeObs = new ResizeObserver(measureViewport)
-  resizeObs.observe(el)
-})
-
-/* 数据整体更换（重开弹窗/重新加载/删除恢复后 rows 被整体重新赋值）必须把窗口起点归零，
-   否则残留的旧 scrollTop 会让 rows.slice(start, end) 为空 → 空白表（review §F2）。
-   只监听数组身份：rows 每次 load 都是整体替换，不存在 push 追加场景。
-   同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
-function resetWindowScroll() {
-  scrollTop.value = 0
-  if (scrollEl.value) scrollEl.value.scrollTop = 0
-}
+/* 数据整体更换（重开弹窗/重新加载/删除恢复后 rows 被整体重新赋值）必须把窗口起点归零（见
+   useVirtualRows.resetWindowScroll），否则残留的旧 scrollTop 会让 rows.slice(start, end)
+   为空 → 空白表。只监听数组身份：rows 每次 load 都是整体替换，不存在 push 追加场景。 */
 watch(() => rows.value, () => resetWindowScroll())
-
-onBeforeUnmount(() => resizeObs?.disconnect())
 
 /** 单次 load 最多翻多少页（页大小由后端固定 ≤1000），避免极端桶把弹窗拖死。 */
 const MAX_VERSION_PAGES = 20

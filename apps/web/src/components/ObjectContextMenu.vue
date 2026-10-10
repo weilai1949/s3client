@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { t } from '../i18n'
+import { useKeydownStack } from '../composables/useKeydownStack'
 import type { Entry } from '../types'
 
 const props = defineProps<{
@@ -8,6 +9,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (e: 'close'): void
   (e: 'open'): void
   (e: 'preview'): void
   (e: 'copy-link'): void
@@ -27,13 +29,37 @@ const emit = defineEmits<{
 
 const menuEl = ref<HTMLElement>()
 
-// 打开时聚焦第一项；方向键在菜单内循环导航（无障碍键盘操作）。
-watch(() => props.menu, async (m) => {
-  if (m) {
-    await nextTick()
-    menuEl.value?.querySelector<HTMLElement>('button')?.focus()
-  }
-})
+// 打开前的焦点元素：关闭时还原，避免键盘用户「菜单一关心就丢焦点」（KNOWN_ISSUES #77）。
+let previousFocus: HTMLElement | null = null
+
+// 打开时记录来源焦点并聚焦第一项；关闭时还原焦点。方向键在菜单内循环导航。
+watch(
+  () => props.menu,
+  async (m) => {
+    if (m) {
+      const active = document.activeElement
+      previousFocus = active instanceof HTMLElement ? active : null
+      await nextTick()
+      menuEl.value?.querySelector<HTMLElement>('button')?.focus()
+    } else {
+      const target = previousFocus
+      previousFocus = null
+      if (target && target.isConnected) target.focus()
+    }
+  },
+)
+
+// Escape 走全局 LIFO 键栈（KNOWN_ISSUES #77）：仅当菜单是最上层时接收 Escape，
+// 不会越过在其之上打开的对话框——旧实现用独立 window 监听无条件关菜单，破坏 LIFO。
+useKeydownStack(
+  (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      emit('close')
+    }
+  },
+  () => props.menu !== null,
+)
 
 function onMenuKeydown(e: KeyboardEvent) {
   // 模板 v-if="menu" 已保证 menuEl 非空、菜单恒含按钮；无需判空守卫。

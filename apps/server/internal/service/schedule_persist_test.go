@@ -81,6 +81,29 @@ func TestScheduleValidate(t *testing.T) {
 	})
 }
 
+// TestScheduleValidationErrorAndMessage 覆盖类型化校验错误：Error/Unwrap 与固定
+// 客户端文案（含非校验错误的通用回退）——handler 只用 Message，绝不透传 err.Error()
+// （KNOWN_ISSUES #80）。
+func TestScheduleValidationErrorAndMessage(t *testing.T) {
+	cause := errors.New("cron: %q is not a number")
+	ve := &ScheduleValidationError{Msg: "cron is invalid", Cause: cause}
+	if got := ve.Error(); got != "cron is invalid: cron: %q is not a number" {
+		t.Errorf("Error() = %q", got)
+	}
+	if !errors.Is(ve, cause) {
+		t.Error("Unwrap 未暴露 Cause")
+	}
+	if got := ScheduleValidationMessage(ve); got != "cron is invalid" {
+		t.Errorf("ScheduleValidationMessage = %q", got)
+	}
+	if got := (&ScheduleValidationError{Msg: "cron is required"}).Error(); got != "cron is required" {
+		t.Errorf("无 Cause Error() = %q", got)
+	}
+	if got := ScheduleValidationMessage(errors.New("raw detail")); got != "invalid schedule configuration" {
+		t.Errorf("非校验错误回退文案 = %q", got)
+	}
+}
+
 // ---- FileSchedulePersister ----
 
 func TestFileSchedulePersisterRoundTrip(t *testing.T) {
@@ -131,13 +154,23 @@ func TestFileSchedulePersisterLoadEmptyFile(t *testing.T) {
 }
 
 func TestFileSchedulePersisterLoadErrors(t *testing.T) {
-	t.Run("corrupt json", func(t *testing.T) {
+	t.Run("corrupt json quarantined", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "schedules.json")
-		if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
+		corrupt := []byte("{not json")
+		if err := os.WriteFile(path, corrupt, 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := NewFileSchedulePersister(path).Load(); err == nil {
 			t.Fatal("want parse error")
+		}
+		// KNOWN_ISSUES #83：损坏内容改名到 <path>.corrupt 保留现场，原路径移走，
+		// 不会被后续空清单 Save 覆盖。
+		got, err := os.ReadFile(path + ".corrupt")
+		if err != nil || string(got) != string(corrupt) {
+			t.Fatalf(".corrupt = %q, %v; want 原损坏内容", got, err)
+		}
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("原文件应已改名移走: %v", err)
 		}
 	})
 	t.Run("unreadable path", func(t *testing.T) {

@@ -30,7 +30,7 @@ func TestDerefAndTimeHelpers(t *testing.T) {
 
 // TestFromS3ObjectNilFields 全空字段的对象也能安全转换（零值 DTO）。
 func TestFromS3ObjectNilFields(t *testing.T) {
-	o := FromS3Object(types.Object{})
+	o := fromS3Object(types.Object{})
 	if o.Key != "" || o.Size != 0 || o.ETag != "" || o.StorageClass != "" || !o.LastModified.IsZero() {
 		t.Fatalf("unexpected zero-value conversion: %+v", o)
 	}
@@ -130,13 +130,13 @@ func TestTaggingSetFromGaps(t *testing.T) {
 // TestDescribeACLOwnerFallbacks owner 显示名为空时回退到 ID；owner 缺省 / 授权缺省均安全。
 func TestDescribeACLOwnerFallbacks(t *testing.T) {
 	// nil owner：owner 为空、非公开、无行。
-	owner, public, rows := DescribeACL(&s3.GetObjectAclOutput{})
+	owner, public, rows := describeACL(&s3.GetObjectAclOutput{})
 	if owner != "" || public || len(rows) != 0 {
 		t.Fatalf("empty acl output: owner=%q public=%v rows=%v", owner, public, rows)
 	}
 
 	// DisplayName 为空 → 回退 ID；grantee 为 nil → 跳过（不公开）。
-	owner, public, rows = DescribeACL(&s3.GetObjectAclOutput{
+	owner, public, rows = describeACL(&s3.GetObjectAclOutput{
 		Owner: &types.Owner{ID: aws.String("id-9")},
 		Grants: []types.Grant{
 			{Grantee: nil, Permission: types.PermissionRead},
@@ -172,8 +172,8 @@ func TestGranteeLabelGaps(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := GranteeLabel(c.grantee); got != c.want {
-				t.Fatalf("GranteeLabel = %q, want %q", got, c.want)
+			if got := granteeLabel(c.grantee); got != c.want {
+				t.Fatalf("granteeLabel = %q, want %q", got, c.want)
 			}
 		})
 	}

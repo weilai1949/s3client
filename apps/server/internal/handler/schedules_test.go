@@ -201,6 +201,24 @@ func TestSchedulesCreateValidation(t *testing.T) {
 	}
 }
 
+// TestSchedulesValidationDoesNotEchoInput 固定 400 文案不回显用户提交的 cron
+// 原文（KNOWN_ISSUES #80）：服务层详细原因只落日志。
+func TestSchedulesValidationDoesNotEchoInput(t *testing.T) {
+	h, _, srcID, dstID := schedAccounts(t)
+	const marker = "NOT_A_CRON_TOKEN"
+	body := schedBody(srcID, dstID, func(m map[string]any) { m["cron"] = marker + " * * * *" })
+	rr := doJSON(t, h.Routes(), http.MethodPost, "/api/schedules", body)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", rr.Code, rr.Body)
+	}
+	if strings.Contains(rr.Body.String(), marker) {
+		t.Errorf("响应回显了用户 cron 原文: %s", rr.Body)
+	}
+	if !strings.Contains(rr.Body.String(), "cron is invalid") {
+		t.Errorf("body = %s, want 固定文案 cron is invalid", rr.Body)
+	}
+}
+
 // ---- 更新 ----
 
 func TestSchedulesUpdate(t *testing.T) {

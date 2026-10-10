@@ -30,12 +30,13 @@ func registerTrash(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"key":    openapi.Str(),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"purged":  openapi.Str(),
 			"deleted": openapi.Int(),
-		})}},
+		})},
+			"409": {Description: "对象被 Object Lock 锁定（ObjectLocked），此前版本已删除", JSON: refSchema("Error")}},
 	})
 }
 

@@ -23,13 +23,13 @@
 
 - `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
 - `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
-- `accounts`：仅允许路径 `{id}` 命中的账号；
+- `accounts`：仅允许路径 `{id}` 命中的账号；`POST /api/accounts`（创建账号，无 `{id}` 可判）对 `accounts` 作用域 token 一律 403（`reason=accounts_create`，KNOWN_ISSUES #81）——创建新账号不属于「访问被授权账号」，会凭空铸造凭证面；
 - 端点级闸（评审 2026-10-09 R1/R2，请求不携带可判定引用、通用判定落空的端点）：`POST /api/accounts/preview-buckets`（自带 endpoint/凭据由服务端拨号的 SSRF 拨号面）对声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；`/api/migrate/jobs*`（任务记录不带归属、无法按桶细判）对声明了 `prefixes` / `accounts` 的 token 一律 403（`reason=migrate_jobs`，`readonly` 读放行）；
 - `expiresAt`：过期后 401（审计 `reason=token_expired`）。
 
-未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs` / `accounts_create`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
-> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表与**计划列表（`GET /api/schedules`，可读到越界计划的桶名，但不可触发 / 删除）**不受其约束；`accounts` 作用域按路径 `{id}` 判定，迁移 / 计划 body 里的账号 id 不受其约束（与 `prefixes` 按 body 桶判定不同）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
+> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表、**计划列表（`GET /api/schedules`，可读到越界计划的桶名，但不可触发 / 删除）**不受其约束；`accounts` 作用域按路径 `{id}` 判定（列表 `GET /api/accounts` 仍放行，返回不含 `SecretKey` 的 `AccountView`，但创建账号 `POST /api/accounts` 已拒），迁移 / 计划 body 里的账号 id 不受其约束（与 `prefixes` 按 body 桶判定不同）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
 
 ### 边界 B：预签名 URL 直传
 
@@ -276,6 +276,7 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 - `/api/metrics` 开启后免鉴权（内网 scrape 用途，见 §2；勿直接暴露公网）。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。
+- **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。
 
 ---
 

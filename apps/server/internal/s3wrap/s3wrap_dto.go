@@ -19,8 +19,8 @@ type ObjectItem struct {
 	StorageClass string
 }
 
-// FromS3Object 把 ListObjectsV2 的单条 Contents 转换为 DTO。
-func FromS3Object(o types.Object) ObjectItem {
+// fromS3Object 把 ListObjectsV2 的单条 Contents 转换为 DTO。
+func fromS3Object(o types.Object) ObjectItem {
 	return ObjectItem{
 		Key:          derefString(o.Key),
 		Size:         derefInt64(o.Size),
@@ -36,8 +36,8 @@ type BucketItem struct {
 	CreationDate time.Time
 }
 
-// FormatBuckets 把 ListBuckets 输出转换为 DTO 列表。
-func FormatBuckets(out *s3.ListBucketsOutput) []BucketItem {
+// formatBuckets 把 ListBuckets 输出转换为 DTO 列表。
+func formatBuckets(out *s3.ListBucketsOutput) []BucketItem {
 	buckets := make([]BucketItem, 0, len(out.Buckets))
 	for _, b := range out.Buckets {
 		buckets = append(buckets, BucketItem{Name: derefString(b.Name), CreationDate: timeOrZero(b.CreationDate)})
@@ -51,8 +51,8 @@ type GrantRow struct {
 	Permission string
 }
 
-// DescribeACL 把 GetObjectAcl 输出转换为展示信息（所有者 / 公开性 / 授权行）。
-func DescribeACL(out *s3.GetObjectAclOutput) (owner string, public bool, rows []GrantRow) {
+// describeACL 把 GetObjectAcl 输出转换为展示信息（所有者 / 公开性 / 授权行）。
+func describeACL(out *s3.GetObjectAclOutput) (owner string, public bool, rows []GrantRow) {
 	if out.Owner != nil {
 		owner = derefString(out.Owner.DisplayName)
 		if owner == "" {
@@ -60,13 +60,13 @@ func DescribeACL(out *s3.GetObjectAclOutput) (owner string, public bool, rows []
 		}
 	}
 	for _, g := range out.Grants {
-		rows = append(rows, GrantRow{Grantee: GranteeLabel(g.Grantee), Permission: string(g.Permission)})
+		rows = append(rows, GrantRow{Grantee: granteeLabel(g.Grantee), Permission: string(g.Permission)})
 	}
 	return owner, aclIsPublic(out.Grants), rows
 }
 
-// GranteeLabel 授权对象的人类可读描述（组 URI / 显示名 / ID）。
-func GranteeLabel(g *types.Grantee) string {
+// granteeLabel 授权对象的人类可读描述（组 URI / 显示名 / ID）。
+func granteeLabel(g *types.Grantee) string {
 	if g == nil {
 		return ""
 	}
@@ -134,7 +134,7 @@ func listPageFrom(out *s3.ListObjectsV2Output) *ListPage {
 		NextToken:      derefString(out.NextContinuationToken),
 	}
 	for _, o := range out.Contents {
-		page.Objects = append(page.Objects, FromS3Object(o))
+		page.Objects = append(page.Objects, fromS3Object(o))
 	}
 	for _, p := range out.CommonPrefixes {
 		page.CommonPrefixes = append(page.CommonPrefixes, derefString(p.Prefix))

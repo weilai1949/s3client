@@ -1687,7 +1687,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     /** @enum {string} */
                     status: "Enabled" | "Suspended";
                 };
@@ -1810,7 +1810,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     rules: {
                         allowedHeaders?: string[];
                         allowedMethods: string[];
@@ -1938,7 +1938,7 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     algorithm: "AES256" | "aws:kms" | "aws:kms:dsse";
-                    bucket: string;
+                    bucket?: string;
                     bucketKeyEnabled?: boolean;
                     kmsKeyId?: string;
                 };
@@ -2070,14 +2070,14 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     /** @description 与 defaultRetentionYears 二选一；必须 ≥1 */
                     defaultRetentionDays?: number;
                     /** @enum {string} */
                     defaultRetentionMode: "GOVERNANCE" | "COMPLIANCE";
                     /** @description 与 defaultRetentionDays 二选一；必须 ≥1 */
                     defaultRetentionYears?: number;
-                };
+                } | unknown | unknown;
             };
         };
         responses: {
@@ -2191,7 +2191,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     /** Format: policy JSON 字符串；空字符串=删除 */
                     policy?: string;
                 };
@@ -2326,7 +2326,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     tags: {
                         key: string;
                         value: string;
@@ -2448,7 +2448,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     errorDocument?: string;
                     indexDocument?: string;
                     redirectAllRequestsTo?: string;
@@ -2572,7 +2572,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     /**
                      * @description 可选；非空时服务端计算并存储全对象校验和（供 verify-checksum 端到端比对）
                      * @enum {string}
@@ -2613,6 +2613,15 @@ export interface operations {
             };
             /** @description 条件字段非法 */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 条件写冲突（ConditionalRequestConflict：并发写，重读后重试） */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2744,6 +2753,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description 在册异步任务已达上限（超限拒绝） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     copyPrefix: {
@@ -2767,7 +2785,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     prefix: string;
                     /** Format: 可选；省略=同桶 */
                     targetBucket?: string;
@@ -2823,7 +2841,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     prefix: string;
                     /** Format: 可选；省略=同桶 */
                     targetBucket?: string;
@@ -2852,6 +2870,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description 在册异步任务已达上限（超限拒绝） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     deleteObjects: {
@@ -2876,7 +2903,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     keys: string[];
                 };
             };
@@ -2932,7 +2959,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     versionId: string;
                 };
@@ -2978,7 +3005,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     prefix: string;
                 };
             };
@@ -3026,7 +3053,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     prefix: string;
                 };
             };
@@ -3050,6 +3077,15 @@ export interface operations {
                         total?: number;
                         truncated?: boolean;
                     };
+                };
+            };
+            /** @description 在册异步任务已达上限（超限拒绝） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -3076,7 +3112,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     keys: string[];
                 };
             };
@@ -3233,7 +3269,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     rules?: {
                         days: number;
                         id: string;
@@ -3280,7 +3316,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     /** @description 可选；条件写：仅当目标对象当前 ETag 匹配时写入 */
                     ifMatch?: string;
                     /**
@@ -3342,7 +3378,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     uploadId: string;
                 };
@@ -3393,7 +3429,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     parts: {
                         etag: string;
@@ -3442,7 +3478,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     contentType?: string;
                     key: string;
                 };
@@ -3493,7 +3529,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     expiresIn?: number;
                     key: string;
                     partNumber: number;
@@ -3673,7 +3709,7 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     acl: "private" | "public-read" | "public-read-write" | "authenticated-read" | "aws-exec-read";
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                 };
             };
@@ -3760,7 +3796,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     /** @enum {string} */
                     status: "ON" | "OFF";
@@ -3881,7 +3917,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     /** @enum {string} */
                     mode: "GOVERNANCE" | "COMPLIANCE";
@@ -4014,7 +4050,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     tags: {
                         key: string;
@@ -4125,7 +4161,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     expiresIn?: number;
                     /** @description 可选；条件写：仅当目标对象当前 ETag 匹配时写入（仅 method=put） */
                     ifMatch?: string;
@@ -4211,7 +4247,25 @@ export interface operations {
                     "application/octet-stream": unknown;
                 };
             };
+            /** @description 参数非法（如 key 缺失 / versionId 非法） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             404: components["responses"]["NotFound"];
+            /** @description Range 请求超出对象大小（InvalidRange） */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     renameObject: {
@@ -4234,7 +4288,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     /** Format: 可选；省略=同桶 */
                     newBucket?: string;
@@ -4284,7 +4338,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     contentType?: string;
                     key: string;
                     metadata?: Record<string, never>;
@@ -4339,7 +4393,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     storageClass: string;
                     versionId?: string;
@@ -4635,7 +4689,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                 };
             };
@@ -4657,6 +4711,15 @@ export interface operations {
                         deleted?: number;
                         purged?: string;
                     };
+                };
+            };
+            /** @description 对象被 Object Lock 锁定（ObjectLocked），此前版本已删除 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -4681,7 +4744,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     versionId?: string;
                 };
@@ -4797,7 +4860,7 @@ export interface operations {
                  *     }
                  */
                 "application/json": {
-                    bucket: string;
+                    bucket?: string;
                     key: string;
                     versionId: string;
                 };
@@ -5097,6 +5160,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description 在册异步任务已达上限（超限拒绝） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     migrateJobs: {
@@ -5230,6 +5302,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description 任务不存在或已被回收 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     migrateJobCancel: {
@@ -5263,6 +5344,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description 任务不存在或已被回收 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     migrateJobEvents: {
@@ -5284,6 +5374,24 @@ export interface operations {
                 content: {
                     /** @example data: {"done":1,"total":100,"migrated":1,"failed":0,"status":"running"} */
                     "text/event-stream": unknown;
+                };
+            };
+            /** @description 任务不存在或已被回收 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description 服务端不支持流式（Streaming not supported） */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

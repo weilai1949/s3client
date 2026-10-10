@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createRowKey } from '../rowKey'
 import { computed, ref, watch } from 'vue'
 
 import {
@@ -33,8 +34,7 @@ interface EditorDoc {
 }
 
 /** 行稳定键：组件内自增序列（同一实例的 v-for 内唯一；不用会碰撞的业务字段 Sid）。 */
-let rowSeq = 0
-const newRowKey = () => `row-${++rowSeq}`
+const newRowKey = createRowKey()
 
 /** parsePolicy / 模板产出的 doc → 编辑态 doc（补齐稳定行键；序列化结果不受影响）。 */
 function toEditorDoc(d: PolicyDoc): EditorDoc {

@@ -426,6 +426,47 @@ func TestMakefileMirrorsCIGates(t *testing.T) {
 	}
 }
 
+// TestMakefileCheckMirrorsCIStaticGates（评审 2026-10-09 R10 / O11 #82）：`make check`
+// 是本地「与 CI 等价的静态检查 + 单测」聚合入口，但此前缺 govulncheck（后端可达漏洞）、
+// 前端 `pnpm lint`、`go build ./...` 三项——本地全绿却在 CI 被这三道拦下。
+// 直接对 `check:` 的依赖列表断言，缺项即红灯（新增 CI 静态门禁时须同步本目标）。
+func TestMakefileCheckMirrorsCIStaticGates(t *testing.T) {
+	text := readRepoFile(t, "Makefile")
+	prereqs := makefileCheckPrereqs(text)
+	// CI `server` / `web` job 的静态门禁在 `make check` 里都要有对应前置。
+	for _, want := range []string{"vet", "govulncheck", "lint", "build", "test-cover", "web-lint", "web-typecheck", "web-typecheck-e2e", "web-test-cover", "web-build"} {
+		if !prereqs[want] {
+			t.Errorf("`make check` 缺前置 %q：本地无法复现 CI 的该门禁（O11 #82）", want)
+		}
+	}
+	if !strings.Contains(text, "web-lint:") || !strings.Contains(text, "pnpm lint") {
+		t.Error("Makefile 必须有 web-lint 目标并真的调用 pnpm lint（O11 #82）")
+	}
+	if !strings.Contains(text, "web-typecheck:") || !strings.Contains(text, "pnpm typecheck") {
+		t.Error("Makefile 必须有 web-typecheck 目标并真的调用 pnpm typecheck（O11 #82）")
+	}
+	if !strings.Contains(text, "web-build:") || !strings.Contains(text, "pnpm build") {
+		t.Error("Makefile 必须有 web-build 目标并真的调用 pnpm build（O11 #82）")
+	}
+	if !strings.Contains(text, "build:") || !strings.Contains(text, "go build ./...") {
+		t.Error("Makefile 必须有 build 目标并真的执行 go build ./...（O11 #82）")
+	}
+}
+
+// makefileCheckPrereqs 解析 `check:` 目标行的依赖列表（目标名集合）。
+func makefileCheckPrereqs(makefile string) map[string]bool {
+	out := map[string]bool{}
+	for _, line := range strings.Split(makefile, "\n") {
+		if !strings.HasPrefix(line, "check:") {
+			continue
+		}
+		for _, f := range strings.Fields(strings.TrimPrefix(line, "check:")) {
+			out[f] = true
+		}
+	}
+	return out
+}
+
 // phonyTargets 解析 .PHONY 行声明的目标集合。
 func phonyTargets(makefile string) map[string]bool {
 	out := map[string]bool{}

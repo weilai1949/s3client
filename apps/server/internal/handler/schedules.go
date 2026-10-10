@@ -133,7 +133,8 @@ func (h *Handler) createSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := h.sched.Create(s)
 	if err != nil {
-		h.writeErr(w, http.StatusBadRequest, err.Error())
+		h.log.Debug("schedule validation failed", "err", err)
+		h.writeErr(w, http.StatusBadRequest, service.ScheduleValidationMessage(err))
 		return
 	}
 	h.writeJSON(w, http.StatusCreated, map[string]any{"schedule": created})
@@ -152,7 +153,8 @@ func (h *Handler) updateSchedule(w http.ResponseWriter, r *http.Request) {
 			h.writeErr(w, http.StatusNotFound, "schedule not found")
 			return
 		}
-		h.writeErr(w, http.StatusBadRequest, err.Error())
+		h.log.Debug("schedule validation failed", "err", err)
+		h.writeErr(w, http.StatusBadRequest, service.ScheduleValidationMessage(err))
 		return
 	}
 	h.writeJSON(w, http.StatusOK, map[string]any{"schedule": updated})

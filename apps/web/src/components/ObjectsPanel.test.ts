@@ -106,6 +106,7 @@ function makeBrowser(overrides: Record<string, unknown> = {}): BrowserApi {
     onRowDblClick: vi.fn(),
     openCtx: vi.fn(),
     openCtxFromButton: vi.fn(),
+    closeCtx: vi.fn(),
     toggleWithShift: vi.fn(),
     toggleSort: vi.fn(),
     openCreateBucket: vi.fn(),

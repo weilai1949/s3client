@@ -121,20 +121,26 @@ func (c *storeCodec) decode(data []byte) ([]*model.Account, error) {
 	return unmarshalAccounts(data)
 }
 
-func (c *storeCodec) encode(list []*model.Account) []byte {
+func (c *storeCodec) encode(list []*model.Account) ([]byte, error) {
 	plain := marshalAccounts(list)
 	// strict（encrypted）：复用文件盐（missing/decode 时确定）。
 	if c.strict {
-		enc, _ := encryptAESGCM(deriveKey(c.password, c.salt, currentParams), plain)
-		return envelope(c.salt, enc)
+		enc, err := encryptAESGCMFn(deriveKey(c.password, c.salt, currentParams), plain)
+		if err != nil {
+			return nil, err
+		}
+		return envelope(c.salt, enc), nil
 	}
 	// permissive（json）：无 key 时明文落盘；有 key 时每次写盘换新盐。
 	if c.password == "" {
-		return plain
+		return plain, nil
 	}
 	salt := randomSalt()
-	enc, _ := encryptAESGCM(deriveKey(c.password, salt, currentParams), plain)
-	return envelope(salt, enc)
+	enc, err := encryptAESGCMFn(deriveKey(c.password, salt, currentParams), plain)
+	if err != nil {
+		return nil, err
+	}
+	return envelope(salt, enc), nil
 }
 
 // randomSalt 生成 encSaltLen 字节的随机盐（crypto/rand 在 Linux 上不会失败）。

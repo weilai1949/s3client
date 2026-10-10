@@ -24,9 +24,10 @@ type fileCodec interface {
 	readError(err error) error
 	// decode 解析磁盘字节为账号列表。
 	decode(data []byte) ([]*model.Account, error)
-	// encode 把有序账号快照编码为磁盘字节。编码视为不可失败：
-	// 明文 JSON / AES-256-GCM 对合法 32 字节密钥均不会失败，crypto/rand 在 Go 1.24+ 也不返回错误。
-	encode(list []*model.Account) []byte
+	// encode 把有序账号快照编码为磁盘字节。加密驱动可能因 AES 密钥异常失败
+	//（deriveKey 恒 32 字节，生产不可达），但错误一律上抛、绝不吞掉后产出损坏信封
+	//（KNOWN_ISSUES #83）；明文 JSON 分支不会失败。
+	encode(list []*model.Account) ([]byte, error)
 }
 
 // fileStore 是 json / encrypted 两个文件驱动共享的内存状态与 CRUD 实现：
@@ -194,7 +195,12 @@ func (f *fileStore) snapshotLocked() []*model.Account {
 
 // persistLocked 假定调用方已持有写锁，把当前快照交给 codec 编码后原子写盘。
 func (f *fileStore) persistLocked() error {
-	if err := atomicfile.WriteFile(f.path, f.codec.encode(f.snapshotLocked())); err != nil {
+	data, err := f.codec.encode(f.snapshotLocked())
+	if err != nil {
+		noteWriteFailure()
+		return fmt.Errorf("encode account file: %w", err)
+	}
+	if err := atomicfile.WriteFile(f.path, data); err != nil {
 		noteWriteFailure()
 		return err
 	}

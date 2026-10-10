@@ -10,7 +10,7 @@ import (
 // 否则 record() 与 Finish 终帧会把 0 当总数回显（「5/0」进度、中断恢复后 0 总数）。
 //
 // 只在「创建时未知（0）」时学习：已知总数的任务其进度帧 Total 与创建值恒等，
-// 不写入 ⇒ 与 migrateAsync 等调用方对 job.Total 的无锁读（响应体回显）无并发写，
+// 不写入 ⇒ 与 migrateAsync 等调用方对 job.Total() 的无锁读（响应体回显）无并发写，
 // 不引入数据竞态。
 func TestJobLearnsUnknownTotalFromProgress(t *testing.T) {
 	r := NewJobRegistry()
@@ -21,8 +21,8 @@ func TestJobLearnsUnknownTotalFromProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TryCreate: %v", err)
 	}
-	if job.Total != 0 {
-		t.Fatalf("Total = %d, want 0（创建时未知）", job.Total)
+	if job.Total() != 0 {
+		t.Fatalf("Total = %d, want 0（创建时未知）", job.Total())
 	}
 
 	// 首个携带正总数的帧：学习为任务总数（record 可见）。
@@ -61,7 +61,7 @@ func TestJobLearnsUnknownTotalFromProgress(t *testing.T) {
 }
 
 // TestJobKnownTotalNotOverwrittenByFrame 已知总数的任务不得被进度帧改写总数——
-// 保证 migrateAsync / copy 等既有路径对 job.Total 的无锁读与 Emit 写入永不并发。
+// 保证 migrateAsync / copy 等既有路径对 job.Total() 的无锁读与 Emit 写入永不并发。
 func TestJobKnownTotalNotOverwrittenByFrame(t *testing.T) {
 	r := NewJobRegistry()
 	defer r.Stop()

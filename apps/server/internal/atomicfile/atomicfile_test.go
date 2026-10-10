@@ -4,8 +4,26 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// TestAtomicTmpPathIsUniquePerCall 临时路径必须每次不同且与目标同目录同名基准，
+// 避免并发 WriteFile 到同一 path 时互相删改临时文件（KNOWN_ISSUES #83）。
+func TestAtomicTmpPathIsUniquePerCall(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "accounts.json")
+	a := atomicTmpPath(p)
+	b := atomicTmpPath(p)
+	if a == b {
+		t.Fatalf("atomicTmpPath 两次相同: %q", a)
+	}
+	if !strings.HasPrefix(a, p+".tmp.") {
+		t.Fatalf("atomicTmpPath = %q, want 前缀 %q", a, p+".tmp.")
+	}
+	if filepath.Dir(a) != filepath.Dir(p) {
+		t.Fatalf("临时文件必须与目标同目录（rename 要求同一文件系统）: %q", a)
+	}
+}
 
 // TestWriteFile 通过注入 OS 操作覆盖原子写全部分支。
 // 真实 OS 上无法触发「写一半失败 / close 报错 / rename 失败」等错误路径，
@@ -16,9 +34,14 @@ func TestWriteFile(t *testing.T) {
 	// 备份并恢复注入点
 	origOpen, origWrite, origSync, origClose, origChmod, origRename, origRemove :=
 		atomicOpenTmp, atomicWrite, atomicSync, atomicClose, atomicChmod, atomicRename, atomicRemove
+	// 固定临时名，便于逐分支断言「临时文件已清理」；唯一性由
+	// TestAtomicTmpPathIsUniquePerCall 单独覆盖。
+	origTmp := atomicTmpPath
+	atomicTmpPath = func(p string) string { return p + ".tmp" }
 	t.Cleanup(func() {
 		atomicOpenTmp, atomicWrite, atomicSync, atomicClose, atomicChmod, atomicRename, atomicRemove =
 			origOpen, origWrite, origSync, origClose, origChmod, origRename, origRemove
+		atomicTmpPath = origTmp
 	})
 
 	t.Run("happy", func(t *testing.T) {

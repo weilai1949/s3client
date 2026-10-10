@@ -57,7 +57,9 @@ func registerObjects(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "二进制流 / text/plain", JSON: nil},
+			"400": {Description: "参数非法（如 key 缺失 / versionId 非法）", JSON: refSchema("Error")},
 			"404": refResp("NotFound"),
+			"416": {Description: "Range 请求超出对象大小（InvalidRange）", JSON: refSchema("Error")},
 		},
 	})
 	r.Operation("POST", "/api/accounts/{id}/set-headers", openapi.Op{
@@ -70,7 +72,7 @@ func registerObjects(r *openapi.Registry) {
 				"key":         openapi.Str(),
 				"contentType": openapi.Str(),
 				"metadata":    openapi.Obj(),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"updated": openapi.Str(),
@@ -89,7 +91,7 @@ func registerObjects(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"rules":  openapi.Arr(lifecycleRuleSchema()),
-			}, "bucket")},
+			})},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"updated": openapi.Int()})}},
 	})
@@ -107,7 +109,7 @@ func registerObjects(r *openapi.Registry) {
 				"versionId":   openapi.Str(),
 				"ifMatch":     desc(openapi.Str(), "可选；条件写：仅当目标对象当前 ETag 匹配时写入（仅 method=put）"),
 				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当目标对象不存在时写入（仅 method=put）"),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "get/put 含 url/expiresIn；post 额外含 fields；put 含 headers（条件头回显）", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"method":    openapi.Str(),
@@ -129,7 +131,7 @@ func registerObjects(r *openapi.Registry) {
 				"key":         openapi.Str(),
 				"ifMatch":     desc(openapi.Str(), "可选；条件写：仅当目标对象当前 ETag 匹配时写入"),
 				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当目标对象不存在时写入（防并发覆盖）"),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"created": openapi.Str(),
@@ -146,7 +148,7 @@ func registerObjects(r *openapi.Registry) {
 				"key":       openapi.Str(),
 				"newBucket": openapi.Str("可选；省略=同桶"),
 				"newKey":    openapi.Str(),
-			}, "bucket", "key", "newKey")},
+			}, "key", "newKey")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"renamed": openapi.Str()})}},
 	})
@@ -164,12 +166,12 @@ func registerObjects(r *openapi.Registry) {
 				"ifNoneMatch": desc(openapi.EnumStr("*"), "可选；条件写：仅当**目标**对象不存在时写入"),
 				"checksumAlgorithm": desc(openapi.EnumStr("CRC64NVME", "SHA256", "CRC32C", "SHA1"),
 					"可选；非空时服务端计算并存储全对象校验和（供 verify-checksum 端到端比对）"),
-			}, "bucket", "key", "newKey")},
+			}, "key", "newKey")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"copied": openapi.Str(),
 			"bucket": openapi.Str(),
-		})}, "412": {Description: "条件不满足（PreconditionFailed）", JSON: refSchema("Error")}, "400": {Description: "条件字段非法", JSON: refSchema("Error")}},
+		})}, "412": {Description: "条件不满足（PreconditionFailed）", JSON: refSchema("Error")}, "409": {Description: "条件写冲突（ConditionalRequestConflict：并发写，重读后重试）", JSON: refSchema("Error")}, "400": {Description: "条件字段非法", JSON: refSchema("Error")}},
 	})
 	// copyObjectsBody 是同步 / 异步批量复制共用的请求体：两者共用 copy.go 的同一个 DTO
 	// （bucket/targetBucket/targetPrefix/keys/deleteSource），此前同步侧误写成 `items`、
@@ -208,7 +210,7 @@ func registerObjects(r *openapi.Registry) {
 		Responses: map[string]openapi.Response{"202": {Description: "jobId", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId": openapi.Str(),
 			"total": openapi.Int(),
-		})}},
+		})}, "503": {Description: "在册异步任务已达上限（超限拒绝）", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/delete", openapi.Op{
 		Tags: []string{"objects"}, Summary: "批量删除（≤1000 keys）", OperationID: "deleteObjects",
@@ -220,7 +222,7 @@ func registerObjects(r *openapi.Registry) {
 				"keys":   openapi.Arr(openapi.Str()),
 				// 注意：真实 handler deleteObjects 仅解析 bucket/keys，无 versionId；
 				// 指定版本删除走 DELETE /api/accounts/{id}/version。
-			}, "bucket", "keys")},
+			}, "keys")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 deleted/failed/lastError；S3 逐 key 失败仍返回 200，deleted 只计成功数", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"deleted":   openapi.Int(),
@@ -232,7 +234,7 @@ func registerObjects(r *openapi.Registry) {
 	deletePrefixBody := openapi.BuildObj(map[string]*openapi.Schema{
 		"bucket": openapi.Str(),
 		"prefix": openapi.Str(),
-	}, "bucket", "prefix")
+	}, "prefix")
 	r.Operation("POST", "/api/accounts/{id}/delete-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归删除前缀（同步流式）", OperationID: "deletePrefix",
 		Params: []openapi.Param{acctIDParam()},
@@ -258,7 +260,7 @@ func registerObjects(r *openapi.Registry) {
 			"jobId":     openapi.Str(),
 			"total":     openapi.Int(),
 			"truncated": openapi.Bool(),
-		})}},
+		})}, "503": {Description: "在册异步任务已达上限（超限拒绝）", JSON: refSchema("Error")}},
 	})
 	// 复制前缀（同步 / 异步）共用 copyPrefixReq：bucket/prefix/targetBucket/targetPrefix。
 	copyPrefixBody := openapi.BuildObj(map[string]*openapi.Schema{
@@ -266,7 +268,7 @@ func registerObjects(r *openapi.Registry) {
 		"prefix":       openapi.Str(),
 		"targetBucket": openapi.Str("可选；省略=同桶"),
 		"targetPrefix": openapi.Str(),
-	}, "bucket", "prefix", "targetPrefix")
+	}, "prefix", "targetPrefix")
 	r.Operation("POST", "/api/accounts/{id}/copy-prefix", openapi.Op{
 		Tags: []string{"objects"}, Summary: "递归复制前缀（同步流式）", OperationID: "copyPrefix",
 		Params: []openapi.Param{acctIDParam()},
@@ -294,7 +296,7 @@ func registerObjects(r *openapi.Registry) {
 			"jobId":     openapi.Str(),
 			"total":     openapi.Int(),
 			"truncated": openapi.Bool(),
-		})}},
+		})}, "503": {Description: "在册异步任务已达上限（超限拒绝）", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/download-zip", openapi.Op{
 		Tags: []string{"objects"}, Summary: "流式 ZIP 打包下载（≤1000 个）", OperationID: "downloadZip",
@@ -304,7 +306,7 @@ func registerObjects(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"keys":   openapi.Arr(openapi.Str()),
-			}, "bucket", "keys")},
+			}, "keys")},
 		},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "application/zip 流", JSON: nil},
@@ -321,7 +323,7 @@ func registerObjects(r *openapi.Registry) {
 				"key":          openapi.Str(),
 				"versionId":    openapi.Str(),
 				"storageClass": openapi.Str(),
-			}, "bucket", "key", "storageClass")},
+			}, "key", "storageClass")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"changed":      openapi.Str(),
@@ -338,7 +340,7 @@ func registerObjects(r *openapi.Registry) {
 				"bucket":    openapi.Str(),
 				"key":       openapi.Str(),
 				"versionId": openapi.Str(),
-			}, "bucket", "key")},
+			}, "key")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "method=none 表示无可验证来源（厂商未存校验和 / 分段合成 / 非单段 ETag），match=false", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"bucket":    openapi.Str(),
@@ -383,7 +385,7 @@ func registerObjectMeta(r *openapi.Registry) {
 				"bucket": openapi.Str(),
 				"key":    openapi.Str(),
 				"acl":    openapi.EnumStr("private", "public-read", "public-read-write", "authenticated-read", "aws-exec-read"),
-			}, "bucket", "key", "acl")},
+			}, "key", "acl")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"acl": openapi.Str()})}},
 	})
@@ -424,7 +426,7 @@ func registerObjectMeta(r *openapi.Registry) {
 				"versionId":       openapi.Str(),
 				"mode":            openapi.EnumStr("GOVERNANCE", "COMPLIANCE"),
 				"retainUntilDate": desc(openapi.Str(), "RFC3339（如 2031-02-03T04:05:06Z），必须是未来时刻"),
-			}, "bucket", "key", "mode", "retainUntilDate")},
+			}, "key", "mode", "retainUntilDate")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"bucket":          openapi.Str(),
@@ -462,7 +464,7 @@ func registerObjectMeta(r *openapi.Registry) {
 				"key":       openapi.Str(),
 				"versionId": openapi.Str(),
 				"status":    openapi.EnumStr("ON", "OFF"),
-			}, "bucket", "key", "status")},
+			}, "key", "status")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"bucket":    openapi.Str(),
@@ -480,7 +482,7 @@ func registerObjectMeta(r *openapi.Registry) {
 				"bucket": openapi.Str(),
 				"key":    openapi.Str(),
 				"tags":   openapi.Arr(tagRowSchema()),
-			}, "bucket", "key", "tags")},
+			}, "key", "tags")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{"tags": openapi.Arr(tagRowSchema())})}},
 	})

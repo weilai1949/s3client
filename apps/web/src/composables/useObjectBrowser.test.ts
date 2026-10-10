@@ -85,14 +85,6 @@ describe('useObjectBrowser', () => {
     expect(browser.ctxMenu.value).toBeNull()
   })
 
-  it('onKey closes ctx on Escape', () => {
-    const browser = useObjectBrowser(makeBindings())
-    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as unknown as Entry)
-    expect(browser.ctxMenu.value).not.toBeNull()
-    browser.onKey(new KeyboardEvent('keydown', { key: 'Escape' }))
-    expect(browser.ctxMenu.value).toBeNull()
-  })
-
   it('toggle adds/removes key from selected', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.toggle('a.txt')

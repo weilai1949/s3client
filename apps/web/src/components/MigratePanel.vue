@@ -8,7 +8,8 @@ import { s3api, subscribeMigrateEvents } from '../api'
 import { state, currentAccount, toast, selectAccount, requestTab } from '../store'
 import { fmtSize } from '../format'
 import { MIGRATE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
-import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
+import { ROW_HEIGHT } from '../virtualList'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import SchedulesSection from './SchedulesSection.vue'
@@ -17,41 +18,9 @@ import type { BucketItem, JobRecord, ObjectItem } from '../types'
 // 大对象列表（listAll 上限 200×1000）走窗口化渲染，避免数十万行直接 v-for 冻结页面。
 // 行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
 // 此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。
-const scrollEl = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const viewportH = ref(DEFAULT_VIEWPORT_H)
-const windowed = computed(() => {
-  const win = virtualWindow(objects.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
-  return { ...win, items: objects.value.slice(win.start, win.end) }
-})
-function onListScroll() {
-  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
-}
-function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
-}
-let resizeObs: ResizeObserver | undefined
-// 虚拟列表在组件挂载后才随对象数据渲染，scrollEl 的 ref 绑定晚于 onMounted：
-// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（修复原 onMounted 恒空失效）。
-watch(scrollEl, (el) => {
-  resizeObs?.disconnect()
-  resizeObs = undefined
-  if (!el || typeof ResizeObserver === 'undefined') return
-  measureViewport()
-  resizeObs = new ResizeObserver(measureViewport)
-  resizeObs.observe(el)
-})
-
-// 窗口起点必须随 objects 变化重置：重新列出/切换前缀后旧的 scrollTop 会让
-// objects.slice(start, end) 为空 → 空白表（review §F2）。同步写回真实 DOM scrollTop
-// （浏览器在内容缩短时也会钳制，此处显式归零避免依赖钳制时机）。
-function resetWindowScroll() {
-  scrollTop.value = 0
-  if (scrollEl.value) scrollEl.value.scrollTop = 0
-}
+const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(computed(() => objects.value))
 
 onBeforeUnmount(() => {
-  resizeObs?.disconnect()
   // 组件卸载时若仍有进行中的 SSE 订阅，立即断开（避免后台 goroutine 持续推事件）。
   if (activeUnsub) activeUnsub()
   // 后端 job 不主动取消（用户离开后任务可能仍在 server 端进行；

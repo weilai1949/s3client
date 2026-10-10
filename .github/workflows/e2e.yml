@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'apps/server/internal/s3wrap/**'
-      - 'apps/server/go.mod'
-      - 'apps/server/go.sum'
+      # 整个后端（不止 s3wrap）：只改 internal/handler/** 或 service / config 的 PR
+      # 也曾跳过这条唯一的真 RustFS S3 对端门禁（评审 2026-10-09 O11 #82）。
+      # 与 e2e-real.yml 的 'apps/server/**' 同口径；由 ci_consistency_gate_test.go
+      # 的 TestRustFSE2ETriggersCoverWholeBackend 钉住两套 CI 一致。
+      - 'apps/server/**'
       - 'docker-compose.yml'
       - '.github/workflows/e2e.yml'
   schedule:

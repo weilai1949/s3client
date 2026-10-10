@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
@@ -98,28 +99,46 @@ func TestSharedHTTPClientIsSingleton(t *testing.T) {
 	}
 }
 
-// TestUnsignedPayloadMiddlewareInjectsHash 中间件行为：给下游签名器注入 UNSIGNED-PAYLOAD 并透传请求。
+// TestUnsignedPayloadMiddlewareInjectsHash 中间件行为：**带 body** 的请求注入
+// UNSIGNED-PAYLOAD 并透传；无 body 的请求不注入（KNOWN_ISSUES #72）。
 func TestUnsignedPayloadMiddlewareInjectsHash(t *testing.T) {
 	m := &unsignedPayloadSetter{}
 	if got := m.ID(); got != "s3client:unsigned-payload" {
 		t.Fatalf("middleware id = %q", got)
 	}
-	seenHash := ""
-	called := false
-	next := middleware.FinalizeHandlerFunc(func(ctx context.Context, in middleware.FinalizeInput) (middleware.FinalizeOutput, middleware.Metadata, error) {
-		called = true
-		seenHash = v4.GetPayloadHash(ctx)
-		return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
-	})
-	_, _, err := m.HandleFinalize(context.Background(), middleware.FinalizeInput{}, next)
+
+	run := func(in middleware.FinalizeInput) string {
+		seenHash := ""
+		called := false
+		next := middleware.FinalizeHandlerFunc(func(ctx context.Context, _ middleware.FinalizeInput) (middleware.FinalizeOutput, middleware.Metadata, error) {
+			called = true
+			seenHash = v4.GetPayloadHash(ctx)
+			return middleware.FinalizeOutput{}, middleware.Metadata{}, nil
+		})
+		if _, _, err := m.HandleFinalize(context.Background(), in, next); err != nil {
+			t.Fatalf("HandleFinalize: %v", err)
+		}
+		if !called {
+			t.Fatal("next handler was not invoked")
+		}
+		return seenHash
+	}
+
+	base := smithyhttp.NewStackRequest().(*smithyhttp.Request)
+	withBody, err := base.SetStream(strings.NewReader("data"))
 	if err != nil {
-		t.Fatalf("HandleFinalize: %v", err)
+		t.Fatalf("SetStream: %v", err)
 	}
-	if !called {
-		t.Fatal("next handler was not invoked")
+	if got := run(middleware.FinalizeInput{Request: withBody}); got != unsignedPayload {
+		t.Fatalf("带 body 请求 payload hash = %q, want %q", got, unsignedPayload)
 	}
-	if seenHash != unsignedPayload {
-		t.Fatalf("payload hash = %q, want %q", seenHash, unsignedPayload)
+	noBody := smithyhttp.NewStackRequest()
+	if got := run(middleware.FinalizeInput{Request: noBody}); got == unsignedPayload {
+		t.Fatalf("无 body 请求不应注入 UNSIGNED-PAYLOAD，got %q", got)
+	}
+	// nil Request（极端兜底）：不得注入。
+	if got := run(middleware.FinalizeInput{}); got == unsignedPayload {
+		t.Fatalf("空 Request 不应注入 UNSIGNED-PAYLOAD，got %q", got)
 	}
 }
 

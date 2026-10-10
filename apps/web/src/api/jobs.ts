@@ -1,5 +1,5 @@
 import type { MigrationResult } from '../types'
-import { opPath, request } from './http'
+import { ApiError, opPath, request } from './http'
 import { operations } from './operations'
 import { getBase, readToken } from './storage'
 
@@ -62,7 +62,7 @@ export function subscribeMigrateEvents(
         signal: ctrl.signal,
       })
       if (!res.ok || !res.body) {
-        throw new Error(`${res.status} ${res.statusText}`)
+        throw new ApiError(res.status, res.statusText, undefined)
       }
       reader = res.body.getReader()
       const dec = new TextDecoder()

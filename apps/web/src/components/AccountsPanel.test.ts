@@ -208,8 +208,8 @@ describe('AccountsPanel', () => {
     await findButton(w, 'accounts.add').trigger('click')
 
     await fieldInput(w, 'accounts.name').setValue('NewAcc')
-    await fieldInput(w, 'AccessKey ID').setValue('ak')
-    await fieldInput(w, 'AccessKey Secret').setValue('sk')
+    await fieldInput(w, 'accounts.accessKeyId').setValue('ak')
+    await fieldInput(w, 'accounts.accessKeySecret').setValue('sk')
     await findButton(w, 'accounts.fetchBuckets').trigger('click')
     await flushPromises()
     expect(s3api.previewBuckets).toHaveBeenCalledTimes(1)
@@ -244,8 +244,8 @@ describe('AccountsPanel', () => {
     expect((w.find('input[placeholder="accounts.namePh"]').element as HTMLInputElement).value).toBe('MyAcc')
     expect((w.find('input[placeholder="accounts.endpointPh"]').element as HTMLInputElement).value).toBe('oss-cn-hangzhou.aliyuncs.com')
     expect((w.find('input[list="region-list"]').element as HTMLInputElement).value).toBe('oss-cn-hangzhou')
-    expect((fieldInput(w, 'AccessKey ID').element as HTMLInputElement).value).toBe('ak1')
-    const secret = fieldInput(w, 'AccessKey Secret')
+    expect((fieldInput(w, 'accounts.accessKeyId').element as HTMLInputElement).value).toBe('ak1')
+    const secret = fieldInput(w, 'accounts.accessKeySecret')
     expect((secret.element as HTMLInputElement).value).toBe('')
     expect(secret.attributes('placeholder')).toBe('accounts.secretKeepPh')
     // 编辑态：保存按钮、桶选项，不再显示 fetchHint
@@ -276,8 +276,8 @@ describe('AccountsPanel', () => {
     expect(w.text()).toContain('accounts.needCreds')
 
     // 补全凭据 → API 拒绝 → bucketErr 展示
-    await fieldInput(w, 'AccessKey ID').setValue('ak')
-    await fieldInput(w, 'AccessKey Secret').setValue('sk')
+    await fieldInput(w, 'accounts.accessKeyId').setValue('ak')
+    await fieldInput(w, 'accounts.accessKeySecret').setValue('sk')
     await findButton(w, 'accounts.fetchBuckets').trigger('click')
     await flushPromises()
     expect(s3api.previewBuckets).toHaveBeenCalledTimes(1)
@@ -292,8 +292,8 @@ describe('AccountsPanel', () => {
     const w = mountPanel()
     await flushPromises()
     await findButton(w, 'accounts.add').trigger('click')
-    await fieldInput(w, 'AccessKey ID').setValue('ak')
-    await fieldInput(w, 'AccessKey Secret').setValue('sk')
+    await fieldInput(w, 'accounts.accessKeyId').setValue('ak')
+    await fieldInput(w, 'accounts.accessKeySecret').setValue('sk')
     await findButton(w, 'accounts.fetchBuckets').trigger('click')
     await flushPromises()
     // res.buckets ?? [] → 无选项，仅占位
@@ -436,8 +436,8 @@ describe('AccountsPanel', () => {
     expect((pub.element as HTMLInputElement).value).toBe('https://pub.example.com')
 
     // 拉取桶后：select 选中桶
-    await fieldInput(w, 'AccessKey ID').setValue('ak')
-    await fieldInput(w, 'AccessKey Secret').setValue('sk')
+    await fieldInput(w, 'accounts.accessKeyId').setValue('ak')
+    await fieldInput(w, 'accounts.accessKeySecret').setValue('sk')
     await findButton(w, 'accounts.fetchBuckets').trigger('click')
     await flushPromises()
     const bucketSelect = w.find('.bucket-row select')

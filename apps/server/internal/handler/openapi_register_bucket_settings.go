@@ -26,7 +26,7 @@ func registerBucketSettings(r *openapi.Registry) {
 				"algorithm":        openapi.EnumStr("AES256", "aws:kms", "aws:kms:dsse"),
 				"kmsKeyId":         openapi.Str(),
 				"bucketKeyEnabled": openapi.Bool(),
-			}, "bucket", "algorithm")},
+			}, "algorithm")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"configured": openapi.Bool(), "algorithm": openapi.Str(),
@@ -57,7 +57,7 @@ func registerBucketSettings(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"rules":  openapi.Arr(corsRuleSchema()),
-			}, "bucket", "rules")},
+			}, "rules")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "rules 非空时 updated；空数组触发删除时 deleted", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"updated": openapi.Int(),
@@ -91,7 +91,7 @@ func registerBucketSettings(r *openapi.Registry) {
 				"indexDocument":         openapi.Str(),
 				"errorDocument":         openapi.Str(),
 				"redirectAllRequestsTo": openapi.Str(),
-			}, "bucket")},
+			})},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"configured": openapi.Bool(),
@@ -121,7 +121,7 @@ func registerBucketSettings(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"policy": openapi.Str("policy JSON 字符串；空字符串=删除"),
-			}, "bucket")},
+			})},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "policy 非空时 configured；空字符串触发删除时 deleted", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"configured": openapi.Bool(),
@@ -153,7 +153,7 @@ func registerBucketSettings(r *openapi.Registry) {
 			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
 				"bucket": openapi.Str(),
 				"tags":   openapi.Arr(openapi.BuildObj(map[string]*openapi.Schema{"key": openapi.Str(), "value": openapi.Str()}, "key", "value")),
-			}, "bucket", "tags")},
+			}, "tags")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "tags 非空时 updated；空数组触发删除时 deleted", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"updated": openapi.Int(),
@@ -182,17 +182,24 @@ func registerBucketSettings(r *openapi.Registry) {
 		Params:    []openapi.Param{acctIDParam(), bucketQ},
 		Responses: map[string]openapi.Response{"200": {Description: "未启用 Object Lock 时 enabled=false", JSON: objectLockResp}},
 	})
+	// 请求体 schema：days / years 二选一（handler 要求其一），用 anyOf 显式表达
+	//（KNOWN_ISSUES #79；旧声明只 required bucket+mode，未表达该约束）。
+	objectLockReq := openapi.BuildObj(map[string]*openapi.Schema{
+		"bucket":                openapi.Str(),
+		"defaultRetentionMode":  openapi.EnumStr("GOVERNANCE", "COMPLIANCE"),
+		"defaultRetentionDays":  desc(openapi.Int(), "与 defaultRetentionYears 二选一；必须 ≥1"),
+		"defaultRetentionYears": desc(openapi.Int(), "与 defaultRetentionDays 二选一；必须 ≥1"),
+	}, "defaultRetentionMode")
+	objectLockReq.AnyOf = []*openapi.Schema{
+		{Required: []string{"defaultRetentionDays"}},
+		{Required: []string{"defaultRetentionYears"}},
+	}
 	r.Operation("PUT", "/api/accounts/{id}/bucket/object-lock", openapi.Op{
 		Tags: []string{"bucket-settings"}, Summary: "设置桶默认保留策略（桶须创建时启用 Object Lock）", OperationID: "putObjectLock",
 		Params: []openapi.Param{acctIDParam()},
 		Request: &openapi.Request{
 			Required: true,
-			Content: openapi.MediaType{Schema: openapi.BuildObj(map[string]*openapi.Schema{
-				"bucket":                openapi.Str(),
-				"defaultRetentionMode":  openapi.EnumStr("GOVERNANCE", "COMPLIANCE"),
-				"defaultRetentionDays":  desc(openapi.Int(), "与 defaultRetentionYears 二选一；必须 ≥1"),
-				"defaultRetentionYears": desc(openapi.Int(), "与 defaultRetentionDays 二选一；必须 ≥1"),
-			}, "bucket", "defaultRetentionMode")},
+			Content:  openapi.MediaType{Schema: objectLockReq},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: objectLockResp},
 			"400": {Description: "输入非法 / 桶未启用 Object Lock", JSON: refSchema("Error")},

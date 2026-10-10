@@ -50,8 +50,8 @@
 | R7 | Required（规范） | 3 个死类型导出（违反 AGENTS.md 硬约束 #5） | ✅ 已修（本批次，连带补类型维度门禁） |
 | R8 | Required（契约） | `multipartParts` 手写路径绕过生成契约 + 注释失效 | ✅ 已修（本批次） |
 | R9 | Required（测试） | e2e OpenAPI 断言不可能失败 | ✅ 已修（本批次，落地口径见 §8 回写） |
-| R10 | Required（工程） | 门禁清单/CI 路径过滤/文档漂移（详见 §5 O11） | ✅ 工具链残留已解除（本机 go1.26.9）；门禁清单/路径过滤/文档漂移半边并入 O11（#82） |
-| O1–O12 | Optional | 载荷完整性、契约漂移、重复实现、可访问性、i18n 等 | ⬜ 已登记（[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #72–#83，待排期） |
+| R10 | Required（工程） | 门禁清单/CI 路径过滤/文档漂移（详见 §5 O11） | ✅ **已全部闭环**（2026-10-09 同日第二批，#82）：工具链残留已解除（本机 go1.26.9）+ `make check` 补项 / 真 RustFS E2E 路径过滤放宽到 `apps/server/**` / DEVELOPMENT 三处漂移修正 + 三道防回退门禁 |
+| O1–O12 | Optional | 载荷完整性、契约漂移、重复实现、可访问性、i18n 等 | ✅ **全部闭环**（O1/O3/O4/O6/O7 → #72/#74/#75/#77/#78，见 [`FEATURES.md`](FEATURES.md) §CC；O2/O9/O10/O11/O12 → #73/#80/#81/#82/#83；O5/O8 → #76/#79，见 §CD）。2026-10-09 评审的 Optional 项已归零 |
 
 > 状态由 **2026-10-09 修复批次**回写（逐条落地与例外口径见 §8 末尾「本批次回写」）；§1 门禁数字仍为评审时点快照，不改写。
 
@@ -249,8 +249,8 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
   技术债 / 缺陷，按「同一事项只登记一处」（[`DEVELOPMENT.md`](DEVELOPMENT.md) §4）不进 ROADMAP §三；
   ROADMAP §四门禁基线已同步本轮实测值。
 - **R10**：工具链残留解除——CI 侧随 `5f0d555` 收口，本机已装 `/usr/local/go1.26.9`（与 CI 同版本），
-  本批全部 Go 门禁在该版本下复跑；表内 R10 的「门禁清单 / CI 路径过滤 / 文档漂移」半边内容并入
-  O11（#82）登记。
+  本批全部 Go 门禁在该版本下复跑；「门禁清单 / CI 路径过滤 / 文档漂移」半边先并入 O11（#82）登记，
+  随后于**同日第二批闭环**（见文末「第二批回写」）。
 - **三处与建议不完全一致的落地口径**（评审原文保留、不改写）：
   - **R6**：原句「`RecycleBinPanel` 只有 try/catch、无 finally → `loadingBuckets` 永久 true」与现场
     不符——该文件此前并无 `loadingBuckets` 标志（桶选择器也不随请求禁用）。落地为「新增
@@ -267,5 +267,19 @@ P2 拿新快照 S2 并先写 → P1 后写 S1 → 磁盘回退到旧状态（进
     真正消费，而非删除契约。
 - **第 7 条的两条未覆盖面已补**：`make e2e-real` **5 passed**（评审时点未复跑）；`-race` 全量经
   `make test-cover` 复跑全绿（「当前 CI 红」由 C1/C2 修复收口，CI 真机结果随下次流水线确认）。
+
+**第二批回写（2026-10-09，同日并行批次）**：
+
+- **R10 残留（= [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #82 / 本报告 §5 O11）全部闭环**：
+  ① `make check` 补齐 CI `server` / `web` job 的三道静态门禁（新增 `build` / `web-lint` 目标 +
+  `govulncheck`，聚合项逐条对齐）；② 真 RustFS Go E2E 的 PR 触发面由
+  `apps/server/internal/s3wrap/**` 放宽到 `apps/server/**`（GitHub `e2e.yml` 与 GitLab
+  `.e2e-rustfs-trigger` 双侧）——只改 `internal/handler/**` 的后端 PR 不再跳过唯一的真 S3 对端门禁；
+  ③ DEVELOPMENT 三处漂移修正（`perf-budget` → 真实 job id `bench`、覆盖率排除项补全、
+  workflow_dispatch job 计数纠正）。新增防回退门禁：`apps/server/doc_ci_drift_gate_test.go` +
+  `TestMakefileCheckMirrorsCIStaticGates` + `TestRustFSE2ETriggersCoverWholeBackend`（均 TDD 先红后绿）。
+- 同批并行批次另闭环 **O2 / O9 / O10 / O12**（`KNOWN_ISSUES` #73 / #80 / #81 / #83）。
+- 至此 Optional 仅剩 **O1 / O3–O8**（#72 / #74–#79）开放；**C1–C2 与 R1–R10 全部闭环**。
+
 - 本报告仍为活跃文档（状态表已回写），按第 6 条在引用收敛后执行
   [`archive/index.md`](archive/index.md)「归档操作」冻结。

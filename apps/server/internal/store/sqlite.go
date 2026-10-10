@@ -47,14 +47,18 @@ CREATE INDEX IF NOT EXISTS idx_accounts_sort ON accounts(sort_order);
 `
 
 // encryptSecret 在配置了 storeKey 时把明文密钥加密为 S3C3 列值；空 key 原样返回。
-// deriveKey 恒返回 32 字节合法密钥，故 AES-GCM 加密不会失败（无冗余错误分支）。
-func (s *SQLiteStore) encryptSecret(secret string) string {
+// encryptAESGCM 的失败只可能来自密钥长度非法（deriveKey 恒 32 字节，生产不可达），
+// 但仍向上传播而非吞掉——静默产出损坏密文会让密钥永远解不回来（KNOWN_ISSUES #83）。
+func (s *SQLiteStore) encryptSecret(secret string) (string, error) {
 	if s.storeKey == "" || secret == "" {
-		return secret
+		return secret, nil
 	}
 	salt := randomSalt()
-	enc, _ := encryptAESGCM(deriveKey(s.storeKey, salt, currentParams), []byte(secret))
-	return string(envelope(salt, enc))
+	enc, err := encryptAESGCMFn(deriveKey(s.storeKey, salt, currentParams), []byte(secret))
+	if err != nil {
+		return "", fmt.Errorf("encrypt secret_key: %w", err)
+	}
+	return string(envelope(salt, enc)), nil
 }
 
 // decryptSecret 解析库中的 secret_key 列：S3C2/S3C3 密文按 storeKey 解密，
@@ -152,8 +156,12 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 
 // insertAccount 加密 secret_key 后写入。
 func (s *SQLiteStore) insertAccount(a *model.Account, sortOrder int) error {
+	secret, err := s.encryptSecret(a.SecretKey)
+	if err != nil {
+		return err
+	}
 	stored := *a
-	stored.SecretKey = s.encryptSecret(a.SecretKey)
+	stored.SecretKey = secret
 	return insertAccountExec(s.db, &stored, sortOrder)
 }
 
@@ -326,7 +334,11 @@ func (s *SQLiteStore) Update(id string, a *model.Account) (*model.Account, error
 	cur.PathStyle = a.PathStyle
 	cur.UseSSL = a.UseSSL
 	cur.UpdatedAt = time.Now().UTC()
-	secret := s.encryptSecret(cur.SecretKey)
+	secret, err := s.encryptSecret(cur.SecretKey)
+	if err != nil {
+		noteWriteFailure()
+		return nil, err
+	}
 	if _, err := s.db.Exec(`
 UPDATE accounts SET name=?,endpoint=?,public_endpoint=?,region=?,access_key=?,secret_key=?,bucket=?,path_style=?,use_ssl=?,updated_at=?
 WHERE id=?`,

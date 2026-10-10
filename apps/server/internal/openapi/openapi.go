@@ -60,7 +60,10 @@ type Schema struct {
 	Example    json.RawMessage    `json:"example,omitempty"`
 	Properties map[string]*Schema `json:"properties,omitempty"`
 	Required   []string           `json:"required,omitempty"`
-	Items      *Schema            `json:"items,omitempty"`
+	// AnyOf 表达「下列子 schema 至少满足一个」（OAS 3.0 `anyOf`）：用于 days/years
+	// 二选一这类无法用单一 required 表达的跨属性约束（KNOWN_ISSUES #79）。
+	AnyOf []*Schema `json:"anyOf,omitempty"`
+	Items *Schema   `json:"items,omitempty"`
 	// Nullable OAS 3.0 的 `nullable: true`：值域为「object 或 null」
 	// （如 head 的 checksums——厂商不支持 / 对象无校验和时响应为 null）。
 	Nullable bool `json:"nullable,omitempty"`

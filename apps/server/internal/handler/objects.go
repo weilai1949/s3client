@@ -373,7 +373,7 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 	}
 	// 任务启动即审计（与同步路径对齐）：异步删除是不可逆动作，202 之后只能靠日志追溯。
 	h.audit(r, auditDeletePrefix, "jobId", job.ID, "bucket", bucket, "prefix", req.Prefix,
-		"total", job.Total, "truncated", truncated)
+		"total", job.Total(), "truncated", truncated)
 	go func() {
 		defer cancel()
 		counts, failKeys := service.DeleteKeysBatched(ctx, client, bucket, keys, maxFailKeys, func(p service.Progress) {
@@ -388,7 +388,7 @@ func (h *Handler) deletePrefixAsync(w http.ResponseWriter, r *http.Request) {
 		}, status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
-		"jobId": job.ID, "total": job.Total, "truncated": truncated,
+		"jobId": job.ID, "total": job.Total(), "truncated": truncated,
 	})
 }
 

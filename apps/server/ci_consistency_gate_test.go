@@ -218,3 +218,33 @@ func TestCIRepoCheckoutsFetchFullHistory(t *testing.T) {
 		t.Error(".gitlab-ci.yml 未设置 GIT_DEPTH: \"0\"（C2：默认 GIT_DEPTH=20 浅克隆缺旧 tag，changelog_tag_gate 必红）")
 	}
 }
+
+// TestRustFSE2ETriggersCoverWholeBackend（评审 2026-10-09 R10 / O11 #82）：Go 端真
+// RustFS E2E（e2e.yml / .e2e-rustfs-trigger）的 PR 触发路径此前只列
+// `internal/s3wrap/**`——只改 `internal/handler/**`（或 service / config）的 PR 会
+// 静默跳过这条唯一的真 S3 对端门禁。两套 CI 都必须把**整个后端**纳入触发面并保持一致。
+func TestRustFSE2ETriggersCoverWholeBackend(t *testing.T) {
+	gh := readRepoFile(t, filepath.Join(".github", "workflows", "e2e.yml"))
+	if !strings.Contains(gh, "'apps/server/**'") {
+		t.Error("GitHub e2e.yml 的 pull_request paths 必须含 'apps/server/**'（否则非 s3wrap 的后端改动跳过真 RustFS Go E2E，O11 #82）")
+	}
+	if strings.Contains(gh, "'apps/server/internal/s3wrap/**'") {
+		t.Error("GitHub e2e.yml 仍残留仅 s3wrap 的窄路径 'apps/server/internal/s3wrap/**'——应被 'apps/server/**' 取代（O11 #82）")
+	}
+
+	var block string
+	for _, j := range ciJobBlocks(readRepoFile(t, ".gitlab-ci.yml"), ciGitLabJobKeyRe) {
+		if j.name == ".e2e-rustfs-trigger" {
+			block = j.body
+		}
+	}
+	if block == "" {
+		t.Fatal("未在 .gitlab-ci.yml 找到 .e2e-rustfs-trigger 块（解析口径需同步）")
+	}
+	if !strings.Contains(block, "apps/server/**") {
+		t.Error("GitLab .e2e-rustfs-trigger 的 changes 必须含 apps/server/**（与 GitHub 侧一致，O11 #82）")
+	}
+	if strings.Contains(block, "apps/server/internal/s3wrap/**") {
+		t.Error("GitLab .e2e-rustfs-trigger 仍残留仅 s3wrap 的窄路径——应被 apps/server/** 取代（O11 #82）")
+	}
+}

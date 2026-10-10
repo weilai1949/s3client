@@ -11,7 +11,7 @@ func TestJobRegistryLifecycle(t *testing.T) {
 	defer r.Stop()
 	_, cancel := context.WithCancel(context.Background())
 	job := r.Create(2, cancel)
-	if job.ID == "" || job.Total != 2 {
+	if job.ID == "" || job.Total() != 2 {
 		t.Fatalf("job=%+v", job)
 	}
 	got, ok := r.Get(job.ID)

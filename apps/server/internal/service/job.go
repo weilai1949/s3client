@@ -52,7 +52,10 @@ type JobResult struct {
 type Job struct {
 	ID      string
 	Created time.Time
-	Total   int
+	// total 是任务总数（0 = 尚未学习）。**经 Total() 方法加锁读取**：total=0 的
+	// 任务会在 Emit 的首个正总数帧被写入，无锁读会与该写构成数据竞争
+	// （KNOWN_ISSUES #83）。record/Finish/Emit 已持锁，直接用字段。
+	total int
 
 	mu       sync.Mutex
 	progress JobProgress
@@ -143,7 +146,7 @@ func (r *JobRegistry) restore() {
 		r.jobs[rec.ID] = &Job{
 			ID:       rec.ID,
 			Created:  rec.Created,
-			Total:    rec.Total,
+			total:    rec.Total,
 			progress: progress,
 			result:   rec.Result,
 			// 旧落盘记录无 finishedAt（零值），Reap 会回退用 Created 计 TTL。
@@ -168,7 +171,10 @@ func (r *JobRegistry) persistJobs() {
 	}
 	r.persistMu.Lock()
 	defer r.persistMu.Unlock()
-	_ = r.persister.Save(r.List())
+	// 失败只计数、不改降级行为；见 persist_metrics.go / KNOWN_ISSUES #83。
+	if err := r.persister.Save(r.List()); err != nil {
+		notePersistFailure()
+	}
 }
 
 // List 返回任务清单快照（按创建时间倒序，最新在前），供 API/前端展示未完成任务。
@@ -211,7 +217,7 @@ func (j *Job) record() JobRecord {
 	progress := j.progress
 	progress.Status = status
 	return JobRecord{
-		ID: j.ID, Created: j.Created, Total: j.Total,
+		ID: j.ID, Created: j.Created, Total: j.total,
 		FinishedAt: j.finishedAt,
 		Status:     status, Progress: progress, Result: result,
 	}
@@ -298,7 +304,7 @@ func (r *JobRegistry) TryCreate(total int, cancel context.CancelFunc) (*Job, err
 	j := &Job{
 		ID:       uuid.NewString(),
 		Created:  time.Now(),
-		Total:    total,
+		total:    total,
 		progress: JobProgress{Total: total, Status: JobStatusRunning},
 		subs:     make(map[chan JobProgress]struct{}),
 		cancel:   cancel,
@@ -400,11 +406,11 @@ func (j *Job) Emit(p JobProgress) {
 		return
 	}
 	// 总数学习（ROADMAP #6 计划同步）：创建时 total=0（SyncKeys 列举前未知总数）
-	// 的任务，从首个携带正总数的进度帧学习。只在 j.Total==0 时写入 ⇒ 已知总数的
-	// 任务（migrateAsync / copy 等）Emit 路径不触碰 j.Total，与它们响应体里对
-	// job.Total 的无锁读不构成并发写。学习后不再改写（首学为准）。
-	if j.Total == 0 && p.Total > 0 {
-		j.Total = p.Total
+	// 的任务，从首个携带正总数的进度帧学习。只在 j.total==0 时写入 ⇒ 已知总数的
+	// 任务（migrateAsync / copy 等）Emit 路径不触碰 j.total，与它们响应体里经
+	// Total() 的加锁读不构成并发写。学习后不再改写（首学为准）。
+	if j.total == 0 && p.Total > 0 {
+		j.total = p.Total
 	}
 	j.progress = p
 	shouldPersist := j.persist != nil && time.Since(j.lastSave) >= jobProgressPersistEvery
@@ -439,7 +445,7 @@ func (j *Job) Finish(out JobResult, status string) {
 		status = "done"
 	}
 	j.progress = JobProgress{
-		Done: j.Total, Total: j.Total,
+		Done: j.total, Total: j.total,
 		Migrated: out.Migrated, Failed: out.Failed, Status: status,
 	}
 	subs := make([]chan JobProgress, 0, len(j.subs))
@@ -463,6 +469,14 @@ func (j *Job) Finish(out JobResult, status string) {
 		}
 		close(ch)
 	}
+}
+
+// Total 返回任务总数（0 表示尚未从首个进度帧学习到）。
+// 加锁读取：total=0 的任务会在 Emit 里被写入，无锁读会构成数据竞争（KNOWN_ISSUES #83）。
+func (j *Job) Total() int {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.total
 }
 
 // Snapshot 返回当前进度/结果/是否完成。

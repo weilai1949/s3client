@@ -175,9 +175,10 @@ variables:
     - if: '$CI_PIPELINE_SOURCE == "schedule" || $CI_PIPELINE_SOURCE == "web"'
       when: on_success
     - changes:
-        - apps/server/internal/s3wrap/**
-        - apps/server/go.mod
-        - apps/server/go.sum
+        # 整个后端（不止 s3wrap）：与 GitHub e2e.yml 的 'apps/server/**' 对齐，
+        # 只改 handler / service / config 的 MR 也跑真 RustFS S3 对端门禁
+        # （评审 2026-10-09 O11 #82；ci_consistency_gate_test.go 钉住两侧一致）。
+        - apps/server/**
         - docker-compose.yml
         - .gitlab-ci.yml
       when: on_success

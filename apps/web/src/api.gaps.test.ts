@@ -586,3 +586,33 @@ describe('api gaps: 迁移轮询超时', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 })
+
+// ── KNOWN_ISSUES #74：传输层错误的 status / body 结构化 ──────────────────────
+describe('api gaps: ApiError 携带 status/body', () => {
+  it('错误响应 → ApiError 带 status 与已解析 body（可区分 409 / 501 / 412）', async () => {
+    const { ApiError, request } = await import('./api/http')
+    for (const [status, statusText, error] of [
+      [409, 'Conflict', 'object locked'],
+      [501, 'Not Implemented', 'not supported by this storage endpoint'],
+      [412, 'Precondition Failed', 'precondition failed'],
+    ] as const) {
+      stubFetch(() => Promise.resolve(makeErrorResponse(status, statusText, error)))
+      await expect(request('/x')).rejects.toBeInstanceOf(ApiError)
+      await expect(request('/x')).rejects.toMatchObject({ status, body: { error } })
+    }
+  })
+
+  it('成功状态但响应体非 JSON → ApiError(200 invalid JSON response)（边界校验）', async () => {
+    const { ApiError, request } = await import('./api/http')
+    stubFetch(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.reject(new SyntaxError('bad json')),
+      } as unknown as Response),
+    )
+    await expect(request('/x')).rejects.toBeInstanceOf(ApiError)
+    await expect(request('/x')).rejects.toMatchObject({ status: 200, message: '200 invalid JSON response' })
+  })
+})

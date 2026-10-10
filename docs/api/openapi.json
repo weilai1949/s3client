@@ -906,7 +906,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "status"
                 ]
               }
@@ -1157,7 +1156,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "rules"
                 ]
               }
@@ -1318,8 +1316,7 @@
                   }
                 },
                 "required": [
-                  "algorithm",
-                  "bucket"
+                  "algorithm"
                 ]
               }
             }
@@ -1458,8 +1455,19 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "defaultRetentionMode"
+                ],
+                "anyOf": [
+                  {
+                    "required": [
+                      "defaultRetentionDays"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "defaultRetentionYears"
+                    ]
+                  }
                 ]
               }
             }
@@ -1642,10 +1650,7 @@
                     "type": "string",
                     "format": "policy JSON 字符串；空字符串=删除"
                   }
-                },
-                "required": [
-                  "bucket"
-                ]
+                }
               }
             }
           },
@@ -1830,7 +1835,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "tags"
                 ]
               }
@@ -1984,10 +1988,7 @@
                   "redirectAllRequestsTo": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "bucket"
-                ]
+                }
               }
             }
           },
@@ -2130,7 +2131,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "newKey"
                 ]
@@ -2171,6 +2171,16 @@
               }
             },
             "description": "条件字段非法"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "条件写冲突（ConditionalRequestConflict：并发写，重读后重试）"
           },
           "412": {
             "content": {
@@ -2361,6 +2371,16 @@
               }
             },
             "description": "jobId"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "在册异步任务已达上限（超限拒绝）"
           }
         },
         "summary": "批量复制（异步，SSE 进度）",
@@ -2404,7 +2424,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "prefix",
                   "targetPrefix"
                 ]
@@ -2495,7 +2514,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "prefix",
                   "targetPrefix"
                 ]
@@ -2530,6 +2548,16 @@
               }
             },
             "description": "jobId"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "在册异步任务已达上限（超限拒绝）"
           }
         },
         "summary": "递归复制前缀（异步）",
@@ -2570,7 +2598,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "keys"
                 ]
               }
@@ -2651,7 +2678,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "versionId"
                 ]
@@ -2716,7 +2742,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "prefix"
                 ]
               }
@@ -2787,7 +2812,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "prefix"
                 ]
               }
@@ -2821,6 +2845,16 @@
               }
             },
             "description": "jobId"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "在册异步任务已达上限（超限拒绝）"
           }
         },
         "summary": "递归删除前缀（异步）",
@@ -2861,7 +2895,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "keys"
                 ]
               }
@@ -3112,10 +3145,7 @@
                       ]
                     }
                   }
-                },
-                "required": [
-                  "bucket"
-                ]
+                }
               }
             }
           },
@@ -3184,7 +3214,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -3262,7 +3291,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "uploadId"
                 ]
@@ -3351,7 +3379,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "parts",
                   "uploadId"
@@ -3417,7 +3444,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -3497,7 +3523,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "partNumber",
                   "uploadId"
@@ -3776,7 +3801,6 @@
                 },
                 "required": [
                   "acl",
-                  "bucket",
                   "key"
                 ]
               }
@@ -3912,7 +3936,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "status"
                 ]
@@ -4096,7 +4119,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "mode",
                   "retainUntilDate"
@@ -4296,7 +4318,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "tags"
                 ]
@@ -4475,7 +4496,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -4601,8 +4621,28 @@
             },
             "description": "二进制流 / text/plain"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "参数非法（如 key 缺失 / versionId 非法）"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Range 请求超出对象大小（InvalidRange）"
           }
         },
         "summary": "对象代理下载 / 预览（流式）",
@@ -4645,7 +4685,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "newKey"
                 ]
@@ -4716,7 +4755,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -4793,7 +4831,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "storageClass"
                 ]
@@ -5257,7 +5294,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -5287,6 +5323,16 @@
               }
             },
             "description": "OK"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "对象被 Object Lock 锁定（ObjectLocked），此前版本已删除"
           }
         },
         "summary": "彻底清除某 key 的全部版本+标记",
@@ -5325,7 +5371,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key"
                 ]
               }
@@ -5498,7 +5543,6 @@
                   }
                 },
                 "required": [
-                  "bucket",
                   "key",
                   "versionId"
                 ]
@@ -5994,6 +6038,16 @@
               }
             },
             "description": "含 jobId/total"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "在册异步任务已达上限（超限拒绝）"
           }
         },
         "summary": "异步迁移（SSE 进度）",
@@ -6231,6 +6285,16 @@
               }
             },
             "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "任务不存在或已被回收"
           }
         },
         "summary": "查询迁移任务状态",
@@ -6279,6 +6343,16 @@
               }
             },
             "description": "已取消含 cancelled；已完成含 done"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "任务不存在或已被回收"
           }
         },
         "summary": "取消迁移任务",
@@ -6309,6 +6383,26 @@
               }
             },
             "description": "text/event-stream"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "任务不存在或已被回收"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "服务端不支持流式（Streaming not supported）"
           }
         },
         "summary": "迁移任务 SSE 进度事件",

@@ -21,9 +21,6 @@ interface MigrateVm {
   targetAccountId: string | undefined;
   error: unknown;
   selected?: Set<string>;
-  onListScroll: () => void;
-  measureViewport: () => void;
-  viewportH: number;
 }
 
 vi.mock("../api", () => ({
@@ -399,25 +396,6 @@ describe("MigratePanel remaining branches", () => {
     await flushPromises();
   });
 
-  it("scrollEl 未绑定时 onListScroll/measureViewport 空安全，绑定后按 clientHeight 测量", async () => {
-    const w = mountPanel();
-    const vm = w.vm as unknown as MigrateVm;
-    // 列表尚未渲染（scrollEl 为 null）→ 守卫直接跳过
-    vm.onListScroll();
-    vm.measureViewport();
-    expect(vm.viewportH).toBe(480);
-    await flushPromises();
-    // 列表渲染绑定 scrollEl → 测量（happy-dom clientHeight=0 → 480 兜底）
-    expect(w.find(".tbl-virtual").exists()).toBe(true);
-    expect(vm.viewportH).toBe(480);
-    const wrap = w.find(".tbl-virtual");
-    Object.defineProperty(wrap.element, "clientHeight", {
-      value: 600,
-      configurable: true,
-    });
-    vm.measureViewport();
-    expect(vm.viewportH).toBe(600);
-  });
 });
 
 describe("MigratePanel 未完成任务（跨重启恢复）", () => {

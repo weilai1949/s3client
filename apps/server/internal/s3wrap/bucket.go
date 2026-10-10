@@ -21,7 +21,7 @@ func (c *Client) ListBuckets(ctx context.Context) ([]BucketItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	return FormatBuckets(out), nil
+	return formatBuckets(out), nil
 }
 
 // CreateBucket 创建桶；region 非 us-east-1 时附带 LocationConstraint（OSS/COS/TOS 需要）。

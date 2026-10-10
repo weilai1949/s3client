@@ -498,8 +498,16 @@ func TestSchedulerTickInvalidStoredCronStops(t *testing.T) {
 	if ids := trig.calledIDs(); len(ids) != 0 {
 		t.Errorf("非法 cron 不得触发: %v", ids)
 	}
-	if got := sc.List()[0]; !got.NextRunAt.IsZero() {
+	got := sc.List()[0]
+	if !got.NextRunAt.IsZero() {
 		t.Errorf("NextRunAt = %v, want 零值停摆", got.NextRunAt)
+	}
+	// 停摆原因必须落 LastError（KNOWN_ISSUES #83），而不是静默不动；且要落盘。
+	if got.LastError == "" {
+		t.Error("非法 cron 停摆未记录 LastError")
+	}
+	if len(p.saves) == 0 || p.saves[0][0].LastError != got.LastError {
+		t.Errorf("停摆状态未落盘: saves=%v lastError=%q", p.saves, got.LastError)
 	}
 }
 

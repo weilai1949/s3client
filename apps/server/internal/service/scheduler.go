@@ -17,6 +17,7 @@ package service
 
 import (
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -133,7 +134,11 @@ func (sc *Scheduler) persist() {
 	sc.mu.Lock()
 	recs := sc.listLocked()
 	sc.mu.Unlock()
-	_ = sc.persister.Save(recs)
+	// 失败只计数、不改降级行为（内存态保真，下一次状态变更会再试）；见
+	// persist_metrics.go / KNOWN_ISSUES #83。
+	if err := sc.persister.Save(recs); err != nil {
+		notePersistFailure()
+	}
 }
 
 // listLocked 生成快照（调用方须持有 sc.mu）。
@@ -152,15 +157,12 @@ func (sc *Scheduler) List() []Schedule {
 	sc.mu.Unlock()
 
 	// 与 JobRegistry.List 同序：最新在前，同刻按 id 稳定。
-	for i := 0; i < len(out); i++ {
-		for j := i + 1; j < len(out); j++ {
-			a, b := out[i], out[j]
-			if a.CreatedAt.Before(b.CreatedAt) ||
-				(a.CreatedAt.Equal(b.CreatedAt) && a.ID > b.ID) {
-				out[i], out[j] = out[j], out[i]
-			}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
 		}
-	}
+		return out[i].ID > out[j].ID
+	})
 	return out
 }
 
@@ -291,23 +293,29 @@ func (sc *Scheduler) Tick(now time.Time) {
 	var dues []due
 
 	sc.mu.Lock()
+	changed := false
 	for id, s := range sc.schedules {
 		if !s.Enabled || s.NextRunAt.IsZero() || s.NextRunAt.After(now) {
 			continue
 		}
-		// 触发前先算好下一次：结构性非法（手改文件塞坏 cron）→ 排期清零停摆。
+		// 触发前先算好下一次：结构性非法（手改文件塞坏 cron）→ 排期清零停摆，
+		// 并把原因写入 LastError（KNOWN_ISSUES #83：原实现对非法 cron 只是静默
+		// 停摆，UI 看不到「为什么不跑」）。清零后下一 tick 的 NextRunAt.IsZero()
+		// 短路会跳过本分支，故只在首次写入、不产生每 tick 抖动。
 		next := s.ComputeNext(now)
 		if next.IsZero() {
 			s.NextRunAt = time.Time{}
+			s.LastError = "invalid cron expression; schedule stopped"
+			changed = true
 			continue
 		}
 		s.NextRunAt = next
 		dues = append(dues, due{id: id, s: *s})
 	}
-	advanced := len(dues) > 0
+	changed = changed || len(dues) > 0
 	sc.mu.Unlock()
 	// 落盘在锁外做（persist 内部自会加锁生成快照）。
-	if advanced {
+	if changed {
 		sc.persist()
 	}
 

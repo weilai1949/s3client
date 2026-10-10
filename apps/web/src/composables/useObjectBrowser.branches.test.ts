@@ -323,13 +323,6 @@ describe('useObjectBrowser 100% branch completion', () => {
     expect(browser.sortDir.value).toBe(1)
   })
 
-  it('onKey 非 Escape 键不关闭右键菜单', () => {
-    const browser = useObjectBrowser(makeBindings())
-    browser.openCtx(new MouseEvent('click'), { kind: 'file', key: 'a.txt' } as unknown as Entry)
-    browser.onKey(new KeyboardEvent('keydown', { key: 'F5' }))
-    expect(browser.ctxMenu.value).not.toBeNull()
-  })
-
   it('size 排序下 size 缺失回退 0（a.size ?? 0 / b.size ?? 0 的缺失侧）', () => {
     const browser = useObjectBrowser(makeBindings())
     browser.objects.value = [

@@ -22,7 +22,7 @@ func (r *JobRegistry) Create(total int, cancel context.CancelFunc) *Job {
 		j = &Job{
 			ID:       uuid.NewString(),
 			Created:  time.Now(),
-			Total:    total,
+			total:    total,
 			progress: JobProgress{Total: total, Status: JobStatusCancelled},
 			done:     true,
 			subs:     make(map[chan JobProgress]struct{}),

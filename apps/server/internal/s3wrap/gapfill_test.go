@@ -268,8 +268,8 @@ func TestNewLoadConfigFailure(t *testing.T) {
 
 // TestFormatBucketsGaps 空桶列表应返回空切片。
 func TestFormatBucketsGaps(t *testing.T) {
-	got := FormatBuckets(&s3.ListBucketsOutput{})
+	got := formatBuckets(&s3.ListBucketsOutput{})
 	if got == nil || len(got) != 0 {
-		t.Fatalf("FormatBuckets(empty) = %+v, want non-nil empty slice", got)
+		t.Fatalf("formatBuckets(empty) = %+v, want non-nil empty slice", got)
 	}
 }

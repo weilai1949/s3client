@@ -58,6 +58,7 @@ const {
   account,
   currentBucket,
   ctxMenu,
+  closeCtx,
   buckets,
   loadingBuckets,
   loading,
@@ -289,6 +290,7 @@ function dismissError() {
         :next-token="nextToken"
         :is-truncated="isTruncated"
         :loading-all="loadingAll"
+        :ctx-entry-key="ctxMenu?.entry.key ?? null"
         @row-click="onRowClick"
         @row-dbl="onRowDblClick"
         @ctx="openCtx"
@@ -434,6 +436,7 @@ function dismissError() {
     <!-- 右键菜单 -->
     <ObjectContextMenu
       :menu="ctxMenu"
+      @close="closeCtx"
       @open="ctxOpen"
       @preview="ctxPreview"
       @copy-link="ctxCopyLink"

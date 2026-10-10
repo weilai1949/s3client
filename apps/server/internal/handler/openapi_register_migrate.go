@@ -34,7 +34,8 @@ func registerMigrate(r *openapi.Registry) {
 		Request: &migrateReq,
 		Responses: map[string]openapi.Response{"202": {Description: "含 jobId/total", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId": openapi.Str(), "total": openapi.Int(),
-		})}},
+		})},
+			"503": {Description: "在册异步任务已达上限（超限拒绝）", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/migrate/sync", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）", OperationID: "migrateSync",
@@ -73,20 +74,24 @@ func registerMigrate(r *openapi.Registry) {
 		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId": openapi.Str(), "done": openapi.Bool(), "progress": jobProgressSchema(), "result": jobResultSchema(),
-		})}},
+		})},
+			"404": {Description: "任务不存在或已被回收", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/migrate/jobs/{id}/cancel", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "取消迁移任务", OperationID: "migrateJobCancel",
 		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{"200": {Description: "已取消含 cancelled；已完成含 done", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"jobId": openapi.Str(), "cancelled": openapi.Bool(), "done": openapi.Bool(),
-		})}},
+		})},
+			"404": {Description: "任务不存在或已被回收", JSON: refSchema("Error")}},
 	})
 	r.Operation("GET", "/api/migrate/jobs/{id}/events", openapi.Op{
 		Tags: []string{"migrate"}, Summary: "迁移任务 SSE 进度事件", OperationID: "migrateJobEvents",
 		Params: []openapi.Param{openapi.Param{Name: "id", In: "path", Required: true, Schema: openapi.Str()}},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "text/event-stream", JSON: nil},
+			"404": {Description: "任务不存在或已被回收", JSON: refSchema("Error")},
+			"503": {Description: "服务端不支持流式（Streaming not supported）", JSON: refSchema("Error")},
 		},
 	})
 }

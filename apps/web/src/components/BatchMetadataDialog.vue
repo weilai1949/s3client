@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createRowKey } from '../rowKey'
 import { computed, reactive, ref } from 'vue'
 
 import { batchSetMetadata, type BatchMetaError } from '../batchMetadata'
@@ -33,8 +34,7 @@ const tagsMode = ref<'replace' | 'clear' | 'none'>('none')
 const tags = ref<{ rowKey: string; key: string; value: string }[]>([])
 
 /** 标签行稳定键：组件内自增序列（v-for key；不使用可能碰撞的业务字段）。 */
-let rowSeq = 0
-const newRowKey = () => `row-${++rowSeq}`
+const newRowKey = createRowKey()
 
 // storageClass 选项来自 HEAD 当前桶内一个样本对象的可能值；前端不强校验，
 // 后端 changeStorageClass 已对非法值返 400。
@@ -182,7 +182,7 @@ async function onConfirm() {
         {{ t('batchEdit.tagsModeLabel') }}
         <select v-model="tagsMode" :disabled="!applyTags" class="full" :aria-label="t('batchEdit.tagsModeLabel')">
           <option value="none">{{ t('batchEdit.tagsNoChange') }}</option>
-          <option value="replace">替换</option>
+          <option value="replace">{{ t('batchEdit.tagsReplace') }}</option>
           <option value="clear">{{ t('batchEdit.tagsClear') }}</option>
         </select>
       </label>

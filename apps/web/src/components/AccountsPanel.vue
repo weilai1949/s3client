@@ -308,9 +308,9 @@ watch(accountFormRequest, () => startCreate())
           <span v-if="bucketErr" class="badge" style="color:var(--danger)">{{ bucketErr }}</span>
           <span v-else-if="!editingId" class="badge">{{ t('accounts.fetchHint') }}</span>
         </label>
-        <label class="field">AccessKey ID <input v-model="form.accessKey" autocomplete="off" /></label>
+        <label class="field">{{ t('accounts.accessKeyId') }} <input v-model="form.accessKey" autocomplete="off" /></label>
         <label class="field">
-          AccessKey Secret
+          {{ t('accounts.accessKeySecret') }}
           <input v-model="form.secretKey" type="password" :placeholder="editingId ? t('accounts.secretKeepPh') : ''" autocomplete="new-password" />
         </label>
       </div>

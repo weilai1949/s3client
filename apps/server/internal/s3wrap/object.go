@@ -139,7 +139,7 @@ func (c *Client) CopyObjectWithMeta(ctx context.Context, srcBucket, srcKey, dstB
 		in.Metadata = metadata
 	}
 	_, err := c.s3.CopyObject(ctx, in)
-	return err
+	return wrapObjectTooLarge(err)
 }
 
 func (c *Client) getObjectIn(ctx context.Context, bucket, key, versionID, rangeHeader string) (*s3.GetObjectOutput, error) {
@@ -208,7 +208,7 @@ func (c *Client) GetObjectAcl(ctx context.Context, bucket, key string) (owner st
 	if err != nil {
 		return "", false, nil, err
 	}
-	owner, public, rows = DescribeACL(out)
+	owner, public, rows = describeACL(out)
 	return owner, public, rows, nil
 }
 
@@ -359,7 +359,7 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 				if end > len(ids) {
 					end = len(ids)
 				}
-				out, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+				delOut, err := c.s3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 					Bucket: aws.String(bucket),
 					Delete: &types.Delete{Objects: ids[i:end]},
 				})
@@ -368,9 +368,9 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 				}
 				// 200 响应体里的逐版本 <Error> 同样算失败：把被拒版本计入「已删除」会让
 				// 回收站 UI 显示「已彻底清除」而版本仍然存在（review §B3 第 4 个受影响点）。
-				deleted += end - i - len(out.Errors)
-				if len(out.Errors) > 0 {
-					first := out.Errors[0]
+				deleted += end - i - len(delOut.Errors)
+				if len(delOut.Errors) > 0 {
+					first := delOut.Errors[0]
 					// 结构化载体携带已删计数：UserMessage 据此透出「删了多少」（review §R17）。
 					return deleted, &partialDeleteError{
 						deleted:   deleted,
@@ -409,7 +409,7 @@ func (c *Client) ChangeObjectStorageClass(ctx context.Context, bucket, key, vers
 		StorageClass: types.StorageClass(storageClass),
 	})
 	if err != nil {
-		return "", err
+		return "", wrapObjectTooLarge(err)
 	}
 	return derefString(out.VersionId), nil
 }

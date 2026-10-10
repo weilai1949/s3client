@@ -29,6 +29,24 @@ export function opPath<Id extends OperationId>(id: Id, ...args: PathArgs<Id>): s
 }
 
 /**
+ * 传输层归一化错误：保留 **HTTP status** 与**已解析响应体**，让调用方能按状态分支
+ * （Object Lock 的 409 vs 501、条件写 copy 的 412、鉴权 401/403 等）——旧实现只拼
+ * 一个字符串 message，调用方无法区分（KNOWN_ISSUES #74）。message 仍为
+ * `"<status> <文案>"`，与历史行为一致。
+ */
+export class ApiError extends Error {
+  readonly status: number
+  readonly body: unknown
+
+  constructor(status: number, message: string, body: unknown) {
+    super(`${status} ${message}`)
+    this.name = 'ApiError'
+    this.status = status
+    this.body = body
+  }
+}
+
+/**
  * 合成 fetch init：默认 header 与调用方 header **合并**，调用方同名项优先，
  * 但 Authorization / Content-Type 等默认值不会被整体覆盖掉。
  *
@@ -44,21 +62,29 @@ function buildInit(opts: RequestInit): RequestInit {
   return { ...opts, headers }
 }
 
-async function toError(res: Response): Promise<Error> {
+async function toError(res: Response): Promise<ApiError> {
   let msg = res.statusText
+  let body: unknown
   try {
-    const j = await res.json()
-    if (j?.error) msg = j.error
+    body = await res.json()
+    const e = body && typeof body === 'object' && 'error' in body ? (body as { error?: unknown }).error : undefined
+    if (typeof e === 'string' && e) msg = e
   } catch {
-    /* ignore */
+    /* 错误体非 JSON：保留 statusText 文案 */
   }
-  return new Error(`${res.status} ${msg}`)
+  return new ApiError(res.status, msg, body)
 }
 
 export async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(getBase() + path, buildInit(opts))
   if (!res.ok) throw await toError(res)
-  return res.json() as Promise<T>
+  try {
+    return (await res.json()) as T
+  } catch {
+    // 成功状态但响应体不是合法 JSON：边界校验失败按传输层错误上抛（KNOWN_ISSUES #74），
+    // 不再把 `res.json() as Promise<T>` 的未校验结果直接交给调用方。
+    throw new ApiError(res.status, 'invalid JSON response', undefined)
+  }
 }
 
 /** 原始 Response（流式下载用）；失败时解析 JSON error。 */

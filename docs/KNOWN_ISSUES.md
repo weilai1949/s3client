@@ -14,13 +14,61 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71 / #72 / #73 / #74 / #75 / #76 / #77 / #78 / #79 / #80 / #81 / #82 / #83；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-08（**#71 已闭环并移除**，同日分两批完成，**推翻原 ➖「维持现状」决策**）：
+> 最后更新：2026-10-09（第三批次：**#76 / #79 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CD）：
+> **#76** 前端结构性重复收敛——`newRowKey` 的 7 份逐字复制提取为 `src/rowKey.ts` 的
+> `createRowKey` 工厂；虚拟滚动管线（ObjectList / MigratePanel / VersionsDialog /
+> RecycleBinPanel 的 4 份）提取为 `src/composables/useVirtualRows.ts`，各组件只传响应式数组；
+> **#79** OpenAPI 契约漂移收口——新增「handler 直接写出的状态码必须声明」门禁
+> （`openapi_status_declared_test.go`）并补齐 migrate jobs 404 / trash 409 / copy 409 /
+> 异步端点 503 / proxy 400+416 等缺失声明；`putObjectLock` 用新增的 `anyOf` 表达
+> days/years 二选一；`bucket` 从全部请求体 required 移除（handler 经 `bucketOr` 回退账号
+> 默认桶，与共享 Bucket query 参数「可省略」一致）并新增门禁，重生成 `docs/api/openapi.json`
+> 与前端 `schema.d.ts`。
+> 故 §二 当前存量 = **#63（➖ 已决策）**——**2026-10-09 评审的 O1–O12（#72–#83）已全部闭环移除**。
+>
+> 上一轮更新：2026-10-09（第二批次：**#72 / #74 / #75 / #77 / #78 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CC）：
+> **#72** 数据面 `UNSIGNED-PAYLOAD` 收窄为只在**带 stream 的请求**注入（无 body 的
+> GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名；此前无条件注入），`http://` endpoint 的
+> 残留载荷完整性风险记入 [`threat-model.md`](threat-model.md) §6.2；
+> **#74** 前端传输层新增 `ApiError{status, body}`（错误响应归一携带 HTTP 状态与已解析体），
+> 成功响应的非 JSON body 由 `request` 边界校验上抛；`jobs.ts` SSE 失败改抛 `ApiError`；
+> **#75** `generated.gate.test.ts` 补双向穷尽性断言：生产源码 `opPath('<id>')` 引用的 opId
+> 必须存在，且未被引用的 opId 必须正好等于 8 个「前端不消费」白名单；
+> **#77** 右键菜单关闭还原来源焦点、Escape 改走 `useKeydownStack`（LIFO，删掉
+> `useObjectBrowser` 的独立 window Escape 监听）、「⋯」触发器补 `aria-haspopup`/`aria-expanded`；
+> **#78** i18n 覆盖测试补「模板 / 数据驱动键逐个有定义」断言（堵 `storageReport.kind.${kind}`
+> 等盲区），并清理 3 处硬编码可见文案（`AccessKey ID/Secret`、批量标签「替换」）。
+> 故 §二 当前存量 = **#63（➖ 已决策）+ #76 / #79（⬜ 开放）**。
+>
+> 上一轮更新：2026-10-09（**#73 / #80 / #81 / #82 / #83 已闭环并移除**；#73/#80/#81/#83 证据见 [`FEATURES.md`](FEATURES.md) §CA，#82 见 §CB）：
+> **#73** `s3wrap` 4 个签名带 AWS SDK 类型、仅供包内调用的转换函数降为小写（`fromS3Object` /
+> `formatBuckets` / `describeACL` / `granteeLabel`），收窄 SDK 类型外泄入口；
+> **#80** 计划校验错误不再透传 `err.Error()`——`service` 新增类型化 `ScheduleValidationError`
+> （`Msg` 固定、`Cause` 仅落日志），handler 改走 `ScheduleValidationMessage`，`error_echo_gate`
+> 增加对 `writeErr(..., 400, x.Error())` 形态的捕获与正则自检；
+> **#81** `POST /api/accounts`（创建账号，无路径 `{id}` 可判）对 `accounts` 作用域 token
+> 一律 403（`reason=accounts_create`）——堵住「`accounts:[A]` 的 token 铸造任意新账号」的
+> 凭证面；`GET /api/accounts`（列表，返回不含 `SecretKey` 的 `AccountView`）语义在
+> [`threat-model.md`](threat-model.md) 最小权限节明确；
+> **#83** 散点缺陷群 12 处全部修复（2 处漏包 `wrapObjectTooLarge`、`PurgeObject` 遮蔽 `out`、
+> `dialContextSSRF` 可返回 `(nil,nil)`、`store` / `sqlite` 吞 `encryptAESGCM` 错误、
+> `atomicfile` 固定 `.tmp` 并发互删、storage_report 金额未取整、`Scheduler.List` O(n²) 选择排序、
+> 损坏 `schedules.json` 静默丢弃后被空列表覆盖、非法 cron 停摆不写 `LastError`、`Job.Total`
+> 无锁读、计划/任务落盘 `Save` 失败被静默——**新增 `s3c_persist_failures_total` 指标**）；
+> **#82** R10 评审残留闭环——`make check` 补 `govulncheck` / 前端 `pnpm lint` / `go build ./...`，
+> 真 RustFS Go E2E 的 PR 触发面从 `internal/s3wrap/**` 放宽到 `apps/server/**`，DEVELOPMENT
+> 的 `perf-budget`（真实 job id 为 `bench`）/ 覆盖率排除项 / 触发事件 job 计数三处漂移修正，
+> 并加机械门禁防回退（`doc_ci_drift_gate_test.go` + `TestMakefileCheckMirrorsCIStaticGates` +
+> `TestRustFSE2ETriggersCoverWholeBackend`），证据见 [`FEATURES.md`](FEATURES.md) §CB。
+> 故 §二 当前存量 = **#63（➖ 已决策）+ #72 / #74–#79（⬜ 开放）**。
+>
+> 上一轮更新：2026-10-08（**#71 已闭环并移除**，同日分两批完成，**推翻原 ➖「维持现状」决策**）：
 > **① 仓库 slug 统一**——`github.com/weilai1949/s3clinet` → `…/s3client`（`apps/server/go.mod` 模块路径 +
 > 全仓 Go import + 全部仓库 URL：`.github/SECURITY.md` / `ISSUE_TEMPLATE/config.yml` / `SUPPORT.md` /
 > `CONTRIBUTING.md` / `AI_POLICY.md` / `docs/en/index.md` / `accounts.schema.json` `$id` /
@@ -75,18 +123,6 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动。**2026-10-08 补登**：该限制此前只写在 `stream_copy.go` 注释 / 本文件 / [`OPERATIONS.md`](OPERATIONS.md) §性能表，**根 `README.md` 新增「已知限制」小节**把它推到用户可见面 |
-| 72 | 数据面载荷缺完整性校验（`UNSIGNED-PAYLOAD` 无条件注入） | code-review-2026-10-09 §5 O1 | ⬜ | `s3wrap/client.go`：`UNSIGNED-PAYLOAD` 无条件注入数据面 + `RequestChecksumCalculation=WhenRequired`——PutObject / UploadPart / Copy 载荷既无 SigV4 完整性也无 SDK 校验和，对已放行的 `http://` endpoint 可被中间人改写。建议按「带 body 的操作」收窄，或对 http endpoint 强制显式开关，并在 [`threat-model.md`](threat-model.md) 记一笔 |
-| 73 | s3wrap 4 个导出函数签名带 AWS SDK 类型但仅包内使用 | code-review-2026-10-09 §5 O2 | ⬜ | `s3wrap/s3wrap_dto.go`：只在 s3wrap 内调用 → 降为小写，避免给下一个 handler 作者留下「合法」的 SDK 类型依赖入口（`store → model → s3wrap → handler` 分层的预防项） |
-| 74 | 前端传输层丢弃 HTTP status、对响应体零校验 | code-review-2026-10-09 §5 O3 | ⬜ | `web/src/api/http.ts`：status 只拼进 message，调用方无法区分 401/403/404/409/412/501（Object Lock 的 409 vs 501、copy 的 412 正需要）；`res.json() as Promise<T>` 对不可信响应零校验。建议 `ApiError{status, body}` + 边界校验（或从 `operations[...]['responses'][200]` 派生类型） |
-| 75 | 前端 `generated.gate` 缺穷尽性断言 | code-review-2026-10-09 §5 O4 | ⬜ | `web/src/api/generated.gate.test.ts`：只有 `>= 60`（实际 84），无「`s3api` 覆盖 `operations` 全部 opId」的穷尽性断言 → 删掉一个 spec 路径再重新生成仍全绿 |
-| 76 | 前端两组结构性重复：`newRowKey` ×7 与虚拟滚动管线 ×4 | code-review-2026-10-09 §5 O5 | ⬜ | `newRowKey` 在 TagsDialog / BucketTags / HeadersDialog / BatchMetadataDialog / LifecycleDialog / BucketCors / BucketPolicyVisualEditor 逐字复制 7 份；虚拟滚动管线在 ObjectList / MigratePanel / VersionsDialog / RecycleBinPanel 重复 4 份；各自应有一个 canonical helper |
-| 77 | 对象右键菜单焦点还原与键盘语义缺口 | code-review-2026-10-09 §5 O6 | ⬜ | `ObjectContextMenu.vue` / `ObjectList.vue`：菜单关闭后焦点丢失（无 `previousFocus` 还原）、触发器缺 `aria-haspopup` / `aria-expanded`；`useObjectBrowser.ts` 两套 window keydown，Escape 绕过 `useKeydownStack` 的 LIFO 语义 |
-| 78 | i18n 键覆盖正则盲区 + 硬编码可见文案 | code-review-2026-10-09 §5 O7 | ⬜ | `web/src/i18n/coverage.test.ts`：正则看不见数据驱动键与模板键（`storageReport.kind.${kind}`——当前 12 个间接键恰好都已定义，属潜在风险）；另有 6–7 处硬编码可见文案（`AccessKey ID/Secret`、`BatchMetadataDialog.vue` 的「替换」等） |
-| 79 | OpenAPI required / 状态码漂移无门禁 | code-review-2026-10-09 §5 O8 | ⬜ | `handler/openapi_register_*.go`：`putObjectLock` 声明只要求 `bucket+mode` 而 handler 还要求 days/years 之一；`bucket` 在部分对象端点标 required、schedules 处不标；migrate jobs 的 404、trash 的 409、copy 的 409、proxy 的 400/416 均未声明 |
-| 80 | schedules 错误回显穿透 + 回显门禁漏检形式 | code-review-2026-10-09 §5 O9 | ⬜ | `handler/schedules.go`：`writeErr(400, err.Error())` 回显服务层错误（含用户 cron 原文）；`error_echo_gate_test.go` 只匹配 `"字面量"+var`，`err.Error()` 形式从缝里漏过 |
-| 81 | `accounts` 作用域不约束账号列表端点 | code-review-2026-10-09 §5 O10 | ⬜ | `handler/scope.go`：`accounts:[A]` 的 token 仍可 `GET/POST /api/accounts`（无 `{id}` 即跳过约束）；测试已写成「预期行为」，但按最小权限语义是越权面，至少应在文档明确 |
-| 82 | `make check` 缺项 / e2e.yml 路径过滤 / DEVELOPMENT 三处文档漂移 | code-review-2026-10-09 §5 O11 | ⬜ | `Makefile` 的 `make check` 缺 `govulncheck` / `pnpm lint` / `go build ./...`；`e2e.yml` 的 paths 过滤使只改 `internal/handler/**` 的 PR 跳过真 RustFS Go E2E；`docs/DEVELOPMENT.md` 的 perf-budget job 名 / 前端覆盖率排除项 / job 计数三处与现场不一致（行号见评审原文，为评审时点） |
-| 83 | 散点缺陷群 12 处 | code-review-2026-10-09 §5 O12 | ⬜ | `wrapObjectTooLarge` 漏包两处（sentinel 不成立）、`PurgeObject` 遮蔽 `out`、`ssrf.go` 可返回 `(nil, nil)`、`store.go` / `sqlite.go` 吞 `encryptAESGCM` 错误、`atomicfile.go` 固定 `.tmp` + `Save` 错误被丢弃、storage_report 金额未取整、`Scheduler.List` O(n²) 选择排序、**损坏的 `schedules.json` 静默丢弃后被空列表覆盖**、**非法 cron 让计划永久停摆却不写 `LastError`**、`Job.Total` 潜在无锁读（逐条位置见评审原文） |
 
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
 > 已闭环移除，证据见 [`FEATURES.md`](FEATURES.md) §AB；同日新开 **#64**（三路复审 19 条的处置清单），
@@ -121,7 +157,7 @@
 > 证据见 [`FEATURES.md`](FEATURES.md) §AQ 与 [`DEVELOPMENT.md`](DEVELOPMENT.md) §3。
 > 故本表当前为：**#63 已决策维持现状（➖）**；**产品功能缺陷仍为零**，外部阻塞见 §一 #25。
 > **#70 / #71 为 2026-09-30「AI 时代文档补强」批次新增**（见 [`FEATURES.md`](FEATURES.md) §BG）：#70 由本批新增的 fuzz 目标实测发现（不可利用，已留回归种子），**已于同日闭环并移除**（推翻 ➖ 决策、修复证据见 [`FEATURES.md`](FEATURES.md) §BK）；#71 为登记既有命名分裂，不是本批引入，**已于 2026-10-08 闭环并移除**（同样推翻 ➖ 决策、证据见 [`FEATURES.md`](FEATURES.md) §BO）。
-> **2026-10-09**：全仓代码质量评审（[`code-review-2026-10-09.md`](code-review-2026-10-09.md)）的 **O1–O12 十二条 Optional 项登记为 #72–#83**（本节表，全部属技术债 / 缺陷，按「同一事项只登记一处」不进 [`ROADMAP.md`](ROADMAP.md) §三）；同批评审的 C1–C2 与 R1–R9 已于**当日修复闭环、不占编号**（证据见 [`FEATURES.md`](FEATURES.md) §BZ 与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`）；R10 的工具链残留同日解除（本机 `/usr/local/go1.26.9` 与 CI 同版本）。故 §二 当前存量 = **#63（➖ 已决策）+ #72–#83（⬜ 开放）**，产品功能缺陷仍为零，外部阻塞见 §一 #25。
+> **2026-10-09**：全仓代码质量评审（[`code-review-2026-10-09.md`](code-review-2026-10-09.md)）的 **O1–O12 十二条 Optional 项登记为 #72–#83**（本节表，全部属技术债 / 缺陷，按「同一事项只登记一处」不进 [`ROADMAP.md`](ROADMAP.md) §三）；同批评审的 C1–C2 与 R1–R9 已于**当日修复闭环、不占编号**（证据见 [`FEATURES.md`](FEATURES.md) §BZ 与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`）；R10 的工具链残留同日解除（本机 `/usr/local/go1.26.9` 与 CI 同版本）。其中 **#73 / #80 / #81 / #83 已于同日闭环并移除**（证据见 [`FEATURES.md`](FEATURES.md) §CA；#81 = `POST /api/accounts` 拒绝 `accounts` 作用域 token，见 §二 台账与 [`threat-model.md`](threat-model.md)），**#82**（R10 评审残留：`make check` 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移）亦于同日闭环（证据见 [`FEATURES.md`](FEATURES.md) §CB），**#72 / #74 / #75 / #77 / #78** 同日第二批次闭环（证据见 §CC），**#76 / #79** 同日第三批次闭环（证据见 §CD）。故 §二 当前存量 = **#63（➖ 已决策）**——**2026-10-09 评审的 O1–O12（#72–#83）已全部闭环移除**，产品功能缺陷仍为零，外部阻塞见 §一 #25。
 
 ## 三、分类归零凭证
 
@@ -162,7 +198,9 @@
 | #69 | **已闭环移除** | CHANGELOG 与 git tag 断裂：顶部新增「tag ↔ 版本段对应关系（唯一台账）」（3 个时间戳 tag 定性为同日内部快照、5 个「有段无 tag」历史段登记）；`[1.0.0]` 段日期按 tag 事实修正为 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go`（tag↔段双向 + Unreleased 居首 + 映射表解析口径 + 扫描阈值，TDD 先红后绿 + 变异验证）+ `scripts/release-version.sh` 硬检查（缺 `## [<version>]` 段即 exit 1），2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BE） |
 | #70 | **已闭环移除** | `NormalizeEndpoint` 对含尾随空白输入不幂等：原 ➖「fail-closed 维持现状」决策于 2026-09-30 推翻，按登记内写死的修法修复（先切分 host/path，再对 host `TrimSpace`、对 path 去尾部斜杠与空白，保输出不以空白结尾），TDD 先红后绿 + 变异验证（删 host `TrimSpace` → 红灯点名 `"00  /"` / `"http://host  /"` → 还原绿）+ 两目标各 10s 有界 fuzz PASS，2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BK） |
 | #71 | **已闭环移除** | 仓库 slug `s3clinet` / `s3client` 并存：2026-10-08 **推翻原 ➖「维持现状」决策**，同日分两批统一——**① slug**（`go.mod` 模块路径 + 全仓 Go import + 全部仓库 URL → `github.com/weilai1949/s3client`，与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 对齐）见 [FEATURES.md](FEATURES.md) §BO；**② 产品名**（品牌 / 运行时 / 监控命名空间的全部旧写法 → `s3client` 系，含 `.s3client.lock` 锁文件名等**行为变更面**）见同文件 §BP。仅 `CHANGELOG.md` 历史条目（只修路径链接）与 `docs/archive/` 冻结件保留旧写法 |
-| #72–#83 | **开放** ⬜ | 2026-10-09 全仓代码质量评审的 O1–O12 登记入 §二（数据面完整性 / s3wrap 导出面 / 前端传输层 status / generated.gate 穷尽性 / 重复 helper / a11y 焦点 / i18n 盲区 / OpenAPI 漂移门禁 / 错误回显 / accounts 列表越权面 / `make check` 缺项 / 散点缺陷群），来源 [`code-review-2026-10-09.md`](code-review-2026-10-09.md) §5；同批评审的 C1–C2 / R1–R9 当日修复闭环，不占编号 |
+| #73 / #80 / #81 / #83 | **已闭环移除** | 2026-10-09 评审 O2 / O9 / O10 / O12：s3wrap 4 个带 SDK 签名的包内转换函数降为小写；计划校验错误改类型化定值文案 + `error_echo_gate` 捕获 `err.Error()` 透传；`POST /api/accounts` 拒绝 `accounts` 作用域 token（`reason=accounts_create`）；散点缺陷群 12 处全修（含新增 `s3c_persist_failures_total`），证据见 [`FEATURES.md`](FEATURES.md) §CA |
+| #82 | **已闭环移除** | 2026-10-09 评审 O11（R10 残留）：`make check` 补 `govulncheck` / `web-lint` / `build`；`e2e.yml` 与 `.gitlab-ci.yml` 的真 RustFS Go E2E 触发面放宽到 `apps/server/**`；DEVELOPMENT 的 `perf-budget`→`bench` / 覆盖率排除项 / 触发 job 计数三处修正；新增 `doc_ci_drift_gate_test.go` 与两道一致性门禁防回退。**2026-10-10 再处置**：补齐 `web-typecheck`（`pnpm typecheck`）与 `web-build`（`pnpm build`）以真正覆盖 CI `web` job 全部静态步，并**真跑 `make check` exit 0** 复核，证据见 [`FEATURES.md`](FEATURES.md) §CB |
+| #76 / #79 | **已闭环移除** | 2026-10-09 评审 O5 / O8：#76 前端 `newRowKey` ×7 → `src/rowKey.ts`、虚拟滚动管线 ×4 → `src/composables/useVirtualRows.ts`；#79 新增 `openapi_status_declared_test.go`（handler 直接写出的状态码必须声明）+ `bucket` required 门禁，补齐缺失状态码、`putObjectLock` 用 `anyOf` 表达二选一、`bucket` 请求体 required 归零并重生成规范。证据见 [`FEATURES.md`](FEATURES.md) §CD |
 
 ---
 

@@ -50,7 +50,7 @@ func registerVersions(r *openapi.Registry) {
 				"bucket":    openapi.Str(),
 				"key":       openapi.Str(),
 				"versionId": openapi.Str(),
-			}, "bucket", "key", "versionId")},
+			}, "key", "versionId")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"restored":  openapi.Str(),
@@ -66,7 +66,7 @@ func registerVersions(r *openapi.Registry) {
 				"bucket":    openapi.Str(),
 				"key":       openapi.Str(),
 				"versionId": openapi.Str(),
-			}, "bucket", "key", "versionId")},
+			}, "key", "versionId")},
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "OK", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"restored":  openapi.Str(),

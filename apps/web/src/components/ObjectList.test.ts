@@ -55,6 +55,7 @@ const defaults = {
   isTruncated: false,
   loadingAll: false,
   listGen: 0,
+  ctxEntryKey: null as string | null,
 }
 
 function mountList(props: Partial<typeof defaults> = {}) {
@@ -62,6 +63,15 @@ function mountList(props: Partial<typeof defaults> = {}) {
 }
 
 describe('ObjectList', () => {
+  it('「⋯」更多按钮暴露 aria-haspopup / aria-expanded（KNOWN_ISSUES #77）', async () => {
+    const w = mountList({ entries: [file('a.txt')], totalCount: 1 })
+    const btn = w.find('.more-btn')
+    expect(btn.attributes('aria-haspopup')).toBe('menu')
+    expect(btn.attributes('aria-expanded')).toBe('false')
+    await w.setProps({ ctxEntryKey: 'a.txt' })
+    expect(btn.attributes('aria-expanded')).toBe('true')
+  })
+
   it('shows skeleton while loading with no entries', () => {
     const w = mountList({ loading: true, totalCount: 0 })
     expect(w.find('[aria-busy="true"]').exists()).toBe(true)
@@ -137,15 +147,6 @@ describe('ObjectList', () => {
     await w.setProps({ sortKey: 'time' })
     await w.vm.$nextTick()
     expect(w.findAll('thead th')[3].find('.sort-ind').text()).toBe('▲')
-  })
-
-  it('onListScroll 未绑定 scrollEl：早退不写 scrollTop', async () => {
-    const w = mountList({ entries: [file('a.txt')] })
-    const vm = w.vm as unknown as { scrollEl: unknown; onListScroll: () => void }
-    vm.scrollEl = null
-    vm.onListScroll()
-    // 不抛错即通过（scrollTop 未更新）
-    expect((w.vm as unknown as { scrollTop: number }).scrollTop).toBe(0)
   })
 
   it('renders grid view with per-type icons and meta, and empty grid state', async () => {

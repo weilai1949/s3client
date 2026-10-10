@@ -186,9 +186,15 @@ func TestScopeAccountsRestrictPathID(t *testing.T) {
 	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/accounts/other-acc", ""); rr.Code != http.StatusForbidden {
 		t.Errorf("越界账号 = %d, want 403", rr.Code)
 	}
-	// 列表端点无路径 {id}：不受 accounts 约束（account 越界由 {id} 判定）。
+	// 列表端点无路径 {id}：不受 accounts 约束（account 越界由 {id} 判定），返回的是
+	// 不含 SecretKey 的 AccountView；但创建账号（POST 集合）无 {id} 可判——accounts
+	// 作用域 token 不得铸造新账号（KNOWN_ISSUES #81），一律 403。
 	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/accounts", ""); rr.Code != http.StatusOK {
 		t.Errorf("GET /api/accounts = %d, want 200", rr.Code)
+	}
+	createBody := `{"name":"x","endpoint":"http://127.0.0.1:9000","accessKey":"ak","secretKey":"sk"}`
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts", createBody); rr.Code != http.StatusForbidden {
+		t.Errorf("POST /api/accounts（accounts 作用域）= %d, want 403", rr.Code)
 	}
 	// preview-buckets 不是账号 {id}（此行不再按账号判定），但该端点由独立作用域闸
 	// 对受限 token 一律拦截（R2，见 TestScopePreviewBucketsDeniedForRestrictedTokens）。

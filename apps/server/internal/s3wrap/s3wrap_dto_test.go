@@ -11,7 +11,7 @@ import (
 
 func TestFromS3Object(t *testing.T) {
 	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	o := FromS3Object(types.Object{
+	o := fromS3Object(types.Object{
 		Key:          aws.String("a.txt"),
 		Size:         aws.Int64(42),
 		LastModified: &ts,
@@ -24,14 +24,14 @@ func TestFromS3Object(t *testing.T) {
 }
 
 func TestGranteeLabel(t *testing.T) {
-	if GranteeLabel(nil) != "" {
+	if granteeLabel(nil) != "" {
 		t.Fatal("nil grantee")
 	}
 	g := &types.Grantee{
 		Type: types.TypeGroup,
 		URI:  aws.String("http://acs.amazonaws.com/groups/global/AllUsers"),
 	}
-	if got := GranteeLabel(g); got != "所有用户 (AllUsers)" {
+	if got := granteeLabel(g); got != "所有用户 (AllUsers)" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -44,7 +44,7 @@ func TestDescribeACL(t *testing.T) {
 			Permission: types.PermissionRead,
 		}},
 	}
-	owner, public, rows := DescribeACL(out)
+	owner, public, rows := describeACL(out)
 	if owner != "owner" || !public || len(rows) != 1 {
 		t.Fatalf("owner=%q public=%v rows=%d", owner, public, len(rows))
 	}

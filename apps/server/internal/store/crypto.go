@@ -148,6 +148,11 @@ func encryptAESGCM(key, plain []byte) ([]byte, error) {
 	return gcm.Seal(nonce, nonce, plain, nil), nil
 }
 
+// encryptAESGCMFn 是 encryptAESGCM 的间接层：测试替换它即可注入失败，覆盖调用方
+// 的错误传播分支——encryptAESGCM 的失败只可能来自密钥长度非法，而 deriveKey 恒返回
+// 32 字节（生产不可达），但不能因此把错误吞掉、产出损坏信封（KNOWN_ISSUES #83）。
+var encryptAESGCMFn = encryptAESGCM
+
 func decryptAESGCM(key, blob []byte) ([]byte, error) {
 	// aes.NewCipher 仅在 key 长度非法时（≠16/24/32）报错——用于 caller 误用保护。
 	block, err := aes.NewCipher(key)

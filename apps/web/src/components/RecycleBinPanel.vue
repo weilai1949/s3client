@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { state, selectAccount } from '../store'
@@ -8,7 +8,8 @@ import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
 import { fmtDate } from '../format'
-import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
+import { ROW_HEIGHT } from '../virtualList'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import { t, tf } from '../i18n'
 import type { BucketItem } from '../types'
 
@@ -37,47 +38,12 @@ const account = () => state.accounts.find((a) => a.id === accSel.value)
 /* markers 大列表窗口化：仅渲染可视区 + overscan，避免上万条删除标记冻结 DOM。
    行高单一来源：ROW_HEIGHT 直接绑定到 v-row 行内样式（:style），CSS 不再另存字面量——
    此前 CSS 38px 与 ROW_HEIGHT=42 漂移导致滚动窗口错位（review §F3，同类 bug 见 §F9③）。 */
-const scrollEl = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const viewportH = ref(DEFAULT_VIEWPORT_H)
+const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(computed(() => markers.value))
 
-const windowed = computed(() => {
-  const win = virtualWindow(markers.value.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
-  return { ...win, items: markers.value.slice(win.start, win.end) }
-})
-
-function onListScroll() {
-  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
-}
-
-function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
-}
-
-let resizeObs: ResizeObserver | undefined
-
-// markers 为空时容器不渲染（首屏/空桶），scrollEl 的 ref 绑定晚于 onMounted：
-// 用 watch 监听 ref 绑定时机，自动测量可视区并注册 ResizeObserver（同 ObjectList/MigratePanel）。
-watch(scrollEl, (el) => {
-  resizeObs?.disconnect()
-  resizeObs = undefined
-  if (!el || typeof ResizeObserver === 'undefined') return
-  measureViewport()
-  resizeObs = new ResizeObserver(measureViewport)
-  resizeObs.observe(el)
-})
-
-/* 数据源整体更换（切桶/切账号/刷新/恢复与清除后的重新赋值）必须把窗口起点归零，
-   否则残留的旧 scrollTop 会让 markers.slice(start, end) 为空 → 空白表（review §F2）。
-   只监听数组身份、不做深监听：「加载更多」是原数组 push 追加，不重置用户滚动位置。
-   同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
-function resetWindowScroll() {
-  scrollTop.value = 0
-  if (scrollEl.value) scrollEl.value.scrollTop = 0
-}
+/* 数据源整体更换（切桶/切账号/刷新/恢复与清除后的重新赋值）必须把窗口起点归零（见
+   useVirtualRows.resetWindowScroll），否则残留的旧 scrollTop 会让 markers.slice(start, end)
+   为空 → 空白表。只监听数组身份、不做深监听：「加载更多」是原数组 push 追加，不重置滚动位置。 */
 watch(() => markers.value, () => resetWindowScroll())
-
-onBeforeUnmount(() => resizeObs?.disconnect())
 
 // 桶加载代际（评审 R6）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
 // 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 seq

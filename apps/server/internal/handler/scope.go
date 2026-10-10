@@ -15,7 +15,9 @@ package handler
 //   - POST /api/accounts/preview-buckets：调用方自带 endpoint/凭据由服务端拨号
 //     （SSRF 拨号面），已设任何资源作用域（readonly/prefixes/accounts）→ 403；
 //   - /api/migrate/jobs*（列取/状态/取消/事件流）：任务记录不带归属，无法按桶细判，
-//     已声明前缀/账号作用域 → 403（readonly 读不受限：本就可读全量桶）。
+//     已声明前缀/账号作用域 → 403（readonly 读不受限：本就可读全量桶）；
+//   - POST /api/accounts（创建账号）：无 {id} 可判，accounts 作用域 → 403
+//     （KNOWN_ISSUES #81）；GET /api/accounts（列表）仍放行，语义见 threat-model.md。
 //
 // 拒绝一律写审计事件（auth.scope_denied + reason）并回统一 JSON 错误；
 // **不记录 token 明文**（凭证不落日志）。
@@ -39,6 +41,7 @@ const auditScopeDenied = "auth.scope_denied"
 
 // 端点级作用域闸钉住的路径（与 routes.go 的注册名一致）。
 const (
+	accountsPath          = "/api/accounts"
 	previewBucketsPath    = "/api/accounts/preview-buckets"
 	migrateJobsPathPrefix = "/api/migrate/jobs"
 )
@@ -69,12 +72,21 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, token string
 		h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 		return false
 	}
-	// 端点级闸（评审 R2）：preview-buckets 用**调用方自带**的 endpoint/credential 由
+	// 端点级闸（评审 2026-10-09 R2）：preview-buckets 用**调用方自带**的 endpoint/credential 由
 	// 服务端去拨号（SSRF 拨号面，ADR-003 自托管放行私网）。它不是账号 {id} 路径、
 	// body 也默认不带桶引用——下面的账号/前缀判定对它全部落空。已设任何资源作用域
 	// 的 token 不得把它当认证后的跳板；无限制语义（仅 expiresAt）的 token 不受影响。
 	if r.URL.Path == previewBucketsPath && scopeHasRestriction(scope) {
 		h.denyScope(w, r, "preview_buckets")
+		return false
+	}
+	// 端点级闸（KNOWN_ISSUES #81）：POST /api/accounts（创建账号）无路径 {id}，
+	// 账号作用域判定落空——accounts:[A] 的 token 曾可铸造任意新账号（凭证面）。
+	// 创建新账号不属于「访问被授权账号」的语义，一律拒绝。GET /api/accounts（列表，
+	// 返回不含 SecretKey 的 AccountView）仍放行：accounts 作用域只约束逐个 {id}
+	// 的操作，列表语义见 docs/threat-model.md。
+	if r.Method == http.MethodPost && r.URL.Path == accountsPath && len(scope.Accounts) > 0 {
+		h.denyScope(w, r, "accounts_create")
 		return false
 	}
 	// 端点级闸（评审 R1）：/api/migrate/jobs*（列取 / 状态 / 取消 / 事件流）没有任何

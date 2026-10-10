@@ -2,7 +2,7 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0
 
-.PHONY: server server-build tidy web web-build web-typecheck web-typecheck-e2e desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check bench e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+.PHONY: server server-build build tidy web web-build web-typecheck web-typecheck-e2e web-lint desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check bench e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
 
 # Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
 GCL ?= npx --yes gitlab-ci-local@4.75.1
@@ -44,6 +44,10 @@ tidy:
 server-build:
 	cd apps/server && go build -ldflags="-X main.version=$(VERSION)" -o s3client-server .
 
+# 编译整个后端（所有包；CI `server` job 的 build 步同口径，不产出二进制）
+build:
+	cd apps/server && go build ./...
+
 # Web 前端开发
 web:
 	cd apps/web && pnpm install --frozen-lockfile && pnpm dev
@@ -59,6 +63,10 @@ web-typecheck:
 # E2E 源码（e2e/ 与 e2e-real/）类型检查（与 CI 同命令；#37）
 web-typecheck-e2e:
 	cd apps/web && pnpm install --frozen-lockfile && pnpm typecheck:e2e
+
+# 前端 Lint（eslint，--max-warnings 0；与 CI 同命令）
+web-lint:
+	cd apps/web && pnpm install --frozen-lockfile && pnpm lint
 
 # 桌面端开发（Tauri）
 desktop-dev:
@@ -106,9 +114,12 @@ govulncheck:
 	cd apps/server && go install golang.org/x/vuln/cmd/govulncheck@v1.8.0 && "$$(go env GOPATH)/bin/govulncheck" ./...
 
 # 提交前门禁聚合：本地一条命令跑完与 CI 等价的静态检查 + 单测 + 覆盖率。
+# 覆盖 CI `server` job 的 gofmt 之外全部静态门禁（vet / govulncheck / golangci-lint / build）
+# 与 `web` job 的全部（lint / typecheck / typecheck:e2e / test:coverage / build）——gofmt 由
+# pre-commit hook 与 CI 各自把关，不重复。
 # 注意：CI 额外有 Trivy 镜像扫描、RustFS E2E、Playwright E2E 与真实联调 E2E（make e2e-real），
 # 本目标不含（见 docs/DEVELOPMENT.md）。
-check: vet lint test-cover web-test-cover web-typecheck-e2e
+check: vet govulncheck lint build test-cover web-lint web-typecheck web-typecheck-e2e web-test-cover web-build
 
 # 后端基准 + 性能回归门禁（与 .github/workflows/perf.yml 同命令；解读与 flakiness 口径见
 # docs/PERFORMANCE.md §4）。第一行是确定性预算门禁（分配数 + 极宽的耗时兜底），

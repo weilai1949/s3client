@@ -177,7 +177,7 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 		// 移动是「复制成功后删源」的组合动作，半成功（复制了但没删/删了没复制）需按
 		// 任务审计对账；纯复制不记该事件（review R3）。
 		h.audit(r, auditObjectsMove, "jobId", job.ID, "bucket", bucket,
-			"targetBucket", targetBucket, "total", job.Total)
+			"targetBucket", targetBucket, "total", job.Total())
 	}
 	go func() {
 		defer cancel()
@@ -197,7 +197,7 @@ func (h *Handler) copyManyAsync(w http.ResponseWriter, r *http.Request) {
 		}
 		job.Finish(jobResultFromBatch(out), status)
 	}()
-	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total})
+	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total()})
 }
 
 type copyPrefixReq struct {
@@ -354,6 +354,6 @@ func (h *Handler) copyPrefixAsync(w http.ResponseWriter, r *http.Request) {
 		job.Finish(jobResultFromBatch(out), status)
 	}()
 	h.writeJSON(w, http.StatusAccepted, map[string]any{
-		"jobId": job.ID, "total": job.Total, "truncated": truncated,
+		"jobId": job.ID, "total": job.Total(), "truncated": truncated,
 	})
 }

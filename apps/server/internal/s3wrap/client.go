@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
@@ -140,7 +141,14 @@ type unsignedPayloadSetter struct{}
 func (m *unsignedPayloadSetter) ID() string { return "s3client:unsigned-payload" }
 
 func (m *unsignedPayloadSetter) HandleFinalize(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
-	ctx = v4.SetPayloadHash(ctx, unsignedPayload)
+	// 仅对**带 body（有 stream）** 的请求注入 UNSIGNED-PAYLOAD（KNOWN_ISSUES #72）：
+	// 无 body 的操作（GET/HEAD/DELETE/List）交回 SigV4 默认的空体哈希签名——此前
+	// 无条件注入，让这些请求也放弃了可计算的载荷哈希。带 body 的 PutObject/UploadPart
+	// 因流式 body 无法预读哈希，仍必须用 UNSIGNED-PAYLOAD；对已放行的 http:// endpoint，
+	// 其载荷完整性依赖 TLS（自托管场景见 ADR-003），残留风险记于 docs/threat-model.md。
+	if req, ok := in.Request.(*smithyhttp.Request); ok && req.GetStream() != nil {
+		ctx = v4.SetPayloadHash(ctx, unsignedPayload)
+	}
 	return next.HandleFinalize(ctx, in)
 }
 

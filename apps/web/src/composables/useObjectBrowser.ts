@@ -73,9 +73,6 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   function closeCtx() {
     ctxMenu.value = null
   }
-  function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') closeCtx()
-  }
 
   const account = computed(() => currentAccount())
   const fileObjects = computed(() => objects.value.filter((o) => !o.isDir))
@@ -511,7 +508,6 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     panelActive.value = true
     syncedAccountId = state.currentAccountId
     window.addEventListener('click', closeCtx)
-    window.addEventListener('keydown', onKey)
     window.addEventListener('keydown', onGlobalKey)
     window.addEventListener('blur', closeCtx)
     window.addEventListener('scroll', closeCtx, true)
@@ -523,7 +519,6 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   onBeforeUnmount(() => {
     window.removeEventListener('click', closeCtx)
-    window.removeEventListener('keydown', onKey)
     window.removeEventListener('keydown', onGlobalKey)
     window.removeEventListener('blur', closeCtx)
     window.removeEventListener('scroll', closeCtx, true)
@@ -551,7 +546,6 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     openCtx,
     openCtxFromButton,
     closeCtx,
-    onKey,
     panelActive,
     account,
     fileObjects,

@@ -23,6 +23,29 @@ import (
 // （形如 `writeErr(w, http.StatusBadRequest, "xxx: "+someVar)`）。
 var clientErrConcatRe = regexp.MustCompile(`writeErr\([^)]*StatusBadRequest[^)]*"[^"]*"\s*\+`)
 
+// clientErrCallRe 匹配 writeErr 的 400 消息里直接透传某个 error 的 Error()
+// （形如 `writeErr(w, http.StatusBadRequest, err.Error())`）。即便当下服务层
+// 文案看似安全，也禁止整段透传——将来服务层消息带上用户输入时会静默回显。
+var clientErrCallRe = regexp.MustCompile(`writeErr\([^)]*StatusBadRequest[^)]*\.Error\(\)`)
+
+// TestClientErrPatternsCatchKnownBadForms 自检两个正则确实能命中已知坏形态
+// （防止正则随重构腐化而静默失效）。
+func TestClientErrPatternsCatchKnownBadForms(t *testing.T) {
+	concat := `	h.writeErr(w, http.StatusBadRequest, "bad: "+req.Name)`
+	if !clientErrConcatRe.MatchString(concat) {
+		t.Errorf("clientErrConcatRe 未命中拼接形态: %s", concat)
+	}
+	call := `	h.writeErr(w, http.StatusBadRequest, err.Error())`
+	if !clientErrCallRe.MatchString(call) {
+		t.Errorf("clientErrCallRe 未命中 Error() 透传形态: %s", call)
+	}
+	// 固定文案 + 类型化错误消息不应误报。
+	safe := `	h.writeErr(w, http.StatusBadRequest, ve.Msg)`
+	if clientErrConcatRe.MatchString(safe) || clientErrCallRe.MatchString(safe) {
+		t.Errorf("固定文案被误报: %s", safe)
+	}
+}
+
 func TestClientErrorMessagesDoNotEchoInput(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -46,8 +69,8 @@ func TestClientErrorMessagesDoNotEchoInput(t *testing.T) {
 			if idx := strings.Index(code, "//"); idx >= 0 {
 				code = code[:idx]
 			}
-			if clientErrConcatRe.MatchString(code) {
-				t.Errorf("%s:%d 400 错误文案拼接了变量（可能回显用户输入）：%s",
+			if clientErrConcatRe.MatchString(code) || clientErrCallRe.MatchString(code) {
+				t.Errorf("%s:%d 400 错误文案拼接/透传了变量（可能回显用户输入）：%s",
 					name, i+1, strings.TrimSpace(line))
 			}
 		}

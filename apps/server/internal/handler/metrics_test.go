@@ -51,6 +51,8 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		"s3c_store_write_failures_total", "s3c_jobs_active",
 		"s3c_http_request_duration_seconds_bucket", "s3c_http_request_duration_seconds_sum",
 		"s3c_volume_size_bytes", "s3c_volume_free_bytes", "s3c_last_shutdown_duration_seconds",
+		// KNOWN_ISSUES #83：计划 / 任务清单落盘失败（原为静默）。
+		"s3c_persist_failures_total",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)

@@ -3,11 +3,11 @@ export type { Entry, SortKey } from '../types'
 </script>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { fmtDate, fmtSize } from '../format'
 import { t, tf } from '../i18n'
 import { previewKind } from '../preview'
-import { DEFAULT_VIEWPORT_H, OVERSCAN, ROW_HEIGHT, virtualWindow } from '../virtualList'
+import { useVirtualRows } from '../composables/useVirtualRows'
 import type { Entry, ObjectItem, SortKey } from '../types'
 
 const props = defineProps<{
@@ -24,6 +24,7 @@ const props = defineProps<{
   isTruncated: boolean
   loadingAll: boolean
   listGen: number // 换源代次：父层整体替换列表时 +1，「加载更多」的追加不递增
+  ctxEntryKey: string | null // 当前打开右键菜单的条目 key（供「⋯」触发器 aria-expanded）
 }>()
 
 const emit = defineEmits<{
@@ -50,52 +51,15 @@ function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
 /* shift 范围选择的临时记录：change 事件不含 shiftKey，需从 mousedown 捕获。 */
 const shiftDown = ref(false)
 
-/* 列表视图窗口化：仅渲染可视区 + overscan，避免大目录万级 DOM。 */
-const scrollEl = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const viewportH = ref(DEFAULT_VIEWPORT_H)
+/* 列表视图窗口化：仅渲染可视区 + overscan，避免大目录万级 DOM（canonical 管线见 useVirtualRows）。 */
+const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(computed(() => props.entries))
 
-const windowed = computed(() => {
-  const win = virtualWindow(props.entries.length, scrollTop.value, viewportH.value, ROW_HEIGHT, OVERSCAN)
-  return { ...win, items: props.entries.slice(win.start, win.end) }
-})
-
-function onListScroll() {
-  if (scrollEl.value) scrollTop.value = scrollEl.value.scrollTop
-}
-
-function measureViewport() {
-  if (scrollEl.value) viewportH.value = scrollEl.value.clientHeight || DEFAULT_VIEWPORT_H
-}
-
-let resizeObs: ResizeObserver | undefined
-
-/** 窗口起点回到列表顶部的三种触发：
+/** 窗口起点回到列表顶部的三种触发（见 useVirtualRows.resetWindowScroll）：
  *  ① 换源（`listGen`：切目录 / 切桶 / 刷新 / 换账号）——`entries` 是过滤+排序后的
  *     computed，每次重算都是**新数组身份**，「加载更多」的追加同样换身份，所以单靠
  *     entries 变化分不出「换源」与「追加」，必须由父层的换源代次表达；
  *  ② 过滤 / 排序变化；
- *  ③ 条目数**变少**——残留偏移会让 `entries.slice(start, end)` 为空 → 渲染 0 行
- *     空白表（review §F2），这是兜底守卫。
- *  同步写回真实 DOM scrollTop，避免下一次滚动事件把陈旧偏移写回。 */
-function resetWindowScroll() {
-  scrollTop.value = 0
-  if (scrollEl.value) scrollEl.value.scrollTop = 0
-}
-
-/** 列表容器 ref 绑定/解绑：测量可视区并注册 ResizeObserver。
- *
- * 首屏是骨架屏（scrollEl 为 null），因此不能在 onMounted 里一次性挂载——
- * 那样 ResizeObserver 永远不会注册、viewportH 恒为 480（review §F9②）。
- */
-watch(scrollEl, (el) => {
-  resizeObs?.disconnect()
-  resizeObs = undefined
-  if (!el || typeof ResizeObserver === 'undefined') return
-  measureViewport()
-  resizeObs = new ResizeObserver(measureViewport)
-  resizeObs.observe(el)
-})
+ *  ③ 条目数**变少**——残留偏移会让 `entries.slice(start, end)` 为空 → 渲染 0 行空白表。 */
 
 watch(
   [() => props.listGen, () => props.filter, () => props.filterActive, () => props.sortKey, () => props.sortDir],
@@ -113,9 +77,6 @@ watch(() => props.entries.length, (n, prev) => {
 const GRID_MAX_ITEMS = 300
 const gridItems = computed(() => props.entries.slice(0, GRID_MAX_ITEMS))
 const gridHiddenCount = computed(() => Math.max(0, props.entries.length - GRID_MAX_ITEMS))
-
-onMounted(measureViewport)
-onBeforeUnmount(() => resizeObs?.disconnect())
 
 /* 网格视图图标（按类型） */
 function iconFor(e: Entry): string {
@@ -231,7 +192,7 @@ function iconFor(e: Entry): string {
             <td class="muted">—</td>
             <td>
               <div class="actions" @click.stop>
-                <button class="btn secondary sm more-btn" :title="t('objects.moreActions')" :aria-label="t('objects.moreActions')" @click="emit('ctxButton', $event, e)">⋯</button>
+                <button class="btn secondary sm more-btn" :title="t('objects.moreActions')" :aria-label="t('objects.moreActions')" aria-haspopup="menu" :aria-expanded="ctxEntryKey === e.key" @click="emit('ctxButton', $event, e)">⋯</button>
               </div>
             </td>
           </template>
@@ -257,7 +218,7 @@ function iconFor(e: Entry): string {
               <div class="actions" @click.stop>
                 <button class="btn secondary sm" @click="emit('download', e.object!)">{{ t('common.download') }}</button>
                 <button class="btn secondary sm" @click="emit('preview', e.object!)">{{ t('objects.preview') }}</button>
-                <button class="btn secondary sm more-btn" :title="t('objects.moreActionsHint')" :aria-label="t('objects.moreActions')" @click="emit('ctxButton', $event, e)">⋯</button>
+                <button class="btn secondary sm more-btn" :title="t('objects.moreActionsHint')" :aria-label="t('objects.moreActions')" aria-haspopup="menu" :aria-expanded="ctxEntryKey === e.key" @click="emit('ctxButton', $event, e)">⋯</button>
               </div>
             </td>
           </template>

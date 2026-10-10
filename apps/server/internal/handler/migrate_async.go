@@ -45,7 +45,7 @@ func (h *Handler) migrateAsync(w http.ResponseWriter, r *http.Request) {
 		}
 		job.Finish(jobResultFromBatch(out), status)
 	}()
-	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total})
+	h.writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "total": job.Total()})
 }
 
 // migrateJobCancel 取消运行中的异步迁移。

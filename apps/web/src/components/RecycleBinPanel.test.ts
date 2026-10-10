@@ -478,33 +478,6 @@ describe('RecycleBinPanel', () => {
     expect((w.find('.tbl-wrap').element as HTMLElement).scrollTop).toBe(0)
   })
 
-  it('scrollEl 未绑定时空安全早退；容器缺席/出现时数据重置与视口测量都正确', async () => {
-    // 空标记列表 → 表格不渲染（scrollEl 为 null）
-    vi.mocked(rememberedAccountId).mockReturnValue('acc-1')
-    vi.mocked(s3api.listBuckets).mockResolvedValue({ buckets: [b1] })
-    let w = mountPanel()
-    await flushPromises()
-    expect(w.find('.tbl-wrap').exists()).toBe(false)
-    const idle = w.vm as unknown as { onListScroll: () => void; measureViewport: () => void; viewportH: number }
-    idle.onListScroll()
-    idle.measureViewport()
-    expect(idle.viewportH).toBe(480)
-    // 空态点刷新：markers 重置触发归零，但无滚动容器 → 守卫不抛错
-    await findButton(w, 'common.refresh').trigger('click')
-    await flushPromises()
-    expect(w.text()).toContain('trash.emptyHint')
-    w.unmount()
-
-    // 表格渲染后 measureViewport 取实测 clientHeight（非 0 时不走 480 兜底）
-    vi.mocked(s3api.listTrash).mockResolvedValue(page(manyMarkers(5)))
-    w = mountPanel()
-    await flushPromises()
-    const vm = w.vm as unknown as { measureViewport: () => void; viewportH: number }
-    Object.defineProperty(w.find('.tbl-wrap').element, 'clientHeight', { value: 600, configurable: true })
-    vm.measureViewport()
-    expect(vm.viewportH).toBe(600)
-  })
-
   it('环境无 ResizeObserver 时列表仍正常渲染（不注册观察者）', async () => {
     vi.stubGlobal('ResizeObserver', undefined)
     try {
