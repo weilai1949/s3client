@@ -1,14 +1,14 @@
 # REST API 参考
 
-后端默认监听 `127.0.0.1:5000`。所有 `/api/*` 响应均为 JSON（`/api/metrics` 除外）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
+后端默认监听 `127.0.0.1:5000`。`/api/*` 响应**均为 JSON，四类例外**：`/api/metrics`（Prometheus 文本）、`download-zip`（`application/zip` 流）、`proxy`（对象字节流；`mode=text` 时为 `text/plain`）、`migrate/jobs/{id}/events`（`text/event-stream` SSE）。若设置 `S3C_TOKEN`，除 `/api/health` 与 `/api/metrics` 外，所有请求需携带 `Authorization: Bearer <token>`（机器可读契约中的同一事实见下文「API 契约」，由顶层 `security` 与豁免端点的 `security: []` 表达）。
 
-> **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：可为单个 token 声明 `readonly` / `prefixes` / `accounts` / `expiresAt`（字段缺省即不限制）。`readonly` 下仅放行 GET / HEAD，其余方法（含能铸造写 URL 的预签名 `POST`）一律 `403`；`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`）下请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 越界返回 `403`，桶级操作需该桶的整桶授权；`accounts` 下路径 `{id}` 越界返回 `403`；`expiresAt` 过期返回 `401`。另有两条**端点级闸**（请求不携带可判定的桶/账号引用，通用判定落空，对受限 token 整体拒绝）：`POST /api/accounts/preview-buckets` 用调用方自带 endpoint/凭据由服务端拨号（SSRF 拨号面），声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 `403`（仅 `expiresAt` 的不受影响）；`/api/migrate/jobs*`（列取 / 状态 / 取消 / 事件流）的任务记录不带归属、无法按桶细判，声明了 `prefixes` / `accounts` 的 token 一律 `403`（`readonly` 读放行——本就可读全量桶）。**未在 `S3C_TOKEN_SCOPES` 中登记的 token 保持全权**（向后兼容）。越权写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs`），过期写 `auth.denied`（`reason=token_expired`）；审计与响应均**不含 token 明文**。配置格式与 fail-closed 规则见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+> **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：可为单个 token 声明 `readonly` / `prefixes` / `accounts` / `expiresAt`（字段缺省即不限制）。`readonly` 下仅放行 GET / HEAD，其余方法（含能铸造写 URL 的预签名 `POST`）一律 `403`；`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`）下请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 越界返回 `403`，桶级操作需该桶的整桶授权；计划任务的 `run` / `DELETE` **无 body**，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；`accounts` 下路径 `{id}` 越界返回 `403`，且 `POST /api/accounts`（创建账号，无 `{id}` 可判）对声明 `accounts` 的 token 一律 `403`（`reason=accounts_create`——创建新账号不属于「访问被授权账号」）；`expiresAt` 过期返回 `401`。另有两条**端点级闸**（请求不携带可判定的桶/账号引用，通用判定落空，对受限 token 整体拒绝）：`POST /api/accounts/preview-buckets` 用调用方自带 endpoint/凭据由服务端拨号（SSRF 拨号面），声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 `403`（仅 `expiresAt` 的不受影响）；`/api/migrate/jobs*`（列取 / 状态 / 取消 / 事件流）的任务记录不带归属、无法按桶细判，声明了 `prefixes` / `accounts` 的 token 一律 `403`（`readonly` 读放行——本就可读全量桶）。**未在 `S3C_TOKEN_SCOPES` 中登记的 token 保持全权**（向后兼容）。越权写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs` / `accounts_create`），过期写 `auth.denied`（`reason=token_expired`）；审计与响应均**不含 token 明文**。配置格式与 fail-closed 规则见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
 > **`/api/metrics` 有意不受 `S3C_TOKEN` 保护**：即使配置了 token，只要设置 `S3C_EXPOSE_METRICS=1`，`GET /api/metrics` 无需 `Authorization` 头即返回 200（`withAuth` 只豁免 `/api/health` 与 `/api/metrics`，见 `middleware.go`）。这是为了让内网 Prometheus 直接 scrape 而无需分发 token；代价是该端点一旦暴露即**匿名可读**（含版本、存储可达性、S3 上游调用统计等运行信息）。因此**不要**把开启 metrics 的实例直接暴露到公网，应仅在内网 / 反向代理鉴权之后放行。
 所有响应带 `X-Request-ID`（客户端可传入，否则服务端生成）；访问日志字段 `req` 与之对应。
 
 错误格式：`{"error": "..."}`  
-通用码：`400`（请求错误）、`401`（未鉴权 / token 过期）、`403`（token 作用域越权 / Origin 不允许）、`404`（未找到）、`500`（服务端错误）。  
+通用码：`400`（请求错误）、`401`（未鉴权 / token 过期）、`403`（token 作用域越权 / Origin 不允许）、`404`（未找到）、`413`（请求体超 16 MB 上限）、`429`（每 IP 120 次/分钟限速，`S3C_TRUSTED_PROXIES` 下才采信 `X-Forwarded-For`）、`500`（服务端错误）。其中 `401 / 413 / 429 / 500` 由中间件 / 兜底统一产生，已在注册完成后**逐 operation 接线**进机器可读契约（`applyUniversalResponses`，门禁 `TestOpenAPIUniversalResponsesAreWiredPerOperation`）；`400 / 403 / 404` 按端点语义选择性声明（400 / 404 复用共享组件，403 由作用域中间件与 CORS 产生、逐端点含义不同）。端点特有码（`409` 冲突 / `412` 条件不满足 / `416` 越界 Range / `503` 上游不可用等）在各端点小节标注。  
 S3 错误码与用户消息对照见 [`docs/errors.md`](./errors.md)。
 
 ## 健康检查
@@ -29,6 +29,7 @@ GET /api/metrics
 Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设置 `S3C_EXPOSE_METRICS=1` 时返回 200；含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及：
 - `s3c_store_up`：账号存储可达性（1 / 0）。store 掉线时 `/api/health` 返回 503 且本指标为 0——硬失败不降级（ADR-002），建议据此告警。
 - `s3c_store_write_failures_total`：账号库写入失败次数（落盘 / SQL 写入出错，业务拒绝不计数）——`json` / `encrypted` 驱动唯一的主动存储故障信号。
+- `s3c_persist_failures_total`：计划 / 任务清单落盘（`Save`）失败次数（内存态保真、失败降级）；与 `s3c_store_write_failures_total` 区分——后者只覆盖账号库。
 - `s3c_volume_size_bytes` / `s3c_volume_free_bytes`：`S3C_DATA_DIR` 所在文件系统总容量与可用字节；取不到时**不输出该序列**（平台不支持 / statfs 失败）。
 - `s3c_volume_inode_total` / `s3c_volume_inode_free`：同一文件系统的 inode 总数与空闲数（statfs `Files` / `Ffree`）；Windows 与 Linux / macOS / FreeBSD 之外的平台，或 statfs 失败时同样**不输出该序列**。
 - `s3c_jobs_active`：在册（未终结）异步任务数，上限 256（与 `JobRegistry` 同口径）。
@@ -596,13 +597,14 @@ POST /api/accounts/{id}/download-zip
 
 ### 安全代理（下载 / 预览）
 ```
-GET /api/accounts/{id}/proxy?bucket=B&key=K&mode=download|inline|text&maxBytes=N
+GET /api/accounts/{id}/proxy?bucket=B&key=K&mode=download|inline|text&maxBytes=N&versionId=V(可选)
 ```
 统一走服务端转发，避免签名 URL 暴露与恶意内容渲染：
 
 - `mode=download`（默认）：强制 `Content-Disposition: attachment` 流式转发（浏览器直接保存，**内容不进渲染管道**），支持 `Range` 请求头透传。
 - `mode=inline`：透传源 `Content-Type` 流式转发（图片 / PDF / 媒体预览），支持 `Range`。
 - `mode=text`：读取前 `maxBytes` 字节（默认 1MB，上限 2MB），**强制** `text/plain; charset=utf-8` + `X-Content-Type-Options: nosniff`，超限时响应头 `X-Preview-Truncated: 1`（杜绝 HTML/JS 注入）。
+- `versionId`（可选）：读取指定历史版本的内容（「版本比较 / 详情」拉取某个版本的预览与下载）。
 
 对象不存在返回 404；文件名经清洗（去路径分隔符/引号）后写入 `Content-Disposition`，防止头注入。
 
@@ -613,7 +615,7 @@ POST /api/accounts/{id}/presign
 ```json
 {"method":"get|put|post","key":"dir/a.txt","bucket":"B(可选)","versionId":"V(可选,仅get)","expiresIn":3600,"ifMatch":"\"e1\"(可选,仅put)","ifNoneMatch":"*(可选,仅put)"}
 ```
-- `expiresIn` 单位秒；缺省（或 ≤0）时**默认 1 小时**，超过 **24 小时**会被钳到 24 小时（S3 协议上限为 7 天，控制台场景收紧到 24h；见 `s3wrap/presign.go` 与 `objects.go` 的钳制）。
+- `expiresIn` 单位秒；缺省（或 ≤0）时**默认 1 小时**，超过 **24 小时**会被钳到 24 小时（S3 协议上限为 7 天，控制台场景收紧到 24h）。默认与钳制在 `handler/objects.go` 的 `presign`（分段另有 `handler/multipart.go` 的 `multipartPart` 同款规则）；`s3wrap/presign.go` 只负责签名与 `expiresIn ≤ 0` 拒绝。
 - `get` / `put` 返回 `{method,url,expiresIn,...}`；`post` 额外返回 `{url,fields}`（multipart 表单字段）。
 - `get` 可传 `versionId` 生成指向指定历史版本的签名 GET（用于「版本比较/详情」拉取某个版本内容）。
 - 条件写（可选，仅 `put`）：`ifNoneMatch` 只接受 `*`、`ifMatch` 为 ETag 字面量；条件不在 URL 里——**浏览器 PUT 时必须携带响应 `headers` 回显的请求头**（S3 服务端求值，且条件头参与签名），条件不满足返回 412。`get`/`post` 携带条件字段直接 400。浏览器直传场景要求桶 CORS 的 **AllowedHeaders 放行 `If-Match` / `If-None-Match`**（条件头必须原样回传，否则预检失败或签名校验不过）。
@@ -715,7 +717,7 @@ GET /api/migrate/jobs/{id}
 ```
 POST /api/accounts/{id}/copy-prefix/async
 ```
-请求体与 `copy-prefix` 相同。立即返回 `jobId`，进度通过既有迁移任务接口查询：
+请求体与 `copy-prefix` 相同。立即返回 `{jobId, total, truncated}`（`total` 为本次复制键数、`truncated` 为列举是否命中 100k 上限，与 `delete-prefix/async` 同口径；202 Accepted），进度通过既有迁移任务接口查询：
 `GET /api/migrate/jobs/{id}` / `.../events` / `POST .../cancel`（`progress.migrated` 表示已复制数）。
 
 ```
@@ -767,10 +769,14 @@ POST /api/migrate/sync
   "copied": 38,             // 实际复制数
   "failed": 2,              // 复制失败数
   "failedKeys": ["bad.txt"],// 上限 200
-  "truncated": false        // 源侧列举命中 100k 硬上限（第 100001 个起未参与本次同步）
+  "lastError": "…",         // 仅失败时出现（failed > 0）：最后一个失败的错误信息
+  "truncated": false        // 源侧或目标侧列举命中 100k 硬上限（第 100001 个起未参与本次同步）
 }
 ```
-`truncated=true` 时必须继续处理剩余对象（再次同步会从同一位置继续列举），否则超出上限的源对象**永不同步**且无任何信号。
+`truncated=true` 表示**源侧或目标侧**列举被 100k 硬上限截断：源侧截断 = 有对象没被扫描（漏拷）；
+目标侧截断 = 目标索引不全（已有对象可能被误判缺失而重拷）。**本端点没有续传游标**——每次同步
+都从头重新列举，重跑会在**同一位置**再次截断，超出上限的对象不会自动纳入；需要人工缩窄
+`sourcePrefix` 分批同步，直到两侧都返回 `truncated=false`。
 
 ### 计划任务（cron 定时增量同步）
 
@@ -841,7 +847,7 @@ OpenAPI 3.0 规范，作为 84 个 `/api/*` 端点的契约单一来源；**经�
 路径参数`），`endpoints.ts` 的 URL 与 method 全部经 `opPath()` 取自生成物；`pnpm gen:api --check`
 （由 `src/api/generated.gate.test.ts` 在 `pnpm test` 内调用）钉住「spec 改了而忘了重新生成」。
 同一份契约也可用于 Swagger UI / 契约测试。
-共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）。
+共享 `components.schemas` / `parameters` / `responses` 已全部接线为 `$ref`（`refSchema` / `refParam` / `refResp`）；中间件 / 兜底统一产生的通用状态码 `401 / 413 / 429 / 500` 也在全部注册完成后逐 operation 补挂（`applyUniversalResponses` → 共享 `Unauthorized` / `PayloadTooLarge` / `TooManyRequests` / `InternalError`，无孤儿组件；由 `TestOpenAPIUniversalResponsesAreWiredPerOperation` 钉住）。
 鉴权与分组已机器可读：顶层 `security: [{bearerAuth: []}]` 要求 `components.securitySchemes.bearerAuth`（`type: http`、`scheme: bearer`），真实豁免鉴权的 `/api/health` 与 `/api/metrics` 逐 operation 显式声明 `security: []`（`middleware.go` 的 `withAuth` 是唯一真值来源；`/api/openapi.json` 不豁免）；顶层 `tags` 声明全部 11 个分组（`accounts` / `buckets` / `bucket-settings` / `objects` / `object-meta` / `multipart` / `versions` / `trash` / `migrate` / `schedules` / `system`），每个 operation 至少归入其中一个。该不变式由 `openapi_auth_test.go` 机械校验。
 
 ## 请求示例（curl）

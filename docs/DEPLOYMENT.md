@@ -132,10 +132,21 @@ curl http://127.0.0.1:5000/api/health
 
 ### 6.4 升级
 
-跟随 [CHANGELOG.md](../CHANGELOG.md) 的 Unreleased 段与 GitHub Release；dependabot 每周自动提交依赖更新 PR，CI 的 Trivy / govulncheck 门禁拦截已知漏洞。
+依赖面：跟随 [CHANGELOG.md](../CHANGELOG.md) 的 Unreleased 段与 GitHub Release；dependabot 每周自动提交依赖更新 PR，CI 的 Trivy / govulncheck 门禁拦截已知漏洞。
+
+可执行步骤（Docker 部署，prod compose；本地二进制同理替换第 1/4 步）：
+
+1. **升级前备份**：按 [`OPERATIONS.md`](OPERATIONS.md) §6 做一次 `/data` 卷备份，并确认 `S3C_STORE_KEY` 可用（丢了 key 备份也解不开）；读 CHANGELOG 确认目标版本无破坏性变更。
+2. **换 tag**：改根 `.env` 的 `S3C_IMAGE_TAG=<新版本>`（prod compose 的镜像为 `s3client/server:${S3C_IMAGE_TAG:-v1.0.0}`；基础 `docker-compose.yml` 则**写死** tag，升级需直接改该文件）。
+3. **拉新版并重启**：`docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml stop && docker compose -f docker-compose.prod.yml up -d`（宽限期见 [`OPERATIONS.md`](OPERATIONS.md) R-9）。
+4. **验证六项**：① `GET /api/health` 返回 200；② `/api/metrics` 的 `s3c_build_info{version=...}` 与目标 tag 一致（需 `S3C_EXPOSE_METRICS=1`）；③ 服务端日志无启动期 fail-closed 报错；④ 抽查一次流式下载；⑤ 抽查一次写操作；⑥ 前端页面版本与后端一致（前端「关于 / 版本」处核对）。
+5. **异常即回滚**：见 §7（tag 指回旧版本，回滚前先备份 `/data`）。
+
+> **格式兼容提醒**：加密格式当前写入 `S3C3`（可读旧 `S3C2`）；**降级到不认识新格式的旧版本可能读不了账号库**——降级前的备份是硬要求，详见 [`OPERATIONS.md`](OPERATIONS.md) §8 与 [`compatibility.md`](compatibility.md) §4。
 
 ## 7. 回滚
 
-- Docker：`docker compose down && docker compose -f docker-compose.prod.yml up -d`（镜像 tag 指回旧版本）。
-- 数据：账号存储（`accounts.json` / `accounts.db` / `accounts.json.enc`）挂载于 `/data` 卷，回滚前先备份；
+- **Docker（prod compose）**：根 `.env` 把 `S3C_IMAGE_TAG` 改回上一个已知良好版本 → `docker compose -f docker-compose.prod.yml up -d`（基础 `docker-compose.yml` 直接改文件里写死的镜像 tag）。镜像 tag 之外的回滚面（`S3C_STORE_DRIVER` / `S3C_STORE_KEY` 等配置）保持升级前取值，不在回滚时顺手改动。
+- **回滚后验证**：同 §6.4 第 4 步六项（`/api/health` 200、`s3c_build_info` 与旧 tag 一致、日志干净、一次下载 + 一次写操作抽查）；检查表口径见 [`OPERATIONS.md`](OPERATIONS.md) §8「升级与回滚」。
+- **数据**：账号存储（`accounts.json` / `accounts.db` / `accounts.json.enc`）挂载于 `/data` 卷，**回滚前先备份**——旧版本可能读不了 `S3C3` 新格式（降级格式风险见 §6.4 提醒）；
   同目录的 `.s3client.lock` 只是 flock 锁文件，不需要备份（进程退出即释放）。

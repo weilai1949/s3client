@@ -131,6 +131,73 @@ func TestOpenAPIStatusCodesAreDeclared(t *testing.T) {
 	}
 }
 
+// TestOpenAPIUniversalResponsesAreWiredPerOperation 断言中间件级通用状态码已逐 operation 接线，
+// 且 components.responses 无零引用孤儿：
+//   - 429（限流）/ 500（兜底）→ 全部端点；
+//   - 401（withAuth / scope）→ 除 `security: []` 豁免端点外全部端点；
+//   - 413（16 MB 请求体上限，`handler.go` decodeBody）→ 仅带 requestBody 的端点。
+//
+// 背景：`Unauthorized` / `TooManyRequests` / `InternalError` 三个共享响应此前**定义后 0 引用**，
+// 84 个 operation 无一声明 401 / 413 / 429 / 500——代码生成器与 Swagger UI 看不到这些状态，
+// 而 docs/api.md 把 401 / 500 列为通用码、「共享 responses 已全部接线为 $ref」。
+// 通用码由中间件统一产生，逐条手写 84×4 必然漂移，故在注册完成后统一接线并由本门禁钉住。
+func TestOpenAPIUniversalResponsesAreWiredPerOperation(t *testing.T) {
+	t.Parallel()
+	doc := openAPIDoc(t)
+	paths := openAPIPaths(t, doc)
+
+	comps, _ := doc["components"].(map[string]any)
+	respComps, _ := comps["responses"].(map[string]any)
+	if len(respComps) < 5 {
+		t.Fatalf("components.responses 只有 %d 个，疑似口径失效", len(respComps))
+	}
+
+	refCount := map[string]int{}
+	checked := 0
+	for path, methods := range paths {
+		for m, op := range methods {
+			checked++
+			resps, _ := op["responses"].(map[string]any)
+			if resps == nil {
+				t.Errorf("%s %s 缺少 responses", m, path)
+				continue
+			}
+			noAuth := false
+			if s, ok := op["security"].([]any); ok {
+				noAuth = len(s) == 0
+			}
+			want := []string{"429", "500"}
+			if !noAuth {
+				want = append(want, "401")
+			}
+			if _, hasBody := op["requestBody"]; hasBody {
+				want = append(want, "413")
+			}
+			for _, s := range want {
+				if _, ok := resps[s]; !ok {
+					t.Errorf("%s %s 未声明通用状态码 %s（中间件会产生该响应）", m, path, s)
+				}
+			}
+			for _, r := range resps {
+				if rm, _ := r.(map[string]any); rm != nil {
+					if ref, _ := rm["$ref"].(string); ref != "" {
+						refCount[ref]++
+					}
+				}
+			}
+		}
+	}
+	if checked < 60 {
+		t.Fatalf("仅检查 %d 个 operation，疑似遍历口径失效", checked)
+	}
+	for name := range respComps {
+		if refCount["#/components/responses/"+name] == 0 {
+			t.Errorf("components.responses.%s 零引用——孤儿共享响应，契约消费者（codegen / Swagger UI）看不到它",
+				name)
+		}
+	}
+}
+
 // TestOpenAPIBucketNotRequiredInRequestBody 所有请求体的 `bucket` 都必须可选：handler 经
 // `bucketOr` 回退账号默认桶（全仓统一语义），共享 `Bucket` query 参数也文档为「可省略」。
 // 注册表若把 `bucket` 标 required 即契约谎言（KNOWN_ISSUES #79）。

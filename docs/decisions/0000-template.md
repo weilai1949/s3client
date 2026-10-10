@@ -1,7 +1,9 @@
 # ADR-NNN：<决策的一句话标题>
 
 > **用法**：复制本文件为 `docs/decisions/NNNN-<短横线短名>.md`（NNNN 为四位递增编号、短名小写
-> kebab-case），逐节填写，并在 [`index.md`](index.md) 的索引表登记一行。**不要**在 ADR 里记录
+> kebab-case），逐节填写，并在 [`index.md`](index.md) 的索引表登记一行。**编号体例**：文件名用
+> **四位**（`0013-…`），标题与正文 / 索引引用一律用**三位** `ADR-0NN`（如 `ADR-013`，与 `ADR-001..ADR-012`
+> 及代码注释口径一致）。**不要**在 ADR 里记录
 > 待办 / 缺陷——那些走 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md)（唯一来源）。
 >
 > **章节约定**：H2 用**英文**（`Status` / `Date` / `Context` / `Decision` /

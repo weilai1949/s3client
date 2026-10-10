@@ -193,7 +193,7 @@ func TestOperationsTraceRowTracksOTelSection(t *testing.T) {
 	}
 	if strings.Contains(row, "未接入") {
 		t.Errorf("%s 的跨服务 trace 行声称「未接入」，但同文件 §3.4 已实现 OTel tracing"+
-			"（`S3C_OTEL_ENDPOINT` 开关、ADR-0013）——同一文件自相矛盾：%s",
+			"（`S3C_OTEL_ENDPOINT` 开关、ADR-013）——同一文件自相矛盾：%s",
 			docStatusOps, strings.TrimSpace(row))
 	}
 	if !strings.Contains(row, "S3C_OTEL_ENDPOINT") {

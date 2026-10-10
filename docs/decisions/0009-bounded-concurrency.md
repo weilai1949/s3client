@@ -38,7 +38,7 @@ S3 连接被短时间内的大量请求拖垮。目标：**内存有界 + 过载
 ### 无界并发（来多少开多少）
 - Pros：实现最简。
 - Cons：内存 / goroutine 耗尽（与 `defaultMaxJobs` 的背景一致：KNOWN_ISSUES #17 /
-  ASSESSMENT M4）。
+  [`../archive/assessment.md`](../archive/assessment.md) M4）。
 - 已被推翻。
 
 ### 缓冲通道收集全部结果再处理
@@ -58,4 +58,4 @@ S3 连接被短时间内的大量请求拖垮。目标：**内存有界 + 过载
   [`OPERATIONS.md`](../OPERATIONS.md)）。
 - 常量值由单实例内存预算推导（compose 512MB 限额）；调整内存预算前必须先重算这些常量。
 - 无缓冲通道的纪律：消费端必须**始终消费** results，否则 worker 永久阻塞
-  （`zip.go` 注释 review §B4 记录过该失败模式）。
+  （`zip.go` 注释 [`../archive/review-2026-09-19.md`](../archive/review-2026-09-19.md) §B4 记录过该失败模式）。

@@ -32,6 +32,8 @@ cd apps/server && go test . -run 'TestBench' -count=1 -v     # 只跑预算门�
 
 采集环境：`go1.26.6 linux/amd64`，13th Gen Intel(R) Core(TM) i5-13400F，`GOMAXPROCS=16`，
 `-benchtime=1s`。**绝对值仅供趋势判断**，换机器请按同机前后对比。
+> ⚠️ 数字采于 go1.26.6；工具链已于 2026-10-09 升至 **go1.26.9**（见 [`ROADMAP.md`](ROADMAP.md) §5.2 E1），
+> **本节基线尚未在新工具链上复测**（按 §4.3 第 4 条，复测须在原采集机上重跑后连同本行一起更新）。
 
 ### 2.1 `s3wrap` —— 端点归一化与签名
 
@@ -71,7 +73,7 @@ cd apps/server && go test . -run 'TestBench' -count=1 -v     # 只跑预算门�
 | `StoreCreate/json+key` | 29 609 321 | 67 193 959 | 150 |
 | `StoreCreate/encrypted` | 29 638 345 | 67 199 428 | 153 |
 
-## 3. 三条需要知道的结论
+## 3. 四条需要知道的结论
 
 ### 3.1 加密写入单次约 30 ms、瞬时分配约 64 MiB —— 这是**有意设计**
 

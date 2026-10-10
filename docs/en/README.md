@@ -2,7 +2,7 @@
 
 > **Source (Chinese SSOT)**: [`docs/README.md`](../README.md) — the Chinese docs landing page is the single
 > source of truth (SSOT); this page is the English navigation adaptation, not a translation of it.
-> **Source revision**: `dd78f36` (2026-09-29); adapted on 2026-09-30.
+> **Source revision**: `30599f0` (2026-10-10); adapted from the working tree on 2026-10-10.
 
 This directory holds the **English snapshots** of a documentation set whose authoritative language is
 Chinese. It is deliberately small: only pages with independent value for English readers are translated.
@@ -28,6 +28,10 @@ authoritative pages (browser translation works reasonably well on them); they ar
 |---|---|
 | Install / configure / operate the service | [`../DEPLOYMENT.md`](../DEPLOYMENT.md) · [`../OPERATIONS.md`](../OPERATIONS.md) |
 | Look up a configuration variable | [`../CONFIGURATION.md`](../CONFIGURATION.md) (SSOT for all `S3C_*` variables) |
+| Understand the data model / on-disk format | [`../data-model.md`](../data-model.md) |
+| Check performance baselines | [`../PERFORMANCE.md`](../PERFORMANCE.md) |
+| Review third-party licenses (auto-generated) | [`../THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) |
+| Write an incident postmortem | [`../POSTMORTEM_TEMPLATE.md`](../POSTMORTEM_TEMPLATE.md) |
 | Call the REST API or map errors | [`../api.md`](../api.md) · [`../errors.md`](../errors.md) |
 | Read the user-facing UI guide | [`../user-guide.md`](../user-guide.md) |
 | Look up S3 / project terminology | [`../glossary.md`](../glossary.md) |

@@ -50,6 +50,21 @@ func apiRouteCountFromSource(t *testing.T) int {
 	return n
 }
 
+// frontendMethodCountFromSource 解析前端 endpoints.ts 的 `s3api` 对象顶层方法数
+// （行首两空格 + `name:` 的条目，与 ops 生成物 operations.ts 同量纲）。
+func frontendMethodCountFromSource(t *testing.T) int {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "apps", "web", "src", "api", "endpoints.ts"))
+	if err != nil {
+		t.Fatalf("读取 endpoints.ts: %v", err)
+	}
+	n := len(regexp.MustCompile(`(?m)^  [a-zA-Z_]+:`).FindAll(b, -1))
+	if n == 0 {
+		t.Fatal("endpoints.ts 未解析到任何 s3api 方法，疑似解析口径失效")
+	}
+	return n
+}
+
 // docNumberClaims 是全部受门禁保护的「叙述性数字」声明。
 //
 // 注意：这里**不**收录 FEATURES.md §B/§C 等历史台账里的数字——那些记录的是当时状态，
@@ -81,6 +96,36 @@ var docNumberClaims = []docNumberClaim{
 		file: "README.md",
 		re:   regexp.MustCompile("(\\d+) 个 `S3C_\\*` 变量"),
 		got:  func(t *testing.T) int { return len(configEnvVarsFromSource(t)) },
+	},
+	{
+		// 英文页同款（2026-10-10 实测 docs/en/index.md 停在 18，真值 22——英文页此前不在扫描面）。
+		// 「18」与「`S3C_*`」在源文件里被换行分隔，故用 \s+ 跨空白匹配。
+		file: "docs/en/index.md",
+		re:   regexp.MustCompile("all (\\d+)\\s+`S3C_\\*` variables"),
+		got:  func(t *testing.T) int { return len(configEnvVarsFromSource(t)) },
+	},
+	{
+		file: "docs/en/index.md",
+		re:   regexp.MustCompile("(\\d+) `/api/\\*` endpoints"),
+		got:  apiRouteCountFromSource,
+	},
+	{
+		// 英文架构页把端点数写成 72（与前端方法数混淆），必须钉在 routes.go 上。
+		file: "docs/en/architecture.md",
+		re:   regexp.MustCompile("(\\d+) `/api/\\*` endpoints"),
+		got:  apiRouteCountFromSource,
+	},
+	{
+		// 前端 s3api 方法数（apps/web/src/api/endpoints.ts 顶层 `name:` 条目），
+		// 与后端端点数是两个量纲，各自钉住。
+		file: "docs/architecture.md",
+		re:   regexp.MustCompile(`s3api 对象，(\d+) 个方法`),
+		got:  frontendMethodCountFromSource,
+	},
+	{
+		file: "docs/en/architecture.md",
+		re:   regexp.MustCompile("`s3api` object, (\\d+) methods"),
+		got:  frontendMethodCountFromSource,
 	},
 }
 

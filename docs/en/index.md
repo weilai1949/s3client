@@ -58,6 +58,10 @@ see [Changelog](../../CHANGELOG.md).
 - **Trash menu**: a dedicated top-level menu listing all **deleted objects (delete markers)** per bucket,
   with **one-click restore (undo delete)** and **permanent purge (delete all versions of that key)**;
   paged loading of the full history.
+- **Cost dashboard menu (FinOps)**: a dedicated top-level menu aggregating bucket usage **by storage class
+  and top-level prefix**, estimating monthly cost (USD/GiB/month) and suggesting **cold (30–89 days) →
+  `STANDARD_IA`** and **archive (≥90 days) → `GLACIER_IR`** moves; prefix filtering supported, clearly
+  marked as truncated beyond 100k objects (order-of-magnitude estimate, not a bill).
 - **Migrate**: same endpoint via `CopyObject` (server-side copy); cross-endpoint via `GetObject` →
   `PutObject` streamed forwarding (preserving Content-Type and metadata); per-key execution with failure
   summary.
@@ -122,7 +126,7 @@ All configuration comes from environment variables (`S3C_*`), with `.env` suppor
 silently falling back) → `.env` in the working directory → `.env` next to the executable; real environment
 variables always win over files.
 
-**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 18
+**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 22
 `S3C_*` variables, the startup hard-failure list, and client settings. Most common:
 
 | Variable | Default | Meaning |
@@ -338,8 +342,12 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
 | Glossary | [`glossary.md`](../glossary.md) |
 | i18n / accessibility | [`i18n.md`](../i18n.md) · [`accessibility.md`](../accessibility.md) |
 | Configuration SSOT | [`CONFIGURATION.md`](../CONFIGURATION.md) |
+| Data model & on-disk format map | [`data-model.md`](../data-model.md) |
 | Deployment / upgrade / rollback | [`DEPLOYMENT.md`](../DEPLOYMENT.md) |
 | Operations (metrics / SLO / runbooks / backup / DR) | [`OPERATIONS.md`](../OPERATIONS.md) |
+| Performance baselines & benchmarks | [`PERFORMANCE.md`](../PERFORMANCE.md) |
+| Postmortem template | [`POSTMORTEM_TEMPLATE.md`](../POSTMORTEM_TEMPLATE.md) |
+| Third-party licenses (auto-generated) | [`THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md) |
 | Threat model / security design | [`threat-model.md`](../threat-model.md) |
 | Architecture & ADRs | [`architecture.md`](../architecture.md) · [`decisions/index.md`](../decisions/index.md) |
 | Development rules / gates (TDD-first) | [`DEVELOPMENT.md`](../DEVELOPMENT.md) |
@@ -361,6 +369,17 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
   is [`docs/README.md`](../README.md).
 - If this page and the Chinese README ever disagree, **the Chinese README wins** — this page is a
   translation snapshot.
+
+## Known limitations
+
+- **640 GB per object on cross-endpoint migration** (`64 MB × 10 000 parts`): cross-endpoint copy streams
+  `GetObject` → `PutObject` (`service.StreamCopy`), and part numbers are capped by S3's 10 000-part limit —
+  **oversized objects are explicitly rejected and aborted before parts run out, never silently truncated**.
+  The buffer is not scaled up because that would break the container's 512 MB memory budget. Rationale in
+  the comments of [`apps/server/internal/service/stream_copy.go`](../../apps/server/internal/service/stream_copy.go);
+  registered as [docs/KNOWN_ISSUES.md](../KNOWN_ISSUES.md) **#63** (decided ➖, keep as is).
+- The **single source of truth for known limitations** is [docs/KNOWN_ISSUES.md](../KNOWN_ISSUES.md);
+  this section only mirrors the user-visible one above.
 
 ## Security notes
 

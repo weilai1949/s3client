@@ -201,6 +201,20 @@ func (r *Registry) Operation(method, path string, op Op) {
 	r.spec = nil
 }
 
+// ForEachOperation 遍历全部已注册 operation，f 返回修改后的副本写回。
+// 供「中间件级通用状态码」这类全量补挂在全部注册完成后统一执行
+// （handler.applyUniversalResponses），避免逐条手写 84×N 处声明漂移。
+func (r *Registry) ForEachOperation(f func(method, path string, op Op) Op) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for path, ops := range r.paths {
+		for m, op := range ops {
+			ops[m] = f(m, path, op)
+		}
+	}
+	r.spec = nil
+}
+
 // SetExamples 为已注册的 operation 附加请求 / 响应示例。
 //
 // 返回 error 而非静默忽略：示例 key（method+path）或状态码拼错时，示例会「凭空消失」且
@@ -637,6 +651,10 @@ func sharedResponses() map[string]any {
 		},
 		"TooManyRequests": Response{
 			Description: "请求频率超限",
+		},
+		"PayloadTooLarge": Response{
+			Description: "请求体超过 16 MB 上限",
+			JSON:        Ref("#/components/schemas/Error"),
 		},
 	}
 }

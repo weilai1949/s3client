@@ -66,3 +66,10 @@ Accepted
   团队必须长期遵守零依赖原则。
 - 历史教训：自研 i18n 曾漏同步 `<html lang>`（KNOWN_ISSUES #67①），已闭环并由
   `a11y_gate.test.ts` 钉住——自研意味着边界行为要自己写门禁，这是本决策的隐性成本。
+
+## Update（2026-10-10）
+
+决策不变，更正一处事实：`Alternatives Considered` 里「只有 **7** 个 tab」现为 **8 个**
+（`apps/web/src/router.ts` 的 `TabKey`：`accounts | objects | upload | migrate | buckets | trash |
+server | finops`——2026-10-08 新增 `finops` 成本看板，见 [`../FEATURES.md`](../FEATURES.md) §BV）。
+「扁平导航、hash 深链接 30 行即覆盖」的结论不受影响。

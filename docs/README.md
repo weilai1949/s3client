@@ -37,7 +37,7 @@
 | 日常运维、排障、备份 | [`OPERATIONS.md`](OPERATIONS.md) | 可观测性 / SLO 与告警（**建议值**）/ Runbook R-1..R-10 / 备份恢复 / 灾难恢复 / 容量 |
 | 查 / 改某个配置项 | [`CONFIGURATION.md`](CONFIGURATION.md) | 全部 `S3C_*` 环境变量的 **SSOT** + 启动期 fail-closed 清单 + 客户端设置 |
 | 出事后写复盘 / 做 DR 演练 | [`POSTMORTEM_TEMPLATE.md`](POSTMORTEM_TEMPLATE.md) | 事故复盘模板（取证 / 时间线 / 根因 / 行动项）+ §7.1 灾难恢复演练字段 |
-| 看性能基线、解释热路径数字 | [`PERFORMANCE.md`](PERFORMANCE.md) | 基准复现命令与三条实测结论（加密写入 / 账号写入 O(n) / 预签名） |
+| 看性能基线、解释热路径数字 | [`PERFORMANCE.md`](PERFORMANCE.md) | 基准复现命令与四条实测结论（加密写入 / 账号写入 O(n) / 预签名 / 归一化与 key 映射） |
 | 做依赖 / 许可证合规审查 | [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) | **脚本自动生成**的第三方依赖与许可证清单（Go 43 模块 / Rust 428 crates / npm 1 包；含覆盖门禁） |
 
 ### 开发与贡献
@@ -50,7 +50,7 @@
 | 看 AI 代理怎么被评测 / 度量 | [`AGENT_EVALS.md`](AGENT_EVALS.md) | 黄金任务集 GT-1..GT-4 / 五维评分卡 / AI 贡献度量口径（效果证据层，与 AI_POLICY 互补）；机械部分 [`../scripts/agent-eval.sh`](../scripts/agent-eval.sh) |
 | 看懂整体架构与分层 | [`architecture.md`](architecture.md) | B/S 架构、`store → model → s3wrap → handler` 分层、关键机制与取舍 |
 | 查数据怎么落盘 / 三驱动与信封 | [`data-model.md`](data-model.md) | `model.Account` 12 字段 / `json`·`sqlite`·`encrypted` 三驱动 / `S3C3` 信封的**地图**（非 SSOT，冲突裁决顺序见其 §0） |
-| 查「当初为什么这么定」 | [`decisions/index.md`](decisions/index.md) | ADR 索引（12 篇 + [`0000-template.md`](decisions/0000-template.md) 新篇模板；architecture §7 取舍表每行必须有 ADR 链接，由 adr_coverage_gate 守住） |
+| 查「当初为什么这么定」 | [`decisions/index.md`](decisions/index.md) | ADR 索引（13 篇 + [`0000-template.md`](decisions/0000-template.md) 新篇模板；architecture §7 取舍表每行必须有 ADR 链接，由 adr_coverage_gate 守住） |
 | 看安全边界与威胁模型 | [`threat-model.md`](threat-model.md) | STRIDE × 5 条边界 / 安全默认值 / 已接受的风险 / SAST triage |
 | 报告漏洞 / 看安全策略 | [`../.github/SECURITY.md`](../.github/SECURITY.md) | 支持的版本 / **私有**漏洞报告渠道 / 部署加固建议 |
 | 问问题 / 提 issue | [`../.github/SUPPORT.md`](../.github/SUPPORT.md) | 支持渠道 / 提问前自查 / **本仓库不提供什么** |
@@ -67,6 +67,7 @@
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
 | 看最近一次全仓代码评审 | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结）：门禁实测数字 + 逐条 `file:line` 证据与复现口径 + 处置计划 |
 | 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查 / 事故复盘 / 批次交接类**时点性文档**的归档索引（只读、不回写；含首份已填写复盘 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 与已收口批次快照 [`handoff-20260930.md`](archive/handoff-20260930.md)） |
+| 看「上一批次执行到哪 / 还剩什么」 | [`handoff-20261010.md`](handoff-20261010.md) | **2026-10-10 全 docs 通读收口批次**的交接快照（时点性、非 SSOT；含未做清单与踩坑，收口提交后归档入 `archive/`） |
 
 ## 机器可读面（给工具与 AI）
 
@@ -78,7 +79,6 @@
 | 供应链评分 / PR 依赖审查 | [`../.github/workflows/scorecard.yml`](../.github/workflows/scorecard.yml) · [`dependency-review.yml`](../.github/workflows/dependency-review.yml) | 全 SHA pin 由 `TestWorkflowActionsAreShaPinned` 守住；口径见 [`threat-model.md`](threat-model.md) §5.5 |
 | 仓库导航（LLM） | [`../llms.txt`](../llms.txt) | 链接可达性（`doc_link_gate_test.go`）+ 超大文档体量预警（`llms_size_gate_test.go`：目标 >200 KB 必须就地标 `⚠️ 超大`） |
 | 代理硬约束 | [`../AGENTS.md`](../AGENTS.md) | 本页 + `AGENTS.md` 命名约定两处同步 |
-
 | 漏洞披露（机器可读） | [`../.well-known/security.txt`](../.well-known/security.txt) | RFC 9116 必填字段 + `Expires` 未过期（`security_txt_gate_test.go`） |
 | SLI 仪表盘 | [`../deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json) | 指标 / `code` / recording rule 真实性（`grafana_dashboard_gate_test.go`） |
 | AI 评测黄金任务集 | [`../scripts/evals/golden-tasks.yaml`](../scripts/evals/golden-tasks.yaml) | 与 [`AGENT_EVALS.md`](AGENT_EVALS.md) 的 id / 标题逐字一致（`agent_evals_gate_test.go`） |

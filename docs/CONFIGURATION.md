@@ -58,7 +58,7 @@
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
 | `S3C_TOKEN` | 空 | ≥ 16 字符；逗号分隔可多值 | 非空时所有 `/api/*` 需 `Authorization: Bearer <token>`（`/api/health`、`/api/metrics` 豁免）。非回环监听时**必填**。多 token 轮换时按**最短者**判定长度；删掉旧值即吊销。生成：`openssl rand -hex 32` |
-| `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（ROADMAP §三 #13）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号）、`expiresAt`（RFC3339，过期返回 401）。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
+| `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（已落地，证据见 [`FEATURES.md`](FEATURES.md) §BS）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号；`POST /api/accounts` 创建账号一律 403）、`expiresAt`（RFC3339，过期返回 401）。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
 | `S3C_CORS_ORIGINS` | 空 | 逗号分隔 Origin 列表 | CORS 白名单。留空 = 仅同源 + `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（含 `tauri` 自定义协议）。`*` 可行但不推荐 |
 | `S3C_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` | 日志级别 |
 | `S3C_LOG_JSON` | 关 | 布尔 | 开 = `slog` JSON 输出（容器 / 生产更易采集）。compose 已默认注入 `1`，设 `0` 可退回纯文本 |
@@ -71,7 +71,7 @@
 | `S3C_CSP_CONNECT_SRC` | `'self' http://127.0.0.1:* http://localhost:*` | CSP `connect-src` 值 | 前端可连接的后端白名单。默认仅同源 + 本地 Tauri 后端；**多后端 / 远程后端需显式放宽**，否则浏览器按 CSP 拦截 |
 | `S3C_TRUSTED_PROXIES` | 空 | 逗号分隔 IP | 可信反向代理 IP。**仅**这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速；直连部署应保持留空 |
 | `S3C_SSRF_DENY_PRIVATE` | 关 | 布尔 | 开 = 连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](decisions/0003-ssrf-private-allow.md) |
-| `S3C_OTEL_ENDPOINT` | 空 | http(s) URL | OTLP/HTTP 采集端基址，导出到 `POST {Endpoint}/v1/traces`（OTLP JSON）。**留空 = 关闭 tracing**（默认，零开销：中间件原样透传、不注入响应头、不导出）；非 http(s) / 无法解析时**拒绝启动**。见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md) |
+| `S3C_OTEL_ENDPOINT` | 空 | http(s) URL | OTLP/HTTP 采集端基址，导出到 `POST {Endpoint}/v1/traces`（OTLP JSON）。**留空 = 关闭 tracing**（默认，零开销：中间件原样透传、不注入响应头、不导出）；非 http(s) / 无法解析时**拒绝启动**。见 [ADR-013](decisions/0013-zero-dep-otlp-tracing.md) |
 | `S3C_OTEL_SAMPLE_RATIO` | `1` | 浮点，**[0,1]** | 新建 trace 的采样比例。入站 `traceparent` 的采样位被继承（为 1 时即使本值为 `0` 也采样；为 0 时不重新采样）；非数字 / `NaN` / 越界**拒绝启动** |
 | `S3C_OTEL_SERVICE_NAME` | `s3client` | 字符串 | OTLP resource attribute `service.name`（导出报文里的后端服务标识），用于采集端区分实例来源 |
 
@@ -108,9 +108,11 @@ CSP `connect-src` 收窄 + 不信任 `X-Forwarded-For` + 可选 token 作用域�
 | 设置项 | 存储键 | 说明 |
 |---|---|---|
 | API 基址 | `s3c.apiBase` | 后端地址。桌面端打开后自动设为 `http://127.0.0.1:5000`，可改 |
-| Bearer Token | `s3c.token` | **默认存 `sessionStorage`**（关标签即清）；勾选「跨会话保留」（`s3c_token_persistent`）才写 `localStorage`。`SecretKey` 任何情况下都不落 localStorage |
+| Bearer Token（单服务器回退） | `s3c.token` | **默认存 `sessionStorage`**（关标签即清）；勾选「跨会话保留」（`s3c_token_persistent`）才写 `localStorage`。`SecretKey` 任何情况下都不落 localStorage |
+| Bearer Token（多服务器，主形态） | `s3c.token.<serverId>` | 每个服务器的 token **独立存储**（与 `s3c.token` 同策略：默认 sessionStorage、「跨会话保留」写 localStorage；关闭时清掉 localStorage 里全部 `s3c.token.*` 残留），见 `api/storage.ts` |
 | 多服务器 | `s3c.servers` / `s3c.activeServerId` | 服务器列表与当前选中项 |
 | 当前账号 | `s3c.currentAccountId` | 上次选中的账号 |
+| 分段续传清单 | `s3c.multipart.resume.v1` | 单键存全部续传记录（上限 20 条，超出丢最早）：只含 `accId` / bucket / key / uploadId / parts 与文件指纹（`name:size:lastModified`），**零凭证**；complete / 中止即清除；`localStorage` 不可用时降级为不持久化 |
 | 语言 / 主题 / 提示 | `s3c.locale` / `s3c.theme` / `s3c.hintsHidden` | 纯界面偏好 |
 
 > 后端若设置了 `S3C_CSP_CONNECT_SRC`，切换 API 基址到白名单外的地址会被浏览器 CSP 拦截——

@@ -32,7 +32,7 @@ Accepted
   [`PERFORMANCE.md`](../PERFORMANCE.md) 实测记录）；参数随文件头保存，支持将来调参。
 - [`apps/server/internal/atomicfile/atomicfile.go`](../../apps/server/internal/atomicfile/atomicfile.go)：
   临时文件 `O_EXCL` + `chmod 0600` + `fsync` + `rename` + 父目录 `fsync`；store 与 service
-  任务清单共用（review R11 收敛两份复制实现，独立成零依赖叶子包避免分层倒置）。
+  任务清单共用（[`../archive/code-review-2026-09-24.md`](../archive/code-review-2026-09-24.md) R11 收敛两份复制实现，独立成零依赖叶子包避免分层倒置）。
 - [`apps/server/internal/store/lock.go`](../../apps/server/internal/store/lock.go)：
   `AcquireDataDirLock` 对 `S3C_DATA_DIR` 加 `flock` **单写者锁**，第二实例立即失败；锁由内核在
   进程退出（含 panic / SIGKILL）时释放；非 unix 平台为 no-op（`lock_other.go`）。

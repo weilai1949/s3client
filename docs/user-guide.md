@@ -59,7 +59,7 @@ S3 Client 是一个**自托管的 S3 兼容对象存储控制台**：你在浏�
 | 区域 | 内容 |
 |---|---|
 | 顶栏左侧 | 产品名 `S3 Client`；桌面端额外显示 `Desktop` 标记 |
-| 顶栏右侧 | 语言按钮（`中文` / `EN`，点击切换）、主题按钮（`跟随系统` / `浅色` / `深色`，点击循环切换）、连接状态（`已连接` / `连接异常`） |
+| 顶栏右侧 | 语言按钮（`中文` / `EN`，点击循环切换）、主题按钮（月亮 / 太阳图标，点击循环 `跟随系统` → `浅色` → `深色`，悬停提示显示当前模式）、连接状态（**优先显示当前服务端名称**，无名称时回落 `已连接`；异常时 `连接异常`） |
 | 左侧导航「数据操作」 | 对象管理、桶管理、回收站、文件上传、文件迁移、成本看板 |
 | 左侧导航「配置」 | 账号管理、服务器设置 |
 
@@ -488,18 +488,19 @@ S3 Client 是一个**自托管的 S3 兼容对象存储控制台**：你在浏�
 
 ### 设置页签（选中桶后）
 
-页签依次为：**概览 / 生命周期 / 加密 / CORS / 网站托管 / 桶策略 / 标签 / Object Lock**。
+页签依次为：**概览 / 生命周期 / 加密 / Object Lock / CORS / 网站托管 / 桶策略 / 标签**（顺序由
+`BucketsPanel.vue` 的 `tabs` 定义）。
 
 | 页签 | 可做的事 | 关键提示 |
 |---|---|---|
 | 概览 | 查看桶名、区域、创建时间、版本控制状态；「开启」/「暂停」版本控制 | 「版本控制开启后，对象的覆盖写入与删除都会保留历史版本，可在对象详情的「版本」里查看/还原。」 |
 | 生命周期 | 编辑前缀过期删除规则：规则 ID（自动生成，只读展示）、前缀、过期天数；「+ 新增规则」「保存规则」 | 「生命周期规则用于按前缀自动过期删除对象。」；「⚠ 基于 S3 兼容生命周期 API（MinIO / AWS 支持；部分厂商兼容性有限）。」保存后提示「已保存 N 条生命周期规则」 |
 | 加密 | 默认加密算法：`SSE-S3 (AES256)` / `SSE-KMS (aws:kms)` / `SSE-KMS 双加密 (aws:kms:dsse)`；选 KMS 时可填「KMS 主密钥 ID」；「启用桶密钥（bucket key）」；「保存」/「关闭加密」 | 「默认加密会对新写入对象自动加密；已存在对象不受影响。」 |
+| Object Lock | 查看「Object Lock 状态」（已启用 / 未启用）；已启用的桶可配置「默认保留模式」（GOVERNANCE / COMPLIANCE）与「默认保留时长」（天 / 年）后「保存保留策略」 | 「Object Lock 让对象在保留期内不可篡改、不可删除（WORM）」；**只能建桶时启用**——未启用的桶显示「该桶未在创建时启用 Object Lock，无法补开——默认保留策略无法保存。」（服务端返回 409）；对象级保留与法定保留在「对象详情」里操作 |
 | CORS | 每条规则可设：规则 ID、允许的方法（GET/PUT/POST/DELETE/HEAD 勾选）、允许的来源（逗号分隔）、允许的头（逗号分隔）、暴露的头（逗号分隔）、缓存秒数；「+ 添加规则」「保存」「清空全部」 | 保存后提示「已保存 CORS 规则」/「已清空 CORS 规则」 |
 | 网站托管 | 索引文档（如 `index.html`）、错误文档（可选）、全量重定向主机（可选）；「保存」/「关闭网站托管」 | 「至少填写「索引文档」或「全量重定向主机」其一」；端点形如 `{bucket}.s3-website-{region}.amazonaws.com`（各厂商略有差异） |
 | 桶策略 | 「可视化编辑」与「原始 JSON」双模式；4 个模板：`公共读（GetObject）` / `公共读写` / `拒绝 List` / `清空`；Statement 表单（Effect / Principal / Action / Resource / Sid）；「+ 新增 Statement」「JSON 预览」；「保存」/「移除策略」 | 有未保存修改时显示「有未保存的修改」；JSON 不合法或含可视化不支持的结构时切到原始 JSON 并提示原因 |
 | 标签 | 键值表，「+ 添加标签」「保存」「清空全部」 | 保存后提示「已保存桶标签」/「已清空桶标签」 |
-| Object Lock | 查看「Object Lock 状态」（已启用 / 未启用）；已启用的桶可配置「默认保留模式」（GOVERNANCE / COMPLIANCE）与「默认保留时长」（天 / 年）后「保存保留策略」 | 「Object Lock 让对象在保留期内不可篡改、不可删除（WORM）」；**只能建桶时启用**——未启用的桶显示「该桶未在创建时启用 Object Lock，无法补开——默认保留策略无法保存。」（服务端返回 409）；对象级保留与法定保留在「对象详情」里操作 |
 
 > 桶策略的校验会在保存前提示：`Version 必须为 "2012-10-17"`、`Statement 必须为数组`、`第 N 条 Effect 非法`、`第 N 条 Principal 不能为空（用 * 表示所有人）`、`第 N 条 Action 不能为空`、`第 N 条 Resource 不能为空`、`Sid "x" 重复（S3 桶策略 Sid 必须唯一）`。
 
@@ -613,9 +614,9 @@ S3 Client 是一个**自托管的 S3 兼容对象存储控制台**：你在浏�
 | **F2** | 重命名（弹出「重命名 / 移动」） | 同上 |
 | **Delete** / **Backspace** | 删除选中文件（弹确认框）；未选中文件时不触发 | 同上 |
 | **Ctrl+A** / **⌘A** | 全选当前目录已加载的文件；再按一次取消全选 | 同上（工具栏「全选」复选框的悬停提示也是 `Ctrl/Cmd+A`） |
-| **Esc** | 关闭右键菜单 | 对象列表（`useObjectBrowser.ts` 的 `onKey`） |
-| **Esc** | 关闭当前弹窗（对话框、预览覆盖层） | `components/ModalDialog.vue`、`components/PreviewOverlay.vue` |
-| **Tab** / **Shift+Tab** | 在弹窗内循环移动焦点（焦点陷阱，不会逃到背后页面） | `components/ModalDialog.vue` |
+| **Esc** | 关闭右键菜单 | `components/ObjectContextMenu.vue`（经 LIFO 键栈 `useKeydownStack`，仅当菜单是最上层时接收——KNOWN_ISSUES #77 改造） |
+| **Esc** | 关闭当前弹窗（对话框、确认框、输入框、预览覆盖层；叠放时只关最上层） | `components/ModalDialog.vue`、`ConfirmDialog.vue`、`PromptDialog.vue`、`PreviewOverlay.vue` |
+| **Tab** / **Shift+Tab** | 在弹窗内循环移动焦点（焦点陷阱，不会逃到背后页面） | `composables/useFocusTrap.ts`，四个模态（`ModalDialog` / `ConfirmDialog` / `PromptDialog` / `PreviewOverlay`）共用 |
 | **Enter** | 确认对话框（等同于点主按钮） | `components/ConfirmDialog.vue` |
 | **Enter** | 提交输入（重命名 / 新建文件夹 / 新建桶名称框 / 复制-移动目标路径框） | `components/PromptDialog.vue`、`components/CreateBucketDialog.vue`、`components/DestDialog.vue` |
 | **↑ / ↓** | 右键菜单条目循环上 / 下移动 | `components/ObjectContextMenu.vue` |

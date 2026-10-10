@@ -2,7 +2,7 @@
 
 > 本文档描述 s3client 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
-> 最后更新：2026-09-30。
+> 最后更新：2026-10-10。
 
 ## 1. 威胁模型（STRIDE × 边界）
 

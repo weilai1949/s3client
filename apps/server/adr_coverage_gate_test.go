@@ -21,8 +21,9 @@ package main
 //   - 链接目标文件是否存在由 `doc_link_gate_test.go` 负责，本门禁只断言「有链接」。
 //
 // 已知盲区（刻意不做的，避免后来者误判覆盖面）：
-//   - 不断言 ADR 总数 / 编号连续性 / 题材分布——本门禁只钉「取舍表每行有决策链接」这个
-//     结构不变量；题材覆盖是否充分靠人工审查。
+//   - 不断言「文档正文里的 ADR 计数文字」（如「ADR 索引（13 篇）」）——文件 ↔ index.md 的
+//     完整性已由 TestADRIndexListsEveryADRFile 双向钉住，计数文字仍需人工随增删同步；
+//     不做编号连续性 / 题材分布断言（题材覆盖靠人工审查）。
 //   - 不覆盖 §2「关键机制」表：该表部分行是机制描述而非取舍，逐行强制会误伤；只对 §7 行。
 //   - 不校验链接目标语义是否与该行匹配（人工审查范畴）。
 //   - 表格行按「行首（可含缩进）以 `|` 开头」识别：若 §7 小节内出现第二个表格，其数据行
@@ -298,5 +299,62 @@ func TestTradeoffRowsMissingSectionFails(t *testing.T) {
 	md2 := "## 7. 关键取舍（详见 ADR）\n\n这里没有表格。\n"
 	if rows2, found2 := tradeoffRows(md2); found2 {
 		t.Fatalf("§7 无表格时应 found=false，实际解析出 %d 行", len(rows2))
+	}
+}
+
+// TestADRIndexListsEveryADRFile 断言 docs/decisions/index.md 的索引与 docs/decisions/ 下的
+// ADR 文件**双向一致**（`0000-template.md` 与 `index.md` 除外）：新增 ADR 忘登记、或索引残留
+// 已删除的文件，都会让「ADR 索引（N 篇）」这类导航计数漂移复发（2026-10-10 实测
+// docs/README.md 与 llms.txt 在 ADR-013 新增后仍写「12 篇」，计数文字此前无任何机械校验）。
+// 变异验证：从 index.md 删一行 → 红灯点名缺失文件；登记不存在的目标 → 反向红灯。
+func TestADRIndexListsEveryADRFile(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(repoRoot(t), "docs", "decisions")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取 decisions 目录: %v", err)
+	}
+	onDisk := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		if e.Name() == "index.md" || e.Name() == "0000-template.md" {
+			continue
+		}
+		onDisk[e.Name()] = true
+	}
+	if len(onDisk) < 5 {
+		t.Fatalf("decisions/ 只解析到 %d 个 ADR 文件，疑似扫描口径失效", len(onDisk))
+	}
+
+	idx := readRepoFile(t, "docs/decisions/index.md")
+	inIndex := map[string]bool{}
+	for _, m := range adrLinkTargetRe.FindAllStringSubmatch(idx, -1) {
+		target := m[1]
+		if target == "" {
+			target = m[2]
+		}
+		target = strings.TrimPrefix(target, "./")
+		if strings.Contains(target, "/") || !strings.HasSuffix(target, ".md") {
+			continue // 只关心同目录（decisions/ 内）的文件链接
+		}
+		inIndex[target] = true
+	}
+	delete(inIndex, "0000-template.md")
+	delete(inIndex, "index.md")
+
+	for f := range onDisk {
+		if !inIndex[f] {
+			t.Errorf("docs/decisions/%s 存在，但 index.md 索引表未登记——导航与真实文件分叉", f)
+		}
+	}
+	for f := range inIndex {
+		if !strings.HasPrefix(f, "0") {
+			continue // 非 ADR 编号形文件不属本断言范围
+		}
+		if !onDisk[f] {
+			t.Errorf("index.md 登记了 decisions/ 下不存在的 ADR 文件 %s", f)
+		}
 	}
 }

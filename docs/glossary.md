@@ -28,13 +28,13 @@
 | **段号（`partNumber`）** | 分段序号，`CompleteMultipartUpload` 要求**升序**；乱序在本仓库被 handler 先行拦下 | [`errors.md`](errors.md)「分段顺序不是升序」→ 400 `parts must be ordered by ascending partNumber` |
 | **ETag** | 对象内容的实体标签，也是分段直传后需要从响应头读回的值（要求桶 CORS **暴露** `ETag`） | [`api.md`](api.md) §分段上传；[`DEVELOPMENT.md`](DEVELOPMENT.md) §2「浏览器直传」 |
 | **预签名 URL（presigned URL）** | 服务端用临时凭证签出的、有时效的直连 S3 地址，用于浏览器直传 / 直下，**不经**后端代理 | [`api.md`](api.md) §生成签名；[`threat-model.md`](threat-model.md) 边界 B |
-| **`expiresIn`** | 预签名有效期（秒）。缺省或 ≤0 时默认 **1 小时**，超过 **24 小时**被钳到 24 小时（S3 协议上限 7 天，控制台刻意收紧） | [`api.md`](api.md) §生成签名（注释指向 `s3wrap/presign.go` 与 `objects.go` 的钳制） |
+| **`expiresIn`** | 预签名有效期（秒）。缺省或 ≤0 时默认 **1 小时**，超过 **24 小时**被钳到 24 小时（S3 协议上限 7 天，控制台刻意收紧） | [`api.md`](api.md) §生成签名（默认与钳制在 `handler/objects.go` 的 `presign` 与 `handler/multipart.go`；`s3wrap/presign.go` 只负责签名与 `≤0` 拒绝） |
 | **path-style** | 端点寻址方式之一：把桶名放进路径（`/{bucket}/{key}`）。兼容 MinIO / OSS 等自建实现，账号参数里由 `pathStyle` 开关控制 | [`api.md`](api.md) §创建账号（`pathStyle` 用于 MinIO/OSS 等第三方）；[`DEVELOPMENT.md`](DEVELOPMENT.md) §2 假 S3 模式 |
 | **virtual-hosted-style** | 另一种寻址方式：桶名进主机名（`{bucket}.endpoint`）。本仓库把它作为 path-style 的**对立项**存在（`pathStyle` 为假时由 AWS SDK 走该风格） | 同上（`pathStyle` 参数的语义对称面；`s3wrap/client.go` 中按该标志构建 client） |
 | **`publicEndpoint`** | 供**浏览器直传 / 预签名**使用的对外端点（与后端内部访问用的 `endpoint` 分离，留空则回落到 `endpoint`） | [`api.md`](api.md) §创建账号；[`CONFIGURATION.md`](CONFIGURATION.md) 客户端设置 |
 | **区域（region）** | 桶所在的 S3 区域；账号可设缺省区域，桶属性里可读实际区域 | [`CONFIGURATION.md`](CONFIGURATION.md) `S3C_REGION`；[`FEATURES.md`](FEATURES.md) §一.2「桶属性」 |
 | **ACL** | 对象的访问控制列表。控制台的 ACL 编辑器列出固定枚举项（如 `public-read`），不做自由文本 | [`api.md`](api.md) §对象权限（ACL）；`AclDialog.vue`、`i18n/messages/objectDialogs.ts` 的 `acl.*` |
-| **标签（Tagging / tags）** | key-value 形式的对象或桶元数据；空标签提交被显式禁止 | [`api.md`](api.md) §对象标签（Tagging）/ §桶标签；[`FEATURES.md`](FEATURES.md)「UX-14 空标签提交 → `hasTagChange`」 |
+| **标签（Tagging / tags）** | key-value 形式的对象或桶元数据。**两层语义**：前端 UI 层的「空标签行提交」被显式禁止（`hasTagChange` 判定，不发无意义请求）；API 层 `tags` 传空数组则**删除全部标签**（`api.md` §对象标签） | [`api.md`](api.md) §对象标签（Tagging）/ §桶标签；[`FEATURES.md`](FEATURES.md)「UX-14 空标签提交 → `hasTagChange`」（`BatchMetadataDialog.vue`） |
 | **对象 HTTP 头** | 可写的响应头族：`Cache-Control` / `Content-Disposition` / `Content-Encoding` / `Content-Language` / `Content-Type` 以及自定义元数据 | [`api.md`](api.md) §设置对象 HTTP 头；`HeadersDialog.vue` |
 | **生命周期规则（lifecycle）** | 桶级「前缀过期删除」规则，本控制台只做前缀 + 过期天数这一子集 | [`api.md`](api.md) §生命周期规则（前缀过期删除）；`LifecycleDialog.vue` |
 | **SSE（服务端加密）** | 桶级服务端加密开关与算法配置 | [`api.md`](api.md) §桶服务端加密（SSE）；`BucketEncryption.vue` |
@@ -82,11 +82,11 @@
 | **豁免腐烂检查** | 门禁的「白名单」本身也要被检查：`INTENTIONAL_UNUSED` 里若登记了**已不存在**的符号即红灯，防止豁免清单越积越假 | `apps/web/src/deadcode_gate.test.ts`「INTENTIONAL_UNUSED 不得登记已不存在的符号」 |
 | **空跑变绿** | 门禁因为路径写错 / 扫到 0 个文件而「没有违规所以通过」。对策是自检下限：如扫描文件数 ≥ 50、公开面 ≥ 50、引用总数 ≥ 30 | `apps/web/src/deadcode_gate.test.ts`「门禁自检」；`apps/server/*_gate_test.go` 同类自检 |
 | **哨兵错误（sentinel error）** | 用 `errors.New` 定义的、可被 `errors.Is` / `errors.As` 识别的**具名错误值**，用来替代「按错误文案 `strings.Contains` 匹配」。即使上游 SDK / 各 S3 实现的文案变化也不会静默失效 | `apps/server/internal/s3wrap/errors.go`（`ErrObjectTooLarge` / `ErrSourceDeleteFailed` / `ErrPartialDelete`）；[`errors.md`](errors.md)「已移除字符串匹配」块引用 |
-| **终态（terminal state）** | 异步任务 / 上传项不再变化的收尾状态（`done` / `cancelled` / `interrupted`…）。终态必须**可判定且有界**：SSE 流若以 EOF 结束却没收到终态，Promise 会永久悬挂、按钮永久禁用——故用「EOF 后回读轮询直到终态」终结它 | `apps/server/internal/service`（`IsTerminalJobStatus`）；`apps/web/src/api/jobs.ts`；[`DEVELOPMENT.md`](DEVELOPMENT.md) §7 的 S7 / P0-4 行 |
+| **终态（terminal state）** | 异步任务 / 上传项不再变化的收尾状态（`done` / `cancelled` / `interrupted`…）。终态必须**可判定且有界**：SSE 流若以 EOF 结束却没收到终态，Promise 会永久悬挂、按钮永久禁用——故用「EOF 后回读轮询直到终态」终结它 | `apps/server/internal/service/job_persist.go`（`IsTerminalJobStatus`）；`apps/web/src/api/jobs.ts`；[`DEVELOPMENT.md`](DEVELOPMENT.md) §7 的 S7 / P0-4 行 |
 | **兜底** | 主路径之外的那条**保底分支**：它可能几乎不触发，但缺了就会挂起 / 白屏。与「死代码」的区别是**能否由公开 API 触发**——能触发就必须保留并用行为断言覆盖，不能为了覆盖率或「没人走」删掉 | [`DEVELOPMENT.md`](DEVELOPMENT.md) §3 块引用（`jobsList` nil 兜底被删、`JobProgress.Status` 兜底被保留的判例）；`api/jobs.ts` 的 EOF 回读兜底 |
 | **代次守卫（seq guard / 代次）** | 每个「可被新请求顶掉」的异步加载持有一个自增序号（`loadSeq` / `detailSeq` / `sourceBucketGen` …），每个 `await` 之后比对序号：**过期响应静默丢弃**，`catch` 与 `finally` 都按「序号仍相等」收口。防的是迟到响应覆盖新数据、把新对象的 loading 提前清掉、把旧错误报到新对象头上 | `apps/web/src/components/VersionsDialog.vue`（`loadSeq`）、`RecycleBinPanel.vue`、`composables/useObjectActions.ts`（`detailSeq`）、`MigratePanel.vue`（`sourceBucketGen` / `targetBucketGen`）；[`FEATURES.md`](FEATURES.md) §AI；[`architecture.md`](architecture.md) |
 | **在途请求（in-flight）** | 已发出、尚未返回的请求。切账号 / 换前缀 / 关弹窗后，在途请求的返回都属于「过期」；本仓库要求早退路径也**递增代次**把它作废 | [`FEATURES.md`](FEATURES.md) §AI 第 4 条；[`DEVELOPMENT.md`](DEVELOPMENT.md) §7 的 S7 行（「流以 EOF 结束时 Promise 悬挂」） |
-| **分层（`store → model → s3wrap → handler`）** | 后端单向分层：AWS SDK 类型只在 `s3wrap` 内出现，handler / 前端不得外泄；单文件不超过约 1000 行 | [`AGENTS.md`](../AGENTS.md) 硬约束 3；[`DEVELOPMENT.md`](DEVELOPMENT.md) §5 |
+| **分层（`store → model → s3wrap → handler`，栈序简化）** | 后端单向分层的口头简称；**逐条 import 边以 [`architecture.md`](architecture.md) §2 为权威**（`s3wrap` 只依赖 `model`、不依赖 `store`；`handler` 直接依赖 `store`）。不变的硬约束：AWS SDK 类型只在 `s3wrap` 内出现，handler / 前端不得外泄；单文件不超过约 1000 行 | [`AGENTS.md`](../AGENTS.md) 硬约束 3；[`architecture.md`](architecture.md) §2；[`DEVELOPMENT.md`](DEVELOPMENT.md) §5 |
 | **防腐层** | 把外部系统（AWS SDK、S3 错误码、上游文案）的差异挡在边界内、对外只暴露**稳定**状态与短消息的那一层。本仓库是 `s3wrap`（错误 → 稳定 HTTP 状态 + 短英文 `UserMessage`，前端再 i18n） | [`errors.md`](errors.md) 首段；[`FEATURES.md`](FEATURES.md) §一.10「`UserMessage` 防腐层」 |
 | **有界并发** | 并发度有显式上限、不会随输入规模无限增长。批量任务、ZIP 拉取、分段上传都走这一模式 | `service/batch.go`（`RunBatch` / `CopyKeys`）、`service/zip.go`（拉取最多 4）、`service/stream_copy.go`；[`DEVELOPMENT.md`](DEVELOPMENT.md) §5「性能」 |
 | **虚拟滚动（窗口化）** | 只渲染视口内的行 + 上下垫片撑出真实滚动高度，用于 20 万行量级的列表；`virtualList.ts` 提供窗口计算，`ObjectList` / `RecycleBinPanel` / `VersionsDialog` / `MigratePanel` 复用 | `apps/web/src/virtualList.ts`；[`FEATURES.md`](FEATURES.md) §一.3「20 万行虚拟滚动」 |

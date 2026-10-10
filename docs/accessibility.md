@@ -17,6 +17,7 @@
 ### 1.1 统计口径
 
 - 范围：`apps/web/src/` 下的 **`*.vue` 与 `*.ts`**。
+- **统计时点：2026-10-10**（数字随功能演进会变，回填时按下列命令重跑并更新本行日期）。
 - **生产源码**＝排除 `*.test.ts`（测试文件里的 `aria-*` 是断言用字面量，不是界面属性；
   不排除会把数字抬高，本文所有数字都取排除后的值）。
 - **重复出现即重复计数**：一个属性在模板里写 N 次就计 N 次（同一组件内多行同理）；
@@ -35,8 +36,10 @@
 
 | 属性 | 次数 | 主要用途（本仓库） |
 |---|---:|---|
-| `aria-hidden` | 43 | 纯装饰元素：emoji、内联 SVG 图标、虚拟滚动的上下垫片行（`v-spacer`） |
-| `aria-label` | 28 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、批量改元数据三个控件（**2026-09-30 起与可见 `<label>` 同键**，见 §1.6）、列表与网格的行选择框、加载态容器（配合 `aria-busy`） |
+| `aria-hidden` | 44 | 纯装饰元素：emoji、内联 SVG 图标、虚拟滚动的上下垫片行（`v-spacer`） |
+| `aria-label` | 30 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、批量改元数据三个控件（**2026-09-30 起与可见 `<label>` 同键**，见 §1.6）、列表与网格的行选择框、加载态容器（配合 `aria-busy`）、计划任务面板（`SchedulesSection`）的图标按钮 |
+| `aria-expanded` | 3 | 「⋯」更多操作触发器的展开态（`ObjectList.vue` 两处模板 + 1 处注释文字；配合 `ctxEntryKey` 反映当前打开的右键菜单条目） |
+| `aria-haspopup` | 2 | 同一「⋯」触发器声明弹出菜单语义（`aria-haspopup="menu"`） |
 | `aria-selected` | 4 | **2026-09-30 起（#17③）**：四张有行选中的表，其数据行随选中集合变化（**刻意不用 `aria-multiselectable`**——axe 的 `aria-allowed-attr` 判定它在原生 `<table>` 上非法，见 §1.6） |
 | `aria-modal` | 4 | 四个模态容器，值均为 `"true"` |
 | `aria-labelledby` | 4 | **2026-09-30 起（#17③）**：`BucketTags` / `LifecycleDialog` 表格单元格里的输入框——一个 `<th>` 无法 `for` 到 N 行输入，故指向**可见列头**（见 §1.6） |
@@ -50,8 +53,8 @@
 
 | role | 次数 | 位置 |
 |---|---:|---|
+| `alert` | 19 | **2026-09-30 起（#17②）统一口径**：面板 / 对话框的错误横幅与校验失败（源码门禁钉住，见 §1.4）。逐文件：`ObjectDetailDialog`（4：校验和 / 保留 / 法定保留 / 保护状态的 `.badge` 错误）、`SchedulesSection`（3）、`StorageReportPanel`（2）、`AccountsPanel`（2）、`ObjectsPanel` / `BucketsPanel` / `CompareDialog` / `MigratePanel` / `RecycleBinPanel` / `ServerPanel` / `PromptDialog` / `BucketObjectLock`（各 1） |
 | `menuitem` | 17 | `ObjectContextMenu.vue`（右键菜单的每个按钮） |
-| `alert` | 9 | **2026-09-30 起（#17②）统一口径**：`ObjectsPanel` / `AccountsPanel`（2 处）/ `BucketsPanel` / `CompareDialog` / `MigratePanel` / `RecycleBinPanel` / `ServerPanel` 的 `msg err` 横幅与 `PromptDialog` 校验失败（源码门禁钉住，见 §1.4） |
 | `status` | 3 | `ObjectList.vue`（网格截断提示）、`UploadQueue.vue`、`Toasts.vue`（单条 toast） |
 | `dialog` | 3 | `ModalDialog.vue`、`PromptDialog.vue`、`PreviewOverlay.vue` |
 | `columnheader` | 3 | `ObjectList.vue` 三个可排序表头（配 `tabindex="0"` 与 `aria-sort`） |
@@ -81,8 +84,10 @@
 
 **内联失败横幅**（不经 toast 的那部分）用 `role="alert"`（隐式 assertive）而非 `aria-live` 属性：
 `ObjectsPanel` / `AccountsPanel` / `BucketsPanel` / `CompareDialog` / `MigratePanel` /
-`RecycleBinPanel` / `ServerPanel` 的 `class="msg err"`，以及 `PromptDialog` 的 `class="modal-err"`
-（校验失败）。这些都是 `v-if` 条件渲染——`role="alert"` 只在元素**插入 DOM 时**播报一次，
+`RecycleBinPanel` / `ServerPanel` / `SchedulesSection`（3 处）/ `StorageReportPanel`（2 处）/
+`BucketObjectLock` 的 `class="msg err"`，`PromptDialog` 的 `class="modal-err"`（校验失败），
+以及 `ObjectDetailDialog` 的 4 个 `.badge` 错误（校验和 / 保留 / 法定保留 / 保护状态）。
+前一类（`msg err` / `modal-err`）都是 `v-if` 条件渲染——`role="alert"` 只在元素**插入 DOM 时**播报一次，
 不会因为文案更新而反复打断。行为断言见 `PromptDialog.test.ts`
 「校验失败文案带 role="alert"」；**漏加 / 回退由 `a11y_gate` 源码门禁红灯点名**（已做变异验证：
 去掉 `ServerPanel` 的 `role` → 门禁列出该标签 → 还原绿灯）。
@@ -105,8 +110,8 @@
 
 ### 1.6 表格可访问名称与表单可见标签（2026-09-30 起，ROADMAP §三 #17③）
 
-**表格 `caption`**：`src/components` 下 **15 张 `<table>` 全部带 `<caption class="sr-only">`**
-（`.sr-only` 为 `src/styles.css` 新增的全局工具类——裁剪到 1px 但**不** `display:none`，
+**表格 `caption`**：`src/components` 下 **19 张 `<table>`（分布在 17 个组件文件）全部带 `<caption class="sr-only">`**
+（统计时点 2026-10-10；`StorageReportPanel` 一个文件 3 张表。`.sr-only` 为 `src/styles.css` 新增的全局工具类——裁剪到 1px 但**不** `display:none`，
 否则会一并从无障碍树里消失）。用 sr-only 而非可见 caption：这些表上方都已有可见标题 / 面板标题，
 再来一行可见 caption 只会视觉重复；WCAG 要的是「表有可访问名称」，不要求它可见。
 由 [`apps/web/src/a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 的
@@ -133,7 +138,8 @@
 a11y_gate 源码门禁钉住（含**自检**：全仓声明 `:aria-selected` 的组件**恰好**是这 4 张，
 防扫描面塌缩）。
 
-**表单可见标签**：`src` 下 77 个可见表单控件**全部**有可关联的标签来源，三种形态按场景取用——
+**表单可见标签**：`src` 下 **94 个可见表单控件**（`<input>` / `<select>` / `<textarea>` 共 96 个，
+其中 2 个为 `display:none` 的 `<input type="file">`，见下）**全部**有可关联的标签来源，三种形态按场景取用——
 
 1. **包裹 `<label class="field">`**（既有主流形态，约 40 处）；
 2. **行内可见 `<label for>`**（紧凑行编辑器）：`TagsDialog` / `HeadersDialog` 的键值行、
@@ -332,7 +338,7 @@ const stack: KeydownHandler[] = []
    `Toasts` 的 `aria-live` 容器，失败的内联横幅统一 `role="alert"`（源码门禁钉住，见 §1.4）。
    **仍不覆盖**：屏幕阅读器实测播报时机、`aria-live` 的实际朗读效果（需辅助技术人工验证）。
 9. **表格语义**：~~数据表没有 `caption`，也没有为「可选中的行」声明 `aria-selected` /
-   `aria-multiselectable`~~ ✅ **已于 2026-09-30 修复（ROADMAP §三 #17③）**——15 张表全部带
+   `aria-multiselectable`~~ ✅ **已于 2026-09-30 修复（ROADMAP §三 #17③）**——19 张表全部带
    sr-only `<caption>`，四张有行选中的表声明行 `aria-selected`（见 §1.6，源码门禁 + 行为断言 +
    组件级 axe 三重钉；`aria-multiselectable` 经 axe 判定在原生 `<table>` 上**非法**，刻意不用）。
    ~~**仍未做**：网格视图的单元格是 `role="button"`，其名称依赖单元格内文本节点，未加 `aria-label`~~
@@ -379,8 +385,8 @@ const stack: KeydownHandler[] = []
 | `components/ModalDialog.test.ts`（14 例） | 焦点移入 / 恢复、`document.contains` 保护、`Escape`、`Tab` 陷阱（首尾回卷、中间不干预）、仅关闭按钮时自回卷、footer 插槽与 `aria-modal` 属性 | `cd apps/web && pnpm test src/components/ModalDialog.test.ts` |
 | `components/{ConfirmDialog,PromptDialog,PreviewOverlay}.test.ts` 的焦点用例（各 2–3 例） | **2026-09-30 起（#17①）**：初始焦点落点、关闭后焦点恢复到打开前元素、`Tab` 首尾回卷 / 中间不干预；`PromptDialog` 另断言全选（`selectionStart`/`selectionEnd`），`ConfirmDialog` 另断言「打开后同 tick 内卸载不抛错」 | `pnpm test src/components/ConfirmDialog.test.ts` 等三个文件 |
 | **live region 断言**：`Toasts.test.ts`（1 例）、`BatchMetadataDialog.test.ts`（1 例）、`PromptDialog.test.ts`（1 例）、`a11y_gate.test.ts`（源码门禁） | **2026-09-30 起（#17②）**：toast 容器 `aria-live="polite"` 且成功 / 失败文案都在区内、批量改元数据状态区 `aria-live` 承载 running / done、校验失败横幅 `role="alert"`、**每个 `msg err` / `modal-err` 开标签必须带 `role="alert"`**（漏加即红灯点名） | `pnpm test src/a11y_gate.test.ts` |
-| **表格与可见标签断言**：`a11y_gate.test.ts`（2 条源码门禁）、`ObjectList.test.ts` / `TagsDialog.test.ts` / `BatchMetadataDialog.test.ts` 各 1 例 | **2026-09-30 起（#17③）**：每张 `<table>` 紧跟 sr-only `<caption>`、行选中表声明 `aria-multiselectable`（名单自检恰好 4 张）、行 `aria-selected` 随选中集合变化、键值行 `label[for]` 能解析到目标输入框、批量元数据三控件被可见 `<label>` 包裹 | `pnpm test src/a11y_gate.test.ts` 等 |
-| `composables/useKeydownStack.test.ts`（9 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
+| **表格与可见标签断言**：`a11y_gate.test.ts`（2 条源码门禁：sr-only `<caption>` + 行 `aria-selected` 名单自检恰好 4 张）、`ObjectList.test.ts` / `TagsDialog.test.ts` / `BatchMetadataDialog.test.ts` 各 1 例 | **2026-09-30 起（#17③）**：每张 `<table>` 紧跟 sr-only `<caption>`、有行选中的表其数据行声明 `aria-selected`（**刻意不用 `aria-multiselectable`**，axe 判定其在原生 `<table>` 上非法）、行 `aria-selected` 随选中集合变化、键值行 `label[for]` 能解析到目标输入框、批量元数据三控件被可见 `<label>` 包裹 | `pnpm test src/a11y_gate.test.ts` 等 |
+| `composables/useKeydownStack.test.ts`（7 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、空栈分支、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
 | Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
 | **`e2e/a11y.spec.ts`（6 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：5 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |

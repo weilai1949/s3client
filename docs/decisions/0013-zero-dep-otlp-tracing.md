@@ -1,4 +1,4 @@
-# ADR-0013：零第三方依赖自研 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关闭）
+# ADR-013：零第三方依赖自研 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关闭）
 
 ## Status
 
@@ -11,7 +11,8 @@ Accepted（已采纳）
 ## Context
 
 ROADMAP §三 3.2 #11 要求把 `X-Request-ID` 升级为可跨 `presign` / `proxy` / `migrate` 关联的
-trace。现状是：
+trace（**该条已于 2026-10-08 落地后按 §六 第 1 条移出转空号，证据 [`../FEATURES.md`](../FEATURES.md) §BR**；
+本 ADR 引用保留为历史出处）。现状是：
 
 - 已有 Prometheus 指标（`/api/metrics`，见 [`../architecture.md`](../architecture.md) §2）与
   `X-Request-ID` 请求关联，以及可选的 `S3C_LOG_JSON` 结构化日志；缺的是**跨子操作的 span 树**

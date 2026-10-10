@@ -74,6 +74,16 @@
         },
         "description": "资源不存在"
       },
+      "PayloadTooLarge": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "请求体超过 16 MB 上限"
+      },
       "TooManyRequests": {
         "description": "请求频率超限"
       },
@@ -286,7 +296,7 @@
   "info": {
     "title": "s3client API",
     "version": "v1.0.0",
-    "description": "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约，所有响应均 JSON（除 /api/health 等纯状态端点）。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
+    "description": "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -332,6 +342,15 @@
               }
             },
             "description": "账号列表（AccountView，不含 secretKey）"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "列出全部账号",
@@ -422,6 +441,18 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "新建账号",
@@ -516,6 +547,18 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "用表单凭证预览桶（不落库）",
@@ -551,8 +594,17 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除账号",
@@ -592,8 +644,17 @@
             },
             "description": "账号（AccountView）"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "获取账号详情",
@@ -685,8 +746,20 @@
             },
             "description": "更新后（AccountView）"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "更新账号",
@@ -731,6 +804,9 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -740,6 +816,12 @@
               }
             },
             "description": "桶非空"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除空桶",
@@ -818,6 +900,18 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "创建桶",
@@ -868,6 +962,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶属性（区域 / 创建时间 / 版本控制）",
@@ -934,6 +1037,18 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "开关桶版本控制（Enabled / Suspended）",
@@ -971,6 +1086,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除 CORS",
@@ -1067,6 +1191,15 @@
               }
             },
             "description": "未配置返回空数组"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶 CORS 规则列表",
@@ -1184,6 +1317,18 @@
               }
             },
             "description": "rules 非空时 updated；空数组触发删除时 deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "配置 CORS（rules 空数组=删除）",
@@ -1221,6 +1366,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除 SSE 配置",
@@ -1272,6 +1426,15 @@
               }
             },
             "description": "未配置时 configured=false"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶服务端加密（SSE）",
@@ -1355,6 +1518,18 @@
               }
             },
             "description": "algorithm 非法"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "配置 SSE",
@@ -1409,6 +1584,15 @@
               }
             },
             "description": "未启用 Object Lock 时 enabled=false"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶 Object Lock 配置",
@@ -1520,6 +1704,9 @@
             },
             "description": "输入非法 / 桶未启用 Object Lock"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -1529,6 +1716,15 @@
               }
             },
             "description": "桶未在创建时启用 Object Lock（InvalidBucketState）"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "501": {
             "content": {
@@ -1576,6 +1772,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除桶策略",
@@ -1619,6 +1824,15 @@
               }
             },
             "description": "未配置返回 configured=false"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶策略（JSON 字符串）",
@@ -1687,6 +1901,18 @@
               }
             },
             "description": "policy 不是合法 JSON"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "配置桶策略（policy=空=删除）",
@@ -1724,6 +1950,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除桶标签",
@@ -1783,6 +2018,15 @@
               }
             },
             "description": "未配置返回空数组"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶标签",
@@ -1863,6 +2107,18 @@
               }
             },
             "description": "tags 非空时 updated；空数组触发删除时 deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "配置桶标签（空数组=删除）",
@@ -1900,6 +2156,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除静态网站托管",
@@ -1951,6 +2216,15 @@
               }
             },
             "description": "未配置返回 configured=false"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "桶静态网站托管配置",
@@ -2022,6 +2296,18 @@
               }
             },
             "description": "indexDocument/redirectAllRequestsTo 至少一个"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "配置静态网站托管",
@@ -2067,6 +2353,15 @@
               }
             },
             "description": "桶列表"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "列出账号下全部桶",
@@ -2172,6 +2467,9 @@
             },
             "description": "条件字段非法"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -2191,6 +2489,15 @@
               }
             },
             "description": "条件不满足（PreconditionFailed）"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "单文件复制（不删源）",
@@ -2289,6 +2596,18 @@
               }
             },
             "description": "含 copied/failed/total；lastError/failedKeys/truncated 视情况出现"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "批量复制（同步）",
@@ -2371,6 +2690,18 @@
               }
             },
             "description": "jobId"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -2471,6 +2802,18 @@
               }
             },
             "description": "含 copied/failed/lastError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "递归复制前缀（同步流式）",
@@ -2548,6 +2891,18 @@
               }
             },
             "description": "jobId"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -2640,6 +2995,18 @@
               }
             },
             "description": "key 数\u003e1000"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "批量删除（≤1000 keys）",
@@ -2708,6 +3075,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "撤销删除标记（一键还原已删除对象）",
@@ -2778,6 +3157,18 @@
               }
             },
             "description": "含 deleted/failed/truncated/lastError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "递归删除前缀（同步流式）",
@@ -2845,6 +3236,18 @@
               }
             },
             "description": "jobId"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -2920,6 +3323,18 @@
               }
             },
             "description": "keys 为空 / \u003e1000"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "流式 ZIP 打包下载（≤1000 个）",
@@ -3026,8 +3441,17 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象元数据",
@@ -3090,6 +3514,15 @@
               }
             },
             "description": "未配置返回空数组"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "生命周期规则（桶级）",
@@ -3169,6 +3602,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "写入生命周期规则（空规则=删除）",
@@ -3253,6 +3698,18 @@
               }
             },
             "description": "key/条件字段非法"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "新建空文件夹（PUT 空对象）",
@@ -3317,6 +3774,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "中止分段上传",
@@ -3406,6 +3875,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "完成分段上传",
@@ -3477,6 +3958,18 @@
               }
             },
             "description": "含 uploadId"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "初始化分段上传",
@@ -3569,6 +4062,18 @@
               }
             },
             "description": "partNumber 非法"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "预签名单段 PUT URL",
@@ -3675,6 +4180,15 @@
               }
             },
             "description": "缺 key/uploadId 或 bucket"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "列已上传分段（断点续传对齐）",
@@ -3757,6 +4271,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象 ACL",
@@ -3826,6 +4349,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "设置对象 ACL",
@@ -3892,6 +4427,15 @@
               }
             },
             "description": "未设置 → status=OFF"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象法定保留状态",
@@ -3975,6 +4519,9 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -3994,6 +4541,15 @@
               }
             },
             "description": "对象被锁定"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "设置对象法定保留（ON/OFF）",
@@ -4070,6 +4626,15 @@
               }
             },
             "description": "无保留期（或桶未启用 Object Lock）时 configured=false"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象保留期（Object Lock）",
@@ -4177,6 +4742,9 @@
             },
             "description": "输入非法 / 保留期违规"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "403": {
             "content": {
               "application/json": {
@@ -4196,6 +4764,15 @@
               }
             },
             "description": "对象被 COMPLIANCE 锁定（ObjectLocked）"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "设置对象保留期（Object Lock）",
@@ -4262,6 +4839,15 @@
               }
             },
             "description": "未配置返回空数组"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象标签",
@@ -4364,6 +4950,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "设置对象标签（空数组=清空）",
@@ -4435,6 +5033,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "列对象（含公共前缀 / 分页）",
@@ -4555,6 +5162,18 @@
               }
             },
             "description": "method/expiresIn/条件字段非法"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "生成预签名 URL",
@@ -4631,6 +5250,9 @@
             },
             "description": "参数非法（如 key 缺失 / versionId 非法）"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
@@ -4643,6 +5265,12 @@
               }
             },
             "description": "Range 请求超出对象大小（InvalidRange）"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象代理下载 / 预览（流式）",
@@ -4711,6 +5339,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "重命名 / 移动（copy+delete，可跨桶）",
@@ -4790,6 +5430,18 @@
               }
             },
             "description": "metadata 校验失败"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "编辑 HTTP 头 / 元数据（CopyObject+REPLACE）",
@@ -4875,6 +5527,18 @@
               }
             },
             "description": "存储类型非法"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "切换对象存储类型",
@@ -5114,6 +5778,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "存储分析与成本洞察（按存储类 / 前缀聚合）",
@@ -5158,6 +5831,15 @@
               }
             },
             "description": "检测结果（始终 200，字段 ok 表状态）"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "连通性检测（200+ok 表示通；ok=false 含 error）",
@@ -5260,6 +5942,15 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "列出桶内全部删除标记（分页游标）",
@@ -5324,6 +6015,9 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -5333,6 +6027,15 @@
               }
             },
             "description": "对象被 Object Lock 锁定（ObjectLocked），此前版本已删除"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "彻底清除某 key 的全部版本+标记",
@@ -5434,8 +6137,20 @@
             },
             "description": "key 缺失或请求体非法"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "端到端校验和验证（本地重算与存储端比对）",
@@ -5505,6 +6220,15 @@
               }
             },
             "description": "缺 key/versionId"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除指定版本",
@@ -5573,6 +6297,18 @@
               }
             },
             "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "把历史版本恢复为当前（复制回 key）",
@@ -5741,6 +6477,15 @@
               }
             },
             "description": "含 versions/deleteMarkers/isTruncated"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "对象版本列表（含删除标记）",
@@ -5806,6 +6551,12 @@
               }
             },
             "description": "OK"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -5875,6 +6626,12 @@
           },
           "404": {
             "description": "默认关闭"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "security": [],
@@ -5962,6 +6719,18 @@
               }
             },
             "description": "含 migrated/failed/failedKeys/lastError"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "同步迁移（流式）",
@@ -6038,6 +6807,18 @@
               }
             },
             "description": "含 jobId/total"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -6181,6 +6962,15 @@
               }
             },
             "description": "含 jobs[]：id/created/total/status/progress/result；status 为 running|done|cancelled|interrupted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "异步任务清单（含重启后中断的任务）",
@@ -6286,6 +7076,9 @@
             },
             "description": "OK"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6295,6 +7088,12 @@
               }
             },
             "description": "任务不存在或已被回收"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "查询迁移任务状态",
@@ -6344,6 +7143,9 @@
             },
             "description": "已取消含 cancelled；已完成含 done"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6353,6 +7155,12 @@
               }
             },
             "description": "任务不存在或已被回收"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "取消迁移任务",
@@ -6384,6 +7192,9 @@
             },
             "description": "text/event-stream"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6393,6 +7204,12 @@
               }
             },
             "description": "任务不存在或已被回收"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {
@@ -6516,6 +7333,9 @@
             },
             "description": "mode 非法 / 账号缺配置"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6525,6 +7345,15 @@
               }
             },
             "description": "账号不存在"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "增量同步（按 ETag / size+mtime 比对，仅复制差异对象）",
@@ -6553,6 +7382,15 @@
               }
             },
             "description": "application/json"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "OpenAPI 3.0 规范（本文件；默认 404，需 S3C_EXPOSE_OPENAPI=1）",
@@ -6670,6 +7508,15 @@
               }
             },
             "description": "计划数组（空清单为 []）"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "计划任务清单（最新在前）",
@@ -6848,6 +7695,9 @@
             },
             "description": "字段缺失 / cron 非法或永不触发 / mode 非法 / 桶不可解析 / 账号配置无效"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6857,6 +7707,15 @@
               }
             },
             "description": "引用的账号不存在"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "创建计划（cron 定时增量同步）",
@@ -6898,6 +7757,9 @@
             },
             "description": "回显被删计划 id"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6907,6 +7769,12 @@
               }
             },
             "description": "计划不存在"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "删除计划（冻结的计划一并移除）",
@@ -7096,6 +7964,9 @@
             },
             "description": "字段缺失 / cron 或 mode 非法 / 账号配置无效"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -7105,6 +7976,15 @@
               }
             },
             "description": "计划或引用的账号不存在"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           }
         },
         "summary": "整体替换计划（保留 id/createdAt/运行态）",
@@ -7160,6 +8040,9 @@
             },
             "description": "引用的账号配置已损坏（缺密钥等）"
           },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -7179,6 +8062,12 @@
               }
             },
             "description": "上一轮执行尚未结束（不叠加）"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
           },
           "503": {
             "content": {

@@ -25,7 +25,7 @@
 | `NoSuchUpload` | 500* | `multipart upload not found` | *HTTP 默认走 fallback 500；消息单独映射 |
 | `errors.Is(err, s3wrap.ErrObjectTooLarge)` | 400** | `object exceeds 5GB single-put limit; use multipart upload` | 单次上传/复制 >5GB；`PutObject`/`CopyObject` 用 `%w` 包装 |
 | `errors.Is(err, s3wrap.ErrSourceDeleteFailed)` | 500* | `copied but failed to delete source` | 移动半成功；handler 用 `%w` 包装 |
-| `errors.Is(err, s3wrap.ErrPartialDelete)` | 409 | `some objects could not be deleted` | 批量删除/S3 在 **200 响应体内**逐 key 报错（桶策略 / 保留期 / MFA Delete）；`HTTPStatus` 已收录该 sentinel → 409（review §R17，此前回落 500 使精细文案不可达、丢失已删计数）；回收站 purge 部分失败的 handler 显式响应同为 409 且带 `{"purged":…,"deleted":n,"error":…}` |
+| `errors.Is(err, s3wrap.ErrPartialDelete)` | 409 | `some objects could not be deleted (N deleted)`（结构化分支带**已删计数**；裸 sentinel 回退基础文案 `some objects could not be deleted`） | 批量删除/S3 在 **200 响应体内**逐 key 报错（桶策略 / 保留期 / MFA Delete）；`HTTPStatus` 已收录该 sentinel → 409（review §R17，此前回落 500 使精细文案不可达、丢失已删计数）；回收站 purge 部分失败的 handler 显式响应同为 409 且带 `{"purged":…,"deleted":n,"error":…}` |
 | 其他 | 500 | `storage operation failed` | |
 
 > **已移除字符串匹配**：应用层错误（5GB 上限 / 删源失败）改用 sentinel + `errors.Is` 识别
@@ -36,7 +36,8 @@
 > `HTTPStatus` 未单独列出的码（如 `NoSuchUpload`）回落 **500**；业务 handler 可在映射前特判。
 
 > **逐 key 失败没有 error 值**：`DeleteObjects` 的失败只出现在 200 响应体内，拿不到 `error`，
-> 因此 `s3wrap.UserMessageForCode(code)`（handler 侧 `s3UserMessageForCode`）复用同一张映射表；
+> 因此 `s3wrap.UserMessageForCode(code)`（`service/delete.go` 逐 key 分支复用同一张映射表；handler 侧
+> 委托入口为 `s3UserMessage` / `s3HTTPStatus`，见 `handler/s3_errors.go`）复用同一张映射表；
 > 未收录的码回落 `storage operation failed`。同一个码在**指标标签**上另有白名单
 > （`metricErrorCodes`）：不可信端点返回的任意 `<Code>` 一律归 `other`，避免标签基数无界。
 
@@ -51,6 +52,7 @@
 | 并发流式请求数达上限 | 503 | `too many concurrent streaming requests` | `withStreamLimit`，上限 32 |
 | 单任务 SSE 订阅数达上限 | 503 | `too many subscribers for this job` | 每任务上限 16，防止终态关闭耗时随订阅数线性增长 |
 | 请求体超过上限（16MB） | 413 | `request body too large (max 16MB)` | 与「JSON 无效」的 400 区分开（此前被 `LimitReader` 截断成 400） |
+| 每 IP 令牌桶超限 | 429 | `rate limit exceeded` | `withRateLimit`，120 次/分钟/IP，作用于**全部** `/api/*`（在 `withAuth` 外层，未鉴权也受限）；`Retry-After: 5`；仅 `S3C_TRUSTED_PROXIES` 配置下才采信 `X-Forwarded-For` |
 | download-zip 传入空 key | 400 | `keys must not contain empty entries` | 空 key 会被 S3 当成「列举桶」，把 ListBucket XML 塞进 ZIP |
 | 分段顺序不是升序 | 400 | `parts must be ordered by ascending partNumber` | S3 要求 `CompleteMultipartUpload` 的 Parts 升序 |
 | `ifNoneMatch` 非 `*` | 400 | `ifNoneMatch must be *` | 条件写边界校验（`handler/conditions.go`；S3 只接受「仅当不存在」语义） |

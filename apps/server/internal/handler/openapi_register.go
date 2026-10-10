@@ -8,7 +8,7 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	r.SetInfo(openapi.Info{
 		Title:       "s3client API",
 		Version:     version,
-		Description: "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约，所有响应均 JSON（除 /api/health 等纯状态端点）。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。",
+		Description: "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。",
 	})
 	r.AddServer(openapi.Server{URL: "/", Description: "同源（前端 Vite 代理或后端 SPA fallback）"})
 
@@ -29,6 +29,43 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 
 	// 示例在所有 operation 注册完成后统一附加（集中登记，见 openapi_examples.go）。
 	applyExamples(r)
+	// 通用状态码（401 / 413 / 429 / 500）在全部注册完成后统一接线（见下）。
+	applyUniversalResponses(r)
+}
+
+// universalResponses 是「中间件 / 兜底统一产生、全端点适用」的状态码 → 共享
+// components.responses 组件名。逐 operation 手写 84×4 处声明必然漂移（实测曾三处孤儿、
+// 零端点声明），故注册完成后统一补挂；适用范围的过滤条件写在 applyUniversalResponses。
+// 门禁：openapi_status_declared_test.go 的 TestOpenAPIUniversalResponsesAreWiredPerOperation。
+var universalResponses = map[string]string{
+	"401": "Unauthorized",
+	"413": "PayloadTooLarge",
+	"429": "TooManyRequests",
+	"500": "InternalError",
+}
+
+// applyUniversalResponses 给已注册 operation 补挂通用状态码（已显式声明的不覆盖）：
+//   - 429（withRateLimit）/ 500（writeInternalErr 兜底）→ 全部端点；
+//   - 401（withAuth / scope 中间件）→ 除 NoAuth 豁免端点（health / metrics）外全部端点；
+//   - 413（decodeBody 的 16 MB 上限）→ 仅带 requestBody 的端点（无请求体不可能触发）。
+func applyUniversalResponses(r *openapi.Registry) {
+	r.ForEachOperation(func(method, path string, op openapi.Op) openapi.Op {
+		if op.Responses == nil {
+			op.Responses = map[string]openapi.Response{}
+		}
+		for status, component := range universalResponses {
+			if status == "401" && op.NoAuth {
+				continue
+			}
+			if status == "413" && op.Request == nil {
+				continue
+			}
+			if _, exists := op.Responses[status]; !exists {
+				op.Responses[status] = refResp(component)
+			}
+		}
+		return op
+	})
 }
 
 // ---- Tags ----

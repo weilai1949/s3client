@@ -16,6 +16,12 @@
 > 先例 [`code-review-2026-09-24.md`](code-review-2026-09-24.md) 已于 2026-09-28 执行，
 > [`code-review-2026-10-09.md`](code-review-2026-10-09.md) 已于 2026-10-10 执行。
 > 当前**无待归档例外**。
+>
+> ⚠️ **冻结件里的旧写法**：归档于 2026-10-08 产品名改名（`s3clinet → s3client`）**之前**的快照
+> （`review-2026-09-19.md` / `code-review-2026-09-24.md` / `code-review-summary.md` / `assessment.md`）
+> 内的可复现命令与项目名保留当时写法——其中 `S3CLINET_E2E` / `S3CLINET_ENDPOINT` 等
+> **环境变量名已改** `S3CLIENT_*`，照抄执行会因变量不匹配而**静默 `t.Skip`**（看似绿、实为 0 用例）；
+> 复现时请替换为 `S3CLIENT_*`。正文按冻结纪律不回写。
 
 ## 归档清单
 
@@ -27,7 +33,7 @@
 | [code-review-summary.md](code-review-summary.md) | `docs/code-review-summary.md` | 2026-09-28 | 代码审查总结与改进建议（总体评分、质量指标、待解决项、改进建议）；头部「状态更新」活块 ①–⑥ 冻结 2026-09-24 → 2026-09-28 的收口事实，正文数字均为**审查时点值**（如「1042 用例 / 66 文件」）。其「⚠️ 待解决的技术问题」在归档前已清空到只剩 #25——该清单是在办事项、已闭环项直接移除 |
 | [incident-20260916-presign-empty-url.md](incident-20260916-presign-empty-url.md) | `docs/incident-20260916-presign-empty-url.md` | 2026-09-30 | **首份已填写的事故复盘**（near-miss 示例，按 [`POSTMORTEM_TEMPLATE.md`](../POSTMORTEM_TEMPLATE.md) §1–§10 填写）：`b3b287c`（2026-09-05 为达 100% 覆盖率删除被误判「不可达」的预签名错误分支）→ 签名失败回 `200 {"url":""}`；2026-09-16 评估实测发现（`ASSESSMENT` L1 / `KNOWN_ISSUES` #23），2026-09-17 `5954bfa` 统一 `writePresignResult` + 源码门禁 `TestPresignErrorsNotSwallowed` 闭环，2026-09-19 `0fbd560` 收口 #23 余项；正文字段全挂 git 取证，**未编造运行期数据** |
 | [handoff-20260930.md](handoff-20260930.md) | `docs/handoff-20260930.md` | 2026-10-08 | **首份批次交接快照**（2026-09-30 中断优化批次的断点记录）：所记四条目 `ROADMAP` #19 / `KNOWN_ISSUES` #70 / `ROADMAP` #18 / #17 已于 2026-10-01 **全部收口**（§2 表），快照冻结为「执行到哪、还剩什么」的历史原文（含当时实跑的门禁数字与踩坑记录）；当前待办一律以 [`ROADMAP.md`](../ROADMAP.md) §三 3.2 与 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 为准 |
-| [code-review-2026-10-09.md](code-review-2026-10-09.md) | `docs/code-review-2026-10-09.md` | 2026-10-10 | **2026-10-09 全仓五轴代码评审**（结论 `Request changes` → 收口）：C1 / C2（CI 两个平台的 Go job 构造性红灯——缺 `apps/web/node_modules` 前置、浅克隆致 `changelog_tag` 必红）与 R1–R10 **全部修复**，O1–O12 **全部闭环**（转登记 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #72–#83，逐条证据见 [`FEATURES.md`](../FEATURES.md) §BZ–§CD）；§1 门禁实测数字为**评审时点快照**，正文不回写 |
+| [code-review-2026-10-09.md](code-review-2026-10-09.md) | `docs/code-review-2026-10-09.md` | 2026-10-10 | **2026-10-09 全仓五轴代码评审**（结论 `Request changes` → 收口）：C1 / C2（CI 两个平台的 Go job 构造性红灯——缺 `apps/web/node_modules` 前置、浅克隆致 `changelog_tag` 必红）与 R1–R10 **全部修复**，O1–O12 **全部闭环**（转登记 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #72–#83，逐条证据见 [`FEATURES.md`](../FEATURES.md) §BZ–§CD）；§1 门禁实测数字为**评审时点快照**，正文不回写。**读正文注意**：其 §8 末条停在同日**中间态**「仅剩 O1 / O3–O8 开放」——终态（全部闭环）以本行与 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) 编号台账为准 |
 
 > `docs/` 下（本目录之外）的文档均为**活跃文档**，须随代码同步维护
 > （§4 文档同步门禁）。本目录约定随归档实践持续生效。

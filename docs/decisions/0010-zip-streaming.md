@@ -55,5 +55,5 @@ blob 兜底并设 500MB / 50 keys 上限。**
 - 流式响应无 `Content-Length` → 客户端不能依赖大小做进度条；blob 兜底因此设
   500MB / 50 keys 上限并在超限时显式报错（`api.zipTooLarge`）。
 - 拉取与写入解耦后，**取消路径必须继续消费 results 通道**，否则 worker 永久阻塞
-  （`zip.go` 注释 review §B4）。
+  （`zip.go` 注释 [`../archive/review-2026-09-19.md`](../archive/review-2026-09-19.md) §B4）。
 - 包内失败清单 `_下载失败清单.txt` 成为跨语言可读的失败契约。

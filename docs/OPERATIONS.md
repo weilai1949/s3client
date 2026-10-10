@@ -208,7 +208,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 
 **跨层定位**：响应头 `traceparent`（`00-<traceId>-<spanId>-<flags>`）里的 `traceId` 与子 span 一致，
 配合 §3.3 的 `req=<X-Request-ID>`（即 span 属性 `request.id`），可把一次请求在采集端与日志之间对齐。
-依赖预算与取舍见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md)。
+依赖预算与取舍见 [ADR-013](decisions/0013-zero-dep-otlp-tracing.md)。
 
 ## 4. SLO / 告警基线
 
@@ -226,7 +226,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 > （2026-09-30 新增）。Grafana → **Dashboards → New → Import** → 上传该 JSON → 数据源选你的 Prometheus 即可；
 > 盘上的 `s3client:*` 记录规则与本节表格同源（**本节与 rules.yml 必须同改**），面板在规则未加载时也各有等价的原始表达式。
 > 该 JSON 由 `grafana_dashboard_gate_test.go` 机械校验：引用的每个指标 / `code` 取值 / 记录规则名都必须真实存在。
-> **OTel trace 已于 2026-10-08 落地**（§3.4；`S3C_OTEL_ENDPOINT` 默认空 = 关闭，见 [ADR-0013](decisions/0013-zero-dep-otlp-tracing.md)）；告警规则本身已随仓库分发。
+> **OTel trace 已于 2026-10-08 落地**（§3.4；`S3C_OTEL_ENDPOINT` 默认空 = 关闭，见 [ADR-013](decisions/0013-zero-dep-otlp-tracing.md)）；告警规则本身已随仓库分发。
 
 ### 4.1 建议 SLI / SLO
 
@@ -275,7 +275,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 > 连续 3 次失败（30s 间隔）即告警——探针由宿主 / 负载均衡侧配置，对应 §4.1「服务可用性」SLI；
 > 进程 / 端口级故障的进程侧信号另见 `S3ClientProcessRestarted`。
 
-### 4.3 必须靠外部采集的观测面（本服务不提供指标）
+### 4.3 需外部补齐 / 平台受限的观测面（部分指标已内置，见表内「现状」列）
 
 | 关注点 | 现状 | 建议做法（**建议值**） |
 |---|---|---|

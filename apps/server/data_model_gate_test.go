@@ -2,7 +2,7 @@ package main
 
 // data_model_gate_test.go —— 「数据模型 / 存储格式」文档与代码一致性门禁。
 //
-// 背景：账号存储的事实此前散落在四处——ADR-0006（驱动与原子写决策）、
+// 背景：账号存储的事实此前散落在四处——ADR-006（驱动与原子写决策）、
 // api/accounts.schema.json（字段契约）、compatibility.md §4（S3C2/S3C3 信封）、
 // architecture.md（分层）。docs/data-model.md 把四者汇成一张地图，代价是**多了一处会漂移的副本**。
 // 本门禁让「漂移」变成红灯，而不是靠人记得同步：
@@ -67,7 +67,7 @@ func parseOpenStoreDrivers(src string) []string {
 }
 
 // TestDataModelDocCoversModelAndDrivers 断言 docs/data-model.md 覆盖
-// model.Account 的全部 JSON 字段、store.Open 接受的全部驱动名，并链接 schema 与 ADR-0006。
+// model.Account 的全部 JSON 字段、store.Open 接受的全部驱动名，并链接 schema 与 ADR-006。
 func TestDataModelDocCoversModelAndDrivers(t *testing.T) {
 	t.Parallel()
 	doc := readRepoFile(t, dataModelDocRel)

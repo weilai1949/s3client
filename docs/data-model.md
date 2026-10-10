@@ -11,11 +11,12 @@
 | 关注点 | 权威来源 | 本文件的角色 |
 |---|---|---|
 | 账号字段集 / JSON 类型 / `required` | [`api/accounts.schema.json`](api/accounts.schema.json)（由 `TestAccountStoreSchemaMatchesModel` 反射比对 `model.Account`，漂移即红灯） | 汇总 + 解释 |
-| 驱动选择 / 原子写 / fail-closed 的**决策依据** | [`decisions/0006-store-drivers-atomic-write.md`](decisions/0006-store-drivers-atomic-write.md)（ADR-0006） | 汇总 + 指向 |
+| 驱动选择 / 原子写 / fail-closed 的**决策依据** | [`decisions/0006-store-drivers-atomic-write.md`](decisions/0006-store-drivers-atomic-write.md)（ADR-006） | 汇总 + 指向 |
 | `S3C2` → `S3C3` 的**兼容承诺**与升级 / 回滚口径 | [`compatibility.md`](compatibility.md) §4 | 汇总 + 指向 |
 | 分层与模块边界 | [`architecture.md`](architecture.md) | 不重复 |
 | **字节级格式**（信封偏移、KDF 参数、权限位） | 生产代码：`apps/server/internal/store/{crypto.go,open.go,store.go,sqlite.go,filestore.go}` 与 `apps/server/internal/atomicfile` | 描述；与本文件不一致时**以代码为准** |
 | 环境变量语义（`S3C_STORE_DRIVER` / `S3C_STORE_KEY` / `S3C_DATA_DIR`） | [`CONFIGURATION.md`](CONFIGURATION.md) | 只讲与数据结构相关的部分 |
+| **启动期硬失败清单**（拒绝启动的条件与 opt-in 开关） | [`CONFIGURATION.md`](CONFIGURATION.md) §3 | §7 汇总存储侧条目 + 指向 |
 
 > 口径：**代码是字节事实，schema 是字段契约，ADR 是决策记录，本文件是地图。**
 > 任何一处改动都要按 [`DEVELOPMENT.md`](DEVELOPMENT.md) §4「文档同步门禁」同步本文件，
@@ -82,6 +83,11 @@ HTTP 响应**不使用** `Account`，而是 `AccountView`：结构与 `Account` 
 才回退环境变量 `S3C_STORE_KEY`（历史 `New` 语义）。`sqlite` / `encrypted` 分支不回退——
 `encrypted` 缺 key 直接报错。
 
+**明文闸（fail-closed）**：上表「需要 key：否」指**允许无 key 运行的驱动**，**不等于无 key 即默认可用**——
+`json` / `sqlite` 在 `S3C_STORE_KEY` 为空且未显式设置 `S3C_ALLOW_PLAINTEXT_STORE=1` 时
+**拒绝启动**（`Config.Validate` 返回 `ErrPlaintextStoreNotAllowed`，报错点名「会把 secretKey 明文落盘」；
+大小写 / 空白变体 `JSON` / ` json ` 同样被拦）。完整启动期清单见 [`CONFIGURATION.md`](CONFIGURATION.md) §3。
+
 **接口**（`store.AccountStore`）：`List` / `Get` / `Create` / `Update` / `Delete` / `Ping` / `Close`，
 不存在时统一返回 `store.ErrNotFound`。
 
@@ -116,6 +122,9 @@ HTTP 响应**不使用** `Account`，而是 `AccountView`：结构与 `Account` 
 
 > **明文驱动的 `secretKey` 就是明文**。需要静态加密时必须配置 `S3C_STORE_KEY`
 > 或改用 `encrypted` 驱动，见 [`threat-model.md`](threat-model.md)。
+> **但无 key 不是默认可用状态**：`json` / `sqlite` 无 `S3C_STORE_KEY` 启动会被明文闸拒绝，
+> 除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`（仅限本地联调，见 §3「明文闸」与
+> [`CONFIGURATION.md`](CONFIGURATION.md) §3）。
 
 ### 4.2 加密信封 `S3C2` / `S3C3`
 
@@ -216,6 +225,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_sort ON accounts(sort_order);
 | 情形 | 行为 |
 |---|---|
 | 未知 `S3C_STORE_DRIVER` | `Open` 报错 `unknown store driver %q (want json\|sqlite\|encrypted)` |
+| `json` / `sqlite` 无 `S3C_STORE_KEY` 且未 `S3C_ALLOW_PLAINTEXT_STORE=1` | **拒绝启动**：`Validate` 返回 `ErrPlaintextStoreNotAllowed`（`%s 驱动在 S3C_STORE_KEY 为空时会把 secretKey 明文落盘…`；opt-in 时改打 `StorePlaintextWarning` 启动告警） |
 | `encrypted` 驱动缺 `S3C_STORE_KEY` | 构造即报错 `S3C_STORE_KEY is required for encrypted store` |
 | `S3C3` KDF 参数为零 / 越界 | 派生前报错 `S3C3 file has invalid KDF params` |
 | strict 驱动遇到非 `S3C2` / `S3C3` magic | 报错 `encrypted account file magic %q is not S3C2/S3C3`，**不回退明文解析** |

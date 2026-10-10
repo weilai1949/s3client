@@ -20,8 +20,8 @@ Accepted
 
 - [`apps/server/internal/service/job.go`](../../apps/server/internal/service/job.go)：`JobRegistry`
   内存注册表 + reap 循环；`Job` 持有进度 / 结果 / 订阅表；`TryCreate` 在册上限 256
-  （`defaultMaxJobs`，注释：无上限会耗尽内存与 goroutine，KNOWN_ISSUES #17 / ASSESSMENT M4）；
-  `JobTTL` 30 分钟（从**完成时刻** `finishedAt` 起算，review R8）、`JobInterruptedTTL` 7 天；
+  （`defaultMaxJobs`，注释：无上限会耗尽内存与 goroutine，KNOWN_ISSUES #17（已闭环移除）/ [`../archive/assessment.md`](../archive/assessment.md) M4）；
+  `JobTTL` 30 分钟（从**完成时刻** `finishedAt` 起算，[`../archive/code-review-2026-09-24.md`](../archive/code-review-2026-09-24.md) R8）、`JobInterruptedTTL` 7 天；
   `JobTimeout` 2 小时；`SSEHeartbeatEvery` 15 秒；每任务订阅上限 16（`maxSubscribersPerJob`）。
 - [`apps/server/internal/service/job_persist.go`](../../apps/server/internal/service/job_persist.go)：
   `FileJobPersister` 可选落盘（整份 JSON 原子写）；Load/Save 失败**降级为内存态**，不阻止启动
@@ -55,7 +55,7 @@ Accepted
 
 ### 任务清单不落盘（纯内存）
 - Pros：实现最简。
-- Cons：进程重启后「复制成功但源未删除」的对账证据丢失（ASSESSMENT S1 / KNOWN_ISSUES #19）。
+- Cons：进程重启后「复制成功但源未删除」的对账证据丢失（[`../archive/assessment.md`](../archive/assessment.md) S1 / KNOWN_ISSUES #19（已闭环移除））。
 - 已被推翻：落盘由 `FileJobPersister` 承载，失败只降级不硬失败。
 
 ### 每个调用方各自实现 SSE 订阅

@@ -20,7 +20,11 @@
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-09（第三批次：**#76 / #79 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CD）：
+> 最后更新：2026-10-10（补齐 §四 编号台账缺失的 **#72 / #74 / #75 / #77 / #78** 五行合并行——
+> 这五个编号在 §二 叙述与页头「已闭环移除」清单里早已登记，但 §四 表此前漏行，代码注释引用 `#74` 会查空；
+> 另订正 #47–#59 的「唯一来源」指针（落地后转 FEATURES，只指 ROADMAP 会查空）。存量未变）：
+>
+> 上一轮：2026-10-09（第三批次：**#76 / #79 已闭环并移除**，证据见 [`FEATURES.md`](FEATURES.md) §CD）：
 > **#76** 前端结构性重复收敛——`newRowKey` 的 7 份逐字复制提取为 `src/rowKey.ts` 的
 > `createRowKey` 工厂；虚拟滚动管线（ObjectList / MigratePanel / VersionsDialog /
 > RecycleBinPanel 的 4 份）提取为 `src/composables/useVirtualRows.ts`，各组件只传响应式数组；
@@ -163,7 +167,9 @@
 
 > 迁移前本文件按六类收录待办。以下**原分类当前均无开放项**——保留本表是为了让旧编号
 > （`todolist #N` / `KNOWN_ISSUES #N`）仍可回溯到闭环证据，**不是待办**；
-> 各分类里属于「功能候选」的条目已按两源分工迁往 [ROADMAP.md](ROADMAP.md) §三 3.2。
+> 各分类里属于「功能候选」的条目已按两源分工迁往 [ROADMAP.md](ROADMAP.md) §三 3.2；
+> 落地后按 ROADMAP §六 第 1 条**移入 [FEATURES.md](FEATURES.md) 对应节**——下表「迁出」列只记迁出时点，
+> 追查现状需按 ROADMAP §3.2 前言的空号说明再转 FEATURES。
 
 | 原分类 | 现状 | 闭环证据 / 迁出去向 |
 |--------|------|---------------------|
@@ -185,7 +191,7 @@
 | #26–#39 | 已闭环移除 | 2026-09-19 补登记，2026-09-20 / 2026-09-22 分批闭环（[FEATURES.md](FEATURES.md) §S–§W） |
 | #40 / #42 / #43 / #44 | 从未启用（保留空号） | 补登记时跳号；回收会让历史提交里的 `#N` 指向不同条目 |
 | #41 / #45 / #46 | 已闭环移除 | 对应文档失真 D1 / D4 / D5 / D10，2026-09-22 闭环（[FEATURES.md](FEATURES.md) §U） |
-| #47–#59 | **已迁出** | 功能候选（非问题），唯一来源改为 [ROADMAP.md](ROADMAP.md) §三 3.2 |
+| #47–#59 | **已迁出** | 功能候选（非问题），唯一来源改为 [ROADMAP.md](ROADMAP.md) §三 3.2；**落地后按 ROADMAP §六 第 1 条再移入 [FEATURES.md](FEATURES.md) 对应节**——已再次移出的编号在 ROADMAP §3.2 现已查空，回溯请按 ROADMAP §3.2 前言的空号说明转 FEATURES 各节 |
 | #60 | **已闭环移除** | 4 个超 1000 行的前端测试文件拆分，2026-09-28 闭环（[FEATURES.md](FEATURES.md) §AB） |
 | #61 | **已闭环移除** | `SameEndpoint` 精确判定纳入 `useSSL`（跨包契约变更），2026-09-28 闭环（[FEATURES.md](FEATURES.md) §AB） |
 | #62 | **已闭环移除** | 批量删除编排下沉 `service`（2026-09-24 审查 Nit 本轮未完成），2026-09-28 闭环（[FEATURES.md](FEATURES.md) §AB） |
@@ -198,6 +204,7 @@
 | #69 | **已闭环移除** | CHANGELOG 与 git tag 断裂：顶部新增「tag ↔ 版本段对应关系（唯一台账）」（3 个时间戳 tag 定性为同日内部快照、5 个「有段无 tag」历史段登记）；`[1.0.0]` 段日期按 tag 事实修正为 2026-09-22（内容未改写）并恢复倒序；新门禁 `apps/server/changelog_tag_gate_test.go`（tag↔段双向 + Unreleased 居首 + 映射表解析口径 + 扫描阈值，TDD 先红后绿 + 变异验证）+ `scripts/release-version.sh` 硬检查（缺 `## [<version>]` 段即 exit 1），2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BE） |
 | #70 | **已闭环移除** | `NormalizeEndpoint` 对含尾随空白输入不幂等：原 ➖「fail-closed 维持现状」决策于 2026-09-30 推翻，按登记内写死的修法修复（先切分 host/path，再对 host `TrimSpace`、对 path 去尾部斜杠与空白，保输出不以空白结尾），TDD 先红后绿 + 变异验证（删 host `TrimSpace` → 红灯点名 `"00  /"` / `"http://host  /"` → 还原绿）+ 两目标各 10s 有界 fuzz PASS，2026-09-30 闭环（[FEATURES.md](FEATURES.md) §BK） |
 | #71 | **已闭环移除** | 仓库 slug `s3clinet` / `s3client` 并存：2026-10-08 **推翻原 ➖「维持现状」决策**，同日分两批统一——**① slug**（`go.mod` 模块路径 + 全仓 Go import + 全部仓库 URL → `github.com/weilai1949/s3client`，与 `git remote` / `.well-known/security.txt` / `CITATION.cff` 对齐）见 [FEATURES.md](FEATURES.md) §BO；**② 产品名**（品牌 / 运行时 / 监控命名空间的全部旧写法 → `s3client` 系，含 `.s3client.lock` 锁文件名等**行为变更面**）见同文件 §BP。仅 `CHANGELOG.md` 历史条目（只修路径链接）与 `docs/archive/` 冻结件保留旧写法 |
+| #72 / #74 / #75 / #77 / #78 | **已闭环移除** | 2026-10-09 评审 O1 / O3 / O4 / O6 / O7（第二批次）：`UNSIGNED-PAYLOAD` 收窄为只在带 stream 的请求注入；前端传输层 `ApiError{status, body}` 归一；`generated.gate.test.ts` 补 opId 双向穷尽断言；右键菜单焦点还原 + Escape 改走 `useKeydownStack` + 「⋯」补 `aria-haspopup`/`aria-expanded`；i18n 覆盖测试补模板 / 数据驱动键断言并清理 3 处硬编码文案。证据见 [`FEATURES.md`](FEATURES.md) §CC |
 | #73 / #80 / #81 / #83 | **已闭环移除** | 2026-10-09 评审 O2 / O9 / O10 / O12：s3wrap 4 个带 SDK 签名的包内转换函数降为小写；计划校验错误改类型化定值文案 + `error_echo_gate` 捕获 `err.Error()` 透传；`POST /api/accounts` 拒绝 `accounts` 作用域 token（`reason=accounts_create`）；散点缺陷群 12 处全修（含新增 `s3c_persist_failures_total`），证据见 [`FEATURES.md`](FEATURES.md) §CA |
 | #82 | **已闭环移除** | 2026-10-09 评审 O11（R10 残留）：`make check` 补 `govulncheck` / `web-lint` / `build`；`e2e.yml` 与 `.gitlab-ci.yml` 的真 RustFS Go E2E 触发面放宽到 `apps/server/**`；DEVELOPMENT 的 `perf-budget`→`bench` / 覆盖率排除项 / 触发 job 计数三处修正；新增 `doc_ci_drift_gate_test.go` 与两道一致性门禁防回退。**2026-10-10 再处置**：补齐 `web-typecheck`（`pnpm typecheck`）与 `web-build`（`pnpm build`）以真正覆盖 CI `web` job 全部静态步，并**真跑 `make check` exit 0** 复核，证据见 [`FEATURES.md`](FEATURES.md) §CB |
 | #76 / #79 | **已闭环移除** | 2026-10-09 评审 O5 / O8：#76 前端 `newRowKey` ×7 → `src/rowKey.ts`、虚拟滚动管线 ×4 → `src/composables/useVirtualRows.ts`；#79 新增 `openapi_status_declared_test.go`（handler 直接写出的状态码必须声明）+ `bucket` required 门禁，补齐缺失状态码、`putObjectLock` 用 `anyOf` 表达二选一、`bucket` 请求体 required 归零并重生成规范。证据见 [`FEATURES.md`](FEATURES.md) §CD |
