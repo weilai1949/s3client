@@ -67,6 +67,9 @@
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
 | 看最近一次全仓代码评审 | [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) | **2026-10-10 全仓五轴评审快照**（结论 **Approve**：未发现 Critical / Required；3 道非阻断 Nit #84–#86 **同日闭环**；**已归档** 2026-10-10）：门禁独立复跑数字 + 逐条 `file:line` 证据 + 复现口径 + 未复跑项披露 |
 | 看上上次全仓代码评审（已归档） | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结） |
+| 看 apps/desktop 优化评审（已归档） | [`archive/desktop-review-2026-10-12.md`](archive/desktop-review-2026-10-12.md) | 2026-10-12 桌面端子树评审快照：1 项死代码（死依赖）+ 6 项优化（release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 打包元数据与 CSP / 依赖升级）+ 1 道防复发门禁（`unused_crate_dependencies`），逐条 `file:line` 证据 + 实跑命令 + 未实测项披露；**已归档** 2026-10-12 |
+| 看 apps/server 优化评审（已归档） | [`archive/server-review-2026-10-12.md`](archive/server-review-2026-10-12.md) | 2026-10-12 服务端子树评审快照：结论**无结构性 / 算法级优化缺口**；S1–S5 五项微优化（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写）全部落地，S6 维持现状、S0 跨子树门禁由 web 批次解除，逐条 `file:line` 证据 + 实跑命令 + 未实测项披露；**已归档** 2026-10-12 |
+| 看 apps/web 页面 UI / 交互优化（已归档） | [`archive/web-review-2026-10-12.md`](archive/web-review-2026-10-12.md) | 2026-10-12 前端子树评审快照：高 / 中 / 低三档 **9 批全部实施**（任务中心 · 拖拽上传 · 软刷新 · 过滤防抖高亮 · 键盘行导航 · Toast 三改 · 偏好持久化 · 移动视口扫描）+ 实测抓到的**对比度缺陷 D1** 同批修复；用户可见行为已进 [`user-guide.md`](user-guide.md)、台账见 [`FEATURES.md`](FEATURES.md) §CL，逐条 `file:line` 证据 + 实跑数字 + 未跑项披露；**已归档** 2026-10-12 |
 | 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查 / 事故复盘 / 批次交接类**时点性文档**的归档索引（只读、不回写；含首份已填写复盘 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 与已收口批次快照 [`handoff-20260930.md`](archive/handoff-20260930.md)、[`handoff-20261010.md`](archive/handoff-20261010.md)） |
 
 ## 机器可读面（给工具与 AI）

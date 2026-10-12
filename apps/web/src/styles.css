@@ -26,6 +26,9 @@
   --row-hover: #f2f9f5;
   --row-sel: #e6f8f0;
   --row-sel-hover: #d9f2e6;
+  /* 选中行内小字（如存储类型徽标）：--muted 在 --row-sel 上只有 4.39:1，
+     低于 WCAG AA 的 4.5:1（2026-10-12 移动视口 axe 扫描实测），故单独取一档更深的值。 */
+  --badge-text: #3f5a4c;
   --head-grad-a: #f5faf7;
   --head-grad-b: #eef7f2;
   --sub-grad-a: #f8fdfb;
@@ -99,6 +102,8 @@
   --row-hover: #182720;
   --row-sel: rgba(16, 163, 124, .14);
   --row-sel-hover: rgba(16, 163, 124, .22);
+  /* 深色下 --muted 已达标（≥4.5:1），此处只为让 token 在两种主题下都有定义、不靠回退。 */
+  --badge-text: #9fb8ac;
   /* 深色底上的 logo 渐变文字：回到亮值（浅端沿用原 #2dbd98、深端微提亮到 ≥4.5） */
   --brand-mark-from: #2dbd98;
   --brand-mark-to: #138e69;

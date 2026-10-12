@@ -70,6 +70,7 @@ web-lint:
 
 # 桌面端开发（Tauri）
 desktop-dev:
+	cd apps/web && pnpm install --frozen-lockfile
 	cd apps/desktop && pnpm install --frozen-lockfile && pnpm tauri dev
 
 # 打包桌面端

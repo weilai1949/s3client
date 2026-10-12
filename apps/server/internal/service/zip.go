@@ -130,7 +130,7 @@ func WriteObjectsZip(
 			continue
 		}
 		// ctxCancelReader：在 ctx 取消时关闭底层 body，中断阻塞式 syscall 读。
-		_, copyErr := io.Copy(f, newCancelReader(ctx, item.body))
+		_, copyErr := CopyBuffered(f, newCancelReader(ctx, item.body))
 		_ = item.body.Close()
 		if copyErr != nil {
 			// 必须 continue 而不是 break：results 无缓冲，一旦停止消费，其余 worker 会永久

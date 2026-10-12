@@ -17,20 +17,31 @@ import (
 // 两处各写一份字面量必然漂移（review Nit），新增引用请用常量而非复制字符串。
 const defaultCSPConnectSrc = "'self' http://127.0.0.1:* http://localhost:*"
 
+// buildCSP 拼出整条 Content-Security-Policy：脚本仅允许同源（杜绝注入脚本执行）；
+// 内联样式给 Vue 用；connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
+// 自定义后端 / 远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
+//
+// 它是纯函数，且**只在启动期调用**（包初始化 / New / SetCSPConnectSrc）：结果预计算进
+// Handler.cspHeader，请求路径上不再做字符串拼接与分配（docs/archive/server-review-2026-10-12.md S4）。
+// connect 由调用方保证非空（New 传 defaultCSPConnectSrc，SetCSPConnectSrc 忽略空值）。
+func buildCSP(connect string) string {
+	return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src " + connect + "; object-src 'none'; base-uri 'self'; form-action 'self'"
+}
+
+// defaultCSPHeader 是默认策略的预计算整串；零值 Handler（未走 New）也用它，
+// 保证安全响应头永不缺失。
+var defaultCSPHeader = buildCSP(defaultCSPConnectSrc)
+
 func (h *Handler) withSecurityHeaders(next http.Handler) http.Handler {
+	csp := h.cspHeader
+	if csp == "" {
+		csp = defaultCSPHeader
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		// 纵深防御：脚本仅允许同源（杜绝注入脚本执行）；内联样式给 Vue 用；
-		// connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
-		// 自定义后端/远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
-		connect := h.cspConnectSrc
-		if connect == "" {
-			connect = defaultCSPConnectSrc
-		}
-		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src "+connect+"; object-src 'none'; base-uri 'self'; form-action 'self'")
+		w.Header().Set("Content-Security-Policy", csp)
 		next.ServeHTTP(w, r)
 	})
 }

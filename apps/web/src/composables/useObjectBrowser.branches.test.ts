@@ -2,7 +2,7 @@
 // KeepAlive 生命周期、loadAll 分支、分页上限与选中合计。断言逐字搬移，与拆分前等价。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent, h, KeepAlive, ref as vueRef } from 'vue'
+import { defineComponent, h, KeepAlive, nextTick, ref as vueRef } from 'vue'
 import { useObjectBrowser } from './useObjectBrowser'
 import type { Account, BucketItem, Entry, ObjectItem } from '../types'
 import { s3api } from '../api'
@@ -44,7 +44,7 @@ vi.mock('../confirm', () => ({
 
 // Mock localStorage
 const localStorageMock = {
-  getItem: vi.fn(() => null),
+  getItem: vi.fn((_key: string): string | null => null),
   setItem: vi.fn(),
   removeItem: vi.fn(),
 }
@@ -651,5 +651,109 @@ describe('useObjectBrowser 分页上限与选中合计', () => {
     await browser.load(true)
     expect(browser.selected.value.size).toBe(0)
     expect(browser.selectedSize.value).toBe(0)
+  })
+})
+
+// 行键盘导航（roving tabindex）：焦点落点由本 composable 决定，ObjectList 只负责落焦。
+describe('useObjectBrowser 键盘行导航焦点', () => {
+  function makeBindings() {
+    return { previewOrDownload: vi.fn(), ctxRenameKey: vi.fn(), removeSelected: vi.fn() }
+  }
+  const file = (key: string) => ({ key, size: 1, lastModified: '', isDir: false }) as unknown as ObjectItem
+
+  it('focusRow 记录焦点；moveFocus 从当前行移动，越界钳到首尾（不绕回）', () => {
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [file('a.txt'), file('b.txt'), file('c.txt')]
+
+    browser.focusRow('b.txt')
+    expect(browser.focusKey.value).toBe('b.txt')
+    browser.moveFocus(1)
+    expect(browser.focusKey.value).toBe('c.txt')
+    browser.moveFocus(1) // 已在尾行：钳住不动
+    expect(browser.focusKey.value).toBe('c.txt')
+    browser.moveFocus(-5) // 越界向上：钳到首行
+    expect(browser.focusKey.value).toBe('a.txt')
+  })
+
+  it('无焦点行时方向键从首行起步；空列表时 moveFocus / focusEdge 均不动', () => {
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    // 空列表：任何移动都是 no-op（也不得写入焦点）
+    browser.moveFocus(1)
+    browser.moveFocus(-1)
+    browser.focusEdge('start')
+    browser.focusEdge('end')
+    expect(browser.focusKey.value).toBeNull()
+
+    browser.objects.value = [file('a.txt'), file('b.txt')]
+    browser.moveFocus(-1) // 无焦点 → 落到首行
+    expect(browser.focusKey.value).toBe('a.txt')
+    browser.focusEdge('end')
+    expect(browser.focusKey.value).toBe('b.txt')
+    browser.focusEdge('start')
+    expect(browser.focusKey.value).toBe('a.txt')
+  })
+
+  it('过滤把焦点行筛掉时清空焦点；仍在可见集内则保留', async () => {
+    const browser = useObjectBrowser(makeBindings())
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [file('a.txt'), file('b.txt')]
+    browser.focusRow('b.txt')
+
+    browser.filter.value = 'b' // b.txt 仍可见 → 焦点保留
+    await nextTick()
+    expect(browser.focusKey.value).toBe('b.txt')
+
+    browser.filter.value = 'a' // b.txt 被筛掉 → 焦点清空，避免方向键/删除落到看不见的行
+    await nextTick()
+    expect(browser.focusKey.value).toBeNull()
+  })
+
+  it('Enter / F2 作用于焦点行（即便该行未勾选）', () => {
+    const bindings = makeBindings()
+    const browser = useObjectBrowser(bindings)
+    browser.panelActive.value = true
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [file('a.txt'), file('b.txt')]
+    browser.selected.value = new Set()
+    browser.focusKey.value = 'b.txt'
+
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(bindings.previewOrDownload).toHaveBeenCalledWith(expect.objectContaining({ key: 'b.txt' }))
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'F2' }))
+    expect(bindings.ctxRenameKey).toHaveBeenCalledWith('b.txt')
+  })
+
+  it('Delete 作用于未勾选的焦点行：先勾选该行再删', () => {
+    const bindings = makeBindings()
+    const browser = useObjectBrowser(bindings)
+    browser.panelActive.value = true
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [file('a.txt'), file('b.txt')]
+    browser.selected.value = new Set()
+    browser.focusKey.value = 'b.txt'
+
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Delete' }))
+    expect(browser.selected.value.has('b.txt')).toBe(true)
+    expect(bindings.removeSelected).toHaveBeenCalledTimes(1)
+  })
+
+  it('焦点行是文件夹时 Enter/F2/Delete 不作用于文件（文件夹不参与文件动作）', () => {
+    const bindings = makeBindings()
+    const browser = useObjectBrowser(bindings)
+    browser.panelActive.value = true
+    browser.currentBucket.value = 'b1'
+    browser.objects.value = [file('a.txt')]
+    browser.commonPrefixes.value = ['dir/']
+    browser.selected.value = new Set()
+    browser.focusRow('dir/')
+
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'F2' }))
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Delete' }))
+    browser.onGlobalKey(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(bindings.ctxRenameKey).not.toHaveBeenCalled()
+    expect(bindings.removeSelected).not.toHaveBeenCalled()
+    expect(bindings.previewOrDownload).not.toHaveBeenCalled()
   })
 })

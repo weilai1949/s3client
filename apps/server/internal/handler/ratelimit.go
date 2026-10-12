@@ -15,7 +15,26 @@ const (
 	rateLimitBurst  = 30
 )
 
+// rateLimitShards 是限流桶的分片数。
+//
+// 旧实现用一把全局 mutex 保护整张 map，而 withRateLimit 挂在鉴权外层——每个 /api/
+// 请求都要进同一个临界区。分片后不同 IP 落到不同锁，高并发 + 多核下不再串行
+// （docs/archive/server-review-2026-10-12.md S2）。临界区本身是纳秒级，收益只在大并发时可见。
+const rateLimitShards = 16
+
+// maxBucketsPerShard 是单分片的桶数**硬上限**；总量硬上限 = rateLimitShards × 该值
+// = 10_000，与分片前的「全局 10_000」内存上限等值——分片不得放大总上限。
+//
+// 旧实现只是「超过 10_000 就尝试清过期桶」，若 IP 都活跃则 map 无硬上限；分片后每个
+// 分片都必须自带硬上限，否则总量会放大成 16 × 10_000（docs/archive/server-review-2026-10-12.md S2）。
+const maxBucketsPerShard = 10_000 / rateLimitShards
+
 type ipLimiter struct {
+	shards [rateLimitShards]limiterShard
+}
+
+// limiterShard 是一组 IP 的令牌桶与它自己的锁。
+type limiterShard struct {
 	mu   sync.Mutex
 	byIP map[string]*tokenBucket
 }
@@ -26,20 +45,30 @@ type tokenBucket struct {
 }
 
 func newIPLimiter() *ipLimiter {
-	return &ipLimiter{byIP: make(map[string]*tokenBucket)}
+	l := &ipLimiter{}
+	for i := range l.shards {
+		l.shards[i].byIP = make(map[string]*tokenBucket)
+	}
+	return l
+}
+
+// shard 按 IP 选分片（FNV-1a，无分配）。同一 IP 恒在同一分片。
+func (l *ipLimiter) shard(ip string) *limiterShard {
+	var h uint32 = 2166136261
+	for i := 0; i < len(ip); i++ {
+		h = (h ^ uint32(ip[i])) * 16777619
+	}
+	return &l.shards[h%rateLimitShards]
 }
 
 func (l *ipLimiter) allow(ip string) bool {
 	now := time.Now()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	b, ok := l.byIP[ip]
+	sh := l.shard(ip)
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	b, ok := sh.byIP[ip]
 	if !ok {
-		l.byIP[ip] = &tokenBucket{tokens: rateLimitBurst - 1, last: now}
-		// 偶尔清理，避免 map 无限增长
-		if len(l.byIP) > 10_000 {
-			l.reapLocked(now)
-		}
+		sh.addBucketLocked(ip, now)
 		return true
 	}
 	elapsed := now.Sub(b.last).Seconds()
@@ -55,10 +84,29 @@ func (l *ipLimiter) allow(ip string) bool {
 	return true
 }
 
-func (l *ipLimiter) reapLocked(now time.Time) {
-	for ip, b := range l.byIP {
+// addBucketLocked 插入新桶并把分片桶数收回硬上限内：先清过期桶，仍超限再淘汰
+// **任意**一个桶（map 迭代顺序随机，单次 O(1)）。
+//
+// 淘汰活跃桶不会削弱限速强度：能撑爆分片的本就是持有大量 IP 的攻击者，被淘汰的
+// 也只会是他们自己的桶；而对集群而言内存有确定上界，比「随 IP 数无限增长」安全。
+func (s *limiterShard) addBucketLocked(ip string, now time.Time) {
+	s.byIP[ip] = &tokenBucket{tokens: rateLimitBurst - 1, last: now}
+	if len(s.byIP) <= maxBucketsPerShard {
+		return
+	}
+	s.reapLocked(now)
+	for len(s.byIP) > maxBucketsPerShard {
+		for k := range s.byIP {
+			delete(s.byIP, k)
+			break
+		}
+	}
+}
+
+func (s *limiterShard) reapLocked(now time.Time) {
+	for ip, b := range s.byIP {
 		if now.Sub(b.last) > 10*time.Minute {
-			delete(l.byIP, ip)
+			delete(s.byIP, ip)
 		}
 	}
 }

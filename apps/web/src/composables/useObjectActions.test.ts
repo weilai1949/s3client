@@ -32,6 +32,8 @@ vi.mock('../upload', () => ({ uploadObject: vi.fn() }))
 vi.mock('../store', () => ({
   toast: vi.fn(),
   createProgressToast: vi.fn(() => vi.fn()),
+  reportActivity: vi.fn(),
+  clearActivity: vi.fn(),
 }))
 vi.mock('../confirm', () => ({ confirmDialog: vi.fn(async () => true) }))
 vi.mock('../prompt', () => ({ promptDialog: vi.fn(async () => 'x') }))
@@ -871,5 +873,49 @@ describe('上传入口', () => {
     expect(lastCtx!.load).toHaveBeenCalledWith(true)
     vi.mocked(uploadObject).mockImplementation(defaultUploadImpl)
   })
+
+  it('dropUpload：拖入文件按「前缀 + 相对路径」入队并上传（含目录结构）', async () => {
+    const actions = makeActions({ prefix: ref('dir/') })
+    const dt = {
+      items: [
+        { kind: 'file', webkitGetAsEntry: () => ({ isFile: true, isDirectory: false, name: 'a.jpg', fullPath: '/photos/a.jpg', file: (ok: (f: File) => void) => ok(new File(['1'], 'a.jpg')) }) },
+      ],
+    } as unknown as DataTransfer
+
+    const running = actions.dropUpload(dt)
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+    expect(actions.uploadQueue.value[0].key).toBe('dir/photos/a.jpg')
+    expect(actions.uploadQueue.value[0].bucket).toBe('b1')
+
+    inFlight[0].resolve()
+    await running
+    expect(vi.mocked(toast)).toHaveBeenCalledWith('objects.toastUploadOkDir')
+    expect(actions.uploadQueue.value.length).toBe(0)
+    expect(lastCtx!.load).toHaveBeenCalledWith(true)
+  })
+
+  it('dropUpload：无桶 / 上传中 / 空拖放时不入队、不发起上传', async () => {
+    const busy = makeActions()
+    busy.uploading.value = true
+    await busy.dropUpload({ items: [] } as unknown as DataTransfer)
+    expect(busy.uploadQueue.value).toHaveLength(0)
+
+    const noBucket = makeActions({ currentBucket: ref('') })
+    await noBucket.dropUpload({ items: [] } as unknown as DataTransfer)
+    expect(noBucket.uploadQueue.value).toHaveLength(0)
+    expect(vi.mocked(uploadObject)).not.toHaveBeenCalled()
+
+    // 有桶但拖入的内容展开为空（非文件项）：同样不动作
+    const empty = makeActions()
+    await empty.dropUpload({ items: [] } as unknown as DataTransfer)
+    expect(empty.uploadQueue.value).toHaveLength(0)
+    expect(vi.mocked(uploadObject)).not.toHaveBeenCalled()
+
+    // 无账号：也不动作
+    const noAcc = makeActions({ account: computed(() => undefined) })
+    await noAcc.dropUpload({ items: [] } as unknown as DataTransfer)
+    expect(vi.mocked(uploadObject)).not.toHaveBeenCalled()
+  })
+
 })
 

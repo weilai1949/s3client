@@ -398,7 +398,9 @@ desktop:
     - mkdir -p apps/web/dist
     - printf '%s\n' '<!doctype html><title>ci</title>' > apps/web/dist/index.html
     - cd apps/desktop/src-tauri
-    - cargo check --locked
+    # 编译器自带 lint：直接依赖被声明却未被引用时**构建失败**（防 D1 复发）。
+    # 仅作用于本条命令，不污染后续 `cargo install cargo-audit`。
+    - RUSTFLAGS="-D unused_crate_dependencies" cargo check --locked
     # RustSec 审计（对应 ci.yml 的 cargo audit step）：有已知漏洞即红灯。
     - cargo install cargo-audit --version 0.22.2 --locked
     - cargo audit
@@ -434,7 +436,7 @@ desktop-build:
     # Build web
     - cd apps/web && pnpm install --frozen-lockfile && pnpm build && cd ../..
     # Install tauri-cli
-    - cargo install tauri-cli --version "^2" --locked
+    - cargo install tauri-cli --version "2.12.2" --locked
     # tauri build --no-bundle
     - cd apps/desktop
     - pnpm install --frozen-lockfile

@@ -1,6 +1,7 @@
-import { onBeforeUnmount, onDeactivated, ref, toRaw } from 'vue'
+import { computed, onBeforeUnmount, ref, toRaw, watch } from 'vue'
 import type { Ref } from 'vue'
 import { toErrorMessage } from '../errors'
+import { clearActivity, reportActivity } from '../store'
 import { uploadObject } from '../upload'
 
 /**
@@ -39,6 +40,13 @@ export interface UploadQueueOptions {
   onItemStart?: (it: UploadQueueItem) => void
   /** 进度回调（缺省写入 item.pct）。 */
   onProgress?: (it: UploadQueueItem, pct: number) => void
+  /**
+   * 把队列进度登记到全局活动中心（顶栏角标）。
+   *
+   * 面板被 KeepAlive 切走时组件仍在跑状态机，但用户看不到进度；登记到 store 后
+   * 顶栏能在任何页面展示它（label 用惰性函数求值，切语言后能取到新文案）。
+   */
+  activity?: { key: string; label: () => string }
 }
 
 export interface UploadQueue {
@@ -46,6 +54,8 @@ export interface UploadQueue {
   running: Ref<boolean>
   /** 入队：全部文件逐个入队（0 字节空文件也入队，不当目录占位丢弃）；make 供调用方补充 key/bucket 等字段。 */
   enqueue: (files: FileList | null, make?: (file: File) => Partial<UploadQueueItem>) => void
+  /** 入队已算好 key 的条目（拖拽上传：每个文件的相对路径不同，无法用 make(file) 表达）。 */
+  enqueueItems: (entries: Array<{ file: File; key: string; bucket?: string }>) => void
   /** 运行共享状态机；返回本轮实际选中的条目（按选中顺序）。 */
   run: () => Promise<UploadQueueItem[]>
   abortItem: (it: UploadQueueItem) => void
@@ -73,6 +83,12 @@ export function useUploadQueue(options: UploadQueueOptions): UploadQueue {
     if (!files || !files.length) return
     for (const f of Array.from(files)) {
       items.value.push({ id: ++seq, file: f, key: '', pct: 0, status: 'pending', ...make?.(f) })
+    }
+  }
+
+  function enqueueItems(entries: Array<{ file: File; key: string; bucket?: string }>) {
+    for (const e of entries) {
+      items.value.push({ id: ++seq, file: e.file, key: e.key, bucket: e.bucket, pct: 0, status: 'pending' })
     }
   }
 
@@ -160,10 +176,35 @@ export function useUploadQueue(options: UploadQueueOptions): UploadQueue {
     }
   }
 
-  // 面板卸载 / KeepAlive 切走时中止上传并停住状态机（对象面板：在途标 cancelled 终态；
-  // 上传面板：在途回 pending 可续传，批内未开始条目不被后台捞起）
-  onDeactivated(abortAll)
-  onBeforeUnmount(abortAll)
+  const activity = options.activity
 
-  return { items, running, enqueue, run, abortItem, abortAll }
+  if (activity) {
+    const agg = computed(() => {
+      const all = items.value
+      let done = 0
+      let active = 0
+      let sum = 0
+      for (const it of all) {
+        if (it.status === 'done') done++
+        else if (it.status !== 'cancelled') active++
+        sum += it.pct
+      }
+      return { done, active, total: all.length, pct: all.length ? Math.round(sum / all.length) : 0 }
+    })
+    watch(agg, (a) => {
+      if (a.active) reportActivity({ key: activity.key, label: activity.label(), done: a.done, total: a.total, pct: a.pct })
+      else clearActivity(activity.key)
+    }, { immediate: true })
+  }
+
+  // 仅在**真正卸载**时中止（对象面板：在途标 cancelled 终态；上传面板：在途回 pending 可续传），
+  // 并撤下活动登记——卸载后没有东西再更新它，留着会让顶栏角标永久停在旧进度。
+  // 刻意不挂 onDeactivated：切 Tab 只是把面板交给 KeepAlive 缓存，组件与状态机仍活着，
+  // 此时中止等于「去别的页面看一眼就把传输掐了」——上传必须跨页面继续。
+  onBeforeUnmount(() => {
+    abortAll()
+    if (activity) clearActivity(activity.key)
+  })
+
+  return { items, running, enqueue, enqueueItems, run, abortItem, abortAll }
 }

@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CK 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CE–§CI（2026-10-10 通读与机械化收口）· **§CJ**（交接快照 §5 未做清单 14 项收口）· **§CK**（全仓代码质量评审 Approve + 三道 Nit #84–#86 闭环 + 快照归档 + 自留项 #87 门禁复跑闭环）。
+> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CM 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· **§CM**（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）。
 
 ## 目录
 
@@ -43,7 +43,7 @@
   - CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描 / 明文 `http://` 端点告知）（+ 一道门禁）
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
-  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环**
+  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -2561,6 +2561,59 @@ functions 1095 / lines 3503）。
 > （平台内唯一 `SHA256SUMS-<bundle>.txt` + `aggregate-checksums`）与工作流内**无任何证书 / 公证配置**证实。
 > 核对中发现并补齐一处指针缺口：[`DEPLOYMENT.md`](DEPLOYMENT.md) §5 的 Windows 行此前未写未签名 / SmartScreen
 > 手动放行，使 #25 / [`ROADMAP.md`](ROADMAP.md) §三 #1 · E6 · R5 指向该节的「手动放行说明」对 Windows 落空。
+
+### CL. 2026-10-12 apps/web 页面 UI 与交互优化批次（H1–H3 / M1–M3 / L1–L2 + D1）
+
+> **来源**：子树评审快照 [`web-review-2026-10-12.md`](archive/web-review-2026-10-12.md)（评审时点 2026-10-12，`apps/web`，已归档）。按高 / 中 / 低三档列的优化点 **9 批全部实施**，另由新增的渲染态扫描**实测抓到 1 处对比度缺陷（D1）**并同批修复。用户可见行为已同步 [`user-guide.md`](user-guide.md)（§一 Toast / §二 软刷新 / §三 过滤·键盘行导航·偏好 / §四 拖拽上传·任务中心 / §十二 快捷键），发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]`。
+> **门禁实跑（2026-10-12）**：`pnpm test` **87 文件 1360 例**全绿 / `pnpm test:coverage` 四指标 **100%（5108 / 3395 / 1290 / 4407）** / `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm build` OK / `pnpm e2e` **23 passed + 1 skipped**（含新增移动视口 a11y 态）/ `make e2e-real` **5 passed**（真实后端 + 真实 RustFS，`SERVER_PORT=8081` + `--no-rustfs`）。**快照 §9 披露的未跑项中，全量 `pnpm e2e` 与 `make e2e-real` 已于同日补跑**；仍属未覆盖的只剩真机 / 触摸 / 屏幕阅读器实测。
+
+| 批次 | 改动面（生产代码） | 新增 / 扩充测试 |
+|---|---|---|
+| H1 任务中心 | `store.ts`（`Activity` / `activities` / `reportActivity` / `clearActivity`）、`ActivityCenter.vue`（新）、`App.vue`（挂载 + KeepAlive 改造）、`useUploadQueue.ts`（activity 上报、去掉 `onDeactivated`）、`useObjectActions.ts` / `UploadPanel.vue` / `MigratePanel.vue`（activity 接线 + `onActivated` 刷新） | `ActivityCenter.test.ts`（新）、`useUploadQueue.test.ts`（活动用例）、`MigratePanel.test.ts`（活动 + `onActivated`）、`App.test.ts` |
+| H2 拖拽上传 | `dropFiles.ts`（新）、`useUploadQueue.ts`（`enqueueItems`）、`useObjectActions.ts`（`dropUpload`）、`ObjectsPanel.vue`（drag 处理 + 覆盖层）、`UploadPanel.vue`（改用 `filesFromDrop`） | `dropFiles.test.ts`（新，11 例）、`ObjectsPanel.test.ts`（drop 用例）、`UploadPanel.test.ts` |
+| H3 软刷新 | `ServerPanel.vue`（三处 reload → `emit('changed')`）、`App.vue`（`onServerChanged` + `:key="serverEpoch"`）、`store.ts`（`serverEpoch` / `bumpServerEpoch`） | `ServerPanel.test.ts`、`App.test.ts`、`store.test.ts` |
+| M1 过滤体验 | `highlight.ts`（新）、`HighlightText.vue`（新）、`ObjectToolbar.vue`（防抖）、`ObjectList.vue`（高亮 + 范围提示） | `highlight.test.ts`（新，8 例）、`HighlightText.test.ts`（新，4 例）、`ObjectToolbar.test.ts`、`ObjectList.test.ts` |
+| M2 键盘行导航 | `useObjectBrowser.ts`（`focusKey` / `moveFocus` / `focusEdge` / 失效焦点清理 / 全局键焦点行优先）、`ObjectList.vue`（roving tabindex + `onRowKeydown`） | `ObjectList.test.ts`、`useObjectBrowser.branches.test.ts` |
+| M3 Toast | `store.ts`（栈上限 4 / 长文案加时 / 悬停·聚焦暂停）、`Toasts.vue`（hover + focus 事件） | `store.test.ts`、`Toasts.test.ts` |
+| L1 偏好持久化 | `useObjectBrowser.ts`（`readPref` / `writePref` + 落盘 watch；键 `s3c.bucketView` / `s3c.sortKey` / `s3c.sortDir`） | `useObjectBrowser.test.ts`（读取 / 非法值 / 写失败三类） |
+| L2 + D1 对比度 | `e2e/a11y.spec.ts`（移动视口 390×844 态 + 无横向溢出断言）、`styles.css`（新增 `--badge-text` token）、`ObjectList.vue`（`.sc-badge` 换 token） | `e2e/a11y.spec.ts`（e2e，非 vitest） |
+
+> **D1 根因与防复发**：存储类型徽标前景 `--muted` on `--row-sel` 小字实测 **4.39:1**（低于 WCAG AA 正文 4.5:1）；新增专用 `--badge-text` token（浅 `#3f5a4c` / 深 `#9fb8ac`，静态重算 6.86:1 / 6.67:1），配对登记进 [`accessibility.md`](accessibility.md) §5.5 并由 [`../apps/server/contrast_gate_test.go`](../apps/server/contrast_gate_test.go) 机械重算比对。
+> **刻意不做（决策项，非待办）**：图标 emoji → SVG（L3）、过滤条件持久化、网格单元格加 `aria-label`、极窄视口 / 横屏 / 200% 缩放扫描——理由见快照 §4.3 / §10。
+
+### CM. 2026-10-12 apps/desktop 优化评审批次（D1 + O1–O6 + G1）
+
+> **来源**：子树评审快照 [`desktop-review-2026-10-12.md`](archive/desktop-review-2026-10-12.md)（评审时点 2026-10-12，`apps/desktop`，已归档）。1 项死代码 + 6 项优化 + 1 道防复发门禁**全部闭环**，发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]`。桌面端仍遵守 [ADR-001](decisions/0001-desktop-no-ipc.md)「无 IPC、无插件、capabilities 空权限集」边界——本批未引入任何 Tauri 插件。
+
+| 项 | 改动面 | 结果 |
+|---|---|---|
+| D1 死依赖 | `apps/desktop/src-tauri/Cargo.toml`（删 `serde` / `serde_json`）、`Cargo.lock`（少两条直接依赖边） | `cargo check --offline` 0 警告；包集合不变（二者仍为 `tauri` 传递依赖） |
+| O1 release profile | 同文件新增 `[profile.release]`（`codegen-units=1` / `lto=true` / `opt-level="s"` / `panic="abort"` / `strip=true`） | 发布产物体积优化（`.exe` / `.deb` / `.dmg` 为用户下载项） |
+| O2 收窄打包目标 | `tauri.conf.json` 的 `bundle.targets`：`"all"` → `["nsis","deb","dmg"]` | 与实际发布面（`release-desktop.yml` 的 `--bundles`）一致，不再连带需联网的 AppImage |
+| O3 CI CLI pin | `.github/workflows/ci.yml` + `.gitlab-ci.yml`：`tauri-cli --version "^2"` → `"2.12.2"` | 与锁文件同版本（ROADMAP E9 口径） |
+| O4 `desktop-dev` 缺 web 依赖 | `Makefile`：`desktop-dev` 目标先 `cd apps/web && pnpm install --frozen-lockfile` | 全新检出不再因 `beforeDevCommand` 的 `pnpm dev` 失败 |
+| O5 元数据 / label / CSP | `tauri.conf.json`：`bundle` 补 `publisher` / `copyright` / `category`；窗口显式 `label: "main"`；CSP 补 `frame-ancestors 'none'` / `form-action 'self'`（后者与 server CSP 对齐，由 `TestServerCSPSharesTauriDirectives` 钉住） | 元数据与 capability 对齐为纯增量；**CSP 收紧按 [`AI_POLICY.md`](AI_POLICY.md) §3 须人类专家复核**（改动已备，确认前不得推送） |
+| O6 依赖升级 | `Cargo.toml` / `Cargo.lock`（`tauri` 2.11.5→2.12.3、`tauri-build` 2.6.3→2.7.2）、`apps/desktop/package.json` / `pnpm-lock.yaml`（`@tauri-apps/cli` 2.11.4→2.12.2，范围收 `^2.12.2`） | `cargo check --locked` OK；`cargo audit` **0 漏洞**（告警 **7→2 条**）；`THIRD_PARTY_LICENSES.md` 重生成（Rust **428→416**） |
+| G1 防复发门禁 | `ci.yml`（step `env: RUSTFLAGS`）/ `.gitlab-ci.yml`（行内 `RUSTFLAGS=`）给 `cargo check` 加 `-D unused_crate_dependencies` | 直接依赖被声明却未引用即构建失败——堵 D1 一类复发（Rust 侧此前无任何 unused 检查） |
+
+> **门禁实跑（2026-10-12）**：`RUSTFLAGS="-D unused_crate_dependencies" cargo check --offline --locked` Finished（0 警告，删依赖后通过）/ `cargo check --locked`（新 tauri 2.12.3）Finished / `cargo audit` **0 漏洞、2 条告警**（`proc-macro-error` + `glib 0.18.5`）。
+> **未实跑项**：O2 的 `tauri build` 三平台打包、O4 的全新检出验证、两套 CI 的实际结果——以推送后为准（见快照 §8）。
+
+### CN. 2026-10-12 apps/server 优化评审 S1–S5 闭环批次
+
+> **来源**：子树评审快照 [`server-review-2026-10-12.md`](archive/server-review-2026-10-12.md)（评审时点 2026-10-12，`apps/server`，已归档）。评审结论为「无结构性 / 算法级优化缺口」；登记的 6 项微优化候选里 **S1–S5 落地、S6 维持现状**，跨子树门禁现状 **S0 由同日 `apps/web` 批次解除**。发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`，性能解读见 [`PERFORMANCE.md`](PERFORMANCE.md) §3.5。
+
+| 项 | 改动面 | 结果 |
+|---|---|---|
+| S1 流式复制缓冲 | `internal/service/stream_copy.go`（新增 `CopyBuffered` + `copyBufSize` 256 KiB + `maxIdleCopyBufs=2` 的 channel 池）、`internal/handler/stream.go`（`copyStream` 改用它 + `writeDeadlineRefreshInterval` 30s 节流）、`internal/service/zip.go`（ZIP 条目复制同改） | 写调用数（及每次写附带的 `SetWriteDeadline`）降为 1/8；池驻留为常量 512 KiB；续期间隔 ≪ `streamIdleTimeout` 5min |
+| S2 限流器分片 | `internal/handler/ratelimit.go`（`rateLimitShards=16`、`maxBucketsPerShard=625`、`addBucketLocked` 过期优先清理 + 硬上限） | 不同 IP 不再共用一把锁；驻留桶总量硬上限 10_000 与分片前等值（旧实现对全活跃 IP 无硬上限） |
+| S3 S3 调用指标去锁 | `internal/s3wrap/metrics.go`（桶与 `Calls` 改 atomic、`Calls` 由桶计数求和、错误码分类保留锁） | `observe` 热路径无全局锁；`+Inf == _count` 与「每次调用恰一个桶」结构性成立 |
+| S4 CSP 预计算 | `internal/handler/middleware.go`（`buildCSP` 纯函数 + `defaultCSPHeader`）、`internal/handler/handler.go`（`cspHeader` 字段） | 请求路径零拼接零分配；零值 Handler 回退默认策略 |
+| S5 指标采集 | `internal/handler/metrics.go`（`readHeapAllocBytes` 走 `runtime/metrics`；整包 `bytes.Buffer` 一次写） | 采集不再 Stop-The-World；`/api/metrics` 由 30+ 次写降为 1 次（指标名与口径不变，仪表盘 / 告警兼容） |
+| S6 / S0 | 无代码改动 | S6 按评审结论维持现状；S0 由同日 `apps/web` 批次同步 [`i18n.md`](i18n.md) 解除（根包 `TestI18nModuleInventoryMatchesDoc` 转绿） |
+
+> **门禁实跑（2026-10-12）**：`go vet ./...` 0 / `golangci-lint run ./...` **0 issues** / `go test ./...` 九个包全绿 / `go test -race -count=1 -coverprofile=coverage.out ./...` **100.0%，零未覆盖块**（仓库自带 `awk` 口径）。
+> **未实跑项**：端到端压测、`mutex` / `block` pprof 与真实 RustFS E2E——S1–S5 的收益仍为**定性**判断（评审 §6 的披露继续成立）。
 
 ## 三、质量与覆盖率现状
 

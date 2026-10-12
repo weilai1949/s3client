@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -532,5 +533,43 @@ func TestMetricsLastShutdownDuration(t *testing.T) {
 	corrupt.LoadLastShutdown()
 	if v := mustMetric(t, metricsBody(t, corrupt.Routes()), "s3c_last_shutdown_duration_seconds"); v != 0 {
 		t.Errorf("shutdown.json 损坏时应读作 0，got %g", v)
+	}
+}
+
+// countingResponseWriter 记录 Write 调用次数与响应体。
+type countingResponseWriter struct {
+	http.ResponseWriter
+	writes int
+	body   bytes.Buffer
+}
+
+func (c *countingResponseWriter) Write(p []byte) (int, error) {
+	c.writes++
+	return c.body.Write(p)
+}
+
+// TestMetricsBufferedSingleWrite /api/metrics 整包一次写出（旧实现 30+ 次直写响应），
+// 且堆占用取自 runtime/metrics（值 > 0 间接验证指标名未漂移、已不再走 ReadMemStats）。
+func TestMetricsBufferedSingleWrite(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, gapLogger(), t.TempDir(), nil, "", "test", true, false)
+	rec := &countingResponseWriter{ResponseWriter: httptest.NewRecorder()}
+	h.metrics(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+
+	if rec.writes != 1 {
+		t.Fatalf("Write 调用 %d 次，want 1（整包缓冲后一次写出）", rec.writes)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
+		t.Fatalf("Content-Type = %q, want text/plain...", ct)
+	}
+	m := regexp.MustCompile(`(?m)^s3c_go_memstats_alloc_bytes (\d+)$`).FindStringSubmatch(rec.body.String())
+	if m == nil {
+		t.Fatal("缺少 s3c_go_memstats_alloc_bytes 行")
+	}
+	if v, _ := strconv.ParseInt(m[1], 10, 64); v <= 0 {
+		t.Fatalf("s3c_go_memstats_alloc_bytes = %s, want > 0（runtime/metrics 指标名可能漂移）", m[1])
 	}
 }

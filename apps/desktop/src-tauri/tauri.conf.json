@@ -13,6 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "S3 Client",
         "width": 1200,
         "height": 800,
@@ -22,12 +23,15 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "publisher": "weilai1949",
+    "copyright": "Copyright © 2026 weilai1949",
+    "category": "DeveloperTool",
+    "targets": ["nsis", "deb", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

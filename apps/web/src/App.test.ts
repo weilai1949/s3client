@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { reactive, ref, nextTick } from 'vue'
+import { defineComponent, reactive, ref, nextTick } from 'vue'
 import App from './App.vue'
 import type { Account } from './types'
 
@@ -16,9 +16,15 @@ vi.mock('./api', () => ({
 }))
 
 vi.mock('./store', async () => {
-  const { reactive } = await import('vue')
+  const { reactive, ref } = await import('vue')
+  const serverEpoch = ref(0)
   return {
     state: reactive({ accounts: [] as Account[], currentAccountId: '' }),
+    activities: reactive({}),
+    serverEpoch,
+    bumpServerEpoch: () => {
+      serverEpoch.value++
+    },
     rememberedAccountId: vi.fn(() => ''),
     selectAccount: vi.fn(),
     tabRequest: reactive({ tab: '', seq: 0 }),
@@ -311,4 +317,50 @@ describe('App', () => {
     expect(w.find('server-panel-stub').exists()).toBe(false)
     w.unmount()
   })
+
+  it('服务器切换：重新拉取账号并作废面板缓存（软刷新，不再整页 reload）', async () => {
+    let serverMounts = 0
+    const ServerStub = defineComponent({
+      name: 'ServerPanel',
+      emits: ['changed'],
+      setup() {
+        serverMounts++
+        return () => null
+      },
+    })
+    vi.mocked(s3api.listAccounts).mockResolvedValue({ accounts: [] } as unknown as Awaited<ReturnType<typeof s3api.listAccounts>>)
+    const w = mount(App, {
+      global: {
+        stubs: {
+          AccountsPanel: true,
+          ObjectsPanel: true,
+          UploadPanel: true,
+          MigratePanel: true,
+          BucketsPanel: true,
+          StorageReportPanel: true,
+          RecycleBinPanel: true,
+          ServerPanel: ServerStub,
+          ConfirmDialog: true,
+          PromptDialog: true,
+          Toasts: true,
+          ActivityCenter: true,
+        },
+      },
+    })
+    await flushPromises()
+    // 切到「服务器设置」页，让 ServerPanel 真实渲染出来
+    await w.findAll('.tabs button').find((b) => b.text().includes('nav.server'))!.trigger('click')
+    await nextTick()
+    expect(serverMounts).toBe(1)
+    const callsBefore = vi.mocked(s3api.listAccounts).mock.calls.length
+
+    w.findComponent(ServerStub).vm.$emit('changed')
+    await flushPromises()
+
+    // ① 账号按新服务器重新拉取 ② 面板缓存整体作废（当前面板被重建，而不是沿用旧服务器的数据）
+    expect(vi.mocked(s3api.listAccounts).mock.calls.length).toBeGreaterThan(callsBefore)
+    expect(serverMounts).toBe(2)
+    w.unmount()
+  })
+
 })

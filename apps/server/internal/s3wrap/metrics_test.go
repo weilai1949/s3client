@@ -163,8 +163,11 @@ func assertPrometheusHistogramContract(t *testing.T, s S3MetricsSnapshot) {
 }
 
 // TestS3MetricsHistogramConcurrentContract 并发 observe 下快照仍满足 Prometheus 契约。
-// 旧实现把 calls 与 buckets 分属 atomic / mutex 两处更新，快照可能读到「+Inf 桶 0、
-// _count 3」这类不一致（review §7.3 D1 的实测现象）；现在两者同锁维护。
+//
+// 历史两次演进：①旧实现把增量当累积输出，`histogram_quantile()` 全错（review §7.3 D1）；
+// ②改用同锁维护 calls/buckets 修正一致性，但每次 observe 都要抢全局锁，串行所有在飞
+// S3 调用（docs/archive/server-review-2026-10-12.md S3）。现在桶为 atomic 增量、Calls 由桶求和
+// 得出，`+Inf == _count` 与「每次调用恰好一个桶」结构性成立，且热路径无锁。
 func TestS3MetricsHistogramConcurrentContract(t *testing.T) {
 	resetMetrics()
 	const goroutines, perG = 8, 50

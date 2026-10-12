@@ -125,17 +125,58 @@ describe('ObjectToolbar', () => {
     expect(w.emitted('toggle-path-edit')).toBeTruthy()
   })
 
-  it('过滤输入 v-model 更新 filter 并显示 badge', async () => {
+  it('过滤输入防抖提交（停顿后更新 filter）并显示 badge', async () => {
+    vi.useFakeTimers()
     const w = mount(ObjectToolbar, { props: { ...baseProps, filterActive: true, visibleCount: 1, totalCount: 4 } })
     await w.find('input[type="search"]').setValue('abc')
-    expect(w.emitted('update:filter')?.[0]).toEqual(['abc'])
+    // 输入中不提交：每次按键都重算+重渲染整份已加载条目，会掉帧
+    expect(w.emitted('update:filter')).toBeUndefined()
+    vi.advanceTimersByTime(199)
+    expect(w.emitted('update:filter')).toBeUndefined()
+    vi.advanceTimersByTime(1)
+    expect(w.emitted('update:filter')).toEqual([['abc']])
     expect(w.text()).toContain('1/4')
-    // 清除按钮清空过滤
+
+    // 清除按钮不走防抖窗口，立即生效
     const clear = w.findAll('button').find((b) => b.text() === 'common.clear')
     expect(clear).toBeTruthy()
     await clear!.trigger('click')
     const filterEvents = w.emitted('update:filter')!
     expect(filterEvents[filterEvents.length - 1]).toEqual([''])
+    expect((w.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
+    w.unmount()
+    vi.useRealTimers()
+  })
+
+  it('连续输入只提交最后一次（防抖窗口被后续按键重置）', async () => {
+    vi.useFakeTimers()
+    const w = mount(ObjectToolbar, { props: { ...baseProps } })
+    const input = w.find('input[type="search"]')
+    await input.setValue('a')
+    vi.advanceTimersByTime(100)
+    await input.setValue('ab')
+    vi.advanceTimersByTime(200)
+    expect(w.emitted('update:filter')).toEqual([['ab']])
+    w.unmount()
+    vi.useRealTimers()
+  })
+
+  it('外部重置 filter（切目录）时输入框草稿同步清空，不残留上次搜索词', async () => {
+    const w = mount(ObjectToolbar, { props: { ...baseProps, filter: 'abc' } })
+    expect((w.find('input[type="search"]').element as HTMLInputElement).value).toBe('abc')
+    await w.setProps({ filter: '' })
+    expect((w.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
+
+    // 输入的草稿值也随外部重置清掉：重置后立刻输入，提交的只有新词
+    await w.setProps({ filter: 'old' })
+    await w.setProps({ filter: '' })
+    vi.useFakeTimers()
+    await w.find('input[type="search"]').setValue('new')
+    vi.advanceTimersByTime(200)
+    vi.useRealTimers()
+    const events = w.emitted('update:filter')!
+    expect(events[events.length - 1]).toEqual(['new'])
+    w.unmount()
   })
 
   it('无桶时显示 noBucket 占位选项；loadingBuckets 禁用选择器；空桶禁用桶属性/向上', () => {

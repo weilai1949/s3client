@@ -188,6 +188,20 @@ test('a11y：对象网格视图（无 serious/critical 违规）', async ({ page
   await scanPage(page, '对象网格视图')
 })
 
+test('a11y：移动视口（390×844）对象面板（无 serious/critical 违规、无横向溢出）', async ({ page }) => {
+  // 窄屏此前没有任何自动化覆盖：`@media (max-width: 900px)` 下导航改横向滚动、主区
+  // 变单列——这些规则是否真的生效只能靠真实视口实测。除了 axe，另钉一条 axe 断不出来的
+  // 移动端典型缺陷：「表格把整页撑出横向滚动」（页面级 scrollWidth > 视口宽）。
+  await page.setViewportSize({ width: 390, height: 844 })
+  await installObjectsStub(page)
+  await openClean(page)
+  await expect(page.locator('tbody')).toContainText('readme.txt')
+  await scanPage(page, '移动视口对象面板')
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `移动视口下页面横向溢出 ${overflow}px（对象表应在 .tbl-wrap 内横向滚动）`).toBeLessThanOrEqual(1)
+})
+
 test('a11y：深色主题初始态（无 serious/critical 违规）', async ({ page }) => {
   // 主题默认 auto → 跟随系统；`data-theme` 由 theme.ts 在模块初始化时写入。
   // 深色下语义色是另一套 token，对比度必须单独验证（浅色通过不代表深色通过）。

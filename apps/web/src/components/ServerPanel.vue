@@ -11,6 +11,8 @@ import ModalDialog from './ModalDialog.vue'
 import type { ServerProfile } from '../types'
 
 const servers = ref<ServerProfile[]>([])
+/** 切换 / 编辑 / 删除当前生效服务器后，请求 App 重新拉取账号并丢弃各面板的旧服务器缓存。 */
+const emit = defineEmits<{ (e: 'changed'): void }>()
 const activeId = ref('')
 const showForm = ref(false)
 const editingId = ref('')
@@ -72,10 +74,8 @@ function submit() {
   showForm.value = false
   resetForm()
   reload()
-  // 若编辑的是当前生效项，已自动 apply；刷新账号数据
-  if (p.id === activeId.value) {
-    setTimeout(() => window.location.reload(), 300)
-  }
+  // 若编辑的是当前生效项，已自动 apply；请 App 刷新账号数据与面板缓存
+  if (p.id === activeId.value) emit('changed')
 }
 
 async function remove(s: ServerProfile) {
@@ -91,7 +91,7 @@ async function remove(s: ServerProfile) {
   reload()
   if (wasActive) {
     toast(t('server.toastSwitchedActive'))
-    setTimeout(() => window.location.reload(), 300)
+    emit('changed')
   }
 }
 
@@ -100,7 +100,7 @@ function select(s: ServerProfile) {
   api.selectServer(s.id)
   activeId.value = s.id
   toast(tf('server.toastSelect', { name: s.name }))
-  setTimeout(() => window.location.reload(), 300)
+  emit('changed')
 }
 
 async function probe(s: ServerProfile) {

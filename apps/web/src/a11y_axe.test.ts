@@ -169,6 +169,7 @@ describe('组件级 axe 扫描', () => {
         loadingAll: false,
         listGen: 0,
         ctxEntryKey: null,
+        focusKey: null,
       },
       attachTo: document.body,
     })

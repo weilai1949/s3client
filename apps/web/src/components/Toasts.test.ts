@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Toasts from './Toasts.vue'
-import { dismissToast, toasts } from '../store'
+import { dismissToast, toast, toasts } from '../store'
 
 vi.mock('../i18n', () => ({
   t: (k: string) => k,
@@ -65,6 +65,35 @@ describe('Toasts', () => {
     toasts.push({ id: 5, kind: 'err', text: 'temporary' })
     dismissToast(5)
     expect(toasts.some((t) => t.id === 5)).toBe(false)
+  })
+
+  it('鼠标悬停 / 焦点进入冻结自动消失，移开后按剩余时长续跑', async () => {
+    vi.useFakeTimers()
+    try {
+      const id = toast('hover me')
+      const w = mount(Toasts)
+      await w.find('.toast').trigger('mouseenter')
+      vi.advanceTimersByTime(10_000)
+      expect(toasts.some((t) => t.id === id)).toBe(true)
+
+      await w.find('.toast').trigger('mouseleave')
+      vi.advanceTimersByTime(3601)
+      expect(toasts.some((t) => t.id === id)).toBe(false)
+
+      // 键盘用户 Tab 到关闭 / 动作按钮上（focusin）同样冻结
+      const id2 = toast('focus me')
+      await nextTick()
+      const item = w.findAll('.toast')[0]
+      await item.trigger('focusin')
+      vi.advanceTimersByTime(10_000)
+      expect(toasts.some((t) => t.id === id2)).toBe(true)
+      await item.trigger('focusout')
+      vi.advanceTimersByTime(3601)
+      expect(toasts.some((t) => t.id === id2)).toBe(false)
+      w.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('操作成功 / 失败统一经容器的 aria-live 播报', async () => {

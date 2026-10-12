@@ -4,7 +4,7 @@ import { toErrorMessage } from './errors'
 
 import { s3api, api } from './api'
 import logoUrl from './assets/logo.svg'
-import { state, selectAccount, tabRequest, accountFormRequest } from './store'
+import { state, selectAccount, tabRequest, accountFormRequest, serverEpoch, bumpServerEpoch } from './store'
 import { resolveAccountSelect } from './composables/useAccountSelect'
 import { readTheme, resolvedTheme, cycleTheme, systemThemeTick, type Theme } from './theme'
 import { tabFromHash, setTabHash, onTabHashChange, type TabKey } from './router'
@@ -19,6 +19,7 @@ import RecycleBinPanel from './components/RecycleBinPanel.vue'
 import StorageReportPanel from './components/StorageReportPanel.vue'
 import ServerPanel from './components/ServerPanel.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import ActivityCenter from './components/ActivityCenter.vue'
 import PromptDialog from './components/PromptDialog.vue'
 import Toasts from './components/Toasts.vue'
 
@@ -77,6 +78,18 @@ const menuGroups = computed<MenuGroup[]>(() => {
 
 function onCycleLocale() {
   cycleLocale()
+}
+
+/**
+ * 服务器切换后：重新拉账号 → 递增数据世代。
+ *
+ * 顺序不能反——先 bump 的话，各面板会用**旧服务器的账号列表**重新挂载，
+ * 一进门就是错的桶/对象（甚至 401）。旧实现在这里做整页刷新，代价是丢掉所有
+ * 与服务器无关的界面状态（未保存表单、上传队列）。
+ */
+async function onServerChanged() {
+  await loadAccounts()
+  bumpServerEpoch()
 }
 
 function onCycleTheme() {
@@ -158,6 +171,7 @@ watch(
         <span class="tag" v-if="api.isTauri">Desktop</span>
       </div>
       <div class="settings">
+        <ActivityCenter />
         <button class="theme-btn" :title="localeLabel" :aria-label="localeLabel" @click="onCycleLocale">{{ localeLabel }}</button>
         <button class="theme-btn" :title="themeLabel" :aria-label="themeLabel" @click="onCycleTheme">
           <svg v-if="themeIcon === 'moon'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -220,7 +234,9 @@ watch(
 
       <main class="content">
         <Transition name="fade-slide" mode="out-in">
-          <KeepAlive :max="5" :exclude="['UploadPanel', 'MigratePanel']">
+          <!-- 缓存全部面板：上传 / 迁移的状态机挂在面板组件上，卸载即中止传输、丢失进度。
+               :max 取 8（= 面板总数）保证 LRU 不淘汰，切走再回来时目录、选中项与上传队列都还在。 -->
+          <KeepAlive :max="8" :key="serverEpoch">
             <AccountsPanel v-if="tab === 'accounts'" @changed="loadAccounts" />
             <ObjectsPanel v-else-if="tab === 'objects'" />
             <BucketsPanel v-else-if="tab === 'buckets'" />
@@ -228,7 +244,7 @@ watch(
             <RecycleBinPanel v-else-if="tab === 'trash'" />
             <UploadPanel v-else-if="tab === 'upload'" />
             <MigratePanel v-else-if="tab === 'migrate'" />
-            <ServerPanel v-else-if="tab === 'server'" />
+            <ServerPanel v-else-if="tab === 'server'" @changed="onServerChanged" />
           </KeepAlive>
         </Transition>
       </main>

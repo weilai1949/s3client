@@ -6,7 +6,7 @@ import { nextTick } from 'vue'
 import MigratePanel from './MigratePanel.vue'
 import { s3api, subscribeMigrateEvents } from '../api'
 import type { MigrateProgress } from '../api'
-import { currentAccount, requestTab, selectAccount, state, toast } from '../store'
+import { clearActivity, currentAccount, reportActivity, requestTab, selectAccount, state, toast } from '../store'
 import { ROW_HEIGHT } from '../virtualList'
 import type { Account, ListObjectsResponse, ObjectItem } from '../types'
 
@@ -51,6 +51,8 @@ vi.mock('../store', async () => {
     toast: vi.fn(),
     selectAccount: vi.fn(),
     requestTab: vi.fn(),
+    reportActivity: vi.fn(),
+    clearActivity: vi.fn(),
   }
 })
 
@@ -875,5 +877,54 @@ describe('MigratePanel', () => {
     // 因此这里只断言「窗口回到顶部」这一外部可见行为（上面的 rows[0]）。
     expect(w.findAll('.v-row')).toHaveLength(2)
   })
+
+  it('迁移进行中把进度登记到全局活动中心，结束后撤下（切走也看得见）', async () => {
+    let progressCb!: (p: MigrateProgress) => void
+    vi.mocked(s3api.migrateAsync).mockResolvedValue({ jobId: 'j9' } as Awaited<ReturnType<typeof s3api.migrateAsync>>)
+    vi.mocked(s3api.migrateJobStatus).mockResolvedValue({
+      progress: { status: 'done' }, result: { migrated: 2, failed: 0 },
+    } as Awaited<ReturnType<typeof s3api.migrateJobStatus>>)
+    vi.mocked(subscribeMigrateEvents).mockImplementation((_id, onP) => {
+      progressCb = onP
+      return () => {}
+    })
+
+    const w = mountPanel()
+    await flushPromises()
+    expect(reportActivity).not.toHaveBeenCalled() // 未开始时无活动
+
+    await w.find('.toolbar input[type="checkbox"]').setValue(true)
+    await findButton(w, 'migrate.start').trigger('click')
+    await flushPromises()
+    expect(reportActivity).toHaveBeenCalledWith(expect.objectContaining({ key: 'migrate', done: 0, total: 2, pct: 0 }))
+
+    progressCb({ done: 1, total: 2, migrated: 0, failed: 0, status: 'running' })
+    await flushPromises()
+    expect(reportActivity).toHaveBeenLastCalledWith(expect.objectContaining({ key: 'migrate', done: 1, total: 2, pct: 50 }))
+
+    progressCb({ done: 2, total: 2, migrated: 2, failed: 0, status: 'done' })
+    await flushPromises()
+    expect(clearActivity).toHaveBeenCalledWith('migrate')
+  })
+
+  it('KeepAlive 缓存下重新激活会刷新未完成任务清单（首次激活紧随 onMounted，不重复拉取）', async () => {
+    const Host = {
+      components: { MigratePanel },
+      template: '<KeepAlive><MigratePanel v-if="show" /></KeepAlive>',
+      data: () => ({ show: true }),
+    }
+    const w = mount(Host, { global: { stubs: { ModalDialog: ModalDialogStub } } })
+    await flushPromises()
+    const callsAfterMount = vi.mocked(s3api.migrateJobs).mock.calls.length
+    expect(callsAfterMount).toBeGreaterThan(0)
+
+    // 切走 → 切回：只多一次清单刷新（首次激活不重复拉取）
+    await w.setData({ show: false })
+    await w.setData({ show: true })
+    await flushPromises()
+    expect(vi.mocked(s3api.migrateJobs).mock.calls.length).toBe(callsAfterMount + 1)
+    w.unmount()
+  })
+
 })
 

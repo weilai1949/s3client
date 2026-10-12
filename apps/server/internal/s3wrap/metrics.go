@@ -26,20 +26,25 @@ var latencyBuckets = []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
 // latencyBucketLabels 与 latencyBuckets 对应，供指标输出使用（+Inf 用 "+Inf"）。
 var latencyBucketLabels = []string{"0.01", "0.05", "0.1", "0.25", "0.5", "1", "2.5", "5", "10", "30", "+Inf"}
 
+// s3Metrics 的写入路径（observe）热而且并发：每次 S3 调用都会走一遍。
+//
+// 直方图与总调用数用 atomic 维护（不再共用一把全局互斥锁，避免所有在飞 S3 调用串行）；
+// Calls 由**桶计数求和**得出（MetricsSnapshot），因此 `+Inf == _count` 与
+// 「每次调用恰好落入一个桶」是结构性成立，而不是靠同锁维护的巧合。
+// 只有错误码分类（失败路径，低频）仍用互斥锁保护 map。
 type s3Metrics struct {
 	errors   atomic.Int64
 	streamIn atomic.Int64
 	sumNanos atomic.Int64
-	mu       sync.Mutex
+	byCodeMu sync.Mutex
 	byCode   map[string]int64
-	buckets  []int64 // 长度 len(latencyBuckets)+1
-	calls    int64   // 与 buckets 同一把锁下维护：每次 observe 恰好 +1 个桶，故 sum(buckets) == calls
+	buckets  []atomic.Int64 // 长度 len(latencyBuckets)+1，各桶为**增量**计数
 }
 
 var globalS3Metrics = newS3Metrics()
 
 func newS3Metrics() *s3Metrics {
-	return &s3Metrics{byCode: map[string]int64{}, buckets: make([]int64, len(latencyBuckets)+1)}
+	return &s3Metrics{byCode: map[string]int64{}, buckets: make([]atomic.Int64, len(latencyBuckets)+1)}
 }
 
 // S3MetricsSnapshot 是指标的一次性只读快照（供 /api/metrics 输出）。
@@ -71,16 +76,16 @@ type LatencyBucket struct {
 // （docs/archive/review-2026-09-19.md §7.3 D1）。
 func MetricsSnapshot() S3MetricsSnapshot {
 	m := globalS3Metrics
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.byCodeMu.Lock()
 	codes := make(map[string]int64, len(m.byCode))
 	for k, v := range m.byCode {
 		codes[k] = v
 	}
+	m.byCodeMu.Unlock()
 	lat := make([]LatencyBucket, 0, len(m.buckets))
 	var cumulative int64
-	for i, c := range m.buckets {
-		cumulative += c
+	for i := range m.buckets {
+		cumulative += m.buckets[i].Load()
 		if i == len(latencyBuckets) {
 			lat = append(lat, LatencyBucket{Inf: true, Count: cumulative})
 			continue
@@ -88,7 +93,8 @@ func MetricsSnapshot() S3MetricsSnapshot {
 		lat = append(lat, LatencyBucket{UpperBound: latencyBuckets[i], Count: cumulative})
 	}
 	return S3MetricsSnapshot{
-		Calls:        m.calls,
+		// Calls 直接取桶计数之和：+Inf 桶与其必然相等（Prometheus histogram 契约）。
+		Calls:        cumulative,
 		Errors:       m.errors.Load(),
 		StreamBytes:  m.streamIn.Load(),
 		LatencySum:   time.Duration(m.sumNanos.Load()),
@@ -114,8 +120,6 @@ func RecordStreamBytes(n int64) {
 func (m *s3Metrics) observe(d time.Duration, err error) {
 	m.sumNanos.Add(d.Nanoseconds())
 	secs := d.Seconds()
-	m.mu.Lock()
-	m.calls++
 	idx := len(latencyBuckets) // 默认落入 +Inf
 	for i, ub := range latencyBuckets {
 		if secs <= ub {
@@ -123,12 +127,14 @@ func (m *s3Metrics) observe(d time.Duration, err error) {
 			break
 		}
 	}
-	m.buckets[idx]++
+	// 单次原子加：失败路径之外不再取任何锁（全局互斥锁会串行所有在飞 S3 调用）。
+	m.buckets[idx].Add(1)
 	if err != nil {
 		m.errors.Add(1)
+		m.byCodeMu.Lock()
 		m.byCode[errorClass(err)]++
+		m.byCodeMu.Unlock()
 	}
-	m.mu.Unlock()
 }
 
 // metricErrorCodes 是允许作为指标标签的错误码白名单。

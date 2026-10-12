@@ -29,7 +29,7 @@ type Handler struct {
 	version        string                                 // 服务端版本号（ldflags 注入），用于 /api/health 上报
 	exposeMetrics  bool                                   // 是否暴露 /api/metrics（默认 false：404 假装不存在）
 	exposeOpenAPI  bool                                   // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
-	cspConnectSrc  string                                 // CSP connect-src 白名单；空 = 用 defaultCSPConnectSrc
+	cspHeader      string                                 // 预计算的整条 CSP（含 connect-src）；空 = 用 defaultCSPHeader
 	trustedProxies []string                               // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信
 	dataDir        string                                 // 数据目录（S3C_DATA_DIR）；卷容量 statfs 目标 + 关停耗时落盘处
 	lastShutdown   time.Duration                          // 最近一次优雅关停耗时（跨重启由 shutdown.json 载入）
@@ -53,12 +53,12 @@ func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins 
 	h := &Handler{
 		store: st, log: log, staticDir: staticDir, corsOrigins: corsOrigins,
 		tokens: splitTokens(token), version: version, exposeMetrics: exposeMetrics, exposeOpenAPI: exposeOpenAPI,
-		cspConnectSrc: defaultCSPConnectSrc,
-		clients:       newClientCache(),
-		migrateJobs:   service.NewJobRegistry(),
-		limiter:       newIPLimiter(),
-		openapi:       reg,
-		schedActive:   make(map[string]bool),
+		cspHeader:   buildCSP(defaultCSPConnectSrc),
+		clients:     newClientCache(),
+		migrateJobs: service.NewJobRegistry(),
+		limiter:     newIPLimiter(),
+		openapi:     reg,
+		schedActive: make(map[string]bool),
 	}
 	// 调度器以 runScheduleJob 为触发器；persister 默认纯内存，SetSchedulePersister
 	// 在 Routes() 前替换为落盘版（同 SetJobPersister 的 setter 口径）。
@@ -85,7 +85,7 @@ func splitTokens(s string) []string {
 // 用于支持自定义多后端/远程后端地址；调用方需在 Routes() 前设置。
 func (h *Handler) SetCSPConnectSrc(src string) {
 	if src != "" {
-		h.cspConnectSrc = src
+		h.cspHeader = buildCSP(src)
 	}
 }
 

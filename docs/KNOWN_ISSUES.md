@@ -23,7 +23,7 @@
 > 最后更新：2026-10-12（**#87 闭环**：三道 Nit（#84–#86）修复后的提交前门禁**全量实跑全绿**——
 > `gofmt` 干净 / `go vet` 0 / `go build` OK / `go test -race` **10/10 包** / 覆盖率 **100.0% 零 `count==0` 块** /
 > `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **83 文件 1292 例** / `pnpm build` OK，
-> 证据见 [`FEATURES.md`](FEATURES.md) §CK。上一行 2026-10-10：全仓代码质量评审
+> 证据见 [`FEATURES.md`](FEATURES.md) §CK；**同日 [`web-review-2026-10-12.md`](archive/web-review-2026-10-12.md) 收口**（`apps/web` UI / 交互批次，台账 §CL）后前端基线前进到 **87 文件 1360 例** / 四指标 **100%（5108 / 3395 / 1290 / 4407）**。上一行 2026-10-10：全仓代码质量评审
 > [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) 结论 **Approve**，三道非阻断 Nit
 > **#84–#86 同日全部闭环并移除**，快照按「归档四步」冻结入 `archive/`）。**存量：§一 #25 · §二 #63**。
 >

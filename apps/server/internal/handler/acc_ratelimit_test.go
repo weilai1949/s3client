@@ -26,45 +26,48 @@ func TestAccRateLimiterAllowBranches(t *testing.T) {
 	}
 
 	// 回满上限：29.5 + 约1秒×2token/s > 30 → 截断到 30 再扣 1 → 剩 29
-	l.mu.Lock()
-	l.byIP["cap"] = &tokenBucket{tokens: 29.5, last: time.Now().Add(-time.Second)}
-	l.mu.Unlock()
+	capShard := l.shard("cap")
+	capShard.mu.Lock()
+	capShard.byIP["cap"] = &tokenBucket{tokens: 29.5, last: time.Now().Add(-time.Second)}
+	capShard.mu.Unlock()
 	if !l.allow("cap") {
 		t.Fatal("cap 桶应放行")
 	}
-	l.mu.Lock()
-	got := l.byIP["cap"].tokens
-	l.mu.Unlock()
+	capShard.mu.Lock()
+	got := capShard.byIP["cap"].tokens
+	capShard.mu.Unlock()
 	if got < 28.9 || got > 29.1 {
 		t.Fatalf("cap 桶 tokens=%v, want ≈29（先截断到 30 再扣 1）", got)
 	}
 
 	// 饿死：tokens<1 → 拒绝且不扣减
-	l.mu.Lock()
-	l.byIP["starve"] = &tokenBucket{tokens: 0.5, last: time.Now()}
-	l.mu.Unlock()
+	starveShard := l.shard("starve")
+	starveShard.mu.Lock()
+	starveShard.byIP["starve"] = &tokenBucket{tokens: 0.5, last: time.Now()}
+	starveShard.mu.Unlock()
 	if l.allow("starve") {
 		t.Fatal("tokens<1 应拒绝")
 	}
-	l.mu.Lock()
-	got = l.byIP["starve"].tokens
-	l.mu.Unlock()
+	starveShard.mu.Lock()
+	got = starveShard.byIP["starve"].tokens
+	starveShard.mu.Unlock()
 	// 拒绝不扣减；但 allow 内部会按 elapsed 回填，tokens 只增不减（容差 0.01）
 	if got < 0.5-0.01 || got >= 1 {
 		t.Fatalf("拒绝后不应扣减（回填除外）, tokens=%v", got)
 	}
 }
 
-// TestAccRateLimiterReapLocked 白盒：reapLocked 只清理超过 10 分钟未活跃的桶。
+// TestAccRateLimiterReapLocked 白盒：分片 reapLocked 只清理超过 10 分钟未活跃的桶。
 func TestAccRateLimiterReapLocked(t *testing.T) {
 	l := newIPLimiter()
-	l.mu.Lock()
-	l.byIP["old"] = &tokenBucket{tokens: 5, last: time.Now().Add(-11 * time.Minute)}
-	l.byIP["fresh"] = &tokenBucket{tokens: 5, last: time.Now()}
-	l.reapLocked(time.Now())
-	_, oldLeft := l.byIP["old"]
-	_, freshLeft := l.byIP["fresh"]
-	l.mu.Unlock()
+	sh := l.shard("old")
+	sh.mu.Lock()
+	sh.byIP["old"] = &tokenBucket{tokens: 5, last: time.Now().Add(-11 * time.Minute)}
+	sh.byIP["fresh"] = &tokenBucket{tokens: 5, last: time.Now()}
+	sh.reapLocked(time.Now())
+	_, oldLeft := sh.byIP["old"]
+	_, freshLeft := sh.byIP["fresh"]
+	sh.mu.Unlock()
 	if oldLeft {
 		t.Fatal("过期桶应被清理")
 	}
@@ -73,26 +76,105 @@ func TestAccRateLimiterReapLocked(t *testing.T) {
 	}
 }
 
-// TestAccRateLimiterReapOnOverflow 白盒：桶数超过 10000 时 allow 内部触发清理。
-func TestAccRateLimiterReapOnOverflow(t *testing.T) {
+// TestAccRateLimiterShardCapEvictsStaleFirst 分片超硬上限时先清过期桶：
+// 过期桶被移除、且未被「随机淘汰」误伤其它活跃桶（即 reap 先于 eviction）。
+func TestAccRateLimiterShardCapEvictsStaleFirst(t *testing.T) {
 	l := newIPLimiter()
-	l.mu.Lock()
-	l.byIP["stale"] = &tokenBucket{tokens: 1, last: time.Now().Add(-11 * time.Minute)}
-	l.mu.Unlock()
-	for i := 0; i < 10_001; i++ {
+	sh := l.shard("stale")
+	sh.mu.Lock()
+	sh.byIP["stale"] = &tokenBucket{tokens: 1, last: time.Now().Add(-11 * time.Minute)}
+	sh.mu.Unlock()
+
+	// 只往同一分片灌新 IP，直到填满硬上限。
+	filled := 0
+	for i := 0; filled < maxBucketsPerShard-1; i++ {
+		ip := "ip-" + strconv.Itoa(i)
+		if l.shard(ip) != sh {
+			continue
+		}
+		l.allow(ip)
+		filled++
+	}
+	sh.mu.Lock()
+	before := len(sh.byIP)
+	sh.mu.Unlock()
+	if before != maxBucketsPerShard {
+		t.Fatalf("填满分片后桶数=%d, want %d", before, maxBucketsPerShard)
+	}
+
+	// 再插一个新桶 → 超限：应先清掉唯一的过期桶，活跃桶全部保留。
+	sh.mu.Lock()
+	sh.addBucketLocked("fresh", time.Now())
+	_, staleLeft := sh.byIP["stale"]
+	n := len(sh.byIP)
+	sh.mu.Unlock()
+	if staleLeft {
+		t.Fatal("超硬上限时应先清理过期桶")
+	}
+	if n != maxBucketsPerShard {
+		t.Fatalf("清理过期桶后桶数=%d, want %d（不应误伤活跃桶）", n, maxBucketsPerShard)
+	}
+}
+
+// TestAccRateLimiterShardHardCap 只灌同一分片：桶数必须停在硬上限，不得随 IP 数增长。
+func TestAccRateLimiterShardHardCap(t *testing.T) {
+	l := newIPLimiter()
+	sh := l.shard("seed")
+	filled := 0
+	for i := 0; filled < maxBucketsPerShard*4; i++ {
+		ip := "ip-" + strconv.Itoa(i)
+		if l.shard(ip) != sh {
+			continue
+		}
+		l.allow(ip)
+		filled++
+		sh.mu.Lock()
+		n := len(sh.byIP)
+		sh.mu.Unlock()
+		if n > maxBucketsPerShard {
+			t.Fatalf("第 %d 个桶后分片桶数=%d, 超过硬上限 %d", filled, n, maxBucketsPerShard)
+		}
+	}
+}
+
+// TestAccRateLimiterTotalBucketsBounded 分片后**总量**上限仍为 10_000 量级：
+// 灌入远超上限的 IP 后，驻留桶数不得超过 分片数 × (maxBucketsPerShard+1)。
+func TestAccRateLimiterTotalBucketsBounded(t *testing.T) {
+	l := newIPLimiter()
+	const ips = 30_000
+	for i := 0; i < ips; i++ {
 		l.allow("ip-" + strconv.Itoa(i))
 	}
-	l.mu.Lock()
-	_, staleLeft := l.byIP["stale"]
-	n := len(l.byIP)
-	l.mu.Unlock()
-	if staleLeft {
-		t.Fatal("溢出触发清理后，过期桶应被移除")
+	total := 0
+	for i := range l.shards {
+		sh := &l.shards[i]
+		sh.mu.Lock()
+		n := len(sh.byIP)
+		sh.mu.Unlock()
+		if n > maxBucketsPerShard {
+			t.Fatalf("分片 %d 桶数=%d, 应不超过 %d", i, n, maxBucketsPerShard)
+		}
+		total += n
 	}
-	// 新桶先插入再触发 reap：map 可短暂持有 10001 个（新桶不会被立即清理）
-	if n > 10_001 {
-		t.Fatalf("桶数=%d, 应不超过 10001", n)
+	if limit := rateLimitShards * maxBucketsPerShard; total > limit {
+		t.Fatalf("驻留桶总数=%d, 应不超过 %d（分片不得放大内存上限）", total, limit)
 	}
+}
+
+// TestAccRateLimiterConcurrent 并发 allow（go test -race 下验证分片锁无数据竞争）。
+func TestAccRateLimiterConcurrent(t *testing.T) {
+	l := newIPLimiter()
+	var wg sync.WaitGroup
+	for g := 0; g < 16; g++ {
+		wg.Add(1)
+		go func(g int) {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				l.allow("10.0." + strconv.Itoa(g) + "." + strconv.Itoa(i%8))
+			}
+		}(g)
+	}
+	wg.Wait()
 }
 
 // TestAccClientIPNoPort 补测 clientIP：RemoteAddr 无端口时原样返回；无可信代理时不信任 XFF。

@@ -7,14 +7,24 @@ import (
 	"time"
 
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // 流式响应（proxy / download-zip / migrate）并发与写超时保护。
 const (
 	maxConcurrentStreams = 32
-	// 滚动空闲写超时：每次成功写出后刷新；慢网大文件不会因绝对截止被误杀。
+	// 滚动空闲写超时：按 writeDeadlineRefreshInterval 节流刷新；
+	// 慢网大文件不会因绝对截止被误杀（刷新间隔远小于该超时，见下）。
 	streamIdleTimeout = 5 * time.Minute
 )
+
+// writeDeadlineRefreshInterval 是流式写出刷新写超时的最小间隔。
+//
+// 旧实现每次 Write 都调 SetWriteDeadline（GB 级下载在 32KiB 通用缓冲下 = 每 32KiB
+// 一次），这里按时间节流：只需保证「刷新间隔 ≪ streamIdleTimeout」即可维持滚动续期，
+// 30s vs 5min 有 10× 余量，慢网大文件不会被误杀（docs/archive/server-review-2026-10-12.md S1）。
+// var 以便单测注入 0（每次写都刷新）覆盖「持续续期」分支。
+var writeDeadlineRefreshInterval = 30 * time.Second
 
 var streamSlots = make(chan struct{}, maxConcurrentStreams)
 
@@ -51,7 +61,8 @@ func beginStreamResponse(w http.ResponseWriter) {
 func copyStream(w http.ResponseWriter, r *http.Request, src io.Reader) (int64, error) {
 	rc := http.NewResponseController(w)
 	dw := &deadlineWriter{w: w, rc: rc, idle: streamIdleTimeout}
-	return io.Copy(dw, &contextReader{ctx: r.Context(), r: src})
+	// 有界池化的 256KiB 缓冲：把写调用数（及其附带的 deadline 刷新）降到 io.Copy 默认 32KiB 的 1/8。
+	return service.CopyBuffered(dw, &contextReader{ctx: r.Context(), r: src})
 }
 
 // recordStreamOutcome 记录一次流式传输的结果。
@@ -79,10 +90,14 @@ type deadlineWriter struct {
 	w    http.ResponseWriter
 	rc   *http.ResponseController
 	idle time.Duration
+	last time.Time // 上一次刷新写 deadline 的时刻；零值保证首次写必然刷新
 }
 
 func (d *deadlineWriter) Write(p []byte) (int, error) {
-	_ = d.rc.SetWriteDeadline(time.Now().Add(d.idle))
+	if now := time.Now(); now.Sub(d.last) >= writeDeadlineRefreshInterval {
+		_ = d.rc.SetWriteDeadline(now.Add(d.idle))
+		d.last = now
+	}
 	return d.w.Write(p)
 }
 

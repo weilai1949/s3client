@@ -1,11 +1,9 @@
 <script setup lang="ts">
-defineOptions({ name: 'MigratePanel' })
-
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { toErrorMessage } from '../errors'
 
 import { s3api, subscribeMigrateEvents } from '../api'
-import { state, currentAccount, toast, selectAccount, requestTab } from '../store'
+import { state, currentAccount, toast, selectAccount, requestTab, reportActivity, clearActivity } from '../store'
 import { fmtSize } from '../format'
 import { MIGRATE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { ROW_HEIGHT } from '../virtualList'
@@ -60,6 +58,18 @@ const progress = reactive({ done: 0, total: 0 })
  */
 const progressPct = computed(() => Math.round((progress.done / progress.total) * 100))
 const activeJobId = ref('')
+
+/**
+ * 迁移进度登记到全局活动中心：面板被 KeepAlive 切走后状态机仍在跑，但用户看不到任何进度——
+ * 顶栏角标是「长任务切走也可见」的唯一出口。busy 为假即撤下登记，避免角标长期停留。
+ */
+watch([busy, progressPct], () => {
+  if (!busy.value) {
+    clearActivity('migrate')
+    return
+  }
+  reportActivity({ key: 'migrate', label: t('activity.migrate'), done: progress.done, total: progress.total, pct: progressPct.value })
+})
 // 组件级 SSE 取消器：保证 onBeforeUnmount 一定能断开正在进行的迁移事件流。
 let activeUnsub: (() => void) | undefined
 const cancelling = ref(false)
@@ -391,6 +401,17 @@ onMounted(async () => {
   await loadSourceBuckets()
   await loadTargetBuckets()
   loadSourceObjects()
+})
+
+// 面板现在由 KeepAlive 缓存：首次激活紧随 onMounted（那次已拉过清单，不重复请求），
+// 之后每次回到本页都刷新一次「未完成任务」，避免看到离开期间的陈旧状态。
+let activatedOnce = false
+onActivated(() => {
+  if (!activatedOnce) {
+    activatedOnce = true
+    return
+  }
+  loadUnfinishedJobs()
 })
 </script>
 

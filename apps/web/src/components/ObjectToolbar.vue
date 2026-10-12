@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { fmtSize } from '../format'
 import { t, tf } from '../i18n'
 import type { BucketItem } from '../types'
@@ -27,6 +28,35 @@ defineProps<{
 
 const filter = defineModel<string>('filter', { default: '' })
 const pathDraft = defineModel<string>('pathDraft', { default: '' })
+
+/**
+ * 过滤输入防抖：过滤会遍历整份已加载条目并重渲染列表，逐键触发在万级目录下会掉帧。
+ * 输入框绑定本地草稿，停顿 FILTER_DEBOUNCE_MS 后才提交给父层。
+ */
+const FILTER_DEBOUNCE_MS = 200
+const filterDraft = ref(filter.value)
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+
+// 外部改动（切目录/切桶重置、清除按钮）要立刻反映到输入框
+watch(filter, (v) => {
+  filterDraft.value = v
+})
+
+function onFilterInput() {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    filter.value = filterDraft.value
+  }, FILTER_DEBOUNCE_MS)
+}
+
+/** 清除：不等防抖窗口，立即生效（否则会出现「点清除了列表还是过滤态」的错觉）。 */
+function clearFilter() {
+  clearTimeout(filterTimer)
+  filterDraft.value = ''
+  filter.value = ''
+}
+
+onBeforeUnmount(() => clearTimeout(filterTimer))
 
 const emit = defineEmits<{
   (e: 'bucket-change', value: string): void
@@ -91,16 +121,17 @@ const emit = defineEmits<{
     <label class="filter-lbl">
       <span>{{ t('toolbar.filterLabel') }}</span>
       <input
-        v-model="filter"
+        v-model="filterDraft"
         type="search"
         class="filter-input"
         :placeholder="t('toolbar.filterPlaceholder')"
         :title="filterActive ? t('toolbar.filterActiveHint') : t('toolbar.filterHint')"
+        @input="onFilterInput"
       />
     </label>
     <span v-if="filterActive" class="badge">
       {{ visibleCount }}/{{ totalCount }}
-      <button class="link" style="margin-left:4px" @click="filter = ''">{{ t('common.clear') }}</button>
+      <button class="link" style="margin-left:4px" @click="clearFilter">{{ t('common.clear') }}</button>
     </span>
   </div>
 

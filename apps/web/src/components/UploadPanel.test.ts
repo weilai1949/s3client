@@ -57,6 +57,11 @@ function makeQueue() {
       }
     }),
     run: vi.fn(async () => [] as UploadQueueItem[]),
+    enqueueItems: vi.fn((entries: Array<{ file: File; key: string; bucket?: string }>) => {
+      for (const e of entries) {
+        items.value.push({ id: items.value.length + 1, file: e.file, key: e.key, bucket: e.bucket, pct: 0, status: 'pending' })
+      }
+    }),
     abortItem: vi.fn(),
     abortAll: vi.fn(),
   }
@@ -93,6 +98,13 @@ beforeEach(() => {
 })
 
 describe('UploadPanel', () => {
+  it('把本页上传登记到全局活动中心（顶栏角标：切走后仍可见），label 走 i18n', () => {
+    mountPanel()
+    const opts = vi.mocked(useUploadQueue).mock.calls[0][0]
+    expect(opts.activity?.key).toBe('upload:panel')
+    expect(opts.activity?.label()).toBe('activity.upload')
+  })
+
   it('shows empty state without account', () => {
     const { w } = mountPanel(null)
     expect(w.find('.empty').text()).toContain('upload.needAccount')
@@ -127,15 +139,26 @@ describe('UploadPanel', () => {
     expect(w.find('.dropzone').classes()).not.toContain('over')
     const dt = { files: [new File(['x'], 'd.txt')] } as unknown as DataTransfer
     await dz.trigger('drop', { dataTransfer: dt })
-    expect(q.enqueue).toHaveBeenCalledTimes(1)
+    await flushPromises()
+    expect(q.enqueueItems).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(q.enqueueItems).mock.calls[0][0].map((e) => e.key)).toEqual(['d.txt'])
     expect(w.find('.dropzone').classes()).not.toContain('over')
   })
 
-  it('drop 无 dataTransfer：`e.dataTransfer?.files ?? null` 兜底为 null,以 null 入队（队列侧自行忽略）', async () => {
+  it('drop 无 dataTransfer 时不入队（合成事件异常路径安全跳过）', async () => {
     const { w, q } = mountPanel()
     const dz = w.find('.dropzone')
     await dz.trigger('drop', {})
-    expect(q.enqueue).toHaveBeenCalledWith(null, expect.any(Function))
+    await flushPromises()
+    expect(q.enqueueItems).not.toHaveBeenCalled()
+  })
+
+  it('drop 展开为空（拖入非文件内容）时不入队', async () => {
+    const { w, q } = mountPanel()
+    const dz = w.find('.dropzone')
+    await dz.trigger('drop', { dataTransfer: { items: [], files: [] } as unknown as DataTransfer })
+    await flushPromises()
+    expect(q.enqueueItems).not.toHaveBeenCalled()
   })
 
   it('addFiles 在 fileInput 未绑定时：`if (fileInput.value)` 守卫跳过重置', async () => {

@@ -143,8 +143,9 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
   `.github/workflows/` 全部 `uses:`；本轮新增两枚 SHA 经 GitHub API 三重核验，2026-09-30：
   `ossf/scorecard-action` v2.4.4 → `2d1146689b8cda280b9bc96326124645441f03bc`、
   `actions/dependency-review-action` v5.0.0 → `a1d282b36b6f3519aa1f3fc636f609c47dddb294`）。
-- **Rust 告警 triage**：`cargo audit` 当前 7 条 unmaintained / unsound 告警（`proc-macro-error`、
-  5 个 `unic-*`、`glib 0.18.5`），均为上游尚未发布修复版本的传递依赖（tauri/wry 链路），
+- **Rust 告警 triage**：`cargo audit` 当前 **2** 条 unmaintained / unsound 告警（`proc-macro-error`、
+  `glib 0.18.5`），均为上游尚未发布修复版本的传递依赖（tauri/wry 链路）。**2026-10-12 tauri 升 2.12**
+  移除了 `unic-*` 传递依赖，告警数由 7 条降到 2 条（0 漏洞不变），
   不用 `.cargo/audit.toml` ignore 清单掩盖；新增可达漏洞会让 CI 红灯。
 - `.trivyignore`：仅策略注释、0 忽略条目（无掩盖性忽略）。
 - dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
@@ -202,7 +203,7 @@ Trivy 镜像扫描命令与 CI 同一镜像 digest（见 [`.github/workflows/ci.
 - **桌面产物未签名 / 未公证**（Windows SmartScreen、macOS Gatekeeper）——外部凭证阻塞，见
   [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25；cosign 与 provenance **只能**证明「来源与完整性」，
   **不解决**发布者信誉。
-- **Rust 侧 7 条 unmaintained / unsound 告警**维持 triage（见上），不用 ignore 清单掩盖。
+- **Rust 侧 2 条 unmaintained / unsound 告警**维持 triage（见上），不用 ignore 清单掩盖。
 - **仓库内不存放 SBOM / 证明文件**：它们是 CI 产物与 registry attestation——入库会让「证据」与
   构建时刻脱钩，核验方式见 §5.3。**本条口径保持不变**：新增的两个 workflow（§5.5）也不产出
   入库 SBOM，Scorecard 的 SARIF 仅以 CI 产物形式保留 5 天。

@@ -56,6 +56,7 @@ const defaults = {
   loadingAll: false,
   listGen: 0,
   ctxEntryKey: null as string | null,
+  focusKey: null as string | null,
 }
 
 function mountList(props: Partial<typeof defaults> = {}) {
@@ -490,4 +491,94 @@ describe('ObjectList 选中态语义', () => {
     expect(after[1].attributes('aria-selected')).toBe('true')
     w.unmount()
   })
+
+  it('过滤命中片段高亮（<mark>），清空过滤词后不再高亮', async () => {
+    const w = mountList({ entries: [file('report.csv')], totalCount: 1, filter: 'report', filterActive: true })
+    const marks = w.findAll('.v-row mark')
+    expect(marks).toHaveLength(1)
+    expect(marks[0].text()).toBe('report')
+    // 全文未被切开：拼回来仍是原对象名
+    expect(w.find('.v-row .mono').text()).toBe('report.csv')
+
+    await w.setProps({ filter: '' })
+    expect(w.findAll('.v-row mark')).toHaveLength(0)
+  })
+
+  it('网格视图同样高亮命中片段', () => {
+    const w = mountList({ bucketView: 'grid', entries: [file('report.csv')], totalCount: 1, filter: 'port', filterActive: true })
+    expect(w.find('.gi-name mark').text()).toBe('port')
+  })
+
+  it('键盘导航：roving tabindex（仅焦点行 tabindex=0）与方向键/Home/End 事件', async () => {
+    const w = mountList({ entries: [file('a.txt'), file('b.txt')], totalCount: 2, focusKey: 'a.txt' })
+    const rows = w.findAll('.v-row')
+    expect(rows[0].attributes('tabindex')).toBe('0')
+    expect(rows[1].attributes('tabindex')).toBe('-1')
+
+    await rows[0].trigger('keydown', { key: 'ArrowDown' })
+    await rows[0].trigger('keydown', { key: 'ArrowUp' })
+    await rows[0].trigger('keydown', { key: 'Home' })
+    await rows[0].trigger('keydown', { key: 'End' })
+    expect(w.emitted('moveFocus')).toEqual([[1], [-1]])
+    expect(w.emitted('focusEdge')).toEqual([['start'], ['end']])
+
+    // 未处理的键不产生任何事件（也不吞掉默认行为）
+    await rows[0].trigger('keydown', { key: 'F5' })
+    expect(w.emitted('moveFocus')).toHaveLength(2)
+    expect(w.emitted('focusEdge')).toHaveLength(2)
+  })
+
+  it('行聚焦发 focusRow；回车=打开、空格=切换选中（行内处理后阻断冒泡）', async () => {
+    const w = mountList({ entries: [file('a.txt')], totalCount: 1 })
+    const row = w.find('.v-row')
+    await row.trigger('focus')
+    expect(w.emitted('focusRow')).toEqual([['a.txt']])
+
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    row.element.dispatchEvent(enter)
+    expect(w.emitted('rowDbl')).toHaveLength(1)
+    expect(enter.defaultPrevented).toBe(true)
+
+    await row.trigger('keydown', { key: ' ' })
+    expect(w.emitted('rowClick')).toHaveLength(1)
+  })
+
+  it('外部改变 focusKey 时把 DOM 焦点落到对应行；清空只撤销 roving 标记、不抢走用户焦点', async () => {
+    const w = mount(ObjectList, {
+      props: { ...defaults, entries: [file('a.txt'), file('b.txt')], totalCount: 2, focusKey: null as string | null },
+      attachTo: document.body,
+    })
+    await w.setProps({ focusKey: 'b.txt' })
+    expect(document.activeElement).toBe(w.findAll('.v-row')[1].element)
+    expect(w.findAll('.v-row')[1].attributes('tabindex')).toBe('0')
+
+    // 清空 focusKey 只把所有行退回 tabindex=-1（行被过滤掉时 DOM 焦点天然回到 body），
+    // 组件不主动 blur —— 父层因列表重算清焦点时不应把焦点从用户手里抢走。
+    await w.setProps({ focusKey: null })
+    expect(w.findAll('.v-row')[1].attributes('tabindex')).toBe('-1')
+    w.unmount()
+  })
+
+  it('网格视图同样参与键盘行导航：tabindex 随 focusKey，focus/方向键事件外发', async () => {
+    const w = mountList({ bucketView: 'grid', entries: [file('a.txt'), file('b.txt')], totalCount: 2, focusKey: 'b.txt' })
+    const items = w.findAll('.grid-item')
+    expect(items[0].attributes('tabindex')).toBe('-1')
+    expect(items[1].attributes('tabindex')).toBe('0')
+
+    await items[1].trigger('focus')
+    expect(w.emitted('focusRow')).toEqual([['b.txt']])
+    await items[1].trigger('keydown', { key: 'ArrowDown' })
+    expect(w.emitted('moveFocus')).toEqual([[1]])
+    await items[1].trigger('keydown', { key: 'End' })
+    expect(w.emitted('focusEdge')).toEqual([['end']])
+  })
+
+  it('过滤态且结果被截断时提示搜索范围（未截断则不提示）', async () => {
+    const w = mountList({ entries: [file('a.txt')], totalCount: 1, nextToken: 't', isTruncated: true, filter: 'a', filterActive: true })
+    expect(w.find('.filter-scope-hint').text()).toContain('objects.filterScopeHint')
+
+    await w.setProps({ isTruncated: false, nextToken: '' })
+    expect(w.find('.filter-scope-hint').exists()).toBe(false)
+  })
+
 })

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
-import { shallowMount } from '@vue/test-utils'
+import { flushPromises, shallowMount } from '@vue/test-utils'
 import ObjectsPanel from './ObjectsPanel.vue'
 import ObjectList from './ObjectList.vue'
 import ObjectToolbar from './ObjectToolbar.vue'
@@ -141,6 +141,7 @@ function makeActions(overrides: Record<string, unknown> = {}): ActionsApi {
     versionsKey: ref(''),
     openBucketInfo: vi.fn(),
     pickUploadFiles: vi.fn(),
+    dropUpload: vi.fn(async () => {}),
     mkdir: vi.fn(),
     openDestMulti: vi.fn(),
     copySelectedLinks: vi.fn(),
@@ -204,6 +205,15 @@ function mountPanel() {
   vi.mocked(useObjectActions).mockReturnValue(makeActions())
   vi.mocked(usePreview).mockReturnValue(makePreview())
   return shallowPanel()
+}
+
+/** 挂面板并同时拿到被注入的 actions 句柄（断言 dropUpload 等调用）。 */
+function mountPanelWithActions(inBucket: boolean) {
+  const actions = makeActions()
+  vi.mocked(useObjectBrowser).mockReturnValue(makeBrowser(inBucket ? {} : { currentBucket: ref('') }))
+  vi.mocked(useObjectActions).mockReturnValue(actions)
+  vi.mocked(usePreview).mockReturnValue(makePreview())
+  return { w: shallowPanel(), actions }
 }
 
 beforeEach(() => {
@@ -563,4 +573,59 @@ describe('ObjectsPanel account select + upload input', () => {
     ;(input.element as HTMLInputElement).dispatchEvent(new Event('change'))
     expect(actions.onPickUpload).toHaveBeenCalled()
   })
+
+  it('拖入文件：显示遮罩并交给 dropUpload；未进入桶时不拦截、不显示', async () => {
+    // 未进入桶（currentBucket 为空）→ 不点亮遮罩、dragover 不 preventDefault
+    const idle = mountPanelWithActions(false)
+    const idleW = idle.w
+    await idleW.find('.panel').trigger('dragenter')
+    expect(idleW.find('.drop-overlay').exists()).toBe(false)
+    const idleOver = new Event('dragover', { cancelable: true })
+    idleW.find('.panel').element.dispatchEvent(idleOver)
+    expect(idleOver.defaultPrevented, '未就绪时不接管拖放（不显示「可放置」光标）').toBe(false)
+    idleW.unmount()
+
+    const { w, actions } = mountPanelWithActions(true)
+    await w.find('.panel').trigger('dragenter')
+    expect(w.find('.drop-overlay').exists()).toBe(true)
+    expect(w.find('.drop-overlay').text()).toContain('objects.dropTitle')
+
+    // dragover：就绪时必须 preventDefault（否则浏览器不会派发 drop）
+    const over = new Event('dragover', { cancelable: true })
+    w.find('.panel').element.dispatchEvent(over)
+    expect(over.defaultPrevented).toBe(true)
+
+    await w.find('.panel').trigger('dragleave')
+    expect(w.find('.drop-overlay').exists()).toBe(false)
+    // 已归零后再来一次 dragleave：计数不落到负数（否则遮罩状态机被外部噪声带偏）
+    await w.find('.panel').trigger('dragleave')
+    expect(w.find('.drop-overlay').exists()).toBe(false)
+
+    // drop：复位遮罩并调用 dropUpload
+    await w.find('.panel').trigger('dragenter')
+    const dt = { items: [] } as unknown as DataTransfer
+    const drop = new Event('drop', { cancelable: true })
+    Object.defineProperty(drop, 'dataTransfer', { value: dt })
+    w.find('.panel').element.dispatchEvent(drop)
+    await flushPromises()
+    expect(w.find('.drop-overlay').exists()).toBe(false)
+    expect(vi.mocked(actions.dropUpload)).toHaveBeenCalledWith(dt)
+  })
+
+  it('drop 落在未就绪状态（无桶 / 无 dataTransfer）时不调用 dropUpload', async () => {
+    const idle = mountPanelWithActions(false)
+    const drop = new Event('drop', { cancelable: true })
+    Object.defineProperty(drop, 'dataTransfer', { value: { items: [] } as unknown as DataTransfer })
+    idle.w.find('.panel').element.dispatchEvent(drop)
+    await flushPromises()
+    expect(vi.mocked(idle.actions.dropUpload)).not.toHaveBeenCalled()
+    idle.w.unmount()
+
+    // 已就绪但事件里没有 dataTransfer（合成事件异常路径）：同样安全跳过
+    const { w, actions } = mountPanelWithActions(true)
+    w.find('.panel').element.dispatchEvent(new Event('drop', { cancelable: true }))
+    await flushPromises()
+    expect(vi.mocked(actions.dropUpload)).not.toHaveBeenCalled()
+  })
+
 })

@@ -380,9 +380,14 @@ jobs:
           printf '%s\n' '<!doctype html><title>ci</title>' > apps/web/dist/index.html
       - name: cargo check
         working-directory: apps/desktop/src-tauri
+        env:
+          # 编译器自带 lint：直接依赖被声明却未被引用时构建失败（防 D1 复发）。
+          # Rust 侧此前无任何 unused 检查（rust-toolchain.toml 有意不装 clippy 组件），
+          # 故沿用编译器能力，不引入新工具、不改工具链。
+          RUSTFLAGS: -D unused_crate_dependencies
         run: cargo check --locked
       # RustSec 审计：有已知漏洞即红灯；unmaintained/unsound 告警按
-      # docs/threat-model.md §5 逐条 triage（当前 7 条，均无 upstream 修复版本）。
+      # docs/threat-model.md §5 逐条 triage（当前 2 条，均无 upstream 修复版本）。
       - name: cargo audit (RustSec)
         working-directory: apps/desktop/src-tauri
         run: |
@@ -417,7 +422,7 @@ jobs:
         run: pnpm install --frozen-lockfile && pnpm build
       - name: Install tauri-cli (cached across runs)
         working-directory: apps/desktop
-        run: cargo install tauri-cli --version "^2" --locked
+        run: cargo install tauri-cli --version "2.12.2" --locked
       - name: tauri build --no-bundle
         working-directory: apps/desktop
         run: |

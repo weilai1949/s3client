@@ -43,6 +43,8 @@ vi.mock("../store", async () => {
     toast: vi.fn(),
     selectAccount: vi.fn(),
     requestTab: vi.fn(),
+    reportActivity: vi.fn(),
+    clearActivity: vi.fn(),
   };
 });
 

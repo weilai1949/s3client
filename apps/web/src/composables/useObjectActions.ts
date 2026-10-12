@@ -7,6 +7,7 @@ import { confirmDialog } from '../confirm'
 import { promptDialog } from '../prompt'
 import { copyText } from '../clipboard'
 import { downloadProxyObject } from '../proxy'
+import { filesFromDrop } from '../dropFiles'
 import { BATCH_META_CONCURRENCY, boundedPool } from '../batchMetadata'
 import { DELETE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { t, tf } from '../i18n'
@@ -368,6 +369,8 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
   const uploadInput = ref<HTMLInputElement>()
   const queue = useUploadQueue({
     target: (it) => ({ accId: requireAccId(), bucket: it.bucket || ctx.currentBucket.value, key: it.key }),
+    // 顶栏角标：切到别的页面后仍能看到对象页的直传进度。
+    activity: { key: 'upload:objects', label: () => t('activity.upload') },
   })
   const uploadQueue = queue.items
   const uploading = queue.running
@@ -402,6 +405,21 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
       uploading.value = false
       await ctx.load(true)
     }
+  }
+
+  /**
+   * 拖拽上传：把拖入的文件 / 目录按「当前前缀 + 相对路径」入队并立即上传。
+   * 目录结构保留（拖入 `photos/` → `<prefix>photos/a.jpg`），与浏览器上传行为一致。
+   * 条件与按钮上传一致：无账号 / 无桶 / 正在上传时不动作。
+   */
+  async function dropUpload(dt: DataTransfer): Promise<void> {
+    if (uploading.value || !ctx.account.value || !ctx.currentBucket.value) return
+    const dropped = await filesFromDrop(dt)
+    if (!dropped.length) return
+    queue.enqueueItems(
+      dropped.map((d) => ({ file: d.file, key: keyForUpload(d.path), bucket: ctx.currentBucket.value })),
+    )
+    await runUpload()
   }
 
   /** 批量复制所选文件的 1 小时签名链接（每行一个）。失败项不中断其余项。 */
@@ -628,6 +646,7 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
     abortUploadItem,
     keyForUpload,
     pickUploadFiles,
+    dropUpload,
     onPickUpload,
     runUpload,
     copySelectedLinks,

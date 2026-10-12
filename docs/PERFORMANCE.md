@@ -73,7 +73,7 @@ cd apps/server && go test . -run 'TestBench' -count=1 -v     # 只跑预算门�
 | `StoreCreate/json+key` | 29 609 321 | 67 193 959 | 150 |
 | `StoreCreate/encrypted` | 29 638 345 | 67 199 428 | 153 |
 
-## 3. 四条需要知道的结论
+## 3. 五条需要知道的结论
 
 ### 3.1 加密写入单次约 30 ms、瞬时分配约 64 MiB —— 这是**有意设计**
 
@@ -112,6 +112,25 @@ SigV4 签名要在本地做 canonical request、HMAC 链与 URI 编码，362 次
 `NormalizeEndpoint` 约 73–144 ns、1–3 次分配（`HTTPS://S3.Example.COM` 更贵是因为要处理
 大小写混合 scheme）；`RelKey` 在常见路径上**零分配**——它是逐 key 调用的内核，
 迁移上万 key 也只有约 0.15 ms 的总开销。`BaseKey` 的 1 次分配来自 `path.Base` 的切片语义。
+
+### 3.5 流式复制缓冲与并发锁：2026-10-12 三项结构性优化（口径：调用次数 / 锁，非 µs）
+
+- **流式下载 / ZIP 打包的写调用数降为 1/8**：`io.Copy` 的通用缓冲是 32 KiB；`service.CopyBuffered`
+  改用**有界复用**的 256 KiB（容量 2 的 channel 池，常驻 512 KiB），handler `copyStream` 与
+  `WriteObjectsZip` 共用。写 deadline 刷新也从「每次写」改为按 `writeDeadlineRefreshInterval = 30s`
+  节流（`streamIdleTimeout` 仍是 5min，故续期余量 10×，慢网大文件不被误杀）。对 GB 级下载 / 打包，
+  写调用与 `SetWriteDeadline` 次数都随之降为 1/8；小响应无差别（评审快照 §3 的独立微基准：
+  64 MiB 下默认缓冲 2048 次写 → 256 KiB 缓冲 256 次写）。
+- **限流器与 S3 调用指标不再有全局锁热点**：`ipLimiter` 分 16 片（每片自带锁与 **625 桶硬上限**，
+  总量仍 10_000）；`s3wrap` 的延迟直方图桶与总调用数改 `atomic`（`Calls` 由桶求和得出，
+  `+Inf == _count` 结构性成立），只有失败路径的错误码分类仍取锁。
+- **`/api/metrics` 采集去 STW**：`runtime.ReadMemStats` → `runtime/metrics`
+  `/memory/classes/heap/objects:bytes`（同一 `MemStats.Alloc` 口径，无 Stop-The-World），
+  且整包先写 `bytes.Buffer` 再一次 `Write`。
+
+> 这三项是**调用次数 / 锁争用**层面的结构性改善，不是 ns 级微优化——收益只在 GB 级传输或
+> 高并发下可见，**未做**端到端压测与 pprof 验证（口径与披露见
+> [`archive/server-review-2026-10-12.md`](archive/server-review-2026-10-12.md) §6）。
 
 ## 4. 改动时怎么用这份基线
 

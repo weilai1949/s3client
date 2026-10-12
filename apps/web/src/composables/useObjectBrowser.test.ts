@@ -2,7 +2,7 @@
 // KNOWN_ISSUES #60 拆分后的分支范围见 useObjectBrowser.branches.test.ts（断言逐字搬移）。
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, nextTick } from 'vue'
 import { useObjectBrowser } from './useObjectBrowser'
 import type { BucketItem, Entry, ObjectItem } from '../types'
 import { s3api } from '../api'
@@ -41,7 +41,7 @@ vi.mock('../confirm', () => ({
 
 // Mock localStorage
 const localStorageMock = {
-  getItem: vi.fn(() => null),
+  getItem: vi.fn((_key: string): string | null => null),
   setItem: vi.fn(),
   removeItem: vi.fn(),
 }
@@ -387,6 +387,64 @@ describe('useObjectBrowser gaps', () => {
       expect(browser.hintsHidden.value).toBe(false)
       expect(() => browser.hideHints()).not.toThrow()
       expect(browser.hintsHidden.value).toBe(true)
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, configurable: true })
+      Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })
+    }
+  })
+
+  it('视图 / 排序偏好落 localStorage：切换后写入，新建实例按存储值恢复', async () => {
+    localStorageMock.getItem.mockReturnValue(null)
+    const browser = useObjectBrowser(makeBindings())
+    expect(browser.bucketView.value).toBe('list')
+    expect(browser.sortKey.value).toBe('name')
+    expect(browser.sortDir.value).toBe(1)
+
+    browser.toggleView()
+    browser.toggleSort('size')
+    browser.toggleSort('size') // 再点一次 → 降序
+    await nextTick()
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('s3c.bucketView', 'grid')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('s3c.sortKey', 'size')
+    expect(localStorageMock.setItem).toHaveBeenCalledWith('s3c.sortDir', '-1')
+
+    // 新实例（= 刷新 / 重启）按存储恢复，而不是回到默认
+    const stored: Record<string, string> = { 's3c.bucketView': 'grid', 's3c.sortKey': 'time', 's3c.sortDir': '-1' }
+    localStorageMock.getItem.mockImplementation((k: string) => stored[k] ?? null)
+    try {
+      const restored = useObjectBrowser(makeBindings())
+      expect(restored.bucketView.value).toBe('grid')
+      expect(restored.sortKey.value).toBe('time')
+      expect(restored.sortDir.value).toBe(-1)
+    } finally {
+      localStorageMock.getItem.mockReturnValue(null)
+    }
+  })
+
+  it('存储值非法 / 存储不可用时回退默认，且写入失败不抛错', async () => {
+    localStorageMock.getItem.mockReturnValue('bogus')
+    try {
+      const bogus = useObjectBrowser(makeBindings())
+      expect(bogus.bucketView.value).toBe('list')
+      expect(bogus.sortKey.value).toBe('name')
+      expect(bogus.sortDir.value).toBe(1)
+    } finally {
+      localStorageMock.getItem.mockReturnValue(null)
+    }
+
+    const boom = () => { throw new DOMException('SecurityError', 'SecurityError') }
+    const throwing = { getItem: boom, setItem: boom, removeItem: boom }
+    Object.defineProperty(globalThis, 'localStorage', { value: throwing, configurable: true })
+    Object.defineProperty(window, 'localStorage', { value: throwing, configurable: true })
+    try {
+      const browser = useObjectBrowser(makeBindings())
+      expect(browser.bucketView.value).toBe('list')
+      expect(browser.sortKey.value).toBe('name')
+      browser.toggleView()
+      browser.toggleSort('size')
+      await nextTick()
+      expect(browser.bucketView.value).toBe('grid') // 写不进去但本次会话内生效
+      expect(browser.sortKey.value).toBe('size')
     } finally {
       Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, configurable: true })
       Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })

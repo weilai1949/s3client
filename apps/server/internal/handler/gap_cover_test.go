@@ -27,34 +27,41 @@ func gapStoreHandler(t *testing.T) (*Handler, *store.Store) {
 	return New(st, gapLogger(), t.TempDir(), nil, "", "test", false, false), st
 }
 
-// SetCSPConnectSrc 覆盖分支（handler.go 70-73）＋ withSecurityHeaders 默认值分支（middleware.go 24-26）。
+// SetCSPConnectSrc 覆盖分支（handler.go）＋ withSecurityHeaders 默认值分支（middleware.go）。
 func TestCSPOverrideAndDefaultBranch(t *testing.T) {
-	h, _ := gapStoreHandler(t)
-
-	// 非空 src → 覆盖生效（覆盖 handler.go 70-73）
-	h.SetCSPConnectSrc("https://oss.example.com")
-	srv := httptest.NewServer(h.Routes())
-	defer srv.Close()
-
-	resp, err := http.Get(srv.URL + "/api/health")
-	if err != nil {
-		t.Fatalf("get: %v", err)
+	fetchCSP := func(t *testing.T, h *Handler) string {
+		t.Helper()
+		srv := httptest.NewServer(h.Routes())
+		defer srv.Close()
+		resp, err := http.Get(srv.URL + "/api/health")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.Header.Get("Content-Security-Policy")
 	}
-	resp.Body.Close()
-	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "https://oss.example.com") {
+
+	// 非空 src → 覆盖生效（预计算进 cspHeader）
+	h, _ := gapStoreHandler(t)
+	h.SetCSPConnectSrc("https://oss.example.com")
+	if csp := fetchCSP(t, h); !strings.Contains(csp, "https://oss.example.com") {
 		t.Fatalf("CSP after override = %q, want custom src", csp)
 	}
 
-	// 置空 → 走默认 connect-src 分支（middleware.go 24-26）
-	h.cspConnectSrc = ""
-	resp2, err := http.Get(srv.URL + "/api/health")
-	if err != nil {
-		t.Fatalf("get2: %v", err)
-	}
-	io.Copy(io.Discard, resp2.Body)
-	resp2.Body.Close()
-	if csp := resp2.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "'self' http://127.0.0.1:* http://localhost:*") {
+	// 新建 Handler → 走 New 里预计算的默认值
+	h2, _ := gapStoreHandler(t)
+	if csp := fetchCSP(t, h2); !strings.Contains(csp, "'self' http://127.0.0.1:* http://localhost:*") {
 		t.Fatalf("CSP default = %q, want built-in default", csp)
+	}
+
+	// 零值 Handler（cspHeader 为空）→ 回退 defaultCSPHeader，安全头不得缺失
+	h3 := &Handler{log: gapLogger()}
+	wrapped := h3.withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	rr := httptest.NewRecorder()
+	wrapped.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if csp := rr.Header().Get("Content-Security-Policy"); csp != defaultCSPHeader {
+		t.Fatalf("零值 Handler CSP = %q, want defaultCSPHeader", csp)
 	}
 }
 

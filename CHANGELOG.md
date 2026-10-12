@@ -31,6 +31,46 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-12 apps/web 页面 UI 与交互优化批次）
+
+- **高**：切 Tab 不再中断上传并新增**顶栏全局任务中心**（角标 + 明细 + `Esc` / 点外关闭，`upload:panel` / `upload:objects` / `migrate` 三类活动统一上报）；对象面板支持**拖拽上传文件与整个目录**（`webkitGetAsEntry` 递归 + `readEntries` 循环 + 5000 文件上限）；切换服务器 / 账号改为**软刷新**（`emit('changed')` → 先 `loadAccounts()` 再 `bumpServerEpoch()`，`<KeepAlive :key>` 重建面板，去掉三处 `window.location.reload()`）。
+- **中**：过滤 **200ms 防抖** + 命中片段 **`<mark>` 高亮**（`highlight.ts` + `HighlightText.vue`，不用 `v-html`）+ 截断时**过滤范围提示**；列表 / 网格新增 **roving tabindex 键盘行导航**（↑↓ / Home / End / Enter / Space / F2 / Delete，焦点行优先，过滤筛掉即清焦点）；Toast **同屏上限 4**、长文案**按字数加时**（封顶 +3s）、**悬停 / 聚焦冻结倒计时**。
+- **低**：视图与排序偏好落 localStorage（**过滤条件刻意不落盘**）；`e2e/a11y.spec.ts` 新增**移动视口 390×844 扫描态**（另断言无横向溢出），并据此修复**存储类型徽标对比度 4.39:1 → 6.86:1**（新增 `--badge-text` token，[`docs/accessibility.md`](docs/accessibility.md) §5.5 由 `contrast_gate_test.go` 机械重算）。
+- **文档同步**：用户可见行为写进 [`docs/user-guide.md`](docs/user-guide.md)（§一 Toast / §二 软刷新 / §三 过滤·键盘行导航·偏好 / §四 拖拽上传·任务中心 / §十二 快捷键）；本批台账见 [`docs/FEATURES.md`](docs/FEATURES.md) §CL；评审快照 [`docs/archive/web-review-2026-10-12.md`](docs/archive/web-review-2026-10-12.md) 条目录入。
+- **归档**：评审快照按「归档四步」冻结入 [`docs/archive/web-review-2026-10-12.md`](docs/archive/web-review-2026-10-12.md)——`git mv` + 内部相对链接改 `../../` 口径 + 顶部冻结横幅 + [`docs/archive/index.md`](docs/archive/index.md) 计数 9 → 10 + 三处命名清单（`AGENTS.md` / `docs/DEVELOPMENT.md` §4 / `llms.txt`）与 [`docs/README.md`](docs/README.md) 导航行改「已归档」+ `docs/DEVELOPMENT.md` §4 登记行转「冻结件 · 不复审」；正文按归档纪律不回写。
+- **验证**：`pnpm test` **87 文件 1360 例**全绿 / `pnpm test:coverage` 四指标 **100%（5108 / 3395 / 1290 / 4407）** / `pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm build` OK / `pnpm e2e` **23 passed + 1 skipped**（含新增移动视口 a11y 态）/ `make e2e-real` **5 passed**（真实后端 + 真实 RustFS，`SERVER_PORT=8081` + `--no-rustfs`，不 mock `/api`）；仅真机 / 触摸 / 屏幕阅读器实测未做。
+
+### 变更（2026-10-12 apps/server 优化评审批次）
+
+- **新增时点性子树评审快照** [`docs/archive/server-review-2026-10-12.md`](docs/archive/server-review-2026-10-12.md)：对 `apps/server`（Go 后端，~16.6k 行生产代码）完成优化评审，结论 **无结构性 / 算法级优化缺口**（`go vet` 0 / `golangci-lint` **0 issues** / `go test ./...` 的 9 个 `internal/*` 包全绿），登记 **6 项微优化候选（S1–S6）** + 1 项跨子树门禁现状（S0，归同日 `apps/web` 批次），每项带 `file:line` 证据、实跑命令与「未实测 / 刻意不做」的如实披露。**快照本身不含代码改动**；其登记的 S1–S5 已由随后同批「S1–S5 闭环」条目落地（见下条），全部闭环后已按「归档四步」`git mv` 冻结入 [`docs/archive/`](docs/archive/)（S6 维持现状、S0 由同日 `apps/web` 批次解除）。文档含**逐项拟改动内容**（§2.5，可照抄落地）与**本批次不纳入的候选优化清单**（§5，11 项，含证据等级与 ADR-001 边界说明）；同 PR 同步：`docs/README.md` 导航行 + 三处命名清单（根 `AGENTS.md` / `docs/DEVELOPMENT.md` §4 / `llms.txt`）+ §4 文档登记表。
+
+### 变更（2026-10-12 apps/server 优化评审 S1–S5 闭环批次）
+
+- **S1 流式下载 / ZIP 打包**：`io.Copy` 的 32 KiB 通用缓冲换成**有界复用**的 256 KiB（新增 `service.CopyBuffered`——定长缓冲 + 容量 2 的 channel 池 `maxIdleCopyBufs`，与 `maxIdlePartBufs` 同款「可证明有界」口径，刻意不用 `sync.Pool` 的无界语义），handler `copyStream` 与 `WriteObjectsZip` 共用；写 deadline 刷新按 `writeDeadlineRefreshInterval = 30s` 节流（≪ `streamIdleTimeout` 5min，慢网大文件仍持续续期）。GB 级传输的写调用数（及每次写附带的 `SetWriteDeadline`）降为 1/8。
+- **S2 限流器分片**：`ipLimiter` 由「一把全局 `sync.Mutex` + 单张 map」改为 **16 个分片**（各自锁 + 各自 map，FNV-1a 选片，`/api/` 请求不再串行过锁）；并把旧实现「超过 10_000 才**尝试**清过期桶」升级为**单分片硬上限** `maxBucketsPerShard`（=10000/16）——超限先清过期桶、仍超限淘汰任意桶，驻留总量**硬上限 10_000** 与分片前等值（旧实现对全活跃 IP 实际并无硬上限）。
+- **S3 S3 调用指标去锁**：`s3wrap` 直方图桶与总调用数改 `atomic`（`Calls` 由桶计数**求和**得出，`+Inf == _count` 与「每次调用恰落一个桶」结构性成立），仅失败路径的错误码分类保留互斥锁——`sync` / `migrate` 批量路径的在飞 S3 调用不再共用一把锁。
+- **S4 安全头 CSP 预计算**：`withSecurityHeaders` 不再每请求拼接 CSP，改为 `buildCSP` 纯函数 + `Handler.cspHeader` 启动期预计算（零值 Handler 回退 `defaultCSPHeader`，安全头不缺失；CSP 字面量语义未变）。
+- **S5 `/api/metrics` 采集**：`runtime.ReadMemStats`（**Stop-The-World**）换成 `runtime/metrics` 的 `/memory/classes/heap/objects:bytes`（无 STW，指标名 / 口径不变）；响应先写 `bytes.Buffer` 再一次 `Write`（原为 30+ 次直写 `http.ResponseWriter`）。
+- **S6 维持现状**（评审已论证不建议单独动手）、**S0 已解除**（同日 web 批次同步 `docs/i18n.md`，根包 `TestI18nModuleInventoryMatchesDoc` 转绿）。
+- **文档同步**：评审快照按「归档四步」冻结入 [`docs/archive/server-review-2026-10-12.md`](docs/archive/server-review-2026-10-12.md)（顶部冻结横幅 + 状态表 S0–S5 记 ✅ + [`docs/archive/index.md`](docs/archive/index.md) 计数 11 → 12 + 三处命名清单（根 `AGENTS.md` / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt)）与 [`docs/README.md`](docs/README.md) 导航行改「已归档」+ [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 登记行转「冻结件 · 不复审」，源码注释里的快照路径同批改指 `docs/archive/`）；台账 [`docs/FEATURES.md`](docs/FEATURES.md) §CN；性能解读 [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) §3.5（新增第 5 条结论）。
+- **验证**：`go vet ./...` 0 / `golangci-lint run ./...` **0 issues** / `go test ./...` 九个包全绿 / 覆盖率门禁 **100.0% 且零未覆盖块**（`go test -race -count=1 -coverprofile=coverage.out ./...` + 仓库自带 `awk` 口径实跑）。未做端到端压测、`mutex`/`block` pprof 与真实 RustFS E2E——S1–S5 的收益仍属**定性**判断（评审 §6 的披露继续成立）。
+
+### 变更（2026-10-12 apps/desktop 优化评审批次）
+
+- **新增时点性子树评审快照** [`docs/archive/desktop-review-2026-10-12.md`](docs/archive/desktop-review-2026-10-12.md)：对 `apps/desktop`（Tauri 2 无 IPC 桌面壳）完成逐文件评审，结论为 **1 项死代码（技术债）+ 6 项优化 + 1 道防复发门禁**，每项带 `file:line` 证据、实跑命令与「未实测 / 刻意不做」的如实披露；条目在**本批次内闭环**（登记与闭环同一批次，故不进入 `KNOWN_ISSUES.md`），闭环后按「归档四步」`git mv` 进 `docs/archive/` 冻结。同 PR 同步：`docs/README.md` 导航行 + 三处命名清单（根 `AGENTS.md` / `docs/DEVELOPMENT.md` §4 / `llms.txt`）+ §4 文档登记表。
+
+### 变更（2026-10-12 apps/desktop 优化评审批次收口：D1 + O1–O6 + G1）
+
+- **死代码 D1**：删除 `apps/desktop/src-tauri/Cargo.toml` 中**未被引用**的直接依赖 `serde` / `serde_json`（[ADR-001](docs/decisions/0001-desktop-no-ipc.md) 无 IPC，无序列化面），`Cargo.lock` 同步少两条直接依赖边（包集合不变，二者仍为 `tauri` 传递依赖）；`cargo check --offline` 0 警告。
+- **发布体积 O1**：新增 `[profile.release]`（`codegen-units=1` / `lto=true` / `opt-level="s"` / `panic="abort"` / `strip=true`）——桌面安装包是用户下载项，体积是用户可见指标。
+- **构建可靠性 O2**：`tauri.conf.json` 的 `bundle.targets` 由 `"all"` 收窄为 `["nsis","deb","dmg"]`，与实际发布面（`release-desktop.yml` 的 `--bundles`）一致，不再连带打包期需联网下载 linuxdeploy 的 AppImage。
+- **可复现性 O3**：两套 CI 的 `cargo install tauri-cli` 由 `--version "^2"` 钉到 `"2.12.2"`（与 `apps/desktop/pnpm-lock.yaml` 一致，ROADMAP E9 口径）。
+- **DX O4**：`make desktop-dev` 先 `cd apps/web && pnpm install`——修「全新检出因缺 `apps/web/node_modules` 必失败」（`beforeDevCommand` 会执行 `cd ../web && pnpm dev`）。
+- **元数据 / 加固 O5**：`tauri.conf.json` 的 `bundle` 补 `publisher` / `copyright` / `category`；窗口显式 `label: "main"`（与 `capabilities/default.json` 的 `windows: ["main"]` 对齐，消除隐式耦合）；CSP 增 `frame-ancestors 'none'` / `form-action 'self'`（`form-action` 与 server CSP 对齐——共享指令由 [`TestServerCSPSharesTauriDirectives`](apps/server/internal/handler/review_20260924_test.go) 钉住一致，且该指令不回退到 `default-src`，较原先「无该指令」仍是收紧）。⚠️ **CSP 收紧按 [`docs/AI_POLICY.md`](docs/AI_POLICY.md) §3「修改安全 / CSP 相关代码须人类专家复核」——改动已备、须人类确认后才推送 / 合并**。
+- **依赖新鲜度 O6**：`tauri` `2.11.5 → 2.12.3`、`tauri-build` `2.6.3 → 2.7.2`、`@tauri-apps/cli` `2.11.4 → 2.12.2`（`apps/desktop/package.json` 范围收紧为 `^2.12.2`）。连带：`cargo audit` **0 漏洞**（unmaintained / unsound 告警 **7 → 2 条**——tauri 2.12 移除 `unic-*` 传递依赖）、[`docs/THIRD_PARTY_LICENSES.md`](docs/THIRD_PARTY_LICENSES.md) 重生成（Rust **428 → 416** crates）；[`docs/threat-model.md`](docs/threat-model.md) §5 与 [`docs/ROADMAP.md`](docs/ROADMAP.md) 的告警数同批由 7 条订正为 2 条。
+- **防复发门禁 G1**：两套 CI 的 desktop job 给 `cargo check` 加 `RUSTFLAGS=-D unused_crate_dependencies`——**直接依赖被声明却未被引用即构建失败**（Rust 侧此前无任何 unused 检查，`rust-toolchain.toml` 有意不装 clippy 组件；沿用编译器自带 lint，不引入新工具）。
+- **快照归档**：子树评审快照 [`docs/desktop-review-2026-10-12.md`](docs/archive/desktop-review-2026-10-12.md) 按「归档四步」`git mv` 冻结入 `docs/archive/`；同批同步 `docs/README.md` 导航行、三处命名清单（根 `AGENTS.md` / `docs/DEVELOPMENT.md` §4 / `llms.txt`）、`DEVELOPMENT.md` §4 文档登记表行与 [`docs/archive/index.md`](docs/archive/index.md)（计数 10 → 11）。
+
 ### 变更（2026-10-10 全仓代码质量评审：结论 Approve + 三道 Nit 登记即闭环 + 快照归档）
 
 - **全仓五轴代码质量评审**（快照 [`docs/archive/code-review-2026-10-10.md`](docs/archive/code-review-2026-10-10.md)，结论绑定提交 `22b79e1`；已按「归档四步」冻结入 `docs/archive/`）：机械化门禁**独立复跑**全绿——`gofmt` 干净 / `go vet` 0 / `go build` OK / `go test` **10/10 包** / 覆盖率 **100.0% 零未覆盖块** / `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **83 文件 1292 例** / `pnpm build` OK。逐文件五轴复核 2026-10-09 评审闭环批次的 delta（cron DST 语义、`persistMu` 锁序、端点级作用域闸路由面、前端 seq 代际守卫、`UNSIGNED-PAYLOAD` 收窄、`store` 加密失败传播等），**未发现 Critical / Required 项**。

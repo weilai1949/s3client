@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { state, requestAccountForm } from '../store'
 import { t, tf } from '../i18n'
 import BucketInfoDialog from './BucketInfoDialog.vue'
@@ -85,6 +86,10 @@ const {
   nextToken,
   isTruncated,
   loadingAll,
+  focusKey,
+  focusRow,
+  moveFocus,
+  focusEdge,
   creatingBucket,
   onBucketSelect,
   goRoot,
@@ -178,10 +183,52 @@ const { preview, showPreview, ctxPreview } = previewComposable
 function dismissError() {
   error.value = ''
 }
+
+/* ---- 拖拽上传（文件 / 目录拖进当前目录） ---- */
+const dragDepth = ref(0)
+const dragActive = computed(() => dragDepth.value > 0)
+/** 就绪条件与按钮上传一致：有账号且已进入某个桶（Bucket 列表页不接收拖放）。 */
+const dropReady = computed(() => !!account.value && !!currentBucket.value)
+
+function onDragEnter() {
+  if (dropReady.value) dragDepth.value++
+}
+
+function onDragLeave() {
+  if (dragDepth.value > 0) dragDepth.value--
+}
+
+/** 必须 preventDefault 才允许 drop；未就绪时不拦截，避免整页出现「可放置」光标。 */
+function onDragOver(e: DragEvent) {
+  if (dropReady.value) e.preventDefault()
+}
+
+async function onDropFiles(e: DragEvent) {
+  dragDepth.value = 0
+  if (!dropReady.value || !e.dataTransfer) return
+  await actions.dropUpload(e.dataTransfer)
+}
 </script>
 
 <template>
-  <div class="panel">
+  <div
+    class="panel"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop.prevent="onDropFiles"
+  >
+    <div v-if="dragActive" class="drop-overlay" aria-hidden="true">
+      <div class="drop-overlay-box">
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14.899A7 7 0 1115.71 8h1.79a4.5 4.5 0 012.5 8.242M12 12v9m0-9l-3.5 3.5M12 12l3.5 3.5" />
+          </svg>
+        </div>
+        <div class="drop-overlay-title">{{ t('objects.dropTitle') }}</div>
+        <div class="drop-overlay-sub">{{ tf('objects.dropTo', { path: prefix || '/' }) }}</div>
+      </div>
+    </div>
     <div class="toolbar">
       <h3 style="margin:0">{{ t('objects.title') }}</h3>
       <span class="spacer" />
@@ -291,8 +338,12 @@ function dismissError() {
         :is-truncated="isTruncated"
         :loading-all="loadingAll"
         :ctx-entry-key="ctxMenu?.entry.key ?? null"
+        :focus-key="focusKey"
         @row-click="onRowClick"
         @row-dbl="onRowDblClick"
+        @focus-row="focusRow"
+        @move-focus="moveFocus"
+        @focus-edge="focusEdge"
         @ctx="openCtx"
         @ctx-button="openCtxFromButton"
         @check-toggle="toggleWithShift"
@@ -458,6 +509,36 @@ function dismissError() {
 
 <style scoped>
 .acc-select { max-width: 220px; padding: 5px 10px; font-size: 13px; }
+
+/* 拖拽遮罩：固定覆盖整屏（不参与命中测试，故不会与 dragenter/leave 互相打架）。
+   选择固定定位而非绝对定位，是为了不依赖父级 position 上下文——面板自身有动画与
+   阴影，改成 relative 会影响其子元素的定位语义。 */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  background: rgba(8, 20, 16, .45);
+  backdrop-filter: blur(3px);
+}
+.drop-overlay-box {
+  padding: 30px 40px;
+  text-align: center;
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+}
+.drop-overlay .dz-icon {
+  width: 46px; height: 46px; margin: 0 auto 10px;
+  border-radius: 14px;
+  background: var(--brand);
+  box-shadow: var(--shadow-brand);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.drop-overlay .dz-icon svg { width: 22px; height: 22px; }
+.drop-overlay-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.drop-overlay-sub { margin-top: 5px; font-size: 12px; color: var(--muted); }
 
 /* 快捷键提示条 */
 .hints-bar {

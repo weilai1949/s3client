@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useUploadQueue } from './useUploadQueue'
 import type { UploadQueueItem, UploadQueueOptions } from './useUploadQueue'
 import { uploadObject } from '../upload'
+import { activities } from '../store'
 
 /**
  * 直传并发上限（产品约定 2，见 useUploadQueue 注释）。
@@ -171,6 +172,18 @@ describe('useUploadQueue 共享状态机', () => {
     expect(q.items.value[1].file.name).toBe('a.txt')
   })
 
+  it('enqueueItems 直接入队已算好 key 的条目（拖拽上传：逐条不同路径）', () => {
+    const q = mountQueue()
+    q.enqueueItems([
+      { file: new File(['1'], 'a.jpg'), key: 'photos/a.jpg', bucket: 'b1' },
+      { file: new File(['2'], 'b.jpg'), key: 'photos/2024/b.jpg', bucket: 'b1' },
+    ])
+    expect(q.items.value.map((it) => it.key)).toEqual(['photos/a.jpg', 'photos/2024/b.jpg'])
+    expect(q.items.value.every((it) => it.status === 'pending' && it.pct === 0 && it.bucket === 'b1')).toBe(true)
+    // id 单调递增：UploadQueue 用 it.id 做 v-for key（同名前缀的两条不得碰撞）
+    expect(q.items.value[1].id).toBeGreaterThan(q.items.value[0].id!)
+  })
+
   it('abortAll aborts all in-flight items', async () => {
     const q = mountQueue()
     const [a] = enqueue(q, ['a.txt'])
@@ -253,5 +266,104 @@ describe('useUploadQueue 共享状态机', () => {
     inFlight.splice(0).forEach((f) => f.resolve())
     await first
     expect(q.items.value[0].status).toBe('done')
+  })
+})
+
+describe('useUploadQueue 全局活动登记（顶栏角标）', () => {
+  const KEY = 'upload:panel'
+
+  beforeEach(() => {
+    inFlight.length = 0
+    vi.mocked(uploadObject).mockClear()
+    vi.mocked(uploadObject).mockImplementation((_file, _target, onProgress, signal) => {
+      return new Promise<void>((resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'))
+          return
+        }
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+        inFlight.push({ resolve, reject, progress: onProgress })
+      })
+    })
+    delete activities[KEY]
+  })
+
+  /** 挂宿主组件并同时拿到组合式返回值与组件包装器（卸载用）。 */
+  function mountHost(options: Partial<UploadQueueOptions>) {
+    let q!: ReturnType<typeof useUploadQueue>
+    const Host = defineComponent({
+      setup() {
+        q = useUploadQueue({ target: (it) => ({ accId: 'a1', key: it.key }), ...options })
+        return () => null
+      },
+    })
+    const wrapper = mount(Host)
+    return { q, wrapper }
+  }
+
+  function push(q: ReturnType<typeof useUploadQueue>, name: string): UploadQueueItem {
+    const it: UploadQueueItem = { file: new File(['x'], name), key: name, pct: 0, status: 'pending' }
+    q.items.value.push(it)
+    return it
+  }
+
+  it('开启 activity：入队后登记、进度更新、全部完成后撤下', async () => {
+    const { q } = mountHost({ activity: { key: KEY, label: () => '上传' }, drain: false })
+    // immediate：空队列 → 不登记
+    expect(activities[KEY]).toBeUndefined()
+
+    push(q, 'a.txt')
+    await nextTick()
+    expect(activities[KEY]).toMatchObject({ key: KEY, label: '上传', done: 0, total: 1, pct: 0 })
+
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+    inFlight[0].progress?.(40)
+    await nextTick()
+    expect(activities[KEY].pct).toBe(40)
+
+    inFlight.splice(0).forEach((f) => f.resolve())
+    await run
+    await nextTick()
+    // 全部 done：没有进行中的条目 → 撤下登记（角标不长期停留）
+    expect(activities[KEY]).toBeUndefined()
+  })
+
+  it('全部条目被取消（cancelled 不算进行中）→ 撤下登记', async () => {
+    const { q } = mountHost({ activity: { key: KEY, label: () => '上传' } })
+    push(q, 'a.txt')
+    await nextTick()
+    expect(activities[KEY]).toBeDefined()
+
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+    // 传队列里的响应式条目（v-for / 模板路径也是这样拿到的）：裸对象改状态不触发响应式
+    q.abortItem(q.items.value[0]) // 默认 cancel 策略 → 终态 cancelled
+    await run
+    await nextTick()
+    expect(activities[KEY]).toBeUndefined()
+  })
+
+  it('未开启 activity 时不登记（默认选项无 activity）', async () => {
+    const { q, wrapper } = mountHost({ drain: false })
+    push(q, 'a.txt')
+    await nextTick()
+    expect(activities[KEY]).toBeUndefined()
+    // 卸载路径同样不碰活动表（无 activity 选项时 clearActivity 不被调用）
+    wrapper.unmount()
+    expect(activities[KEY]).toBeUndefined()
+  })
+
+  it('卸载时中止上传并撤下活动登记（卸载后没有东西再更新它）', async () => {
+    const { q, wrapper } = mountHost({ activity: { key: KEY, label: () => '上传' } })
+    const it = push(q, 'a.txt')
+    const run = q.run()
+    await vi.waitFor(() => expect(inFlight.length).toBe(1))
+    expect(activities[KEY]).toBeDefined()
+
+    wrapper.unmount()
+    expect(it.status).toBe('cancelled') // abortAll：在途按 cancel 策略落终态
+    expect(activities[KEY]).toBeUndefined()
+    await run
   })
 })

@@ -354,6 +354,15 @@ const stack: KeydownHandler[] = []
 12. ~~**`textarea` 不在统一焦点样式内**~~ ✅ **已于 2026-09-29 修复（KNOWN_ISSUES #67③）**：
     全局 `:focus-visible` 规则的选择器列表已纳入 `textarea`（详见 §2.4），
     由 [`apps/web/src/a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 断言防回退。
+13. ~~**窄屏（≤900px）没有任何渲染态扫描**~~ ✅ **已于 2026-10-12 收口**：
+    `@media (max-width: 900px)` 的响应式规则（导航改横向滚动、主区转单列）此前**从未被任何
+    自动化手段扫过**，只靠人读 CSS。`e2e/a11y.spec.ts` 新增「移动视口 390×844 对象面板」扫描态
+    （复用对象桩，另断言 `documentElement.scrollWidth` 不超出视口——表格应在 `.tbl-wrap` 内横向滚动）。
+    **上线即抓到一处真实缺陷**：选中行内的存储类型徽标（`--muted` on `--row-sel`）浅色对比度仅
+    **4.39:1**，低于 AA 的 4.5:1 —— 该小字徽标只在**对象列表视图**出现，而此前六个扫描态里
+    没有一个是列表视图（网格视图把存储类型画在同一行的 `.gi-meta` 里）。修复：新增
+    `--badge-text` token（浅 `#3f5a4c` / 深 `#9fb8ac`，见 §5.5）。
+    **仍未做**：极窄视口（<360px）与横屏 / 平板断点的扫描，以及缩放 200% 的复查。
 
 ---
 
@@ -389,7 +398,7 @@ const stack: KeydownHandler[] = []
 | `composables/useKeydownStack.test.ts`（7 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、空栈分支、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
 | Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
-| **`e2e/a11y.spec.ts`（6 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：5 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
+| **`e2e/a11y.spec.ts`（7 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：6 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / **移动视口 390×844 对象面板（2026-10-12 新增，另断言页面无横向溢出）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
 | **`src/a11y_axe.test.ts`（6 例，vitest-axe + axe-core）** | **2026-09-30 起（#17④）组件级**：对**挂载后的组件 DOM** 跑同一套 WCAG 2.0 / 2.1 A + AA 规则集，覆盖 E2E 到不了的边界态（`ModalDialog` 带 footer / `ConfirmDialog` 危险态 / `PromptDialog` 带校验失败 / `Toasts` 成功+失败堆叠 / `ObjectList` 带 caption 与选中行）；**serious / critical 即红灯**，非阻塞项打印供人工判断；另 1 例「注入 `image-alt` 必须被报出」空跑自检。**不判对比度**（happy-dom 无 CSS 级联，显式关掉 `color-contrast`） | `cd apps/web && pnpm test src/a11y_axe.test.ts` |
 
 > 以上命令均为 `apps/web/package.json` 的既有脚本（`test` = `vitest run`、`build` = `vue-tsc --noEmit && vite build`、
@@ -465,8 +474,9 @@ axe 无法解析的背景（渐变）上的对比度。
 | `--brand-mark-from` on `--bg`（header logo 渐变文字 · 浅端） | 4.56 | 7.87 | 双主题达标（**深色底回亮值 `#2dbd98`**，见下方 token 说明） |
 | `--brand-mark-to` on `--bg`（header logo 渐变文字 · 深端） | 4.52 | 4.54 | 双主题达标 |
 | 白字 on `--brand` 渐变（深端 `--brand-to`） | 4.80 | 4.80 | 双主题达标；浅端 `--brand-from` 4.84（原 2.37 / 4.23，渐变两端已加深） |
+| `--badge-text` on `--row-sel`（选中行内的小字徽标，如存储类型） | 6.86 | 6.67 | 双主题达标（**2026-10-12 新增**：此前该处用 `--muted`，浅色实测仅 **4.39** 低于 AA——移动视口 axe 扫描抓到后单独取色） |
 
-> **结论（2026-09-30 修色收尾后）**：本表共 **13 行**；浅色主题 **0 行**低于 AA；
+> **结论（2026-09-30 修色收尾后；2026-10-12 补 `--badge-text` 一行）**：本表共 **14 行**；浅色主题 **0 行**低于 AA；
 > 深色主题 **0 行**低于 AA。
 > 本轮把 §5.4「剩余」清单里的 6 组**全部修到 ≥4.5**（token 公式值）：
 > `--muted` 4.44→4.57、`--primary` 3.21 / 3.02→4.85 / 4.56、`--placeholder` 浅 2.58→4.54、
@@ -477,8 +487,8 @@ axe 无法解析的背景（渐变）上的对比度。
 > 浅色沿用加深值（在 `--bg` 上 4.56 / 4.52），**深色块里回亮值**（`#2dbd98` / `#138e69`，
 > 在 `--bg` 上 7.87 / 4.54）——否则「为白字加深」会把深色主题 logo 反拖到 4.1:1。
 > **为什么此前 axe 全绿而这些组合仍在**：`--brand` 是 `background-image` 渐变（axe 无法解析其上的白字），
-> `--placeholder` 是 placeholder 文本（axe 不判该规则），`--muted` / `--primary` 在被扫描的四个状态里
-> 没有以「小字正文」形态出现——**扫描通过 ≠ 全站达标**。本仓库**不声称 WCAG 合规**（§4 第 1 条）：
+> `--placeholder` 是 placeholder 文本（axe 不判该规则），`--muted` / `--primary` 在被扫描的渲染态里
+> 没有以「小字正文」形态出现（2026-10-12 的移动视口态正是此类：`--muted` 在 `--row-sel` 上的**小字徽标**首次被扫到）——**扫描通过 ≠ 全站达标**。本仓库**不声称 WCAG 合规**（§4 第 1 条）：
 > 表内全绿只代表**这些 token 配对**达标，仍不含渐变中间色、图片、阴影与组件临时配色。
 
 

@@ -31,6 +31,8 @@ vi.mock('../upload', () => ({ uploadObject: vi.fn() }))
 vi.mock('../store', () => ({
   toast: vi.fn(),
   createProgressToast: vi.fn(() => vi.fn()),
+  reportActivity: vi.fn(),
+  clearActivity: vi.fn(),
 }))
 vi.mock('../confirm', () => ({ confirmDialog: vi.fn(async () => true) }))
 vi.mock('../prompt', () => ({ promptDialog: vi.fn(async () => 'x') }))

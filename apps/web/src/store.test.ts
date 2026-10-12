@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProgressToast, toasts, requestTab, tabRequest, requestAccountForm, accountFormRequest, currentAccount, selectAccount, rememberedAccountId, toast, dismissToast, state } from './store'
+import { bumpServerEpoch, serverEpoch } from './store'
+import { createProgressToast, setToastHovered, toasts, requestTab, tabRequest, requestAccountForm, accountFormRequest, currentAccount, selectAccount, rememberedAccountId, toast, dismissToast, state } from './store'
 import type { Account } from './types'
 
 describe('createProgressToast（SSE 进度节流）', () => {
@@ -46,6 +47,14 @@ describe('createProgressToast（SSE 进度节流）', () => {
     vi.advanceTimersByTime(100)
     progress('b')
     expect(toasts[0].text).toBe('b')
+  })
+})
+
+describe('serverEpoch', () => {
+  it('bumpServerEpoch 自增（切换服务器后 App 据此丢弃各面板的旧服务器缓存）', () => {
+    const before = serverEpoch.value
+    bumpServerEpoch()
+    expect(serverEpoch.value).toBe(before + 1)
   })
 })
 
@@ -181,6 +190,68 @@ describe('dismissToast', () => {
   it('no-op for unknown id (timer undefined + index < 0 两侧)', () => {
     toasts.splice(0, toasts.length)
     dismissToast(424242)
+    expect(toasts).toHaveLength(0)
+  })
+})
+
+describe('toast 栈上限 / 长文案时长 / 悬停暂停', () => {
+  beforeEach(() => {
+    toasts.splice(0, toasts.length)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    toasts.splice(0, toasts.length)
+  })
+
+  it('同时可见上限 4 条：超出时挤掉最旧一条（新反馈不被挡）', () => {
+    for (let i = 1; i <= 6; i++) toast(`msg-${i}`)
+    expect(toasts.map((t) => t.text)).toEqual(['msg-3', 'msg-4', 'msg-5', 'msg-6'])
+  })
+
+  it('长文案停留更久（封顶 +3s），短文案按基准 3600ms', () => {
+    toast('short')
+    vi.advanceTimersByTime(3599)
+    expect(toasts).toHaveLength(1)
+    vi.advanceTimersByTime(2)
+    expect(toasts).toHaveLength(0)
+
+    toast('x'.repeat(200)) // 3600 + 封顶 3000 = 6600ms
+    vi.advanceTimersByTime(5000)
+    expect(toasts).toHaveLength(1)
+    vi.advanceTimersByTime(1700)
+    expect(toasts).toHaveLength(0)
+  })
+
+  it('悬停冻结倒计时，移开后按剩余时长续跑', () => {
+    const id = toast('hover me')
+    vi.advanceTimersByTime(2000) // 剩余 1600ms
+    setToastHovered(id, true)
+    vi.advanceTimersByTime(60_000)
+    expect(toasts).toHaveLength(1)
+    setToastHovered(id, false)
+    vi.advanceTimersByTime(1599)
+    expect(toasts).toHaveLength(1)
+    vi.advanceTimersByTime(2)
+    expect(toasts).toHaveLength(0)
+  })
+
+  it('重复进入 / 重复离开悬停都是 no-op；未知 id 静默忽略', () => {
+    const id = toast('x')
+    setToastHovered(id, true)
+    setToastHovered(id, true) // 已暂停：不重复扣减剩余时长
+    setToastHovered(id, false)
+    setToastHovered(id, false) // 已在跑：不重复挂计时器
+    vi.advanceTimersByTime(3601)
+    expect(toasts).toHaveLength(0)
+    expect(() => setToastHovered(424242, true)).not.toThrow()
+  })
+
+  it('暂停中手动 dismiss：计时器一并清掉，不留悬挂回调', () => {
+    const id = toast('paused')
+    setToastHovered(id, true)
+    dismissToast(id)
+    vi.advanceTimersByTime(10_000)
     expect(toasts).toHaveLength(0)
   })
 })

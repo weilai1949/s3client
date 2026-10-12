@@ -42,8 +42,6 @@ const modalStub = {
 }
 
 let fetchMock: ReturnType<typeof vi.fn>
-let reloadSpy: ReturnType<typeof vi.fn>
-let origReload: () => void
 
 function okResponse(body: unknown) {
   return { ok: true, status: 200, statusText: 'OK', json: async () => body }
@@ -63,13 +61,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   fetchMock = vi.fn()
   vi.stubGlobal('fetch', fetchMock)
-  origReload = window.location.reload
-  reloadSpy = vi.fn()
-  ;(window.location as { reload: unknown }).reload = reloadSpy
 })
 
 afterEach(() => {
-  ;(window.location as { reload: unknown }).reload = origReload
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -229,11 +223,11 @@ describe('ServerPanel', () => {
     expect(api.upsertServer).toHaveBeenCalledWith({ id: undefined, name: 'NewS', base: 'http://n:1/', token: 'tok' })
     expect(toast).toHaveBeenCalledWith('server.toastAdded')
     expect(w.find('.modal-stub').exists()).toBe(false)
-    // p.id !== activeId → 不安排页面刷新
-    expect(reloadSpy).not.toHaveBeenCalled()
+    // p.id !== activeId → 不通知 App 重置数据
+    expect(w.emitted('changed')).toBeUndefined()
   })
 
-  it('编辑当前生效服务器：保存后刷新页面', async () => {
+  it('编辑当前生效服务器：保存后通知 App 重新拉账号并丢弃面板缓存', async () => {
     vi.mocked(api.listServers).mockReturnValue([s1])
     vi.mocked(api.activeServerId).mockReturnValue('s1')
     vi.mocked(api.upsertServer).mockReturnValue({ ...s1, name: 'S1x' })
@@ -249,11 +243,10 @@ describe('ServerPanel', () => {
     await flushPromises()
     expect(api.upsertServer).toHaveBeenCalledWith({ id: 's1', name: 'S1x', base: 'http://x:9000/', token: 't1' })
     expect(toast).toHaveBeenCalledWith('server.toastUpdated')
-    await vi.advanceTimersByTimeAsync(300)
-    expect(reloadSpy).toHaveBeenCalledTimes(1)
+    expect(w.emitted('changed')).toHaveLength(1)
   })
 
-  it('删除：取消不删除；删除当前项触发切换提示与刷新', async () => {
+  it('删除：取消不删除；删除当前项触发切换提示与数据重置', async () => {
     vi.mocked(api.listServers).mockReturnValue([s1])
     vi.mocked(api.activeServerId).mockReturnValue('s1')
     vi.mocked(confirmDialog).mockResolvedValueOnce(false)
@@ -270,11 +263,10 @@ describe('ServerPanel', () => {
     expect(api.deleteServer).toHaveBeenCalledWith('s1')
     expect(toast).toHaveBeenNthCalledWith(1, 'server.toastDeleted')
     expect(toast).toHaveBeenNthCalledWith(2, 'server.toastSwitchedActive')
-    await vi.advanceTimersByTimeAsync(300)
-    expect(reloadSpy).toHaveBeenCalledTimes(1)
+    expect(w.emitted('changed')).toHaveLength(1)
   })
 
-  it('删除非当前服务器不提示切换、不刷新页面', async () => {
+  it('删除非当前服务器不提示切换、不重置数据', async () => {
     vi.mocked(api.listServers).mockReturnValue([s1, s2])
     vi.mocked(api.activeServerId).mockReturnValue('s1')
     const w = mountPanel()
@@ -283,13 +275,13 @@ describe('ServerPanel', () => {
     await flushPromises()
     expect(api.deleteServer).toHaveBeenCalledWith('s2')
     expect(toast).toHaveBeenCalledTimes(1)
-    expect(reloadSpy).not.toHaveBeenCalled()
+    expect(w.emitted('changed')).toBeUndefined()
     // 行仍渲染（mock 未删除），且 healthMap 条目已被清理 → healthUntested
     expect(w.text()).toContain('server.healthUntested')
     expect(w.text()).toContain('S2')
   })
 
-  it('选择服务器：当前项 no-op，切换项调用 selectServer 并刷新', async () => {
+  it('选择服务器：当前项 no-op，切换项调用 selectServer 并通知 App', async () => {
     vi.mocked(api.listServers).mockReturnValue([s1, s2])
     vi.mocked(api.activeServerId).mockReturnValue('s1')
     vi.useFakeTimers()
@@ -305,8 +297,7 @@ describe('ServerPanel', () => {
     await flushPromises()
     expect(api.selectServer).toHaveBeenCalledWith('s2')
     expect(toast).toHaveBeenCalledWith('server.toastSelect')
-    await vi.advanceTimersByTimeAsync(300)
-    expect(reloadSpy).toHaveBeenCalledTimes(1)
+    expect(w.emitted('changed')).toHaveLength(1)
   })
 
   it('选择当前已激活服务器时 short-circuit：不调 api、不提示', async () => {
@@ -318,6 +309,6 @@ describe('ServerPanel', () => {
     await (w.vm as unknown as { select: (s: ServerProfile) => void }).select(s1)
     expect(api.selectServer).not.toHaveBeenCalled()
     expect(toast).not.toHaveBeenCalled()
-    expect(reloadSpy).not.toHaveBeenCalled()
+    expect(w.emitted('changed')).toBeUndefined()
   })
 })

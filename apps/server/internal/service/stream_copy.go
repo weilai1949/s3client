@@ -69,6 +69,49 @@ func releasePartBuf(b []byte) {
 	}
 }
 
+// copyBufSize 是流式复制使用的中等缓冲大小（256 KiB）。
+//
+// io.Copy 的通用缓冲只有 32 KiB，GB 级下载 / 打包时写调用数偏高（每 32 KiB 一次 Write，
+// handler 侧每次写还会刷一次写 deadline）。用 256 KiB 把写调用数降到 1/8
+// （口径见 docs/archive/server-review-2026-10-12.md S1）。
+const copyBufSize = 256 << 10
+
+// maxIdleCopyBufs 是小缓冲池的驻留上限（与 maxIdlePartBufs 同款「可证明有界」口径，
+// 不用 sync.Pool 的无界语义）。池驻留是**常量**内存：2 × 256 KiB = 512 KiB，
+// 相对 512 MB 容器预算可忽略。
+const maxIdleCopyBufs = 2
+
+// copyBufPool 是有界的小缓冲池；channel 容量即驻留上限。
+var copyBufPool = make(chan []byte, maxIdleCopyBufs)
+
+// acquireCopyBuf 取一块长度恰为 copyBufSize 的缓冲；池空则新分配。
+func acquireCopyBuf() []byte {
+	select {
+	case b := <-copyBufPool:
+		return b[:copyBufSize]
+	default:
+		return make([]byte, copyBufSize)
+	}
+}
+
+// releaseCopyBuf 归还缓冲；池满时直接丢弃交给 GC，保证驻留上限。
+// 契约：只接受 acquireCopyBuf / CopyBuffered 产出的定长缓冲（长度恒为 copyBufSize）。
+func releaseCopyBuf(b []byte) {
+	select {
+	case copyBufPool <- b[:copyBufSize]:
+	default:
+	}
+}
+
+// CopyBuffered 用有界池化的大缓冲做 io.CopyBuffer：复制语义与 io.Copy 完全一致
+// （含 WriterTo / ReaderFrom 捷径与错误原样传播），只是把默认 32 KiB 缓冲换成 256 KiB。
+// 流式下载（handler.copyStream）与 ZIP 打包（WriteObjectsZip）共用，避免各自复制一份池。
+func CopyBuffered(dst io.Writer, src io.Reader) (int64, error) {
+	buf := acquireCopyBuf()
+	defer releaseCopyBuf(buf)
+	return io.CopyBuffer(dst, src, buf)
+}
+
 // StreamCopy 跨客户端复制对象；>5GB 或未知大小走 multipart。
 func StreamCopy(ctx context.Context, src, dst *s3wrap.Client, srcBucket, srcKey, dstBucket, dstKey string) error {
 	stream, err := src.GetObjectStream(ctx, srcBucket, srcKey, "", "")

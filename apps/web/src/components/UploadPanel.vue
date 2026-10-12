@@ -1,6 +1,4 @@
 <script setup lang="ts">
-defineOptions({ name: 'UploadPanel' })
-
 import { computed, ref } from 'vue'
 import { toErrorMessage } from '../errors'
 
@@ -11,6 +9,7 @@ import { fmtSize } from '../format'
 import { t, tf } from '../i18n'
 import { useUploadQueue } from '../composables/useUploadQueue'
 import type { UploadQueueItem } from '../composables/useUploadQueue'
+import { filesFromDrop } from '../dropFiles'
 
 const prefix = ref('')
 const dragging = ref(false)
@@ -37,6 +36,8 @@ const queue = useUploadQueue({
   selectBatch: (all) => all.filter((it) => it.status !== 'done' && it.status !== 'cancelled'),
   drain: false,
   onAbort: 'requeue',
+  // 顶栏角标：切到别的页面后仍能看到本页的直传进度。
+  activity: { key: 'upload:panel', label: () => t('activity.upload') },
 })
 const items = queue.items
 const running = queue.running
@@ -54,9 +55,13 @@ function addFiles(files: FileList | null) {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-function onDrop(e: DragEvent) {
+/** 拖放：与对象页一致地展开目录（保留相对路径），不再只取扁平的 dataTransfer.files。 */
+async function onDrop(e: DragEvent) {
   dragging.value = false
-  addFiles(e.dataTransfer?.files ?? null)
+  if (!e.dataTransfer) return
+  const dropped = await filesFromDrop(e.dataTransfer)
+  if (!dropped.length) return
+  queue.enqueueItems(dropped.map((d) => ({ file: d.file, key: keyFor(d.path) })))
 }
 
 async function uploadAll() {

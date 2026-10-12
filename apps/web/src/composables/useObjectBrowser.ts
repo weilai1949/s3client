@@ -45,9 +45,64 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   /* ---- 本地过滤（只过滤已加载条目，不重新请求） ---- */
   const filter = ref('')
 
+  /* ---- 键盘行导航（roving tabindex）----
+     焦点落点由这里决定：只有它掌握完整的可见条目顺序（虚拟窗口只渲染局部）。
+     ObjectList 只负责把焦点落到对应行元素上。 */
+  const focusKey = ref<string | null>(null)
+
+  function focusRow(key: string) {
+    focusKey.value = key
+  }
+
+  /** ↑/↓：从当前焦点行移动 ±delta，越界钳到首/尾（不绕回，文件管理器习惯）。 */
+  function moveFocus(delta: number) {
+    const list = visibleEntries.value
+    if (!list.length) return
+    const i = list.findIndex((e) => e.key === focusKey.value)
+    if (i < 0) {
+      focusKey.value = list[0].key
+      return
+    }
+    focusKey.value = list[Math.min(Math.max(i + delta, 0), list.length - 1)].key
+  }
+
+  /** Home/End：跳到可见条目首/尾。 */
+  function focusEdge(where: 'start' | 'end') {
+    const list = visibleEntries.value
+    if (!list.length) return
+    focusKey.value = (where === 'start' ? list[0] : list[list.length - 1]).key
+  }
+
+  /* ---- 视图 / 排序偏好持久化 ----
+     把列表切成网格、或按大小/时间排序，是**用户的设定**而不是一次临时查询：切目录、
+     刷新、重启后回到默认设置等于每次都要重设一遍。故这三项落 localStorage。
+     **过滤条件不落盘**——它更像「这一次查找」，持久化会让人下次打开看到被筛过的列表
+     却不知为何（甚至以为对象丢了）。存储不可用（隐私模式 / 配额异常）时读回默认值、
+     写入静默忽略，面板初始化与交互都不受影响。 */
+  const LS_VIEW = 's3c.bucketView'
+  const LS_SORT_KEY = 's3c.sortKey'
+  const LS_SORT_DIR = 's3c.sortDir'
+
+  function readPref(key: string): string {
+    try {
+      return localStorage.getItem(key) ?? ''
+    } catch {
+      return ''
+    }
+  }
+
+  function writePref(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      /* ignore：写不进去时本次会话内仍然生效 */
+    }
+  }
+
   /* ---- 列排序：文件夹恒在前，文件按列排序 ---- */
-  const sortKey = ref<SortKey>('name')
-  const sortDir = ref<1 | -1>(1) // 1=升序 -1=降序
+  const storedSortKey = readPref(LS_SORT_KEY)
+  const sortKey = ref<SortKey>(storedSortKey === 'size' || storedSortKey === 'time' ? storedSortKey : 'name')
+  const sortDir = ref<1 | -1>(readPref(LS_SORT_DIR) === '-1' ? -1 : 1) // 1=升序 -1=降序
 
   function toggleSort(k: SortKey) {
     if (sortKey.value === k) sortDir.value = sortDir.value === 1 ? -1 : 1
@@ -119,6 +174,12 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   const filterActive = computed(() => filter.value.trim() !== '')
 
+  // 过滤/排序可能把当前焦点行筛掉：焦点指向不存在的行会让后续方向键从第一行重启，
+  // 也会让 F2/Delete 落在看不见的目标上——落空即清空焦点。
+  watch(visibleEntries, (list) => {
+    if (focusKey.value && !list.some((e) => e.key === focusKey.value)) focusKey.value = null
+  })
+
   const crumbs = computed(() => {
     const parts = prefix.value.split('/').filter(Boolean)
     return parts.map((name, i) => ({ name, path: parts.slice(0, i + 1).join('/') + '/' }))
@@ -154,7 +215,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   }
 
   /* ---- Bucket 管理（控制台化：列表页 / 创建 / 删除 / 进入） ---- */
-  const bucketView = ref<'list' | 'grid'>('list')
+  const bucketView = ref<'list' | 'grid'>(readPref(LS_VIEW) === 'grid' ? 'grid' : 'list')
   const creatingBucket = ref(false)
 
   function enterBucket(name: string) {
@@ -263,6 +324,8 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
         commonPrefixes.value = res.commonPrefixes ?? []
         selected.value = new Set()
         lastSelIdx.value = -1
+        // 换源（切目录/切桶/刷新/换账号）：旧焦点行已不在列表里
+        focusKey.value = null
       } else {
         objects.value = [...objects.value, ...(res.objects ?? [])]
         commonPrefixes.value = [...new Set([...commonPrefixes.value, ...(res.commonPrefixes ?? [])])]
@@ -312,6 +375,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
 
   /** 行点击：文件=切换选中，文件夹=进入（文件管理器习惯）。 */
   function onRowClick(e: Entry) {
+    focusKey.value = e.key // 鼠标点选同时落焦，后续 F2/Delete 才有对象
     if (e.kind === 'folder') enterPrefix(e.key)
     else toggle(e.key)
   }
@@ -333,19 +397,30 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     if (!account.value || !currentBucket.value) return
     const files = fileObjects.value.filter((o) => selected.value.has(o.key))
     const first = files[0]
+    // 键盘导航路径：焦点行优先于「首个已勾选文件」。行内的 Enter/Space 已自行处理并
+    // 阻断冒泡，所以这里覆盖的是 F2/Delete 这类行内不处理的键（以及焦点不在行上时的 Enter）。
+    const focused = visibleEntries.value.find((en) => en.key === focusKey.value)
+    const focusedFile = focused?.kind === 'file' ? focused.object : undefined
     if (e.key === 'Enter') {
-      if (first) {
+      const target = focusedFile ?? first
+      if (target) {
         e.preventDefault()
-        bindings.previewOrDownload?.(first)
+        bindings.previewOrDownload?.(target)
       }
     } else if (e.key === 'F2') {
-      if (first) {
+      const key = focusedFile?.key ?? first?.key
+      if (key) {
         e.preventDefault()
-        bindings.ctxRenameKey?.(first.key)
+        bindings.ctxRenameKey?.(key)
       }
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (files.length) {
         e.preventDefault()
+        bindings.removeSelected?.()
+      } else if (focusedFile) {
+        // 焦点行未勾选时，Delete 删的是「当前行」——否则键盘用户按 Delete 毫无反应
+        e.preventDefault()
+        toggle(focusedFile.key)
         bindings.removeSelected?.()
       }
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
@@ -490,6 +565,13 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     load(false)
   }
 
+  /* 偏好变更即落盘（写失败已被 writePref 吞掉，不影响交互）。 */
+  watch([bucketView, sortKey, sortDir], () => {
+    writePref(LS_VIEW, bucketView.value)
+    writePref(LS_SORT_KEY, sortKey.value)
+    writePref(LS_SORT_DIR, String(sortDir.value))
+  })
+
   watch(() => state.currentAccountId, async () => {
     if (!panelActive.value) return
     await onAccountSwitch()
@@ -539,6 +621,10 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
     error,
     selected,
     filter,
+    focusKey,
+    focusRow,
+    moveFocus,
+    focusEdge,
     sortKey,
     sortDir,
     toggleSort,

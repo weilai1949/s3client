@@ -9,6 +9,7 @@ import { t, tf } from '../i18n'
 import { previewKind } from '../preview'
 import { useVirtualRows } from '../composables/useVirtualRows'
 import type { Entry, ObjectItem, SortKey } from '../types'
+import HighlightText from './HighlightText.vue'
 
 const props = defineProps<{
   entries: Entry[] // 过滤 + 排序后的可见条目
@@ -25,6 +26,8 @@ const props = defineProps<{
   loadingAll: boolean
   listGen: number // 换源代次：父层整体替换列表时 +1，「加载更多」的追加不递增
   ctxEntryKey: string | null // 当前打开右键菜单的条目 key（供「⋯」触发器 aria-expanded）
+  /** 键盘导航焦点所在条目 key（roving tabindex：只有它为 0，其余 -1）。 */
+  focusKey: string | null
 }>()
 
 const emit = defineEmits<{
@@ -39,6 +42,9 @@ const emit = defineEmits<{
   (e: 'toggleSort', key: SortKey): void
   (e: 'loadMore'): void
   (e: 'loadAll'): void
+  (e: 'focusRow', key: string): void
+  (e: 'moveFocus', delta: number): void
+  (e: 'focusEdge', where: 'start' | 'end'): void
 }>()
 
 const sortInd = computed(() => (props.sortDir === 1 ? '▲' : '▼'))
@@ -50,6 +56,56 @@ function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
 
 /* shift 范围选择的临时记录：change 事件不含 shiftKey，需从 mousedown 捕获。 */
 const shiftDown = ref(false)
+
+/* ---- 键盘行导航（roving tabindex）----
+   列表此前只能用鼠标点选：<tr> 不可聚焦，键盘用户无法移动「当前条目」，
+   于是 Enter/F2/Delete 这些快捷键也无对象可作用（KNOWN_ISSUES 前端评审项）。
+   现在每行都参与 roving tabindex：焦点行 tabindex=0，其余 -1，方向键在行间移动。 */
+const rowEls = new Map<string, HTMLElement>()
+function setRowEl(key: string, el: unknown) {
+  if (el) rowEls.set(key, el as HTMLElement)
+  else rowEls.delete(key)
+}
+
+// 父层决定焦点落点（它掌握完整的可见条目顺序，虚拟窗口只看得到局部），这里只负责落焦。
+watch(
+  () => props.focusKey,
+  (k) => {
+    if (k) rowEls.get(k)?.focus()
+  },
+)
+
+/**
+ * 行内按键：方向键移动焦点；Enter/Space 由本行自己处理并 stopPropagation，
+ * 否则 window 上的全局快捷键会再对「已选中项」执行一次相同动作。
+ *
+ * 按键名统一转小写后比较：`<kbd>` 语义上 `event.key` 是 'Enter'，但空格是 ' '（部分
+ * 环境为 'Space'/'Spacebar'），且测试驱动会按小写名派发——大小写敏感比较会静默漏掉按键。
+ */
+function onRowKeydown(e: KeyboardEvent, entry: Entry) {
+  const k = e.key.toLowerCase()
+  if (k === 'arrowdown') {
+    e.preventDefault()
+    emit('moveFocus', 1)
+  } else if (k === 'arrowup') {
+    e.preventDefault()
+    emit('moveFocus', -1)
+  } else if (k === 'home') {
+    e.preventDefault()
+    emit('focusEdge', 'start')
+  } else if (k === 'end') {
+    e.preventDefault()
+    emit('focusEdge', 'end')
+  } else if (k === 'enter') {
+    e.preventDefault()
+    e.stopPropagation()
+    emit('rowDbl', entry)
+  } else if (k === ' ' || k === 'space' || k === 'spacebar') {
+    e.preventDefault()
+    e.stopPropagation()
+    emit('rowClick', entry)
+  }
+}
 
 /* 列表视图窗口化：仅渲染可视区 + overscan，避免大目录万级 DOM（canonical 管线见 useVirtualRows）。 */
 const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(computed(() => props.entries))
@@ -104,15 +160,16 @@ function iconFor(e: Entry): string {
       class="grid-item"
       :class="{ selected: e.kind === 'file' && selected.has(e.key) }"
       role="button"
-      tabindex="0"
+      :tabindex="e.key === focusKey ? 0 : -1"
+      :ref="(el) => setRowEl(e.key, el)"
       @click="emit('rowClick', e)"
       @dblclick="emit('rowDbl', e)"
-      @keydown.enter.prevent="emit('rowDbl', e)"
-      @keydown.space.prevent="emit('rowClick', e)"
+      @focus="emit('focusRow', e.key)"
+      @keydown="onRowKeydown($event, e)"
       @contextmenu.prevent="emit('ctx', $event, e)"
     >
       <div class="gi-icon" aria-hidden="true">{{ e.kind === 'folder' ? '📁' : iconFor(e) }}</div>
-      <div class="gi-name" :title="e.key">{{ e.name }}</div>
+      <div class="gi-name" :title="e.key"><HighlightText :text="e.name" :query="filter" /></div>
       <div class="gi-meta">{{ e.kind === 'folder' ? t('objects.folder') : (fmtSize(e.size ?? 0) + (e.object?.storageClass ? ' · ' + e.object.storageClass : '')) }}</div>
     </div>
     <div v-if="gridHiddenCount > 0" class="grid-more" style="grid-column:1/-1" role="status">
@@ -176,8 +233,12 @@ function iconFor(e: Entry): string {
           class="v-row"
           :class="{ selected: e.kind === 'file' && selected.has(e.key), 'row-folder': e.kind === 'folder' }"
           :aria-selected="e.kind === 'file' && selected.has(e.key)"
+          :tabindex="e.key === focusKey ? 0 : -1"
+          :ref="(el) => setRowEl(e.key, el)"
           @click="emit('rowClick', e)"
           @dblclick="emit('rowDbl', e)"
+          @focus="emit('focusRow', e.key)"
+          @keydown="onRowKeydown($event, e)"
           @contextmenu.prevent="emit('ctx', $event, e)"
         >
           <template v-if="e.kind === 'folder'">
@@ -185,7 +246,7 @@ function iconFor(e: Entry): string {
             <td>
               <button class="folder-link" @click.stop="emit('enterDir', e.key)">
                 <span class="folder-icon" aria-hidden="true">📁</span>
-                <span>{{ e.name }}</span>
+                <span><HighlightText :text="e.name" :query="filter" /></span>
               </button>
             </td>
             <td class="muted">—</td>
@@ -209,7 +270,7 @@ function iconFor(e: Entry): string {
             </td>
             <td>
               <span class="file-icon" aria-hidden="true">📄</span>
-              <span class="mono">{{ e.name }}</span>
+              <span class="mono"><HighlightText :text="e.name" :query="filter" /></span>
               <span v-if="e.object?.storageClass" class="badge sc-badge" :title="t('objects.storageClass') + '：' + e.object.storageClass">{{ e.object.storageClass }}</span>
             </td>
             <td>{{ fmtSize(e.size ?? 0) }}</td>
@@ -242,6 +303,10 @@ function iconFor(e: Entry): string {
       {{ loadingAll ? t('common.loading') : t('objects.loadAll') }}
     </button>
     <span class="badge">{{ isTruncated ? t('objects.hasMore') : t('objects.endReached') }}</span>
+    <!-- 过滤只作用于已加载条目：没这条提示时，用户会以为「搜不到 = 不存在」 -->
+    <span v-if="filterActive && isTruncated" class="badge filter-scope-hint">
+      {{ tf('objects.filterScopeHint', { n: entries.length }) }}
+    </span>
   </div>
 </template>
 
@@ -315,6 +380,6 @@ function iconFor(e: Entry): string {
 .folder-link:hover .folder-icon { transform: scale(1.05); }
 .folder-icon { font-size: 16px; transition: transform .12s ease; }
 .file-icon { margin-right: 6px; opacity: .75; }
-.sc-badge { margin-left: 6px; font-size: 10px; background: var(--row-sel); color: var(--muted); border: 1px solid var(--border); }
+.sc-badge { margin-left: 6px; font-size: 10px; background: var(--row-sel); color: var(--badge-text); border: 1px solid var(--border); }
 .sc-badge:not(:empty) { text-transform: uppercase; }
 </style>
