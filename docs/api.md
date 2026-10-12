@@ -121,7 +121,7 @@ Prometheus 文本格式。**默认返回 404**（不暴露端点），仅当设�
 - `s3c_store_write_failures_total`：账号库写入失败次数（落盘 / SQL 写入出错，业务拒绝不计数）——`json` / `encrypted` 驱动唯一的主动存储故障信号。
 - `s3c_persist_failures_total`：计划 / 任务清单落盘（`Save`）失败次数（内存态保真、失败降级）；与 `s3c_store_write_failures_total` 区分——后者只覆盖账号库。
 - `s3c_volume_size_bytes` / `s3c_volume_free_bytes`：`S3C_DATA_DIR` 所在文件系统总容量与可用字节；取不到时**不输出该序列**（平台不支持 / statfs 失败）。
-- `s3c_volume_inode_total` / `s3c_volume_inode_free`：同一文件系统的 inode 总数与空闲数（statfs `Files` / `Ffree`）；Windows 与 Linux / macOS / FreeBSD 之外的平台，或 statfs 失败时同样**不输出该序列**。
+- `s3c_volume_inode_capacity` / `s3c_volume_inode_free`：同一文件系统的 inode 总数与空闲数（statfs `Files` / `Ffree`）；Windows 与 Linux / macOS / FreeBSD 之外的平台，或 statfs 失败时同样**不输出该序列**。
 - `s3c_jobs_active`：在册（未终结）异步任务数，上限 256（与 `JobRegistry` 同口径）。
 - `s3c_last_shutdown_duration_seconds`：上一次优雅关停耗时（启动时从 `data/shutdown.json` 载入；0 = 尚无记录）。
 - `s3c_http_request_duration_seconds`：HTTP 请求延迟直方图（含流式端点）；`+Inf` 桶恒等于 `s3c_http_requests_total`。

@@ -52,7 +52,7 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		"s3c_http_request_duration_seconds_bucket", "s3c_http_request_duration_seconds_sum",
 		"s3c_volume_size_bytes", "s3c_volume_free_bytes", "s3c_last_shutdown_duration_seconds",
 		// 数据卷 inode（OPERATIONS.md §4.3 原「无内置指标」项，取不到时不发序列）。
-		"s3c_volume_inode_total", "s3c_volume_inode_free",
+		"s3c_volume_inode_capacity", "s3c_volume_inode_free",
 		// KNOWN_ISSUES #83：计划 / 任务清单落盘失败（原为静默）。
 		"s3c_persist_failures_total",
 	} {
@@ -407,18 +407,18 @@ func TestMetricsVolumeInodes(t *testing.T) {
 	// ① 未 SetDataDir：inode 序列同样缺失（与容量序列同一开关）。
 	noDir := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
 	noDirBody := metricsBody(t, noDir.Routes())
-	if _, ok := metricValue(t, noDirBody, "s3c_volume_inode_total"); ok {
-		t.Errorf("未配置数据目录时不应输出 s3c_volume_inode_total：\n%s", noDirBody)
+	if _, ok := metricValue(t, noDirBody, "s3c_volume_inode_capacity"); ok {
+		t.Errorf("未配置数据目录时不应输出 s3c_volume_inode_capacity：\n%s", noDirBody)
 	}
 
 	// ② 配置真实目录：总数 > 0，空闲 ∈ [0, 总数]。
 	okHandler := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
 	okHandler.SetDataDir(t.TempDir())
 	okBody := metricsBody(t, okHandler.Routes())
-	total := mustMetric(t, okBody, "s3c_volume_inode_total")
+	total := mustMetric(t, okBody, "s3c_volume_inode_capacity")
 	free := mustMetric(t, okBody, "s3c_volume_inode_free")
 	if total <= 0 {
-		t.Errorf("s3c_volume_inode_total = %g, want > 0：\n%s", total, okBody)
+		t.Errorf("s3c_volume_inode_capacity = %g, want > 0：\n%s", total, okBody)
 	}
 	if free < 0 || free > total {
 		t.Errorf("s3c_volume_inode_free = %g，应在 [0, %g] 内", free, total)
@@ -428,7 +428,7 @@ func TestMetricsVolumeInodes(t *testing.T) {
 	missing := New(mustStore(t), logger, t.TempDir(), nil, "", "test", true, false)
 	missing.SetDataDir(filepath.Join(t.TempDir(), "does-not-exist"))
 	missingBody := metricsBody(t, missing.Routes())
-	if _, ok := metricValue(t, missingBody, "s3c_volume_inode_total"); ok {
+	if _, ok := metricValue(t, missingBody, "s3c_volume_inode_capacity"); ok {
 		t.Errorf("statfs 失败时不应输出 inode 序列：\n%s", missingBody)
 	}
 	if _, ok := metricValue(t, missingBody, "s3c_volume_inode_free"); ok {

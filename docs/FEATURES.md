@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-10（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CI 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CE–§CI（2026-10-10 通读与机械化收口）与 **§CJ**（交接快照 §5 未做清单 14 项收口）。
+> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CK 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CE–§CI（2026-10-10 通读与机械化收口）· **§CJ**（交接快照 §5 未做清单 14 项收口）· **§CK**（全仓代码质量评审 Approve + 三道 Nit #84–#86 闭环 + 快照归档 + 自留项 #87 门禁复跑闭环）。
 
 ## 目录
 
@@ -43,6 +43,7 @@
   - CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描 / 明文 `http://` 端点告知）（+ 一道门禁）
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
+  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环**
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -1706,7 +1707,7 @@ functions 1095 / lines 3503）。
 | `s3c_jobs_active` | gauge | **未终结**任务数，与 `JobRegistry` 在册上限（256）同口径 | `service/job.go` `JobRegistry.ActiveCount()`（锁内复用 `runningCountLocked`）；`job_cap_test.go` `TestJobRegistryActiveCount` |
 | `s3c_http_request_duration_seconds` | histogram | 桶上界 `0.005 … 30` + `+Inf`；`+Inf` 与 `_count` 都取 `s3c_http_requests_total`（同一次 `recordHTTPMetric` 记录，结构上不会漂移） | `handler/metrics.go` `recordHTTPMetric(status, dur)`；`middleware.go` 的 `withLogging` 传入 `dur`（计数与直方图同源）；`metrics_test.go` `TestMetricsHTTPDurationHistogram` |
 | `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | `S3C_DATA_DIR` 的 statfs / `GetDiskFreeSpaceExW`；**取不到就不发序列**（平台不支持 / 目录未配置 / statfs 失败），不用 0 冒充 | 新增 `volume_unix.go`（`linux \|\| darwin \|\| freebsd`，`syscall.Statfs`）、`volume_windows.go`（kernel32 延迟绑定——标准库 `syscall` **没有**该 API，`golang.org/x/sys` 违 ADR-004）、`volume_other.go`（恒 `ok=false`） |
-| `s3c_volume_inode_total` / `s3c_volume_inode_free` | gauge | 同一 statfs 的 `Files` / `Ffree`；**口径与容量序列一致**——取不到就不发序列（0 会让 `free/total` = 0/0 = NaN，告警静默失效）。2026-10-10 补上，收口 OPERATIONS §4.3 原「仍无内置指标」行 | `volume_unix.go` `volumeInodes()`、`volume_windows.go`（Windows 无 inode 概念 → 恒 `ok=false`）、`volume_other.go`（恒 `ok=false`）；`metrics.go` 在 `h.dataDir != ""` 内输出；`metrics_test.go` `TestMetricsVolumeInodes` |
+| `s3c_volume_inode_capacity` / `s3c_volume_inode_free` | gauge | 同一 statfs 的 `Files` / `Ffree`；**口径与容量序列一致**——取不到就不发序列（0 会让 `free/capacity` = 0/0 = NaN，告警静默失效）。2026-10-10 补上，收口 OPERATIONS §4.3 原「仍无内置指标」行 | `volume_unix.go` `volumeInodes()`、`volume_windows.go`（Windows 无 inode 概念 → 恒 `ok=false`）、`volume_other.go`（恒 `ok=false`）；`metrics.go` 在 `h.dataDir != ""` 内输出；`metrics_test.go` `TestMetricsVolumeInodes` |
 | `s3c_last_shutdown_duration_seconds` | gauge | **上一次**关停耗时：关停在进程退出前发生、scrape 赶不上 → 落盘 `data/shutdown.json` `{"durationUs":N}`，**下次启动载入**后暴露；0 = 尚无记录（单位取微秒，避免亚毫秒关停截断成 0 与「无记录」撞车） | 新增 `handler/shutdown_metric.go`（`LoadLastShutdown` / `RecordShutdown`）；`main.go` 在 `srv.Shutdown` 返回后 `RecordShutdown`；`main_test.go` `TestMainServerSubprocess` 断言子进程退出后文件存在且 `durationUs ∈ (0, 5e6)` |
 
 **告警与仪表盘**（同批落地，两道既有门禁同步钉住「引用的指标必须真实发射」）：
@@ -2392,11 +2393,11 @@ functions 1095 / lines 3503）。
 
 | # | 项 | 改动 | 证据 / 门禁 |
 |---|---|---|---|
-| A1 | `OPERATIONS.md` §4.3「数据卷 **inode** 仍无内置指标」 | `internal/handler` 新增 `volumeInodes()`（`volume_unix.go` 取 statfs `Files` / `Ffree`、`volume_windows.go` 恒 `ok=false`——Windows 无 inode 概念、`volume_other.go` 恒 `ok=false`），`/api/metrics` 发 `s3c_volume_inode_total` / `s3c_volume_inode_free`，**沿用「取不到就不发序列」口径**（总数为 0 会让 `free/total` = 0/0 = NaN，告警静默失效）；`OPERATIONS.md` §3.2 表 + §3.2 尾注 + §4.3 行转「仅序列缺失平台」+ §10.2 资源表、`api.md` 指标清单、`DEPLOYMENT.md` 同步；`rules.yml` 新增告警 `S3ClientVolumeInodeLow`（空闲 < 20% 持续 10 分钟）+ §4.2 对应行 | `metrics_test.go` `TestMetricsVolumeInodes`（三态：未配目录 / 正常 / statfs 失败）先红后绿；`TestPrometheusRulesReferenceRealMetrics` 校新指标真实发射；四平台 `GOOS=darwin/freebsd/windows/openbsd go build` 全过 |
+| A1 | `OPERATIONS.md` §4.3「数据卷 **inode** 仍无内置指标」 | `internal/handler` 新增 `volumeInodes()`（`volume_unix.go` 取 statfs `Files` / `Ffree`、`volume_windows.go` 恒 `ok=false`——Windows 无 inode 概念、`volume_other.go` 恒 `ok=false`），`/api/metrics` 发 `s3c_volume_inode_capacity` / `s3c_volume_inode_free`，**沿用「取不到就不发序列」口径**（总数为 0 会让 `free/capacity` = 0/0 = NaN，告警静默失效）；`OPERATIONS.md` §3.2 表 + §3.2 尾注 + §4.3 行转「仅序列缺失平台」+ §10.2 资源表、`api.md` 指标清单、`DEPLOYMENT.md` 同步；`rules.yml` 新增告警 `S3ClientVolumeInodeLow`（空闲 < 20% 持续 10 分钟）+ §4.2 对应行 | `metrics_test.go` `TestMetricsVolumeInodes`（三态：未配目录 / 正常 / statfs 失败）先红后绿；`TestPrometheusRulesReferenceRealMetrics` 校新指标真实发射；四平台 `GOOS=darwin/freebsd/windows/openbsd go build` 全过 |
 | A2 / A6 | `AI_POLICY.md` §11「不自动合并 PR / 不自动删分支或数据」原标 **⚠️ 人工**、**且无门禁守着**（零命中只是现状） | 新增 `TestNoAutoMergeOrPrivilegedCITriggers`：扫 `.github/workflows/*` + `.gitlab-ci.yml` + `scripts/*.sh`，命中 `gh pr merge` / `enable-auto-merge` / `mergify` / `merge_when_pipeline_succeeds` / `auto_merge` / `pull_request_target` / `git push --delete` / `git branch -D` / `delete-branch` 任一即红；**双向钉**：§11 必须回指测试名。A6 的「禁止类」可机检部分并入本条，§11 对应行改 **代码强制**；「进入发布模式需人类授权」等仓库外判定项仍如实标 ⚠️ 人工 | `ai_governance_gate_test.go`（含扫描面自检 `minCIScannedFiles=18`）；`docs/AI_POLICY.md` §11 回指 |
 | A3 | `OPERATIONS.md` §4.2 表 ⇔ `rules.yml` 双向同步此前**只靠人工**：实测表 13 行 = 13 条 alert **纯属巧合**——表多「健康探测失败」（外部黑盒探测，不属 Prometheus 规则）、规则多 `S3ClientZipPartialFailures`，两边集合根本不同 | §4.2 每行第一列补**反引号 alert 名**；外部探测项移入表外注记（保住阈值信息）；补 `S3ClientZipPartialFailures` 行；新增 `doc_alert_drift_gate_test.go` 断言「表行 ⇔ `- alert:` 双向等集」（各带 ≥13 条扫描面基线）；§4 导语与 `rules.yml` 头注同步登记该门禁 | `TestOperationsAlertTableMatchesRulesFile`：上线即红并**点名漂移**（表无 `S3ClientZipPartialFailures`、规则多两条），补行 + 加名后转绿；`DEVELOPMENT.md` §3 门禁清单登记 |
 | A4 | `accessibility.md` §4 第 9 条「网格单元格 `role=button` 无 `aria-label`」**从没被 axe 扫过**（四个扫描态都不含网格视图），真伪未判 | `e2e/a11y.spec.ts` 新增第 5 个扫描态「对象网格视图」（`installObjectsStub` 桩出带默认桶的账号 + 3 个对象 → 切网格）；同批把文件头承诺的「非阻塞级违规打印供人工判断」真正接上（此前代码直接丢弃）。**判定结果：axe 0 违规（阻塞级与非阻塞级均无）→ 非缺陷，不改组件**——`button-name` 认可文本节点派生的可访问名，加 `aria-label` 反而会覆盖「文件名 + 大小」并造出第二事实源 | `pnpm exec playwright test a11y.spec.ts` **6 passed**；`accessibility.md` §4.9 由「仍未做」转「已判定 + 受 CI 约束」，§4 第 2 / 4 条与 §5.2 / §5.3 状态数 4 → 5 |
-| A5 | `threat-model.md` §6.2 `http://` 载荷完整性**残留**（本体只能靠 TLS）且账号创建 / 更新时**零提示** | 对齐 `main.go` 明文落盘告警先例：`handler/accounts.go` 新增 `warnPlaintextEndpoints`——`endpoint` / `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后为 `http://` 即打 WARN（创建 + 更新两路；日志只记 id / 名称 / 端点，**不含密钥**）；前端 `AccountsPanel.vue` 在「使用 HTTPS/TLS」**未勾选**时于勾选框下给出同一句提示（`accounts.useSSLWarn`，中英双语），勾选即消失 | `accounts_plaintext_test.go` 三条（显式 `http://` / 大小写 scheme / 裸端点 + `useSSL=false` 打 WARN，`https://` 与裸端点 + `useSSL=true` **不打**（防噪声），更新路径与 `publicEndpoint` 各一条，外加「日志不含 `secretKey` 哨兵」）；`AccountsPanel.test.ts`「明文端点提示」用例断言展示 / 勾选消失 / 取消恢复 |
+| A5 | `threat-model.md` §6.2 `http://` 载荷完整性**残留**（本体只能靠 TLS）且账号创建 / 更新时**零提示** | 对齐 `main.go` 明文落盘告警先例：`handler/accounts.go` 新增 `warnPlaintextEndpoints`——`endpoint` / `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后为 `http://` 即打 WARN（创建 + 更新两路；日志只记 id / 名称 / 端点，**不含密钥**；2026-10-10 评审 #84 起端点另经 `redactEndpoint()` 去 URL userinfo）；前端 `AccountsPanel.vue` 在「使用 HTTPS/TLS」**未勾选**时于勾选框下给出同一句提示（`accounts.useSSLWarn`，中英双语），勾选即消失 | `accounts_plaintext_test.go` 四条（原三条 + 2026-10-10 评审 #84 新增 `TestPlaintextWarnDoesNotLeakEndpointCredentials`；显式 `http://` / 大小写 scheme / 裸端点 + `useSSL=false` 打 WARN，`https://` 与裸端点 + `useSSL=true` **不打**（防噪声），更新路径与 `publicEndpoint` 各一条，外加「日志不含 `secretKey` 哨兵」）；`AccountsPanel.test.ts`「明文端点提示」用例断言展示 / 勾选消失 / 取消恢复 |
 | 相邻 | **上一批遗留**：后端默认端口 8080 → 5000 之后，`e2e/smoke.spec.ts` 的「无后端 → 条件跳过」判据失效——旧口径按状态码猜（注释写 503），而 vite 代理在目标拒绝连接时实测回 **500 + `text/plain` + 空 body**（vite 源码 `res.writeHead(500, …)`），于是 `pnpm e2e` 在**没起后端的常态下**必然红灯；更糟的是真实后端的 404 恰好也是 `text/plain`，按 content-type 猜会把「端点坏了」误判成「没后端」 | 改用**后端自己写的头**作判据：`X-Request-ID`（`withRequestID` 中间件覆盖全部路由，含 404 / 5xx，见 `OPERATIONS.md` §3.3）——vite 自己应答时不带该头。判据来自后端而非代理实现，不随 vite 版本漂移 | **双向实测**：不起后端 → `1 skipped`（原本红）；起后端但未开 `S3C_EXPOSE_OPENAPI` → `1 failed`（R9 严格断言**未被削弱**）；随后关后端复跑 → `22 passed + 1 skipped` |
 
 > **文档同步**：[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`、
@@ -2520,6 +2521,46 @@ functions 1095 / lines 3503）。
 > [`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)、本节 + 页头 + 目录行。
 
 ---
+
+### CK. 2026-10-10 全仓代码质量评审（结论 Approve）+ 三道 Nit #84–#86 闭环 + 快照归档
+
+> **来源**：全仓代码质量评审快照（评审时点结论绑定提交 `22b79e1`，已按「归档四步」冻结入
+> [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md)）。机械化门禁**独立复跑**
+> 全绿：`gofmt` 干净 / `go vet` 0 / `go build` OK / `go test` **10/10 包** / 覆盖率 **100.0% 零未覆盖块** /
+> `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **83 文件 1292 例** / `pnpm build` OK。
+> 五轴逐文件复核 2026-10-09 闭环批次的 delta（cron DST 语义、`persistMu` 锁序、端点级作用域闸路由面、
+> 前端 seq 代际守卫、`UNSIGNED-PAYLOAD` 收窄、`store` 加密失败传播）**未发现 Critical / Required**。
+> 未复跑项（真实 RustFS E2E / `make e2e-real` / `govulncheck` / 两套 CI 远端）已在快照 §4 如实披露。
+
+| # | Nit（评审编号） | 改动 | 证据 / 门禁 |
+|---|---|---|---|
+| 84 | 明文端点 WARN 原样记录用户提交的 endpoint（URL userinfo 可能携带凭据） | `handler/accounts.go` 新增 `redactEndpoint()`（`net/url` 解析后清空 `User`，无 userinfo / 解析失败原样返回），WARN 的 `endpoint` / `publicEndpoint` 字段改走它；函数注释与 `warnPlaintextEndpoints` 文档同步 | `accounts_plaintext_test.go` `TestPlaintextWarnDoesNotLeakEndpointCredentials`：**TDD 先红**（修复前日志出现 `URLPASS-SENTINEL`）→ 后绿，且仍断言 WARN 未因脱敏而消失 |
+| 85 | `s3c_volume_inode_total` 是 gauge 却使用 counter 保留的 `_total` 后缀 | 改名 **`s3c_volume_inode_capacity`**：`handler/metrics.go`（HELP / TYPE / 值）· `deploy/prometheus/s3client.rules.yml`（`S3ClientVolumeInodeLow` 表达式 + 注释）· `OPERATIONS.md` §3.2 / §4.2 / §4.3 / §10.2 · `DEPLOYMENT.md` · `api.md` · 本节 §CH 行的指标名 | `metrics_test.go` `TestMetricsVolumeInodes`（改期望名**先红** → 后绿）；`TestPrometheusRulesReferenceRealMetrics` 校新名真实发射；`doc_alert_drift_gate_test` 保告警表 ⇔ 规则文件一致 |
+| 86 | `main.go` `runHealthcheck` 注释重复行（历史遗留，非本批评审引入） | 删除重复的 `// "no-port-in-here"）时` 行 | 无门禁影响（注释卫生） |
+
+> **归档**：评审快照按 [`archive/index.md`](archive/index.md)「归档四步」冻结——`git mv` 保留重命名历史、
+> 修正快照内相对链接、`archive/index.md` 补行 + 页头计数 +1、从 `AGENTS.md` / `DEVELOPMENT.md` §4 /
+> `llms.txt` 三处命名清单与 `docs/README.md` 导航行摘除；由 `archive_index_gate_test.go` 钉住
+> 「归档目录 ⇄ 索引行 ⇔ 页头计数」三方一致。
+
+> **门禁复跑（自留项 #87，已闭环）**：2026-10-10 收口时只复跑了根包文档门禁（`cd apps/server && go test . -count=1` → 全绿）
+> 与 `pnpm lint`（0 告警）。**2026-10-12 沙箱会话**补齐 `apps/server` 的 `gofmt -l`（空）/ `go vet ./...`（0）/
+> `go build ./...`（OK）/ `golangci-lint run ./...`（**0 issues**）、变更用例 `internal/handler`
+> （`TestPlaintextWarn*` / `TestMetricsVolumeInodes` / `TestMetricsEndpointExposed`）+ **变异验证**
+> （临时去掉 `redactEndpoint` 脱敏 → 用例红灯点名 `URLPASS-SENTINEL` → 还原绿）、可运行 5 包 `-race`
+> 覆盖率（**100.0%**，零 `count==0` 块）与前端 `pnpm test`（**83 文件 1292 例**）/ `pnpm build`（含 `vue-tsc`）；
+> 该会话受沙箱 `listen()` 限制（`httptest` 在根包 / `internal/handler` / `s3wrap` / `service` / `tracing` 五包 panic，
+> **已知假红灯、非代码缺陷**），全量 `go test -race ./...` 未能跑。**同日非沙箱会话**补齐该**全量**
+> `go test -race -count=1 ./...`（**10/10 包**）与 `make test-cover`（每包 + 汇总 **100.0%** statements、
+> `count==0` 零未覆盖块）→ 全部门禁全绿，[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#87 于同日闭环并移除**（§四 台账）。
+
+> **存量条目核对（2026-10-12，随 #87 收口一并做）**：对 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) §一 #25 / §二 #63 做
+> 代码 ⇄ 文档一致性核对——#63 与 `service/stream_copy.go`（`64 << 20` × `10_000` 段）、`docker-compose*.yml` 的
+> 512M 内存预算、五条边界用例（`stream_copy_parts_test.go`）与根 [`README.md`](../README.md)「已知限制」全一致；
+> #25 的「代码侧无剩余工作」由 [`.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)
+> （平台内唯一 `SHA256SUMS-<bundle>.txt` + `aggregate-checksums`）与工作流内**无任何证书 / 公证配置**证实。
+> 核对中发现并补齐一处指针缺口：[`DEPLOYMENT.md`](DEPLOYMENT.md) §5 的 Windows 行此前未写未签名 / SmartScreen
+> 手动放行，使 #25 / [`ROADMAP.md`](ROADMAP.md) §三 #1 · E6 · R5 指向该节的「手动放行说明」对 Windows 落空。
 
 ## 三、质量与覆盖率现状
 

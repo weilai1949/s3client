@@ -201,7 +201,6 @@ func parseLevel(s string) slog.Level {
 //
 // 地址取 S3C_ADDR：通配 host（如 ":5000"，服务绑全接口）时探测回退 127.0.0.1——回环上
 // 同一端口必可达，避免把探测打到外部网卡地址。SplitHostPort 失败（地址缺端口，如
-// "no-port-in-here"）时
 // "no-port-in-here"）时 host 与 port 均为空串：host 置 127.0.0.1、port 为空拼出
 // "http://127.0.0.1:/api/health"，按 http 方案默认 80 端口连接，几乎必然失败返回 1。
 // 这是刻意的 fail-closed：同一非法地址下服务端自身也无法监听（missing port），

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/weilai1949/s3client/apps/server/internal/model"
@@ -105,7 +106,8 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 //
 // 判定走 `s3wrap.NormalizeEndpoint`（端点归一化的**唯一**实现）：裸端点按 `useSSL` 补全
 // scheme，故「没写 scheme + 未勾 TLS」同样算明文。`publicEndpoint` 单独判——浏览器直传的
-// 预签名 PUT 走它，明文链路下同样无完整性保护。日志只记 id / name / 端点，**不记任何密钥**。
+// 预签名 PUT 走它，明文链路下同样无完整性保护。日志只记 id / name / 端点，且端点先经
+// `redactEndpoint` 去掉 userinfo——**不记任何密钥**。
 func (h *Handler) warnPlaintextEndpoints(a *model.Account) {
 	var plain []string
 	if isPlaintextEndpoint(a.Endpoint, a.UseSSL) {
@@ -120,12 +122,25 @@ func (h *Handler) warnPlaintextEndpoints(a *model.Account) {
 	h.log.Warn("明文 http:// 端点：带 body 的请求缺少 SigV4 载荷完整性（threat-model §6.2）——建议勾选「使用 HTTPS/TLS」或在反向代理处终止 TLS",
 		"fields", strings.Join(plain, ","),
 		"id", a.ID, "name", a.Name,
-		"endpoint", a.Endpoint, "publicEndpoint", a.PublicEndpoint)
+		"endpoint", redactEndpoint(a.Endpoint), "publicEndpoint", redactEndpoint(a.PublicEndpoint))
 }
 
 // isPlaintextEndpoint 判定归一化后的端点是否为明文 http（scheme 大小写不敏感）。
 func isPlaintextEndpoint(endpoint string, useSSL bool) bool {
 	return strings.HasPrefix(s3wrap.NormalizeEndpoint(endpoint, useSSL), "http://")
+}
+
+// redactEndpoint 抹掉端点 URL 的 userinfo（`http://key:secret@host:9000` → `http://host:9000`）供
+// 日志使用：`s3wrap.NormalizeEndpoint` 与 `ValidateEndpoint` **都不剥离** userinfo，用户把凭据写进
+// 端点 URL 会建号成功，故必须在**落日志前**脱敏（根 AGENTS.md「SecretKey 不落日志」；
+// 评审 2026-10-10 N1 / KNOWN_ISSUES #84）。无 userinfo 或解析失败时原样返回。
+func redactEndpoint(endpoint string) string {
+	u, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil || u.User == nil {
+		return endpoint
+	}
+	u.User = nil
+	return u.String()
 }
 
 // deleteAccount 删除账号。

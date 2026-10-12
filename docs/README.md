@@ -65,7 +65,8 @@
 | 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，含编号台账与闭环凭证） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
-| 看最近一次全仓代码评审 | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结）：门禁实测数字 + 逐条 `file:line` 证据与复现口径 + 处置计划 |
+| 看最近一次全仓代码评审 | [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) | **2026-10-10 全仓五轴评审快照**（结论 **Approve**：未发现 Critical / Required；3 道非阻断 Nit #84–#86 **同日闭环**；**已归档** 2026-10-10）：门禁独立复跑数字 + 逐条 `file:line` 证据 + 复现口径 + 未复跑项披露 |
+| 看上上次全仓代码评审（已归档） | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结） |
 | 找冻结的历史快照 | [`archive/index.md`](archive/index.md) | 评估 / 审查 / 事故复盘 / 批次交接类**时点性文档**的归档索引（只读、不回写；含首份已填写复盘 [`incident-20260916-presign-empty-url.md`](archive/incident-20260916-presign-empty-url.md) 与已收口批次快照 [`handoff-20260930.md`](archive/handoff-20260930.md)、[`handoff-20261010.md`](archive/handoff-20261010.md)） |
 
 ## 机器可读面（给工具与 AI）

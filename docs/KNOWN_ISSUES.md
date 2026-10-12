@@ -14,22 +14,26 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71 / #72 / #73 / #74 / #75 / #76 / #77 / #78 / #79 / #80 / #81 / #82 / #83；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71 / #72 / #73 / #74 / #75 / #76 / #77 / #78 / #79 / #80 / #81 / #82 / #83 / #84 / #85 / #86 / #87；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-10（§四 编号台账补齐 **#72 / #74 / #75 / #77 / #78** 五行合并行——这五个编号在 §二 叙述与
-> 页头「已闭环移除」清单里早已登记，§四 表此前漏行会让代码注释里对 `#74` 的引用查空；另订正 #47–#59 的
-> 「唯一来源」指针（只指 ROADMAP 会查空）。**存量未变**）。
+> 最后更新：2026-10-12（**#87 闭环**：三道 Nit（#84–#86）修复后的提交前门禁**全量实跑全绿**——
+> `gofmt` 干净 / `go vet` 0 / `go build` OK / `go test -race` **10/10 包** / 覆盖率 **100.0% 零 `count==0` 块** /
+> `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **83 文件 1292 例** / `pnpm build` OK，
+> 证据见 [`FEATURES.md`](FEATURES.md) §CK。上一行 2026-10-10：全仓代码质量评审
+> [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) 结论 **Approve**，三道非阻断 Nit
+> **#84–#86 同日全部闭环并移除**，快照按「归档四步」冻结入 `archive/`）。**存量：§一 #25 · §二 #63**。
 >
 > **闭环批次索引**（本文件只收**未闭环**项，故历史批次不复述细节；逐条处置证据在
 > [`FEATURES.md`](FEATURES.md)，编号在 §四 台账）：
 >
 > | 日期 | 闭环并移除 | 证据 |
 > |---|---|---|
-> | 2026-10-10 | 本轮无编号闭环；§四 台账补 #72 / #74 / #75 / #77 / #78 五行（存量未变） | §四（本文件） |
+> | 2026-10-12 | **#87** 评审修复批（#84–#86）的提交前门禁全量复跑全绿（收口自留项闭环） | [`FEATURES.md`](FEATURES.md) §CK |
+> | 2026-10-10 | **#84–#86 登记即闭环并移除**（全仓评审三道 Nit：凭据脱敏 / 指标命名 / 注释卫生） | [`FEATURES.md`](FEATURES.md) §CK |
 > | 2026-10-09 | #76 前端结构性重复收敛（`rowKey.ts` / `useVirtualRows.ts`） · #79 OpenAPI 状态码声明门禁 | [`FEATURES.md`](FEATURES.md) §CD |
 > | 2026-10-09 | #72 数据面 `UNSIGNED-PAYLOAD` 收窄 · #74 前端 `ApiError` · #75 `generated.gate` 穷尽性 · #77 右键菜单 a11y · #78 i18n 盲区 | §CC |
 > | 2026-10-09 | #73 `s3wrap` 导出面降级 · #80 计划校验定值文案 · #81 accounts 创建面收口 · #83 散点缺陷 12 处（+`s3c_persist_failures_total`） | §CA |
@@ -67,7 +71,6 @@
 | # | 项 | 来源 | 状态 | 说明 |
 |---|----|------|------|------|
 | 63 | 流式复制单对象 640GB 上限（64MB × 10000 段） | code-review-2026-09-24 Nit（刻意取舍） | ➖ | **已决策维持现状**（2026-09-28 复核并补齐证据）：10000 段是 S3 协议上限，按比例放大分段缓冲会突破容器 512MB 内存预算（`docker-compose.yml` / `docker-compose.prod.yml` 的 server 服务 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。超出上限的对象在段号耗尽前被**明确拒绝并 abort**，绝不静默截断。口径与内存账写在 `service/stream_copy.go` 注释（段号在**上传前**判定，不误杀第 10000 段的合法对象）；两个默认值分别由 `TestMultipartStreamCopyPartSizeIs64MB`（分段 64MB）与 `TestMaxMultipartPartsIsProtocolLimit`（段数 10000）钉住，边界行为由 `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 覆盖。如将来要放宽，先评估内存预算再动。**2026-10-08 补登**：该限制此前只写在 `stream_copy.go` 注释 / 本文件 / [`OPERATIONS.md`](OPERATIONS.md) §性能表，**根 `README.md` 新增「已知限制」小节**把它推到用户可见面 |
-
 > 2026-09-28：#60（前端测试拆分）/ #61（`SameEndpoint` 纳入 `useSSL`）/ #62（批量删除编排下沉 `service`）
 > 已闭环移除，证据见 [`FEATURES.md`](FEATURES.md) §AB；同日新开 **#64**（三路复审 19 条的处置清单），
 > 其余 18 条当天闭环（§AE–§AI）。**#64 于 2026-09-28 晚些时候闭环**：json 分支抽
@@ -102,6 +105,7 @@
 > 故本表当前为：**#63 已决策维持现状（➖）**；**产品功能缺陷仍为零**，外部阻塞见 §一 #25。
 > **#70 / #71 为 2026-09-30「AI 时代文档补强」批次新增**（见 [`FEATURES.md`](FEATURES.md) §BG）：#70 由本批新增的 fuzz 目标实测发现（不可利用，已留回归种子），**已于同日闭环并移除**（推翻 ➖ 决策、修复证据见 [`FEATURES.md`](FEATURES.md) §BK）；#71 为登记既有命名分裂，不是本批引入，**已于 2026-10-08 闭环并移除**（同样推翻 ➖ 决策、证据见 [`FEATURES.md`](FEATURES.md) §BO）。
 > **2026-10-09**：全仓代码质量评审（[`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md)）的 **O1–O12 十二条 Optional 项登记为 #72–#83**（本节表，全部属技术债 / 缺陷，按「同一事项只登记一处」不进 [`ROADMAP.md`](ROADMAP.md) §三）；同批评审的 C1–C2 与 R1–R9 已于**当日修复闭环、不占编号**（证据见 [`FEATURES.md`](FEATURES.md) §BZ 与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`）；R10 的工具链残留同日解除（本机 `/usr/local/go1.26.9` 与 CI 同版本）。其中 **#73 / #80 / #81 / #83 已于同日闭环并移除**（证据见 [`FEATURES.md`](FEATURES.md) §CA；#81 = `POST /api/accounts` 拒绝 `accounts` 作用域 token，见 §二 台账与 [`threat-model.md`](threat-model.md)），**#82**（R10 评审残留：`make check` 缺项 / E2E 路径过滤 / DEVELOPMENT 漂移）亦于同日闭环（证据见 [`FEATURES.md`](FEATURES.md) §CB），**#72 / #74 / #75 / #77 / #78** 同日第二批次闭环（证据见 §CC），**#76 / #79** 同日第三批次闭环（证据见 §CD）。故 §二 当前存量 = **#63（➖ 已决策）**——**2026-10-09 评审的 O1–O12（#72–#83）已全部闭环移除**，产品功能缺陷仍为零，外部阻塞见 §一 #25。
+> **2026-10-10（全仓评审）**：同日**全仓代码质量评审**（[`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md)，结论 **Approve**，机械化门禁独立复跑全绿）**无 Critical / Required**；登记的三道非阻断 Nit **#84–#86 同日全部闭环并移除**（证据见 [`FEATURES.md`](FEATURES.md) §CK）；**同时留 #87（⬜ 待处理）**——修复落地后仅复跑根包文档门禁（`go test . -count=1`）与 `pnpm lint`，`apps/server` 全量 `go test -race` + 覆盖率 `count==0` / `golangci-lint` 与前端 `pnpm test` / `pnpm build` 的提交前门禁复跑尚未完成（见 §四 台账 #87 行）。故 §二 当前存量 = **#63（➖ 已决策）· #87（⬜ 待处理）**。**#87 于 2026-10-12 闭环并移除**：提交前门禁全量实跑全绿（`gofmt` 干净 / `go vet` 0 / `go build` OK / `go test -race` 10/10 包 / 覆盖率 100.0% 零 `count==0` 块 / `golangci-lint` 0 issues / `pnpm lint` 0 告警 / `pnpm test` 83 文件 1292 例 / `pnpm build` OK），证据见 [`FEATURES.md`](FEATURES.md) §CK；§二 存量回到 **#63（➖ 已决策）**。
 
 ## 三、分类归零凭证
 
@@ -148,6 +152,8 @@
 | #73 / #80 / #81 / #83 | **已闭环移除** | 2026-10-09 评审 O2 / O9 / O10 / O12：s3wrap 4 个带 SDK 签名的包内转换函数降为小写；计划校验错误改类型化定值文案 + `error_echo_gate` 捕获 `err.Error()` 透传；`POST /api/accounts` 拒绝 `accounts` 作用域 token（`reason=accounts_create`）；散点缺陷群 12 处全修（含新增 `s3c_persist_failures_total`），证据见 [`FEATURES.md`](FEATURES.md) §CA |
 | #82 | **已闭环移除** | 2026-10-09 评审 O11（R10 残留）：`make check` 补 `govulncheck` / `web-lint` / `build`；`e2e.yml` 与 `.gitlab-ci.yml` 的真 RustFS Go E2E 触发面放宽到 `apps/server/**`；DEVELOPMENT 的 `perf-budget`→`bench` / 覆盖率排除项 / 触发 job 计数三处修正；新增 `doc_ci_drift_gate_test.go` 与两道一致性门禁防回退。**2026-10-10 再处置**：补齐 `web-typecheck`（`pnpm typecheck`）与 `web-build`（`pnpm build`）以真正覆盖 CI `web` job 全部静态步，并**真跑 `make check` exit 0** 复核，证据见 [`FEATURES.md`](FEATURES.md) §CB |
 | #76 / #79 | **已闭环移除** | 2026-10-09 评审 O5 / O8：#76 前端 `newRowKey` ×7 → `src/rowKey.ts`、虚拟滚动管线 ×4 → `src/composables/useVirtualRows.ts`；#79 新增 `openapi_status_declared_test.go`（handler 直接写出的状态码必须声明）+ `bucket` required 门禁，补齐缺失状态码、`putObjectLock` 用 `anyOf` 表达二选一、`bucket` 请求体 required 归零并重生成规范。证据见 [`FEATURES.md`](FEATURES.md) §CD |
+| #84 / #85 / #86 | **已闭环移除** | 2026-10-10 全仓代码质量评审（[archive/code-review-2026-10-10.md](archive/code-review-2026-10-10.md)，结论 Approve）三道非阻断 Nit，**登记即同日闭环**：#84 新增 `redactEndpoint()` 让明文端点 WARN 不落 userinfo 凭据（`TestPlaintextWarnDoesNotLeakEndpointCredentials` 先红后绿）· #85 指标改名 `s3c_volume_inode_capacity`（rules / OPERATIONS §3.2·§4.2·§4.3·§10.2 / DEPLOYMENT / api.md 同步）· #86 删 `main.go` 重复注释行。证据见 [FEATURES.md](FEATURES.md) §CK |
+| #87 | **已闭环移除** | 2026-10-10 评审 Nit #84–#86 修复后的**提交前门禁复跑未完成**（收口自留项，非评审发现），见 §二。**2026-10-12 闭环**：2026-10-12 上午沙箱会话先补齐 `gofmt` / `go vet` / `go build` / `golangci-lint` / 前端三项 / 根包文档门禁 / 变异验证 / 可运行包覆盖率（见 §二 与 [`FEATURES.md`](FEATURES.md) §CK 历史记录），随后**非沙箱会话**补齐此前受沙箱 `listen()` 限制的**全量** `go test -race -count=1 ./...` **10/10 包**与 `make test-cover`（每包 + 汇总 **100.0%** statements、`count==0` 零未覆盖块），全部门禁全绿，证据见 [FEATURES.md](FEATURES.md) §CK |
 
 ---
 

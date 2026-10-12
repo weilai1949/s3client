@@ -200,11 +200,11 @@ groups:
             （联动 s3c_store_write_failures_total）。inode 耗尽另看 S3ClientVolumeInodeLow。
 
       - alert: S3ClientVolumeInodeLow
-        # 数据卷 inode（2026-10-10 起内置 s3c_volume_inode_total / s3c_volume_inode_free，
+        # 数据卷 inode（2026-10-10 起内置 s3c_volume_inode_capacity / s3c_volume_inode_free，
         # 此前只能靠宿主采集）：inode 耗尽与字节耗尽互不等价——大量小文件场景先耗尽
         # inode，此时 mkdir / 落盘同样失败。
-        # total 为 0 的文件系统（极少数伪文件系统）会让除法得 NaN，告警天然不触发，属可接受退化。
-        expr: s3c_volume_inode_free / s3c_volume_inode_total < 0.2
+        # capacity 为 0 的文件系统（极少数伪文件系统）会让除法得 NaN，告警天然不触发，属可接受退化。
+        expr: s3c_volume_inode_free / s3c_volume_inode_capacity < 0.2
         for: 10m
         labels:
           severity: warning

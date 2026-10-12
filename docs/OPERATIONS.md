@@ -98,7 +98,7 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_store_up` | gauge | 账号存储可达性：1 / 0 | `== 0` 持续 1 分钟即告警（沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议） |
 | `s3c_store_write_failures_total` | counter | **账号库写入失败次数**（落盘 / SQL 写入出错、写操作已回滚；重复 ID、NotFound 这类业务拒绝**不计数**） | 15 分钟内有增量即告警（critical，见 §4.2）——`json` / `encrypted` 驱动唯一的主动存储故障信号 |
 | `s3c_volume_size_bytes` / `s3c_volume_free_bytes` | gauge | **数据卷容量**：`S3C_DATA_DIR` 所在文件系统总字节 / 本进程可用字节 | 剩余占比 < 20% 持续 10 分钟告警（`S3ClientVolumeSpaceLow`，见 §4.2）；**序列缺失 = 取不到**（见下方口径） |
-| `s3c_volume_inode_total` / `s3c_volume_inode_free` | gauge | **数据卷 inode**：同一文件系统的 inode 总数 / 空闲数（statfs `Files` / `Ffree`；Windows 与 Linux / macOS / FreeBSD 之外的平台**不发序列**） | 空闲占比 < 20% 持续 10 分钟告警（`S3ClientVolumeInodeLow`，见 §4.2）；序列缺失的平台按 §4.3 外部采集 |
+| `s3c_volume_inode_capacity` / `s3c_volume_inode_free` | gauge | **数据卷 inode**：同一文件系统的 inode 总数 / 空闲数（statfs `Files` / `Ffree`；Windows 与 Linux / macOS / FreeBSD 之外的平台**不发序列**） | 空闲占比 < 20% 持续 10 分钟告警（`S3ClientVolumeInodeLow`，见 §4.2）；序列缺失的平台按 §4.3 外部采集 |
 | `s3c_jobs_active` | gauge | **在册（未终结）异步任务数**，与 `JobRegistry` 上限同口径（上限 256） | `>= 230` 持续 10 分钟告警（见 §4.2） |
 | `s3c_persist_failures_total` | counter | **计划 / 任务清单落盘（`Save`）失败次数**（内存态保真、失败降级；此前为静默，KNOWN_ISSUES #83） | 有增量即查（磁盘满 / 只读）；与 `s3c_store_write_failures_total` 区分——后者只覆盖账号库 |
 | `s3c_last_shutdown_duration_seconds` | gauge | **上一次优雅关停耗时**（由 `data/shutdown.json` 在启动时载入；0 = 尚无记录） | 与 `S3C_SHUTDOWN_TIMEOUT`（默认 30s）对比，逼近即说明关停吃紧 |
@@ -118,7 +118,7 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 **2026-09-30 观测缺口已全部补齐**（原「账号库写入失败次数、在册任务数、HTTP 请求延迟直方图、
 卷 / 磁盘容量、优雅关停耗时」五项，现均为上表内置指标；补齐记录见 [`ROADMAP.md`](ROADMAP.md)
 空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL）。**2026-10-10 起连 inode 用量也已内置**
-（`s3c_volume_inode_total` / `s3c_volume_inode_free`），仍**只能在服务外完成**的观测面
+（`s3c_volume_inode_capacity` / `s3c_volume_inode_free`），仍**只能在服务外完成**的观测面
 只剩一类：**跨服务 trace 的采集端**（span 导出已内置 §3.4，采集 / 存储仍在服务外，见 §4.3）。
 
 > **卷容量 / inode 序列缺失 ≠ 数值为 0**：`s3c_volume_*` 只在 statfs / `GetDiskFreeSpaceExW`
@@ -259,7 +259,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 | 账号库写入失败 `S3ClientStoreWriteFailures` | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
 | 在册任务逼近上限 `S3ClientJobsNearCapacity` | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
 | 数据卷剩余空间 `S3ClientVolumeSpaceLow` | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
-| 数据卷 inode 耗尽 `S3ClientVolumeInodeLow` | `s3c_volume_inode_free / s3c_volume_inode_total < 0.2` | `for: 10m` | inode 耗尽与字节耗尽**互不等价**（大量小文件场景先耗 inode），此时 `mkdir` / 落盘同样失败；序列缺失的平台按 §4.3 外部采集 |
+| 数据卷 inode 耗尽 `S3ClientVolumeInodeLow` | `s3c_volume_inode_free / s3c_volume_inode_capacity < 0.2` | `for: 10m` | inode 耗尽与字节耗尽**互不等价**（大量小文件场景先耗 inode），此时 `mkdir` / 落盘同样失败；序列缺失的平台按 §4.3 外部采集 |
 | HTTP 延迟升高 `S3ClientHTTPLatencyHigh` | `s3client:http_latency_p95:rate5m > 5` | `for: 10m` | 先排除流式端点，再对照上游耗时直方图区分「上游慢」与「本服务排队」 |
 
 > **表外项**（不属 Prometheus 规则，故刻意不在 `rules.yml`）：外部黑盒探测 `/api/health`
@@ -270,7 +270,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 
 | 关注点 | 现状 | 建议做法（**建议值**） |
 |---|---|---|
-| 数据卷 **inode**（`s3c_volume_inode_total` / `s3c_volume_inode_free`，2026-10-10 已内置） | **仅在序列缺失的平台**：Windows 无 inode 概念、Linux / macOS / FreeBSD 之外无免依赖 statfs 实现 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；有序列的平台直接用 §4.2 的 `S3ClientVolumeInodeLow` |
+| 数据卷 **inode**（`s3c_volume_inode_capacity` / `s3c_volume_inode_free`，2026-10-10 已内置） | **仅在序列缺失的平台**：Windows 无 inode 概念、Linux / macOS / FreeBSD 之外无免依赖 statfs 实现 | 宿主 `node_exporter` / `df -i` 采集，inode 使用率 > 80% 告警；有序列的平台直接用 §4.2 的 `S3ClientVolumeInodeLow` |
 | 数据卷容量（**仅在序列缺失的平台**：Linux / macOS / FreeBSD / Windows 之外） | 该平台 `volumeUsage` 无免依赖实现 → 不发序列 | 宿主 `node_exporter` / `df -h` 采集，卷使用率 > 80% 告警 |
 | 账号库可写性（`json` / `encrypted`） | **主动探针仍无**（`Ping` 恒 nil）；但**写入失败已内置计数** `s3c_store_write_failures_total`（事后信号，2026-09-30） | 用 §4.2 的 S3ClientStoreWriteFailures（critical）+ 5xx 比例 + `msg="handler error"` 日志三者交叉确认（R-3） |
 | 跨服务 trace | **导出已内置、采集端在服务外**（§3.4 OTel tracing：W3C `traceparent` + OTLP/HTTP JSON，`S3C_OTEL_ENDPOINT` 留空 = 关闭） | 设 `S3C_OTEL_ENDPOINT=http://<collector>:4318` 指向 OTLP/HTTP JSON 采集端（配置与失败模式见 §3.4）；未开启时用 `X-Request-ID` + nginx 日志关联 |
@@ -278,7 +278,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 > 2026-09-30 起，本表原有的「数据卷**容量** / 在册异步任务数 / 优雅关停耗时」三项已由内置指标补齐
 > （`s3c_volume_*`、`s3c_jobs_active`、`s3c_last_shutdown_duration_seconds`，见 §3.2 与 §4.2），
 > 补齐记录见 [`ROADMAP.md`](ROADMAP.md) 空号 **#18** 与 [`FEATURES.md`](FEATURES.md) §BL；
-> 2026-10-10 起**数据卷 inode** 亦已内置（`s3c_volume_inode_total` / `s3c_volume_inode_free`，
+> 2026-10-10 起**数据卷 inode** 亦已内置（`s3c_volume_inode_capacity` / `s3c_volume_inode_free`，
 > 本表只保留「序列缺失平台」的外部采集口径）。
 
 ## 5. Runbook（故障处置）
@@ -844,7 +844,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 | 关注点 | 说明 | 建议做法 |
 |---|---|---|
-| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；inode 使用率已内置（`s3c_volume_inode_total` / `s3c_volume_inode_free`，2026-10-10），**仅在序列缺失的平台需宿主采集** | 字节剩余 < 20% 告警（§4.2 `S3ClientVolumeSpaceLow`）；inode 空闲 < 20% 告警（§4.2 `S3ClientVolumeInodeLow`） |
+| 数据卷使用率 | 字节使用率已内置（`s3c_volume_size_bytes` / `s3c_volume_free_bytes`，2026-09-30）；inode 使用率已内置（`s3c_volume_inode_capacity` / `s3c_volume_inode_free`，2026-10-10），**仅在序列缺失的平台需宿主采集** | 字节剩余 < 20% 告警（§4.2 `S3ClientVolumeSpaceLow`）；inode 空闲 < 20% 告警（§4.2 `S3ClientVolumeInodeLow`） |
 | 账号库写放大 | `json` / `encrypted` **每次写盘重写整个文件**（全量快照 + 原子替换）；`sqlite` 为行级更新 | 账号数达到数百时优先 `sqlite`（**建议**，代码未设阈值） |
 | `jobs.json` 增长 | 受 TTL 控制（30 分钟 / 7 天），但大批量任务期间会持续写入 | 无需清理；异常增长按 R-8 排查 |
 | 日志占用 | 由 compose 的 json-file 轮转限制硬上限；本机 `.run/*.log` **不轮转** | 本机部署建议外部 `logrotate`（**建议**） |

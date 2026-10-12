@@ -136,3 +136,25 @@ func TestCreateAccountWarnsOnPlaintextPublicEndpoint(t *testing.T) {
 		t.Errorf("publicEndpoint 为明文时未打 WARN：\n%s", buf.String())
 	}
 }
+
+// TestPlaintextWarnDoesNotLeakEndpointCredentials（评审 2026-10-10 N1 / KNOWN_ISSUES #84）：
+// endpoint 里的 URL userinfo（`http://key:secret@host`）是**用户输入**，可能携带凭据。
+// 断言的外部可见行为：明文 WARN 仍然出现（告知义务不能丢），但日志里**搜不到** userinfo 的
+// 用户名与口令——`s3wrap.ValidateEndpoint` / `NormalizeEndpoint` 都不剥离 userinfo，故必须由
+// 日志侧脱敏（根 AGENTS.md「密钥不落日志」）。
+func TestPlaintextWarnDoesNotLeakEndpointCredentials(t *testing.T) {
+	var buf bytes.Buffer
+	h := newCapturingHandler(t, &buf)
+	rr := doJSON(t, h, http.MethodPost, "/api/accounts",
+		accountBody(t, "http://AKIAUSER:URLPASS-SENTINEL@127.0.0.1:9000", "", false))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201（本用例只关心日志脱敏）：\n%s", rr.Code, rr.Body.String())
+	}
+	log := buf.String()
+	if !strings.Contains(log, plaintextWarnMarker) {
+		t.Errorf("明文端点的告知不能因脱敏而消失：\n%s", log)
+	}
+	if strings.Contains(log, "URLPASS-SENTINEL") || strings.Contains(log, "AKIAUSER") {
+		t.Errorf("WARN 泄漏了 endpoint 的 userinfo 凭据（应在落日志前脱敏）：\n%s", log)
+	}
+}
