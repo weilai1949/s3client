@@ -31,10 +31,18 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-12 晚：依赖漏洞清零 + a11y 扫描盲区补齐 + dev strictPort）
+
+- **安全（依赖）**：长期「沿用 CI」的 `pnpm audit` 改用官方 registry **真跑**，首跑暴露 **12 条通告（8 high / 4 moderate）**——`vue` 3.5.41 连带的 `@vue/server-renderer`（XSS 通告）与 `brace-expansion` / `postcss-selector-parser` / `source-map-js` 传递依赖旧版（四者均**不进 dist 产物**：runtime bundle 不含 compiler / server-renderer，后两者纯 dev 链）。升级 `vue` → **3.5.43**（`package.json` 语义范围不变）并对三个传递依赖按补丁版更新后 **0 漏洞**；[`docs/ROADMAP.md`](docs/ROADMAP.md) §四 audit 行改按官方 registry 口径（默认镜像仍无 audit 端点）。
+- **可访问性**：补齐 [`docs/accessibility.md`](docs/accessibility.md) §4.13「仍未做」的三个扫描盲区——`apps/web/e2e/a11y.spec.ts` 新增**极窄视口 320×700** / **横屏手机 844×390** / **200% 缩放近似 640×450**（WCAG 1.4.4；用「CSS 视口减半 = 重排等价」近似，口径在用例注释与 §4.13 如实披露），三态均另断言页面无横向溢出；实跑全绿未抓到新违规，axe 扫描态 7 → **10**，`pnpm e2e` 23+1 → **26 passed + 1 skipped**。真机 / 触摸 / 屏幕阅读器实测仍属人工项。
+- **开发者体验**：`apps/web/vite.config.ts` 加 `server.strictPort: true`（desktop 评审 C1）——1949 被 Tauri `devUrl` 固定依赖，端口被占时 dev server 快速失败，不再静默换端口导致桌面壳白屏；E2E 走 preview 4173 不受影响。
+- **验证**：`pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **87 文件 1360 例**全绿 / `pnpm test:coverage` 四指标 **100%（5108 / 3395 / 1290 / 4407）** / `pnpm build` OK / `pnpm e2e` **26 passed + 1 skipped** / `make e2e-real` **5 passed**（升级后产物复跑，`SERVER_PORT=8081` + 外部共享 RustFS `--no-rustfs`）/ `pnpm audit`（官方 registry）**0 漏洞** / `S3CLIENT_E2E=1` 真协议 E2E **7/7 PASS**（后端无代码改动）。
+
 ### 变更（2026-10-12 docs 全量通读复盘快照）
 
-- **新增** [`docs/docs-review-2026-10-12.md`](docs/docs-review-2026-10-12.md)——对 `docs/` 下**全部 54 篇文档**（顶层 23 · `archive/` 13 · `decisions/` 15 · `en/` 3；不含本快照自身，即第 55 篇）做一次通读复盘：清单与体量、三层入口与唯一来源纪律的交叉观察、仍存问题（超大文件体量与体例收尾）与下一步建议（**沿用** [`docs/archive/handoff-20261010.md`](docs/archive/handoff-20261010.md) §5 的既有 14 项，**不新增** [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 编号）；结论绑定 2026-10-12，建议项被处置 / 移交后按「归档四步」冻结入 `docs/archive/`。
+- **新增** [`docs/archive/docs-review-2026-10-12.md`](docs/archive/docs-review-2026-10-12.md)——对 `docs/` 下**全部 54 篇文档**（顶层 23 · `archive/` 13 · `decisions/` 15 · `en/` 3；不含本快照自身，即第 55 篇）做一次通读复盘：清单与体量、三层入口与唯一来源纪律的交叉观察、仍存问题（超大文件体量与体例收尾）与下一步建议（**沿用** [`docs/archive/handoff-20261010.md`](docs/archive/handoff-20261010.md) §5 的既有 14 项，**不新增** [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 编号）；结论绑定 2026-10-12，建议项被处置 / 移交后按「归档四步」冻结入 `docs/archive/`。
 - **文档同步**：本快照同批登记进 [`docs/README.md`](docs/README.md) 导航、`AGENTS.md` / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt) 三处命名清单与 `DEVELOPMENT.md` §4「文档登记表」（未实跑项见快照 §8 披露）。
+- **归档**：复盘快照按「归档四步」冻结入 [`docs/archive/docs-review-2026-10-12.md`](docs/archive/docs-review-2026-10-12.md)——其沿用的 14 项建议经**逐项复核**已被更早的 2026-10-10 批次全部闭环（5 道新门禁 + 9 处文档结构修复，见 [`docs/FEATURES.md`](docs/FEATURES.md) §CJ，门禁注释逐条点名），快照正文按归档纪律不改写、仅顶部加冻结横幅与修正相对链接；同步归档索引（12 → 13 份 + 触发规则补「文档复盘快照」先例）、[`docs/README.md`](docs/README.md) 导航行、`AGENTS.md` / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt) 三处命名清单与 §4 登记行（转「冻结件 · 不复审」）。
 
 ### 变更（2026-10-12 apps/web 页面 UI 与交互优化批次）
 

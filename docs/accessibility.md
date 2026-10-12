@@ -362,7 +362,15 @@ const stack: KeydownHandler[] = []
     **4.39:1**，低于 AA 的 4.5:1 —— 该小字徽标只在**对象列表视图**出现，而此前六个扫描态里
     没有一个是列表视图（网格视图把存储类型画在同一行的 `.gi-meta` 里）。修复：新增
     `--badge-text` token（浅 `#3f5a4c` / 深 `#9fb8ac`，见 §5.5）。
-    **仍未做**：极窄视口（<360px）与横屏 / 平板断点的扫描，以及缩放 200% 的复查。
+    ~~**仍未做**：极窄视口（<360px）与横屏 / 平板断点的扫描，以及缩放 200% 的复查。~~
+    ✅ **2026-10-12 三个盲区同批补齐**：`e2e/a11y.spec.ts` 新增三个扫描态（实跑全绿、未抓到新缺陷，
+    与本条上一轮的 D1 同机制——补扫描面、由 axe 判定）：①**极窄视口 320×700**（初代 iPhone SE
+    宽度，断点响应的下界）；②**横屏手机 844×390**（竖屏态转置，宽度仍在 `max-width: 900px`
+    内但高度减半）；③**200% 缩放近似 640×450 视口**（WCAG 1.4.4 Resize Text AA）——
+    **近似口径如实声明**：Playwright 无法直接设置浏览器 zoom（CDP 缩放是纯视觉、不触发重排），
+    而 200% 缩放对布局的唯一影响就是 CSS 视口减半，故用半尺寸视口做**重排等价**近似；
+    三态均另断言页面级 `scrollWidth` 不超出视口。至此 §4 无「仍未做」的扫描盲区；
+    真机 / 触屏与屏幕阅读器实测仍属人工项（见本节第 1 / 3 条）。
 
 ---
 
@@ -398,7 +406,7 @@ const stack: KeydownHandler[] = []
 | `composables/useKeydownStack.test.ts`（7 例） | 键栈 LIFO 语义：`dispatch` 只调栈顶、真实 `window` 事件也只到栈顶、重复 `pop` 是 no-op、空栈分支、`active` 开关的入栈/出栈与重复激活守卫 | `pnpm test src/composables/useKeydownStack.test.ts` |
 | `components/ObjectList.test.ts` | 排序表头的 `aria-sort` 取值随排序变化（`none` / `ascending` / `descending`）与键盘触发排序 | `pnpm test src/components/ObjectList.test.ts` |
 | Playwright E2E（`apps/web/e2e/*.spec.ts`） | 用例大量使用 `getByRole('button' \| 'dialog' \| 'alertdialog' \| 'row', { name })` 定位元素——**这等于顺带验证了这些角色与可访问名称确实存在**，但它不是可访问性审计（不检查朗读顺序、不跑 a11y 规则集） | `pnpm e2e`（或 `make e2e-real` 走真实后端） |
-| **`e2e/a11y.spec.ts`（7 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：6 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / **移动视口 390×844 对象面板（2026-10-12 新增，另断言页面无横向溢出）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
+| **`e2e/a11y.spec.ts`（10 例，axe-core）** | **真实 Chromium + 真实构建产物**上的 WCAG 2.0 / 2.1 A + AA 规则集扫描：9 个界面状态（浅色初始态 / 新增登录对话框 / 服务器设置面板 / **对象网格视图（2026-10-10 新增）** / **移动视口 390×844 对象面板（2026-10-12 新增）** / **极窄视口 320×700（2026-10-12 晚新增）** / **横屏手机 844×390（2026-10-12 晚新增）** / **200% 缩放近似 640×450（2026-10-12 晚新增，重排等价近似——口径见 §4.13）** / 深色主题初始态）的 **serious / critical 违规必须为 0**，视口态另断言页面无横向溢出；非阻塞级违规打印供人工判断；另 1 例「axe 有效性自检」（注入 `image-alt` 违规必须被报出，防空跑）。**覆盖对比度、ARIA 角色 / 名称、表单标签、landmark 等渲染态规则** | `cd apps/web && pnpm build && pnpm exec playwright test e2e/a11y.spec.ts` |
 | **`src/a11y_axe.test.ts`（6 例，vitest-axe + axe-core）** | **2026-09-30 起（#17④）组件级**：对**挂载后的组件 DOM** 跑同一套 WCAG 2.0 / 2.1 A + AA 规则集，覆盖 E2E 到不了的边界态（`ModalDialog` 带 footer / `ConfirmDialog` 危险态 / `PromptDialog` 带校验失败 / `Toasts` 成功+失败堆叠 / `ObjectList` 带 caption 与选中行）；**serious / critical 即红灯**，非阻塞项打印供人工判断；另 1 例「注入 `image-alt` 必须被报出」空跑自检。**不判对比度**（happy-dom 无 CSS 级联，显式关掉 `color-contrast`） | `cd apps/web && pnpm test src/a11y_axe.test.ts` |
 
 > 以上命令均为 `apps/web/package.json` 的既有脚本（`test` = `vitest run`、`build` = `vue-tsc --noEmit && vite build`、

@@ -202,6 +202,50 @@ test('a11y：移动视口（390×844）对象面板（无 serious/critical 违�
   expect(overflow, `移动视口下页面横向溢出 ${overflow}px（对象表应在 .tbl-wrap 内横向滚动）`).toBeLessThanOrEqual(1)
 })
 
+test('a11y：极窄视口（320×700）对象面板（无 serious/critical 违规、无横向溢出）', async ({ page }) => {
+  // accessibility §4.13「仍未做」①：极窄视口（<360px）。320px 是初代 iPhone SE 的宽度，
+  // 也是断点响应规则最容易出问题的下界；表格 / 工具栏 / 徽标在比 390px 更窄的 CSS 空间里
+  // 可能换行溢出或对比度退化，只能实测。横向溢出断言与移动视口态同口径。
+  await page.setViewportSize({ width: 320, height: 700 })
+  await installObjectsStub(page)
+  await openClean(page)
+  await expect(page.locator('tbody')).toContainText('readme.txt')
+  await scanPage(page, '极窄视口对象面板')
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `极窄视口下页面横向溢出 ${overflow}px（内容应在容器内滚动而非撑破页面）`).toBeLessThanOrEqual(1)
+})
+
+test('a11y：横屏手机（844×390）对象面板（无 serious/critical 违规、无横向溢出）', async ({ page }) => {
+  // accessibility §4.13「仍未做」②：横屏断点。844×390 是竖屏态（390×844）的转置——
+  // 宽度仍在 `@media (max-width: 900px)` 内但高度只剩一半，固定高度 / 依赖纵向空间的
+  // 布局（导航、统计条、面板滚动）在横屏下的表现只能实测。
+  await page.setViewportSize({ width: 844, height: 390 })
+  await installObjectsStub(page)
+  await openClean(page)
+  await expect(page.locator('tbody')).toContainText('readme.txt')
+  await scanPage(page, '横屏手机对象面板')
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `横屏下页面横向溢出 ${overflow}px`).toBeLessThanOrEqual(1)
+})
+
+test('a11y：200% 缩放近似（640×450 视口）对象面板（无 serious/critical 违规、无横向溢出）', async ({ page }) => {
+  // accessibility §4.13「仍未做」③：缩放 200% 复查（WCAG 1.4.4 Resize Text AA）。
+  // Playwright 无法直接设置浏览器 zoom（CDP 的页面缩放是纯视觉缩放，不触发重排）；
+  // 200% 缩放对布局的**唯一影响**就是把 CSS 视口减半（1280×900 的屏在 200% 下 CSS 视口
+  // 为 640×450），故用半尺寸视口做**重排等价**的近似——媒体查询 / 断点 / flex / 表格
+  // 看到的 CSS 像素完全一致。这是近似而非逐像素等价，如实披露在 accessibility.md §4.13。
+  await page.setViewportSize({ width: 640, height: 450 })
+  await installObjectsStub(page)
+  await openClean(page)
+  await expect(page.locator('tbody')).toContainText('readme.txt')
+  await scanPage(page, '200% 缩放近似对象面板')
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+  expect(overflow, `200% 缩放近似视口下页面横向溢出 ${overflow}px（放大后内容不得撑破页面）`).toBeLessThanOrEqual(1)
+})
+
 test('a11y：深色主题初始态（无 serious/critical 违规）', async ({ page }) => {
   // 主题默认 auto → 跟随系统；`data-theme` 由 theme.ts 在模块初始化时写入。
   // 深色下语义色是另一套 token，对比度必须单独验证（浅色通过不代表深色通过）。

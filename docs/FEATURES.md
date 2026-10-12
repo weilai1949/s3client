@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CM 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· **§CM**（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）。
+> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CP 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· §CM（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）· §CN（apps/server 优化评审 S1–S5 闭环）· §CO（docs 复盘快照归档：其沿用的 14 项建议经逐项复核已被 §CJ 全部闭环）· **§CP**（`pnpm audit` 官方 registry 实跑 12 → 0 + a11y 扫描盲区三态补齐 + dev `strictPort`）。
 
 ## 目录
 
@@ -43,7 +43,7 @@
   - CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描 / 明文 `http://` 端点告知）（+ 一道门禁）
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
-  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档）
+  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档） · CO 2026-10-12 docs 复盘快照归档（其沿用的 14 项建议经逐项复核已被 §CJ 批次全部闭环；快照已归档） · CP 2026-10-12 晚（`pnpm audit` 官方 registry 实跑 12 → 0（vue 3.5.43 + 三传递依赖补丁版）· a11y 扫描盲区三态补齐（320×700 / 844×390 / 200% 缩放近似 640×450，e2e 23+1 → 26+1）· dev `strictPort`）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -2614,6 +2614,35 @@ functions 1095 / lines 3503）。
 
 > **门禁实跑（2026-10-12）**：`go vet ./...` 0 / `golangci-lint run ./...` **0 issues** / `go test ./...` 九个包全绿 / `go test -race -count=1 -coverprofile=coverage.out ./...` **100.0%，零未覆盖块**（仓库自带 `awk` 口径）。
 > **未实跑项**：端到端压测、`mutex` / `block` pprof 与真实 RustFS E2E——S1–S5 的收益仍为**定性**判断（评审 §6 的披露继续成立）。
+
+### CO. 2026-10-12 docs 复盘快照归档 + 其沿用的 14 项建议逐项复核
+
+> **来源**：文档复盘快照 [`docs-review-2026-10-12.md`](archive/docs-review-2026-10-12.md) 的归档处置。复核结论：该快照 §7 沿用的 [`archive/handoff-20261010.md`](archive/handoff-20261010.md) §5 的 14 项建议，**已于更早的本文件 §CJ 批次（2026-10-10）全部闭环**——快照采信该清单时未逐项复核，其「仍存问题」与「下一步建议」不再有效（逐项现状已在快照文首冻结横幅与 [`archive/index.md`](archive/index.md) 归档行注明，正文按归档纪律不改写）。
+
+| 复核对象（快照 §7 项） | 现状证据 |
+|---|---|
+| 瘦身三项（FEATURES 页头/目录 · KNOWN_ISSUES 页头 · DEVELOPMENT §3）与标题锚点 / `2026-04-19` 核实 | §CJ 第 1 / 1b / 2 / 3 行（页头摘要 188 字、目录 24 行、KNOWN_ISSUES 216 → 156 行；`### X.` 体例统一） |
+| `api.md` 目录 / 84 op `description` / etag 引号口径 | §CJ 第 8 行（目录 61 锚点、description 0/84 → 84/84、`strings.Trim` 统一去引号） |
+| `compatibility.md` §6.2 符号锚点 | §CJ 第 7 行 + `TestCompatibilityMatrixCitesSymbolsNotLineNumbers`（实测 §6.2 已无 `file:line` 引用） |
+| 建议门禁（i18n 模块数弱断言 · `doc_status_drift` 页头日期扩面 · AGENT_EVALS 回填） | §CJ 第 4 / 9 / 10 行（`agent_evals_gate_test.go` / `doc_number_gate_test.go` i18n 段 / `doc_status_drift_gate_test.go` 断言 4） |
+| 体例收尾（POSTMORTEM §0/§11 · OPERATIONS §3.2 归附录 · user-guide 工具栏 + FinOps 单列 · ADR-013 体例） | §CJ 第 11 / 12 / 13 行（§11 改「有意不定义」单一口径、§12 附录 A、§九 独立成节、`adr_format_gate_test.go`） |
+| `THIRD_PARTY_LICENSES.md` SPDX 同义分裂 | §CJ 第 6 行（生成脚本 `canonical_spdx` 归并 + `third_party_licenses_gate_test.go`） |
+| `en/` 刻意不译清单 + revision 过期提醒 | §CJ 第 14 行（`en/index.md` Scope 段 + `en_docs_gate_test.go` 断言 e） |
+
+> **归档执行（2026-10-12）**：按「归档四步」——`git mv` 冻结入 `docs/archive/`（相对链接按新深度修正 + 文首冻结横幅）；归档索引计数 12 → 13 并补「文档复盘快照」触发先例；[`README.md`](README.md) 导航行 / `AGENTS.md` / [`DEVELOPMENT.md`](DEVELOPMENT.md) §4 命名段与登记行（转「冻结件 · 不复审」）/ [`llms.txt`](../llms.txt) 同步；发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+> **门禁实跑（2026-10-12）**：`go vet ./...` 0 / `go build ./...` OK / `go test ./...` **10/10 包**全绿（含 `doc_link_gate` / `doc_index_gate` / `docs_naming_gate` / `archive_index_gate` / `doc_status_drift_gate` 全部文档门禁）。
+
+### CP. 2026-10-12 晚：`pnpm audit` 官方 registry 实跑清零（12 → 0）+ a11y 扫描盲区补齐（§4.13 三态）+ dev `strictPort`
+
+> **来源**：docs 复盘快照归档后的同日追加批次。①长期「沿用 CI」的 `pnpm audit` 改用官方 registry **真跑**，首跑暴露 12 条通告（此前口径「0 漏洞」实为镜像无 audit 端点下的未验证值）；②[`accessibility.md`](accessibility.md) §4.13「仍未做」的三个扫描盲区补齐（与 D1 同机制：补扫描面、由 axe 判定）；③desktop 评审快照 C1（`strictPort`）落地。发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+
+| 项 | 改动面 | 结果 |
+|---|---|---|
+| `pnpm audit` 实跑缺口 | `apps/web/pnpm-lock.yaml`（`vue` 3.5.41 → **3.5.43**，连带 `@vue/server-renderer` 补丁；`pnpm update --depth Infinity brace-expansion postcss-selector-parser source-map-js` 三个传递依赖补丁版；`package.json` 语义版本范围不变） | 官方 registry 实跑 **12 条（8 high / 4 moderate）→ 0 漏洞**。首跑的 12 条均**不进 dist 产物**（`@vue/server-renderer` / `source-map-js` 属编译期链，runtime bundle 不含 compiler；brace-expansion / postcss-selector-parser 纯 dev 链）——升级消除通告面而非仅 triage；默认镜像 `registry.npmmirror.com` 仍无 audit 端点，[ROADMAP.md](ROADMAP.md) §四 audit 行已按官方 registry 口径改写 |
+| a11y 扫描盲区（§4.13「仍未做」三项） | [`apps/web/e2e/a11y.spec.ts`](../apps/web/e2e/a11y.spec.ts) 新增三个扫描态：**极窄视口 320×700**（初代 iPhone SE 宽度，断点响应下界）/ **横屏手机 844×390**（竖屏态转置，宽度仍在 `max-width: 900px` 内）/ **200% 缩放近似 640×450**（WCAG 1.4.4；Playwright 无法设真 zoom，用「CSS 视口减半 = 重排等价」近似，口径在用例注释与 §4.13 如实披露），三态均另断言页面级 `scrollWidth` 无溢出 | `pnpm e2e` 23+1 → **26 passed + 1 skipped**（axe 扫描态 7 → 10）；三态实跑**全绿未抓到新违规**（对比 D1 批次——盲区补齐两种结局的先例都齐了）；§4 从此无「仍未做」的扫描盲区，剩余人工项（真机 / 触摸 / 屏幕阅读器）与第 1 / 3 条一致 |
+| dev 端口快速失败（desktop 评审 C1） | [`apps/web/vite.config.ts`](../apps/web/vite.config.ts) `server.strictPort: true` + 注释（1949 被 Tauri `devUrl` 固定依赖） | 端口被占时 dev server 快速失败，不再静默换端口让桌面壳连旧进程后白屏；E2E 走 preview 4173、`make e2e-real` 走静态产物，均不受影响 |
+
+> **门禁实跑（2026-10-12 晚）**：`pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **87 文件 1360 例** / `pnpm test:coverage` 四指标 **100%（5108 / 3395 / 1290 / 4407）** / `pnpm build` OK / `pnpm e2e` **26 passed + 1 skipped** / `make e2e-real` **5 passed**（升级后产物复跑，`SERVER_PORT=8081` + 外部共享 RustFS `--no-rustfs`）/ `pnpm audit`（官方 registry）**0 漏洞**；后端无代码改动，`S3CLIENT_E2E=1` 七条真协议 E2E 同日复跑 **7/7 PASS**。
 
 ## 三、质量与覆盖率现状
 

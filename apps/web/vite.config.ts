@@ -35,6 +35,9 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     port: 1949,
+    // 1949 被 Tauri devUrl（apps/desktop/src-tauri/tauri.conf.json）固定依赖：
+    // 端口被占时宁可快速失败，也不静默换端口让桌面壳连上旧进程后白屏。
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:5000',
