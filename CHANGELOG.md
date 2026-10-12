@@ -31,6 +31,11 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-12 docs 全量通读复盘快照）
+
+- **新增** [`docs/docs-review-2026-10-12.md`](docs/docs-review-2026-10-12.md)——对 `docs/` 下**全部 54 篇文档**（顶层 23 · `archive/` 13 · `decisions/` 15 · `en/` 3；不含本快照自身，即第 55 篇）做一次通读复盘：清单与体量、三层入口与唯一来源纪律的交叉观察、仍存问题（超大文件体量与体例收尾）与下一步建议（**沿用** [`docs/archive/handoff-20261010.md`](docs/archive/handoff-20261010.md) §5 的既有 14 项，**不新增** [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 编号）；结论绑定 2026-10-12，建议项被处置 / 移交后按「归档四步」冻结入 `docs/archive/`。
+- **文档同步**：本快照同批登记进 [`docs/README.md`](docs/README.md) 导航、`AGENTS.md` / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt) 三处命名清单与 `DEVELOPMENT.md` §4「文档登记表」（未实跑项见快照 §8 披露）。
+
 ### 变更（2026-10-12 apps/web 页面 UI 与交互优化批次）
 
 - **高**：切 Tab 不再中断上传并新增**顶栏全局任务中心**（角标 + 明细 + `Esc` / 点外关闭，`upload:panel` / `upload:objects` / `migrate` 三类活动统一上报）；对象面板支持**拖拽上传文件与整个目录**（`webkitGetAsEntry` 递归 + `readEntries` 循环 + 5000 文件上限）；切换服务器 / 账号改为**软刷新**（`emit('changed')` → 先 `loadAccounts()` 再 `bumpServerEpoch()`，`<KeepAlive :key>` 重建面板，去掉三处 `window.location.reload()`）。
