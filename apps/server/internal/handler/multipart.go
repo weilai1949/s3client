@@ -68,6 +68,11 @@ func (h *Handler) multipartPart(w http.ResponseWriter, r *http.Request) {
 	if bucket, ok = h.bucketOr(w, acc, bucket); !ok {
 		return
 	}
+	// 负数是配置错误，回 400；0 / 缺省仍走下方默认 1h（与 presign 同口径）。
+	if req.ExpiresIn < 0 {
+		h.writeErr(w, http.StatusBadRequest, "expiresIn must be >= 0")
+		return
+	}
 	expires := time.Duration(req.ExpiresIn) * time.Second
 	if expires <= 0 {
 		expires = time.Hour

@@ -15,12 +15,26 @@ import (
 // 启动时硬失败（生产推荐 openssl rand -hex 32 / 64）。
 const MinTokenLength = 16
 
+// MinMetricsTokenLength 是 S3C_METRICS_TOKEN 允许的最小字符数。
+// 它保护运行指标端点，强度口径与 S3C_TOKEN 一致。
+const MinMetricsTokenLength = 16
+
 // MinStoreKeyLength 是 S3C_STORE_KEY 允许的最小字符数。该口令是账号密钥落盘加密
 // 的唯一凭据（Argon2id 派生），过短同样会被暴力破解；非空即校验（已闭环：FEATURES.md §M）。
 const MinStoreKeyLength = 16
 
+// DefaultRateLimitRPM / DefaultRateLimitBurst 是 API 限流默认值（S3C_RATE_LIMIT_* 未设置时）。
+// 放在 config 包供 handler.New 共用，避免两处字面量漂移。
+const (
+	DefaultRateLimitRPM   = 120
+	DefaultRateLimitBurst = 30
+)
+
 // ErrShortToken 表示 S3C_TOKEN 长度低于 MinTokenLength。
 var ErrShortToken = errors.New("S3C_TOKEN too short")
+
+// ErrShortMetricsToken 表示 S3C_METRICS_TOKEN 长度低于 MinMetricsTokenLength。
+var ErrShortMetricsToken = errors.New("S3C_METRICS_TOKEN too short")
 
 // ErrShortStoreKey 表示 S3C_STORE_KEY 长度低于 MinStoreKeyLength。
 var ErrShortStoreKey = errors.New("S3C_STORE_KEY too short")
@@ -137,6 +151,7 @@ type Config struct {
 	Region              string                // 账号缺省 region
 	Token               string                // 可选 API 鉴权 token；非空则要求 Bearer
 	TokenScopes         map[string]TokenScope // S3C_TOKEN_SCOPES：按 token 声明最小权限（未登记 = 全权）
+	MetricsToken        string                // S3C_METRICS_TOKEN：设置后 /api/metrics 仅接受该独立 Bearer
 	CORSOrigins         []string              // CORS 白名单；空 = 仅同源 + localhost/tauri
 	LogLevel            string                // debug|info|warn|error
 	LogJSON             bool                  // true = slog JSON（容器/生产更易采集）
@@ -149,6 +164,8 @@ type Config struct {
 	CSPConnectSrc       string                // CSP connect-src 白名单；默认仅同源 + 本地 Tauri 后端；多后端/远程需显式放宽
 	TrustedProxies      []string              // 可信反向代理 IP；仅这些对端的 X-Forwarded-For 被采信（默认空 = 不信任 XFF）
 	SSRFDenyPrivate     bool                  // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
+	RateLimitRPM        int                   // 每 IP（IPv6 按 /64 聚合）每分钟放行请求数；默认 DefaultRateLimitRPM
+	RateLimitBurst      int                   // 令牌桶突发容量；默认 DefaultRateLimitBurst
 	OTelEndpoint        string                // OTLP/HTTP 采集端基址；空 = 关闭 tracing（默认）
 	OTelSampleRatio     float64               // 新建 trace 采样比例，取值 [0,1]（默认 1）
 	OTelServiceName     string                // OTLP resource attribute service.name（默认 s3client）
@@ -206,6 +223,8 @@ func envOrFloat(key string, def float64) (float64, error) {
 func FromEnv() Config {
 	loadErr := loadDotEnv()
 	shutdownTimeout, secErr := envOrInt("S3C_SHUTDOWN_TIMEOUT", 30)
+	rateLimitRPM, rpmErr := envOrInt("S3C_RATE_LIMIT_RPM", DefaultRateLimitRPM)
+	rateLimitBurst, burstErr := envOrInt("S3C_RATE_LIMIT_BURST", DefaultRateLimitBurst)
 	tokenScopes, scopeErr := parseTokenScopes(os.Getenv("S3C_TOKEN_SCOPES"))
 	otelSampleRatio, ratioErr := envOrFloat("S3C_OTEL_SAMPLE_RATIO", 1)
 	envErr := loadErr
@@ -218,6 +237,12 @@ func FromEnv() Config {
 	if envErr == nil {
 		envErr = ratioErr
 	}
+	if envErr == nil {
+		envErr = rpmErr
+	}
+	if envErr == nil {
+		envErr = burstErr
+	}
 	return Config{
 		Addr:                envOr("S3C_ADDR", "127.0.0.1:5000"),
 		DataDir:             envOr("S3C_DATA_DIR", "./data"),
@@ -225,6 +250,7 @@ func FromEnv() Config {
 		Region:              envOr("S3C_REGION", "us-east-1"),
 		Token:               os.Getenv("S3C_TOKEN"),
 		TokenScopes:         tokenScopes,
+		MetricsToken:        os.Getenv("S3C_METRICS_TOKEN"),
 		CORSOrigins:         splitList(envOr("S3C_CORS_ORIGINS", "")),
 		LogLevel:            envOr("S3C_LOG_LEVEL", "info"),
 		LogJSON:             envTruthy("S3C_LOG_JSON"),
@@ -237,6 +263,8 @@ func FromEnv() Config {
 		CSPConnectSrc:       envOr("S3C_CSP_CONNECT_SRC", "'self' http://127.0.0.1:* http://localhost:*"),
 		TrustedProxies:      splitList(envOr("S3C_TRUSTED_PROXIES", "")),
 		SSRFDenyPrivate:     envTruthy("S3C_SSRF_DENY_PRIVATE"),
+		RateLimitRPM:        rateLimitRPM,
+		RateLimitBurst:      rateLimitBurst,
 		OTelEndpoint:        envOr("S3C_OTEL_ENDPOINT", ""),
 		OTelSampleRatio:     otelSampleRatio,
 		OTelServiceName:     envOr("S3C_OTEL_SERVICE_NAME", "s3client"),
@@ -283,6 +311,7 @@ func IsLoopbackAddr(addr string) bool {
 //   - S3C_STORE_DRIVER 必须在白名单 json|sqlite|encrypted（空串 = 未显式指定，默认 json），
 //     未知值拒绝启动——此前未知值被 store.Open 静默当 json，绕过下面的明文落盘闸（R4）；
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
+//   - 非空 S3C_METRICS_TOKEN 必须达到最短长度；S3C_CSP_CONNECT_SRC 不得含控制字符 / 纯空白；
 //   - 非回环监听必须设置 S3C_TOKEN；
 //   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：FEATURES.md §M）；
 //   - json / sqlite 且 S3C_STORE_KEY 为空时必须显式 opt-in 明文落盘，否则拒绝启动（KNOWN_ISSUES #29/#31）。
@@ -298,11 +327,24 @@ func (c Config) Validate() error {
 	if err := validateTokenScopes(c.Token, c.TokenScopes); err != nil {
 		return err
 	}
+	if c.MetricsToken != "" && len(c.MetricsToken) < MinMetricsTokenLength {
+		return fmt.Errorf("%w: got %d chars, need >= %d (建议 openssl rand -hex 32)",
+			ErrShortMetricsToken, len(c.MetricsToken), MinMetricsTokenLength)
+	}
 	// S3C_SHUTDOWN_TIMEOUT 必须有上界，否则 time.Duration(n) * time.Second 溢出为负时长
 	// → 优雅关停被静默跳过（错误被丢弃、退出码仍 0），在途流式下载被硬切断。
 	if c.ShutdownTimeoutSec > maxShutdownTimeoutSec {
 		return fmt.Errorf("%w: S3C_SHUTDOWN_TIMEOUT=%d 超过上界 %d 秒",
 			ErrInvalidEnvValue, c.ShutdownTimeoutSec, maxShutdownTimeoutSec)
+	}
+	// S3C_CSP_CONNECT_SRC：空串 = 未指定（SetCSPConnectSrc 忽略空值、沿用默认 CSP，
+	// 与 StoreDriver 空串口径一致）；一旦指定则必须可用——控制字符（含换行）会让
+	// CSP 响应头写出失败或被客户端丢弃（加固项静默失效），纯空白会把 connect-src
+	// 变成空源列表（阻断所有连接）。启动期 fail-closed，不静默降级。
+	if src := c.CSPConnectSrc; src != "" {
+		if strings.TrimSpace(src) == "" || strings.ContainsFunc(src, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return fmt.Errorf("%w: S3C_CSP_CONNECT_SRC=%q 含控制字符或为空白", ErrInvalidEnvValue, src)
+		}
 	}
 	driver := normalizeStoreDriver(c.StoreDriver)
 	switch driver {

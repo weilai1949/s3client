@@ -49,6 +49,31 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-15 安全评审 R2a / R2b / R3a + 两项低风险加固）
+
+- **收紧（R2a，鉴权语义）**：`GET /api/health` 继续免鉴权供 Docker / 探针使用，但 `version` 仅在请求携带**有效** `S3C_TOKEN` 且 token 未过作用域有效期时返回；匿名 / 错 token / 过期 token 均只返回 `status` / `time` / `store`，不再免费暴露版本号。
+- **新增（R2b，配置项）**：`S3C_METRICS_TOKEN`（可选、≥ 16 字符）——设置后 `GET /api/metrics` 必须携带该独立 Bearer，通用 `S3C_TOKEN` 不能替代；不设置则维持既有内网匿名 scrape 兼容。短 token 拒绝启动。
+- **收紧（R3a，CSP）**：服务端 CSP 从 `style-src 'self' 'unsafe-inline'` 调整为 `style-src 'self'; style-src-attr 'unsafe-inline'`——Vue `:style` 绑定继续可用，内联 `<style>` 块被禁止；桌面壳按既有取舍不变。
+- **加固**：`S3C_CSP_CONNECT_SRC` 含换行 / 控制字符或为纯空白时拒绝启动，防 CSP 响应头异常或 connect-src 静默变成空列表；`/api/metrics` 新增 `s3c_rate_limit_rpm` / `s3c_rate_limit_burst` gauge，供运维核对限流生效值。
+- **文档 / 契约同步**：[`docs/api.md`](docs/api.md) 与 [`docs/api/openapi.json`](docs/api/openapi.json)（health `version` 改可选、metrics 鉴权口径）、[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)、[`docs/OPERATIONS.md`](docs/OPERATIONS.md)（Prometheus `authorization.credentials_file` 示例）、[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)、[`docs/threat-model.md`](docs/threat-model.md)、[`docs/user-guide.md`](docs/user-guide.md)、[`README.md`](README.md) / [`docs/en/index.md`](docs/en/index.md)（配置计数 24 → 25）、两份 `.env.example`、两份 compose 白名单、[`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md) 与 [`docs/FEATURES.md`](docs/FEATURES.md)。
+- **验证**：新增行为先红后绿（metrics token / health version / CSP / OpenAPI 可选鉴权）；`go vet` / `go test ./...` / `go build` 全绿，`make test-cover` 11/11 包 **100.0%** 且零 `count==0` 块，`golangci-lint` **0 issues**；前端 `pnpm lint` / `typecheck` / `typecheck:e2e` / **1364 tests** / 四指标 **100%** / `build` / `gen:api --check` 全绿；`pnpm e2e` **26 passed + 1 skipped**，`make e2e-real`（真实后端 + RustFS + 真实产物，不 mock `/api`）**5/5 PASS**；compose base / prod / tls 配置与包根文档门禁全绿。R3a 仍按 [`AI_POLICY.md`](docs/AI_POLICY.md) §3 等待人类专家复核后合并。
+
+### 变更（2026-10-15 安全评审 R4 + R5 闭环：限流可配置与 IPv6 /64 聚合 + 预签名负数 expiresIn 拒绝）
+
+- **修复（R5，行为收紧）**：`POST /api/accounts/{id}/presign` 与 `POST /api/accounts/{id}/multipart/part` 的 `expiresIn` **负数返回 400**（配置错误不静默回退）；`0` / 缺省仍默认 1 小时、超 24 小时钳制不变。先红后绿：`TestOlPresignModes` / `TestOlMultipartPartClamp` 各加负数用例（旧实现返回 200 + 3600）。
+- **新增（R4，配置项）**：`S3C_RATE_LIMIT_RPM`（默认 `120`）与 `S3C_RATE_LIMIT_BURST`（默认 `30`）——API 限流速率与突发容量可调；非整数 / `< 1` **拒绝启动**（fail-closed，与 `S3C_SHUTDOWN_TIMEOUT` 同口径）。
+- **修复（R4，防绕过）**：限流桶键对 **IPv6 按 /64 前缀聚合**——此前攻击者可用单 /64 内海量地址各自换取独立令牌桶绕过限速；IPv4（含 IPv4 映射 IPv6）与无法解析的地址原样作为桶键，审计日志仍记完整 IP。默认值不变，零配置行为无变化。
+- **文档 / 契约同步**：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)（变量表 + fail-closed 清单）、[`docs/api.md`](docs/api.md)（429 通用码、`expiresIn` 语义、multipart/part 说明）、[`docs/api/openapi.json`](docs/api/openapi.json)（multipart/part 400 描述补 `expiresIn`，已用 `-update-openapi-spec` 重新生成）、[`docs/threat-model.md`](docs/threat-model.md)（边界 A DoS 行）、[`README.md`](README.md) 与 [`docs/en/index.md`](docs/en/index.md)（配置项计数 22 → 24，`doc_number` 门禁钉住）、两份 `.env.example`、两份 compose 白名单、[`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md)（R4 / R5 状态回写）。
+- **验证**：目标用例先红后绿（R5：200→400；R4：新 API 编译红→绿）；`gofmt` / `go vet` / `go build` 干净 · `go test -race -count=1 ./...` **11/11 包 PASS** · 覆盖率 **100.0% 零 `count==0` 块** · `golangci-lint` **0 issues** · 包根文档门禁全绿；真实 RustFS E2E（`S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E -v`，含条件写 / 校验和 / Object Lock / 分段 / 桶设置 / 回收站）**全 PASS**；`make e2e-real`（真实后端 + 真实 RustFS + 真实产物 + Playwright 不 mock `/api`）**5/5 PASS**。
+
+### 变更（2026-10-15 全仓安全评审：快照落地 + R1 威胁模型 XFF 表述修正）
+
+- **新增** 时点性快照 [`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md)——**2026-10-15 全仓安全评审**（第一性原理：资产 → 信任边界 → STRIDE → 逐项代码级核验；结论 **Approve**：未发现高危 / 中危，R1–R5 均为低危 / 观察项）。工具实测：`govulncheck` **0 可达漏洞**、`pnpm audit --prod` **0**、`cargo audit` 仅 2 条已放行告警（unmaintained / unsound，均为 Tauri 传递依赖）；前端生产代码 **0 处** `v-html` / `innerHTML` / `eval`；`.env` 未入库且 Git 历史无泄露。
+- **修复（文档漂移，R1）**：[`docs/threat-model.md`](docs/threat-model.md) §2 安全默认值表中 XFF 的表述由「采信首段」订正为「采信其直连对端追加的**最后一段**」——与 `apps/server/internal/handler/ratelimit.go` `clientIPWithProxies` 的实际实现一致（代码正确、文档过期；取最后一段防客户端在 XFF 左侧预置伪造值换桶绕过限速）。
+- **观察项登记**：R2（`/api/health` 暴露 `version` / metrics 开启后免鉴权——探针与内网 scrape 的设计取舍，公网部署须内网 scrape 或前置访问层）、R3（CSP `style-src 'unsafe-inline'` 与 Tauri `connect-src` 全放开——Vue / 任意 S3 端点所需，2026-10-14 评审 C1 已复核维持）、R4（限流固定 120/min 且按单 IP 计数，IPv6 /64 可分散——公网部署前再评估 /64 聚合）、R5（`presign` 的 `expiresIn <= 0` 静默取 1h——行为惊讶非漏洞）；处置口径见快照 §2 / §4。
+- **文档同步**：[`docs/README.md`](docs/README.md) 导航新增「看最近一次全仓安全评审」行；三处命名清单（根 [`AGENTS.md`](AGENTS.md) / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt)）登记 `code-review-2026-10-15.md`；`DEVELOPMENT.md` §4 文档登记表补活跃快照行。
+- **验证**：改文档前后各跑一次 `cd apps/server && go test . -count=1`（包根门禁，含 `doc_link` / `doc_index` / `docs_naming` / `doc_review` 等）均 **PASS**；变异验证——先落快照不登记三处命名清单 → `docs_naming_gate` 红灯点名三处均缺 `code-review-2026-10-15.md`，补齐后转绿。
+
 ### 变更（2026-10-15：2026-10-14 评审 O1–O3 闭环 + 门禁全量实跑全绿）
 
 - **重构（前端，行为等价）**：新增 `composables/useSeqGuard()`（`next` / `isCurrent` / `invalidate`）收敛「自增代次 → 丢弃过期响应 → finally 条件复位 loading」惯用法——迁移 `useObjectBrowser`（bucket / load 双 guard，承接 F1 的分计数）/ `BucketsPanel` / `RecycleBinPanel` / `StorageReportPanel` / `MigratePanel`（源 · 目标）/ `AccountsPanel` / `ObjectDetailDialog` / `useBucketSetting` / `VersionsDialog` / `useObjectActions` 共 10 处；各处 finally 复位语义逐字保留（`KNOWN_ISSUES` #88 / 评审 O1 闭环）。

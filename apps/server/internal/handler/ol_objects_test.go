@@ -299,6 +299,9 @@ func TestOlPresignModes(t *testing.T) {
 	// 缺 key → 400
 	rr = env.accDoRec("POST", "/api/accounts/"+id+"/presign", `{}`)
 	olExpectStatus(t, rr, http.StatusBadRequest, "no key")
+	// 负数 expiresIn → 400（不得静默回退默认 1h；0 / 缺省仍走默认）
+	rr = env.accDoRec("POST", "/api/accounts/"+id+"/presign", `{"key":"k","method":"put","expiresIn":-5}`)
+	olExpectStatus(t, rr, http.StatusBadRequest, "negative expiresIn")
 }
 
 // TestOlDeleteObjectsTooManyKeys 1001 个 key 触发 400；少量走通。

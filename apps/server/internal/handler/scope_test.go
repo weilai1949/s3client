@@ -587,8 +587,16 @@ func TestScopeExemptEndpointsUnchanged(t *testing.T) {
 	e := newScopeEnv(t, map[string]config.TokenScope{
 		scopeTokReadonly: {Readonly: true, ExpiresAt: time.Now().Add(-time.Minute)},
 	})
-	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/health", ""); rr.Code != http.StatusOK {
+	rr := e.request(scopeTokReadonly, http.MethodGet, "/api/health", "")
+	if rr.Code != http.StatusOK {
 		t.Errorf("过期 token 访问 /api/health = %d, want 200（豁免）", rr.Code)
+	}
+	var health map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &health); err != nil {
+		t.Fatalf("解析 health 响应: %v", err)
+	}
+	if _, ok := health["version"]; ok {
+		t.Errorf("过期 token 不得看到 health version: %v", health)
 	}
 	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/metrics", ""); rr.Code != http.StatusNotFound {
 		t.Errorf("/api/metrics（未开启）= %d, want 404", rr.Code)

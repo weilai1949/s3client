@@ -56,6 +56,8 @@ func TestMetricsEndpointExposed(t *testing.T) {
 		"s3c_volume_inode_capacity", "s3c_volume_inode_free",
 		// KNOWN_ISSUES #83：计划 / 任务清单落盘失败（原为静默）。
 		"s3c_persist_failures_total",
+		// 限流生效参数（S3C_RATE_LIMIT_*）：运维核对配置是否真的生效。
+		"s3c_rate_limit_rpm", "s3c_rate_limit_burst",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("missing %s in %s", want, body)
@@ -63,6 +65,43 @@ func TestMetricsEndpointExposed(t *testing.T) {
 	}
 	if rr.Header().Get("X-Request-ID") == "" {
 		t.Fatal("missing X-Request-ID")
+	}
+}
+
+// TestMetricsRateLimitGaugesReflectConfig 限流生效参数以 gauge 输出（对齐
+// s3c_ssrf_deny_private 的「生效值核对」口径）；SetRateLimit 后应反映新值。
+func TestMetricsRateLimitGaugesReflectConfig(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(st, gapLogger(), t.TempDir(), nil, "", "test", true, false)
+	handler.SetRateLimit(60, 5)
+	h := handler.Routes()
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	body := rr.Body.String()
+	for _, want := range []string{"s3c_rate_limit_rpm 60", "s3c_rate_limit_burst 5"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("SetRateLimit(60,5) 后应输出 %q，got:\n%s", want, body)
+		}
+	}
+}
+
+// TestMetricsRateLimitGaugesOmittedWithoutLimiter 白盒：手工构造的零值 Handler
+// （limiter == nil，不经 New）不输出限流参数序列——与 dataDir 未配置时同口径，
+// 不用 0 冒充「限流为 0」。
+func TestMetricsRateLimitGaugesOmittedWithoutLimiter(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := New(st, gapLogger(), t.TempDir(), nil, "", "test", true, false)
+	h.limiter = nil
+	rr := httptest.NewRecorder()
+	h.metrics(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	if strings.Contains(rr.Body.String(), "s3c_rate_limit_rpm") {
+		t.Fatalf("limiter == nil 时不应输出 s3c_rate_limit_rpm，got:\n%s", rr.Body)
 	}
 }
 
@@ -103,11 +142,9 @@ func TestMetricsStoreUpAndSSRFPolicy(t *testing.T) {
 	}
 }
 
-// TestMetricsEndpointUnauthenticatedEvenWithToken 固定「设计如此」的行为（KNOWN_ISSUES #30）：
-// 即使配置了 S3C_TOKEN，/api/metrics 也**免鉴权**（内部 Prometheus 需在无 Bearer 的情况下
-// scrape），仅由 S3C_EXPOSE_METRICS 门控；其余 /api/* 仍强制鉴权。若未来要改鉴权行为，
-// 本测试必须先被有意识地改写——不要为「修安全项」而悄悄给 metrics 加鉴权。
-func TestMetricsEndpointUnauthenticatedEvenWithToken(t *testing.T) {
+// TestMetricsEndpointUnauthenticatedWithoutMetricsToken 保持兼容口径：未设置独立
+// S3C_METRICS_TOKEN 时，即使配置了 S3C_TOKEN，/api/metrics 仍匿名可读，供内网 scrape。
+func TestMetricsEndpointUnauthenticatedWithoutMetricsToken(t *testing.T) {
 	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -134,6 +171,57 @@ func TestMetricsEndpointUnauthenticatedEvenWithToken(t *testing.T) {
 	h.ServeHTTP(rrHealth, httptest.NewRequest(http.MethodGet, "/api/health", nil))
 	if rrHealth.Code != http.StatusOK {
 		t.Fatalf("GET /api/health without token = %d, want 200", rrHealth.Code)
+	}
+}
+
+// TestMetricsEndpointRequiresMetricsTokenWhenConfigured S3C_METRICS_TOKEN 设置后，
+// metrics 只接受该独立 Bearer；通用 S3C_TOKEN 不能代替 scrape 凭据。
+func TestMetricsEndpointRequiresMetricsTokenWhenConfigured(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	handler := New(st, logger, t.TempDir(), nil, "unit-test-token-0123456789", "test", true, false)
+	const metricsToken = "metrics-token-0123456789"
+	handler.SetMetricsToken(metricsToken)
+	h := handler.Routes()
+
+	for _, tc := range []struct {
+		name string
+		auth string
+		want int
+	}{
+		{name: "missing", want: http.StatusUnauthorized},
+		{name: "wrong", auth: "Bearer wrong-metrics-token", want: http.StatusUnauthorized},
+		{name: "api token is not metrics token", auth: "Bearer unit-test-token-0123456789", want: http.StatusUnauthorized},
+		{name: "metrics token", auth: "Bearer " + metricsToken, want: http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
+			if tc.auth != "" {
+				req.Header.Set("Authorization", tc.auth)
+			}
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			if rr.Code != tc.want {
+				t.Fatalf("metrics status = %d, want %d", rr.Code, tc.want)
+			}
+		})
+	}
+}
+
+func TestHiddenMetricsReturns404BeforeMetricsAuth(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "a.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(st, gapLogger(), t.TempDir(), nil, "", "test", false, false)
+	handler.SetMetricsToken("metrics-token-0123456789")
+	rr := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("隐藏 metrics 的状态 = %d, want 404", rr.Code)
 	}
 }
 

@@ -79,7 +79,8 @@ func readHeapAllocBytes() uint64 {
 	return samples[0].Value.Uint64()
 }
 
-// metrics 暴露 Prometheus 文本格式指标（无需鉴权，便于内网 scrape）。
+// metrics 暴露 Prometheus 文本格式指标；S3C_METRICS_TOKEN 非空时由 withMetricsGate 校验，
+// 为空则保持内网匿名 scrape 兼容。
 //
 // 整个响应先写进一个缓冲、最后一次性 Write：旧实现 30+ 次 fmt.Fprintf 直写
 // http.ResponseWriter，每次都经 httpx.StatusRecorder / 连接写路径（S5）。
@@ -132,6 +133,17 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&buf, "# HELP s3c_ssrf_deny_private Effective SSRF policy: 1 = private/loopback S3 endpoints rejected\n")
 	fmt.Fprintf(&buf, "# TYPE s3c_ssrf_deny_private gauge\n")
 	fmt.Fprintf(&buf, "s3c_ssrf_deny_private %d\n", boolToInt(s3wrap.DenyPrivateNetworks()))
+	// 限流生效参数（S3C_RATE_LIMIT_*）：与 s3c_ssrf_deny_private 同一「生效值核对」口径，
+	// 运维可比对配置与运行态是否一致。零值 Handler（不经 New，limiter == nil）不输出序列
+	// （同 dataDir 口径：不用 0 冒充「限流为 0」）。
+	if h.limiter != nil {
+		fmt.Fprintf(&buf, "# HELP s3c_rate_limit_rpm Configured per-IP rate limit (requests per minute; IPv6 aggregated by /64)\n")
+		fmt.Fprintf(&buf, "# TYPE s3c_rate_limit_rpm gauge\n")
+		fmt.Fprintf(&buf, "s3c_rate_limit_rpm %d\n", h.limiter.rpm)
+		fmt.Fprintf(&buf, "# HELP s3c_rate_limit_burst Configured rate limit burst (token bucket capacity)\n")
+		fmt.Fprintf(&buf, "# TYPE s3c_rate_limit_burst gauge\n")
+		fmt.Fprintf(&buf, "s3c_rate_limit_burst %d\n", h.limiter.burst)
+	}
 	// 账号库写入失败（ROADMAP #18 指标①）：json / encrypted 驱动的 Ping() 恒为 nil、
 	// s3c_store_up 对它们永远是 1，落盘失败是这两类驱动暴露「磁盘满 / 只读」的主动信号。
 	fmt.Fprintf(&buf, "# HELP s3c_store_write_failures_total Account store write failures (persist/SQL write error; business rejections not counted)\n")

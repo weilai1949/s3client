@@ -126,14 +126,15 @@ All configuration comes from environment variables (`S3C_*`), with `.env` suppor
 silently falling back) → `.env` in the working directory → `.env` next to the executable; real environment
 variables always win over files.
 
-**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 22
+**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 25
 `S3C_*` variables, the startup hard-failure list, and client settings. Most common:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `S3C_ADDR` | `127.0.0.1:5000` | Listen address; loopback is safer. Remote access needs `0.0.0.0:5000` (then **`S3C_TOKEN` is required**) |
 | `S3C_DATA_DIR` | `./data` | Data directory (account store + single-writer lock file `.s3client.lock`) |
-| `S3C_TOKEN` | empty | When set, all `/api/*` require `Authorization: Bearer <token>`; **required on non-loopback binds** (suggest `openssl rand -hex 32`, min 16 chars); comma-separated for token rotation |
+| `S3C_TOKEN` | empty | When set, business `/api/*` require `Authorization: Bearer <token>`; health stays probe-friendly but exposes `version` only with a valid token; **required on non-loopback binds** (min 16 chars) |
+| `S3C_METRICS_TOKEN` | empty | Optional dedicated bearer for `/api/metrics`; unset preserves anonymous internal scraping (min 16 chars) |
 | `S3C_STORE_DRIVER` | `json` | Account store: `json` / `sqlite` / `encrypted` |
 | `S3C_STORE_KEY` | empty | At-rest encryption passphrase (min 16 chars); required for `encrypted`, enables encryption for `json`/`sqlite`. **With `json`/`sqlite` and no `S3C_STORE_KEY` the process refuses to start** (unless explicit `S3C_ALLOW_PLAINTEXT_STORE=1`) |
 
@@ -392,7 +393,7 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
   never `secretKey`).
 - Direct uploads use short-lived v4 presigned URLs; keys are never exposed to the frontend.
 - Loopback bind by default, CORS allowlist, optional Bearer auth; short tokens (< 16 chars) refuse startup.
-- `/api/metrics` returns 404 unless `S3C_EXPOSE_METRICS=1`.
+- `/api/metrics` returns 404 unless `S3C_EXPOSE_METRICS=1`; `S3C_METRICS_TOKEN` optionally protects scraping.
 - The frontend bearer token defaults to `sessionStorage` (cleared on tab close); opt-in "keep across
   sessions" writes `localStorage`.
 - Production guidance: [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) and [`docs/threat-model.md`](../threat-model.md)

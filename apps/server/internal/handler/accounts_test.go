@@ -152,18 +152,51 @@ func TestSecureCompare(t *testing.T) {
 	}
 }
 
-func TestHealthReportsVersion(t *testing.T) {
-	h := newTestHandler(t, nil, "")
-	rr := doJSON(t, h, "GET", "/api/health", "")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("health status = %d", rr.Code)
+func TestHealthVersionRequiresValidAPIToken(t *testing.T) {
+	const token = "unit-test-token-0123456789"
+	h := newTestHandler(t, nil, token)
+	for _, tc := range []struct {
+		name        string
+		auth        string
+		wantVersion any
+	}{
+		{name: "anonymous omits version"},
+		{name: "bad token omits version", auth: "Bearer wrong-token"},
+		{name: "valid token includes version", auth: "Bearer " + token, wantVersion: "test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+			if tc.auth != "" {
+				req.Header.Set("Authorization", tc.auth)
+			}
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("health status = %d, want 200", rr.Code)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+				t.Fatalf("health body: %v", err)
+			}
+			if body["version"] != tc.wantVersion {
+				t.Fatalf("version = %v, want %v", body["version"], tc.wantVersion)
+			}
+		})
 	}
-	var m map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+}
+
+func TestHealthWithoutAPITokenNeverReportsVersion(t *testing.T) {
+	h := newTestHandler(t, nil, "")
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	req.Header.Set("Authorization", "Bearer anyone")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatalf("health body: %v", err)
 	}
-	if m["version"] != "test" {
-		t.Fatalf("version = %v, want test", m["version"])
+	if _, ok := body["version"]; ok {
+		t.Fatalf("未配置 S3C_TOKEN 时 health 不得返回 version: %v", body)
 	}
 }
 

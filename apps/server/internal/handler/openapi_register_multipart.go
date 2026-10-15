@@ -35,7 +35,7 @@ func registerMultipart(r *openapi.Registry) {
 		},
 		Responses: map[string]openapi.Response{"200": {Description: "含 url/expiresIn", JSON: openapi.BuildObj(map[string]*openapi.Schema{
 			"partNumber": openapi.Int(), "url": openapi.Str(), "expiresIn": openapi.Int64(),
-		})}, "400": {Description: "partNumber 非法", JSON: refSchema("Error")}},
+		})}, "400": {Description: "partNumber / expiresIn 非法", JSON: refSchema("Error")}},
 	})
 	r.Operation("POST", "/api/accounts/{id}/multipart/complete", openapi.Op{
 		Tags: []string{"multipart"}, Summary: "完成分段上传", OperationID: "multipartComplete",

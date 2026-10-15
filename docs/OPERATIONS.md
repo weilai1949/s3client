@@ -54,18 +54,18 @@ GET /api/health        # 免鉴权（withAuth 显式豁免），响应恒带 X-R
 
 | 状态 | 响应体（逐字字段） | 语义 |
 |---|---|---|
-| 200 | `{"status":"ok","version":"v1.0.0","time":"...","store":{"ok":true}}` | store 探测通过 |
-| 503 | `{"status":"error","version":"v1.0.0","time":"...","store":{"ok":false,"error":"store unavailable"}}` | store 探测失败；**硬失败不降级**（[ADR-002](decisions/0002-store-fail-closed.md)） |
+| 200 | `{"status":"ok","time":"...","store":{"ok":true}}` | store 探测通过；有效 API token 可见时另含 `version` |
+| 503 | `{"status":"error","time":"...","store":{"ok":false,"error":"store unavailable"}}` | store 探测失败；**硬失败不降级**（[ADR-002](decisions/0002-store-fail-closed.md)） |
 
 - 503 时**不回传**底层错误原因：原始错误只写进 Debug 日志（`msg="health store ping"`，需 `S3C_LOG_LEVEL=debug`）。
-- `version` 由构建时注入（`make server-build` / Dockerfile 的 `-X main.version`），可用于核对**前后端版本是否匹配**。
+- `version` 由构建时注入（`make server-build` / Dockerfile 的 `-X main.version`）；仅有效 `S3C_TOKEN` 请求可见，可用于核对**前后端版本是否匹配**。
 - **探测粒度按驱动不同（易误判，务必知悉）**：`sqlite` 驱动的 `Ping` 是真实的 `db.Ping()`；`json` / `encrypted`
   驱动的 `Ping` **恒返回 nil**（`apps/server/internal/store/filestore.go`）——因此后两种驱动下，磁盘写满 / 只读挂载
   **不会**让 `/api/health` 变 503，会以写请求 500 的形式暴露（见 §5 R-3）。
 - 容器 `HEALTHCHECK` 走 `s3client-server -healthcheck` 子命令（GET `http://<S3C_ADDR host>:<port>/api/health`，3 秒超时，200 → 0），
   间隔 30s / 超时 5s / 重试 3 次 / start-period 5s；compose 的 nginx 依赖 `condition: service_healthy`。
 - 恢复后**无需重启**：下一次探测成功即回到 200（[`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1）。
-- `/api/health` 是**免鉴权**端点（Docker 探针需要），`version` 暴露属已接受项（[`threat-model.md`](threat-model.md) §6.2）。
+- `/api/health` 是**免鉴权**探针端点（Docker 探针需要）；匿名响应不暴露 `version`。
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health   # 200 / 503
@@ -77,10 +77,22 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health   # 2
 GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_METRICS=1 时 200
 ```
 
-> ⚠️ **`/api/metrics` 不受 `S3C_TOKEN` 保护**：开启后**匿名可读**（含版本、存储可达性、S3 上游调用统计、SSRF 生效策略）。
-> 只在内网 / 反向代理鉴权之后暴露，切勿把开启 metrics 的实例直接放上公网。
+> **鉴权口径**：设置 `S3C_METRICS_TOKEN` 后，`/api/metrics` 必须携带该独立 Bearer；
+> 不设置则保持兼容模式、匿名可读。通用 `S3C_TOKEN` 不能替代 metrics token。两种模式都只应在
+> 内网 / 反向代理鉴权之后暴露，切勿把开启 metrics 的实例直接放上公网。
 
-暴露方式：设置 `S3C_EXPOSE_METRICS=1` 后重启进程（配置在启动时读取）。
+暴露方式：设置 `S3C_EXPOSE_METRICS=1` 后重启进程（配置在启动时读取）。生产建议同时设置
+`S3C_METRICS_TOKEN`（≥ 16 字符），并在 Prometheus 使用文件挂载的凭据，避免把 secret 写进仓库：
+
+```yaml
+scrape_configs:
+  - job_name: s3client
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/s3c-metrics-token
+    static_configs:
+      - targets: ["s3client-server:5000"]
+```
 
 | 指标（逐字） | 类型 | 含义 | 建议告警用法（**建议值，未强制**） |
 |---|---|---|---|
@@ -93,6 +105,8 @@ GET /api/metrics       # Prometheus 文本格式；默认 404，仅 S3C_EXPOSE_M
 | `s3c_zip_failed_total` | counter | ZIP 打包整体失败次数 | 有增量即查 |
 | `s3c_uptime_seconds` | gauge | 进程运行秒数 | 突降 = 发生过重启（可用于发现容器重启循环） |
 | `s3c_go_goroutines` | gauge | goroutine 数 | 持续单调上升 = 疑似泄漏 |
+| `s3c_rate_limit_rpm` | gauge | 生效的每 IP 限流速率（IPv6 按 /64 聚合） | 与 `S3C_RATE_LIMIT_RPM` 对账 |
+| `s3c_rate_limit_burst` | gauge | 生效的令牌桶突发容量 | 与 `S3C_RATE_LIMIT_BURST` 对账 |
 | `s3c_go_memstats_alloc_bytes` | gauge | 当前堆占用字节 | 逼近容器内存上限（server 512M）即告警 |
 | `s3c_build_info{version="..."}` | gauge | 构建版本（恒为 1，版本在标签里） | 升级后核对版本是否与预期 tag 一致 |
 | `s3c_store_up` | gauge | 账号存储可达性：1 / 0 | `== 0` 持续 1 分钟即告警（沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议） |

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weilai1949/s3client/apps/server/internal/config"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
@@ -216,7 +217,7 @@ func TestRateLimitNotBypassedBySpoofedXFF(t *testing.T) {
 
 	client := srv.Client()
 	status := 0
-	for i := 0; i < rateLimitBurst+5; i++ {
+	for i := 0; i < config.DefaultRateLimitBurst+5; i++ {
 		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/accounts", nil)
 		// 每次伪造不同的 XFF：若被采信则每个 IP 都是新桶，永远不会 429。
 		req.Header.Set("X-Forwarded-For", "10.9.9."+string(rune('0'+i%10)))

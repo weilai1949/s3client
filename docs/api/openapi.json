@@ -290,13 +290,18 @@
         "description": "S3C_TOKEN 中的 Bearer token。可通过 S3C_TOKEN_SCOPES 为单个 token 限定 readonly / prefixes（桶或桶内键前缀）/ accounts / expiresAt；越权请求返回 403，过期 token 返回 401。未在 S3C_TOKEN_SCOPES 中登记的 token 为全权。",
         "scheme": "bearer",
         "type": "http"
+      },
+      "metricsBearerAuth": {
+        "description": "S3C_METRICS_TOKEN 中的独立 Bearer token。服务端设置该变量时 /api/metrics 必须携带；未设置时该端点允许匿名 scrape。",
+        "scheme": "bearer",
+        "type": "http"
       }
     }
   },
   "info": {
     "title": "s3client API",
     "version": "v1.0.0",
-    "description": "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。"
+    "description": "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。业务鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）；metrics 可选独立 S3C_METRICS_TOKEN。"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -4107,7 +4112,7 @@
                 }
               }
             },
-            "description": "partNumber 非法"
+            "description": "partNumber / expiresIn 非法"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -6565,7 +6570,7 @@
     },
     "/api/health": {
       "get": {
-        "description": "健康检查（含 store 状态与版本）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
+        "description": "健康检查（status/store；有效 API token 可见 version）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
         "operationId": "health",
         "responses": {
           "200": {
@@ -6573,7 +6578,6 @@
               "application/json": {
                 "example": {
                   "status": "ok",
-                  "version": "v1.0.0",
                   "time": "2026-09-30T05:00:00Z",
                   "store": {
                     "ok": true
@@ -6606,16 +6610,12 @@
                     "time": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "version": {
-                      "type": "string"
                     }
                   },
                   "required": [
                     "status",
                     "store",
-                    "time",
-                    "version"
+                    "time"
                   ]
                 }
               }
@@ -6658,16 +6658,12 @@
                     "time": {
                       "type": "string",
                       "format": "date-time"
-                    },
-                    "version": {
-                      "type": "string"
                     }
                   },
                   "required": [
                     "status",
                     "store",
-                    "time",
-                    "version"
+                    "time"
                   ]
                 }
               }
@@ -6676,7 +6672,7 @@
           }
         },
         "security": [],
-        "summary": "健康检查（含 store 状态与版本）",
+        "summary": "健康检查（status/store；有效 API token 可见 version）",
         "tags": [
           "system"
         ]
@@ -6684,7 +6680,7 @@
     },
     "/api/metrics": {
       "get": {
-        "description": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
+        "description": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；S3C_METRICS_TOKEN 可选鉴权）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。",
         "operationId": "metrics",
         "responses": {
           "200": {
@@ -6694,6 +6690,9 @@
               }
             },
             "description": "text/plain; version=0.0.4"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "404": {
             "description": "默认关闭"
@@ -6705,8 +6704,13 @@
             "$ref": "#/components/responses/InternalError"
           }
         },
-        "security": [],
-        "summary": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）",
+        "security": [
+          {
+            "metricsBearerAuth": []
+          },
+          {}
+        ],
+        "summary": "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；S3C_METRICS_TOKEN 可选鉴权）",
         "tags": [
           "system"
         ]

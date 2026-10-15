@@ -20,14 +20,15 @@ import (
 const defaultCSPConnectSrc = "'self' http://127.0.0.1:* http://localhost:*"
 
 // buildCSP 拼出整条 Content-Security-Policy：脚本仅允许同源（杜绝注入脚本执行）；
-// 内联样式给 Vue 用；connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
+// 内联样式只允许在元素 style 属性上（Vue :style），内联 <style> 块保持禁用；
+// connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
 // 自定义后端 / 远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
 //
 // 它是纯函数，且**只在启动期调用**（包初始化 / New / SetCSPConnectSrc）：结果预计算进
 // Handler.cspHeader，请求路径上不再做字符串拼接与分配（docs/archive/server-review-2026-10-12.md S4）。
 // connect 由调用方保证非空（New 传 defaultCSPConnectSrc，SetCSPConnectSrc 忽略空值）。
 func buildCSP(connect string) string {
-	return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src " + connect + "; object-src 'none'; base-uri 'self'; form-action 'self'"
+	return "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src " + connect + "; object-src 'none'; base-uri 'self'; form-action 'self'"
 }
 
 // defaultCSPHeader 是默认策略的预计算整串；零值 Handler（未走 New）也用它，
@@ -165,13 +166,21 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 	})
 }
 
-// withMetricsGate 在未开启 S3C_EXPOSE_METRICS 时，对 /api/metrics 返回 404，
-// 让外部看不出该端点是否存在（避免公网被 scrape 运行指标）。
+// withMetricsGate 在未开启 S3C_EXPOSE_METRICS 时返回 404；开启且配置
+// S3C_METRICS_TOKEN 时再要求独立 Bearer。未配置该 token 时保持匿名 scrape 兼容。
 func (h *Handler) withMetricsGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.exposeMetrics && r.URL.Path == "/api/metrics" {
 			http.NotFound(w, r)
 			return
+		}
+		if r.URL.Path == "/api/metrics" && h.metricsToken != "" {
+			cred, ok := bearerCredential(r.Header.Get("Authorization"))
+			if !ok || !secureCompare(cred, h.metricsToken) {
+				h.audit(r, auditAuthDenied, "reason", "metrics_token")
+				h.writeErr(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -209,28 +218,53 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		auth := r.Header.Get("Authorization")
-		// RFC 7235：auth-scheme 大小写不敏感；凭证本身仍按常量时间比较。
-		scheme, cred, ok := strings.Cut(auth, " ")
-		if !ok || !strings.EqualFold(scheme, "bearer") {
+		cred, ok := bearerCredential(r.Header.Get("Authorization"))
+		if !ok {
 			h.audit(r, auditAuthDenied, "reason", "malformed")
 			h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		for _, t := range h.tokens {
-			if secureCompare(cred, t) {
-				// 常量时间比较命中后，再按该 token 的 S3C_TOKEN_SCOPES 声明判定最小权限。
-				if !h.authorize(w, r, t) {
-					return
-				}
-				next.ServeHTTP(w, r)
+		if token, ok := h.matchingToken(cred); ok {
+			// 常量时间比较命中后，再按该 token 的 S3C_TOKEN_SCOPES 声明判定最小权限。
+			if !h.authorize(w, r, token) {
 				return
 			}
+			next.ServeHTTP(w, r)
+			return
 		}
 		// 审计：鉴权失败（不记录提交的凭证值）。
 		h.audit(r, auditAuthDenied, "reason", "bad_token")
 		h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 	})
+}
+
+// bearerCredential 解析 RFC 7235 Bearer 凭证；auth-scheme 大小写不敏感。
+func bearerCredential(auth string) (string, bool) {
+	scheme, cred, ok := strings.Cut(auth, " ")
+	if !ok || !strings.EqualFold(scheme, "bearer") {
+		return "", false
+	}
+	return cred, true
+}
+
+func (h *Handler) matchingToken(cred string) (string, bool) {
+	for _, token := range h.tokens {
+		if secureCompare(cred, token) {
+			return token, true
+		}
+	}
+	return "", false
+}
+
+// hasValidAPIToken 供 health 决定是否回显 version：探针始终免鉴权，
+// 只有命中 S3C_TOKEN 且未过作用域有效期的请求才能看到版本号。
+func (h *Handler) hasValidAPIToken(r *http.Request) bool {
+	cred, ok := bearerCredential(r.Header.Get("Authorization"))
+	if !ok {
+		return false
+	}
+	token, ok := h.matchingToken(cred)
+	return ok && !h.tokenExpired(token)
 }
 
 // secureCompare 以常量时间比较两个字符串。

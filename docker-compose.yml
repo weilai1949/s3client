@@ -28,6 +28,10 @@ services:
     environment:
       S3C_ADDR: "0.0.0.0:5000"
       S3C_SHUTDOWN_TIMEOUT: "${S3C_SHUTDOWN_TIMEOUT:-30}"
+      S3C_RATE_LIMIT_RPM: "${S3C_RATE_LIMIT_RPM:-120}"
+      S3C_RATE_LIMIT_BURST: "${S3C_RATE_LIMIT_BURST:-30}"
+      S3C_EXPOSE_METRICS: "${S3C_EXPOSE_METRICS:-0}"
+      S3C_METRICS_TOKEN: "${S3C_METRICS_TOKEN:-}"
       S3C_DATA_DIR: "/data"
       # 生产推荐 encrypted（整文件加密，需 S3C_STORE_KEY）。默认 sqlite：
       # 只要设置了 S3C_STORE_KEY，secret_key 列即以 AES-256-GCM 密文落盘（已闭环：见 docs/FEATURES.md §M；残留风险 docs/ROADMAP.md §5.1「已收敛」索引 R3）。

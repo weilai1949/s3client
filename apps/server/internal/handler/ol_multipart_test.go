@@ -122,6 +122,11 @@ func TestOlMultipartPartClamp(t *testing.T) {
 	if u, _ := m["url"].(string); u == "" {
 		t.Fatal("missing presigned url")
 	}
+
+	// 负数 expiresIn → 400（与 presign 同口径，不得静默回退默认 1h）
+	rr = env.accDoRec("POST", "/api/accounts/"+env.acc.ID+"/multipart/part",
+		`{"key":"k","uploadId":"u","partNumber":1,"expiresIn":-5}`)
+	olExpectStatus(t, rr, http.StatusBadRequest, "negative expiresIn")
 }
 
 // TestOlMultipartInitCtxErr init 在上下文取消时返回内部错误（白盒）。

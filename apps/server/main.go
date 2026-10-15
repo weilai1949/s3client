@@ -95,8 +95,12 @@ func runServer(ctx context.Context) int {
 	// Token 作用域（S3C_TOKEN_SCOPES）：按 token 限定只读 / 桶前缀 / 账号 / 过期；
 	// 未登记的 token 保持全权（向后兼容）。必须在 Routes() 前设置。
 	h.SetTokenScopes(cfg.ScopeFor)
+	// /api/metrics 可选独立 Bearer（S3C_METRICS_TOKEN）；空值保持内网匿名 scrape 兼容。
+	h.SetMetricsToken(cfg.MetricsToken)
 	// 仅信任显式配置的反向代理 IP 的 X-Forwarded-For（默认不信任，防直连伪造绕过限速）。
 	h.SetTrustedProxies(cfg.TrustedProxies)
+	// 限流参数（S3C_RATE_LIMIT_*）：每 IP（IPv6 按 /64 聚合）速率与突发容量。
+	h.SetRateLimit(cfg.RateLimitRPM, cfg.RateLimitBurst)
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
 	// 「复制成功但源未删除」的移动任务（KNOWN_ISSUES #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))

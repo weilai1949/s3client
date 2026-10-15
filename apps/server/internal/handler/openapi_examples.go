@@ -499,7 +499,7 @@ var apiExamples = map[string]openapi.OpExample{
 	// ---- system ----
 	"GET /api/health": {
 		Responses: map[string]json.RawMessage{
-			"200": ex(`{"status":"ok","version":"v1.0.0","time":"2026-09-30T05:00:00Z","store":{"ok":true}}`),
+			"200": ex(`{"status":"ok","time":"2026-09-30T05:00:00Z","store":{"ok":true}}`),
 		},
 	},
 	"GET /api/metrics": {

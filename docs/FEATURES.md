@@ -44,6 +44,7 @@
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
   - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档） · CO 2026-10-12 docs 复盘快照归档（其沿用的 14 项建议经逐项复核已被 §CJ 批次全部闭环；快照已归档） · CP 2026-10-12 晚（`pnpm audit` 官方 registry 实跑 12 → 0（vue 3.5.43 + 三传递依赖补丁版）· a11y 扫描盲区三态补齐（320×700 / 844×390 / 200% 缩放近似 640×450，e2e 23+1 → 26+1）· dev `strictPort`） · CQ 2026-10-14 全仓代码质量评审（结论 Approve：F1 前端计数桶竞态 / F2 s3wrap 无界列举 / F3·F4·F6·F7 四道门禁假阴性 / F5 孤儿 `.PHONY` / A1·A2 可访问名 / C2 六镜像 digest pin + 门禁；C1 有意维持；O1–O3 转登记 #88–#90；**环境离线，未含门禁实跑结论**） · CR 2026-10-15 O1–O3 闭环（`useSeqGuard` 收敛 ×10 · `service.EnumeratePages` 五处循环 + `ListMaxPages` 常量收敛 · `httpx.StatusRecorder` 收敛）+ 门禁全量实跑全绿（race 11/11 包 · 覆盖率零 `count==0` 块 · lint 0 issues · 前端 88 文件 1364 例 / 四指标 100%）+ `changelog_tag` 门禁克隆口径校准（阈值 2 + 15 个「有段无 tag」段登记）
+- CS 2026-10-15 安全评审 R2a / R2b / R3a + CSP 配置校验 + 限流可观测收口（health version token-gated、metrics 独立 token、CSP style-src 收紧、限流 gauge）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -2693,6 +2694,16 @@ functions 1095 / lines 3503）。
 > （`TestListAllStopsOnNonAdvancingToken` / `TestIndexDstStopsOnNonAdvancingToken` /
 > `TestListAllTruncationStopsWithoutToken` / `TestRunDeletePrefixStopsOnNonAdvancingToken` /
 > `TestOlListPrefixKeysStopsOnNonAdvancingToken`）同时红灯，还原即绿——共享骨架仍被逐调用方钉住。
+
+### CS. 2026-10-15 安全评审 R2a / R2b / R3a + 两项加固收口
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| R2a | `/api/health` 始终免鉴权供探针，但 `version` 仅在请求命中有效 `S3C_TOKEN` 且未过期时返回 | 匿名 / 错 token 响应不含 `version`；`TestHealthVersionRequiresValidAPIToken` |
+| R2b | 新增 `S3C_METRICS_TOKEN`（≥ 16 字符）；设置后 `/api/metrics` 只接受该独立 Bearer，不设则维持匿名 scrape | 通用 `S3C_TOKEN` 不可代替；`TestMetricsEndpointRequiresMetricsTokenWhenConfigured` |
+| R3a | 服务端 CSP 改为 `style-src 'self'; style-src-attr 'unsafe-inline'` | 保留 Vue `:style`，禁止内联 `<style>`；`TestSecurityHeadersRestrictInlineStylesToAttributes` + 真实浏览器 E2E |
+| CSP 配置 | `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行 / 纯空白时拒绝启动 | `TestValidate` 边界用例 |
+| 限流可观测 | `/api/metrics` 输出 `s3c_rate_limit_rpm` / `s3c_rate_limit_burst` | `TestMetricsRateLimitGaugesReflectConfig` |
 
 ## 三、质量与覆盖率现状
 

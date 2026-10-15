@@ -76,6 +76,65 @@ func TestFromEnvShutdownTimeout(t *testing.T) {
 	}
 }
 
+// TestFromEnvRateLimit 覆盖 S3C_RATE_LIMIT_RPM / S3C_RATE_LIMIT_BURST 的默认/合法/非法取值：
+// 非法值不静默回退默认——FromEnv 记录解析失败，Validate 上抛（与 S3C_SHUTDOWN_TIMEOUT 同口径）。
+func TestFromEnvRateLimit(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("S3C_RATE_LIMIT_RPM", "")
+		t.Setenv("S3C_RATE_LIMIT_BURST", "")
+		cfg := FromEnv()
+		if cfg.RateLimitRPM != DefaultRateLimitRPM || cfg.RateLimitBurst != DefaultRateLimitBurst {
+			t.Fatalf("RateLimit = %d/%d, want %d/%d",
+				cfg.RateLimitRPM, cfg.RateLimitBurst, DefaultRateLimitRPM, DefaultRateLimitBurst)
+		}
+	})
+	t.Run("valid", func(t *testing.T) {
+		t.Setenv("S3C_RATE_LIMIT_RPM", "60")
+		t.Setenv("S3C_RATE_LIMIT_BURST", "5")
+		cfg := FromEnv()
+		if cfg.RateLimitRPM != 60 || cfg.RateLimitBurst != 5 {
+			t.Fatalf("RateLimit = %d/%d, want 60/5", cfg.RateLimitRPM, cfg.RateLimitBurst)
+		}
+	})
+	for _, val := range []string{"abc", "0", "-3"} {
+		t.Run("invalid rpm "+val, func(t *testing.T) {
+			t.Setenv("S3C_RATE_LIMIT_RPM", val)
+			t.Setenv("S3C_RATE_LIMIT_BURST", "")
+			if err := FromEnv().Validate(); !errors.Is(err, ErrInvalidEnvValue) {
+				t.Fatalf("Validate() = %v, want wraps ErrInvalidEnvValue", err)
+			}
+		})
+		t.Run("invalid burst "+val, func(t *testing.T) {
+			t.Setenv("S3C_RATE_LIMIT_RPM", "")
+			t.Setenv("S3C_RATE_LIMIT_BURST", val)
+			if err := FromEnv().Validate(); !errors.Is(err, ErrInvalidEnvValue) {
+				t.Fatalf("Validate() = %v, want wraps ErrInvalidEnvValue", err)
+			}
+		})
+	}
+}
+
+func TestFromEnvMetricsToken(t *testing.T) {
+	t.Run("default empty", func(t *testing.T) {
+		t.Setenv("S3C_METRICS_TOKEN", "")
+		if got := FromEnv().MetricsToken; got != "" {
+			t.Fatalf("MetricsToken = %q, want empty", got)
+		}
+	})
+	t.Run("configured", func(t *testing.T) {
+		t.Setenv("S3C_METRICS_TOKEN", "metrics-token-0123456789")
+		if got := FromEnv().MetricsToken; got != "metrics-token-0123456789" {
+			t.Fatalf("MetricsToken = %q, want configured value", got)
+		}
+	})
+	t.Run("short rejected", func(t *testing.T) {
+		t.Setenv("S3C_METRICS_TOKEN", "short")
+		if err := FromEnv().Validate(); !errors.Is(err, ErrShortMetricsToken) {
+			t.Fatalf("Validate() = %v, want wraps ErrShortMetricsToken", err)
+		}
+	})
+}
+
 // TestLoadDotEnvFileEmptyKey 键为空的行（"=value"）应被跳过；正常键照常写入环境变量。
 func TestLoadDotEnvFileEmptyKey(t *testing.T) {
 	dir := t.TempDir()

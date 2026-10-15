@@ -121,7 +121,10 @@ type Op struct {
 	Deprecated  bool
 	// NoAuth 显式声明该 operation **无需鉴权**，渲染为 `security: []`（覆盖文档级默认）。
 	// 只有真实豁免鉴权的端点才可置 true（见 handler 的 withAuth 豁免名单）。
-	NoAuth    bool
+	NoAuth bool
+	// Security 覆盖文档级鉴权要求。多个 requirement 是 OR 关系，
+	// 空 requirement `{}` 表示该 operation 也允许匿名调用。
+	Security  []map[string][]string
 	Params    []Param
 	Request   *Request
 	Responses map[string]Response
@@ -371,6 +374,8 @@ func renderOp(op Op, tagDesc map[string]string) map[string]any {
 	// 显式豁免：必须渲染空数组，覆盖文档级默认（缺字段会被读成「继承 bearerAuth」）。
 	if op.NoAuth {
 		out["security"] = []any{}
+	} else if len(op.Security) > 0 {
+		out["security"] = renderSecurityRequirements(op.Security)
 	}
 	if len(op.Params) > 0 {
 		out["parameters"] = renderParams(op.Params)
@@ -584,7 +589,7 @@ func withExample(s *Schema, raw string) *Schema {
 }
 
 func defaultSecurity() map[string]any {
-	return map[string]any{
+	schemes := map[string]any{
 		"bearerAuth": map[string]any{
 			"type":   "http",
 			"scheme": "bearer",
@@ -593,6 +598,24 @@ func defaultSecurity() map[string]any {
 			"description": "S3C_TOKEN 中的 Bearer token。可通过 S3C_TOKEN_SCOPES 为单个 token 限定 readonly / prefixes（桶或桶内键前缀）/ accounts / expiresAt；越权请求返回 403，过期 token 返回 401。未在 S3C_TOKEN_SCOPES 中登记的 token 为全权。",
 		},
 	}
+	schemes["metricsBearerAuth"] = map[string]any{
+		"type":        "http",
+		"scheme":      "bearer",
+		"description": "S3C_METRICS_TOKEN 中的独立 Bearer token。服务端设置该变量时 /api/metrics 必须携带；未设置时该端点允许匿名 scrape。",
+	}
+	return schemes
+}
+
+func renderSecurityRequirements(requirements []map[string][]string) []any {
+	out := make([]any, 0, len(requirements))
+	for _, requirement := range requirements {
+		obj := map[string]any{}
+		for scheme, scopes := range requirement {
+			obj[scheme] = scopes
+		}
+		out = append(out, obj)
+	}
+	return out
 }
 
 // defaultSecurityRequirement 是文档级默认安全要求：全部 /api/* 默认需 Bearer token。

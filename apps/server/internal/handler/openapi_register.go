@@ -8,7 +8,7 @@ func registerOpenAPI(r *openapi.Registry, version string) {
 	r.SetInfo(openapi.Info{
 		Title:       "s3client API",
 		Version:     version,
-		Description: "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）。",
+		Description: "s3client 是面向 S3 兼容对象存储的多账号 Web 控制台。本文档为 /api/* 端点的 OpenAPI 3.0 契约；除 /api/metrics（Prometheus 文本）、download-zip（application/zip）、proxy（对象字节流 / 纯文本）、migrate/jobs/{id}/events（SSE）外，响应均为 JSON。业务鉴权：Bearer Token（环境变量 S3C_TOKEN，多值逗号分隔）；metrics 可选独立 S3C_METRICS_TOKEN。",
 	})
 	r.AddServer(openapi.Server{URL: "/", Description: "同源（前端 Vite 代理或后端 SPA fallback）"})
 
@@ -46,7 +46,7 @@ var universalResponses = map[string]string{
 
 // applyUniversalResponses 给已注册 operation 补挂通用状态码（已显式声明的不覆盖）：
 //   - 429（withRateLimit）/ 500（writeInternalErr 兜底）→ 全部端点；
-//   - 401（withAuth / scope 中间件）→ 除 NoAuth 豁免端点（health / metrics）外全部端点；
+//   - 401（withAuth / scope / metrics 中间件）→ 除始终免鉴权的 health 外全部端点；
 //   - 413（decodeBody 的 16 MB 上限）→ 仅带 requestBody 的端点（无请求体不可能触发）。
 func applyUniversalResponses(r *openapi.Registry) {
 	r.ForEachOperation(func(method, path string, op openapi.Op) openapi.Op {

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weilai1949/s3client/apps/server/internal/config"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
@@ -34,7 +35,7 @@ func TestRateLimitUsesLastXFFHop(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	status := 0
-	for i := 0; i < rateLimitBurst+5; i++ {
+	for i := 0; i < config.DefaultRateLimitBurst+5; i++ {
 		req, err := http.NewRequest(http.MethodGet, srv.URL+"/api/accounts", nil)
 		if err != nil {
 			t.Fatal(err)
@@ -76,7 +77,7 @@ func TestRateLimitAppliesBeforeAuth(t *testing.T) {
 	h := accNewHandler(t, &accStubStore{}, nil, "unit-test-token-0123456789")
 	routes := h.Routes()
 	saw429 := false
-	for i := 0; i < rateLimitBurst+5; i++ {
+	for i := 0; i < config.DefaultRateLimitBurst+5; i++ {
 		rr := httptest.NewRecorder()
 		routes.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/accounts", nil))
 		switch rr.Code {
@@ -92,7 +93,7 @@ func TestRateLimitAppliesBeforeAuth(t *testing.T) {
 		}
 	}
 	if !saw429 {
-		t.Fatalf("连续 %d 次未鉴权请求均未被限速（rateLimit 在 auth 内层）", rateLimitBurst+5)
+		t.Fatalf("连续 %d 次未鉴权请求均未被限速（rateLimit 在 auth 内层）", config.DefaultRateLimitBurst+5)
 	}
 }
 
@@ -451,8 +452,9 @@ func TestCSPConnectSrcLiteralHasSingleSource(t *testing.T) {
 }
 
 // TestServerCSPSharesTauriDirectives 纯守卫（预期恒绿）：server CSP 与桌面壳
-// tauri.conf.json 的 CSP 在**共享指令**上取值必须一致（connect-src 除外：
-// server 收紧到本地回环，壳侧允许 http:/https:），防止两侧静默漂移。
+// tauri.conf.json 的 CSP 在**共享指令**上取值必须一致。connect-src / style-src /
+// style-src-attr 刻意不同：server 收紧连接来源与内联样式能力，桌面壳仍需连接
+// 任意用户配置的 S3 端点并兼容 Tauri 内联样式注入。
 func TestServerCSPSharesTauriDirectives(t *testing.T) {
 	h, _ := gapStoreHandler(t)
 	srv := httptest.NewServer(h.Routes())
@@ -498,8 +500,8 @@ func TestServerCSPSharesTauriDirectives(t *testing.T) {
 	}
 	shared := 0
 	for d, tv := range tauriD {
-		if d == "connect-src" {
-			continue // 两侧取值刻意不同（server 收紧、壳侧放宽），不参与比对。
+		if d == "connect-src" || d == "style-src" || d == "style-src-attr" {
+			continue // 三者两侧取值刻意不同，不参与比对。
 		}
 		sv, ok := serverD[d]
 		if !ok {

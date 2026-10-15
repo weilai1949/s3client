@@ -8,12 +8,8 @@ import (
 	"time"
 )
 
-// 简易令牌桶限速：每 IP 默认 120 req/min，突发 30。
+// 简易令牌桶限速：默认每 IP 120 req/min、突发 30（config.DefaultRateLimit*）。
 // 仅保护写密集型 API 被刷；health 与静态资源不计入。
-const (
-	rateLimitPerMin = 120
-	rateLimitBurst  = 30
-)
 
 // rateLimitShards 是限流桶的分片数。
 //
@@ -31,6 +27,8 @@ const maxBucketsPerShard = 10_000 / rateLimitShards
 
 type ipLimiter struct {
 	shards [rateLimitShards]limiterShard
+	rpm    int
+	burst  int
 }
 
 // limiterShard 是一组 IP 的令牌桶与它自己的锁。
@@ -44,8 +42,8 @@ type tokenBucket struct {
 	last   time.Time
 }
 
-func newIPLimiter() *ipLimiter {
-	l := &ipLimiter{}
+func newIPLimiter(rpm, burst int) *ipLimiter {
+	l := &ipLimiter{rpm: rpm, burst: burst}
 	for i := range l.shards {
 		l.shards[i].byIP = make(map[string]*tokenBucket)
 	}
@@ -68,14 +66,14 @@ func (l *ipLimiter) allow(ip string) bool {
 	defer sh.mu.Unlock()
 	b, ok := sh.byIP[ip]
 	if !ok {
-		sh.addBucketLocked(ip, now)
+		sh.addBucketLocked(ip, now, l.burst)
 		return true
 	}
 	elapsed := now.Sub(b.last).Seconds()
 	b.last = now
-	b.tokens += elapsed * (float64(rateLimitPerMin) / 60.0)
-	if b.tokens > rateLimitBurst {
-		b.tokens = rateLimitBurst
+	b.tokens += elapsed * (float64(l.rpm) / 60.0)
+	if b.tokens > float64(l.burst) {
+		b.tokens = float64(l.burst)
 	}
 	if b.tokens < 1 {
 		return false
@@ -89,8 +87,8 @@ func (l *ipLimiter) allow(ip string) bool {
 //
 // 淘汰活跃桶不会削弱限速强度：能撑爆分片的本就是持有大量 IP 的攻击者，被淘汰的
 // 也只会是他们自己的桶；而对集群而言内存有确定上界，比「随 IP 数无限增长」安全。
-func (s *limiterShard) addBucketLocked(ip string, now time.Time) {
-	s.byIP[ip] = &tokenBucket{tokens: rateLimitBurst - 1, last: now}
+func (s *limiterShard) addBucketLocked(ip string, now time.Time, burst int) {
+	s.byIP[ip] = &tokenBucket{tokens: float64(burst) - 1, last: now}
 	if len(s.byIP) <= maxBucketsPerShard {
 		return
 	}
@@ -151,6 +149,17 @@ func remoteHost(remoteAddr string) string {
 	return host
 }
 
+// rateLimitKey 返回限流桶键：IPv6 按 /64 前缀聚合——攻击者可用单 /64 内海量地址
+// 各自换取独立令牌桶绕过限速；IPv4（含 IPv4 映射 IPv6）与无法解析的地址原样返回。
+// 仅用于限流桶键；审计日志仍记完整 IP（clientIP 原值，不经本函数）。
+func rateLimitKey(ip string) string {
+	parsed := net.ParseIP(ip)
+	if parsed == nil || parsed.To4() != nil {
+		return ip
+	}
+	return parsed.Mask(net.CIDRMask(64, 128)).String()
+}
+
 func (h *Handler) withRateLimit(next http.Handler) http.Handler {
 	if h.limiter == nil {
 		return next
@@ -166,7 +175,7 @@ func (h *Handler) withRateLimit(next http.Handler) http.Handler {
 			return
 		}
 		ip := h.clientIP(r)
-		if !h.limiter.allow(ip) {
+		if !h.limiter.allow(rateLimitKey(ip)) {
 			h.audit(r, auditRateLimited, "ip", ip)
 			w.Header().Set("Retry-After", "5")
 			h.writeErr(w, http.StatusTooManyRequests, "rate limit exceeded")

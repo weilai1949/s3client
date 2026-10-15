@@ -29,6 +29,13 @@ func TestValidate(t *testing.T) {
 		{"empty store key ok (no driver)", Config{Addr: "127.0.0.1:5000", StoreKey: ""}, nil},
 		{"long store key ok", Config{Addr: "127.0.0.1:5000", StoreKey: strings.Repeat("k", MinStoreKeyLength)}, nil},
 		{"json empty key with opt-in ok", Config{Addr: "127.0.0.1:5000", StoreDriver: "json", AllowPlaintextStore: true}, nil},
+		// S3C_CSP_CONNECT_SRC：空串 = 未指定（New 用默认 CSP）；一旦指定，
+		// 控制字符（含换行）与纯空白都必须拒绝启动（fail-closed）。
+		{"csp connect src empty ok (default)", Config{Addr: "127.0.0.1:5000"}, nil},
+		{"csp connect src valid ok", Config{Addr: "127.0.0.1:5000", CSPConnectSrc: "'self' https://s3.example.com"}, nil},
+		{"csp connect src newline rejected", Config{Addr: "127.0.0.1:5000", CSPConnectSrc: "http://x\nhttps://y"}, ErrInvalidEnvValue},
+		{"csp connect src nul rejected", Config{Addr: "127.0.0.1:5000", CSPConnectSrc: "http://x\x00"}, ErrInvalidEnvValue},
+		{"csp connect src blank rejected", Config{Addr: "127.0.0.1:5000", CSPConnectSrc: "   "}, ErrInvalidEnvValue},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

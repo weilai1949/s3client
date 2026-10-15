@@ -65,6 +65,7 @@
 | 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，含编号台账与闭环凭证） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
+| 看最近一次全仓安全评审 | [`code-review-2026-10-15.md`](code-review-2026-10-15.md) | **2026-10-15 全仓安全评审快照**（结论 **Approve**：未发现高危 / 中危；R1 威胁模型 XFF 表述漂移**同日修正**，R2–R5 为低危 / 观察项并登记处置口径）：第一性原理（资产 → 信任边界 → STRIDE）+ 逐条 `file:line` 代码级核验 + 工具实测（govulncheck / pnpm audit / cargo audit）+ 未复跑项披露 |
 | 看最近一次全仓代码评审 | [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) | **2026-10-10 全仓五轴评审快照**（结论 **Approve**：未发现 Critical / Required；3 道非阻断 Nit #84–#86 **同日闭环**；**已归档** 2026-10-10）：门禁独立复跑数字 + 逐条 `file:line` 证据 + 复现口径 + 未复跑项披露 |
 | 看上上次全仓代码评审（已归档） | [`code-review-2026-10-09.md`](archive/code-review-2026-10-09.md) | 2026-10-09 全仓五轴评审快照（2 Critical + 10 Required，**已归档**：C1–C2 / R1–R10 / O1–O12 全部闭环，2026-10-10 冻结） |
 | 看 apps/desktop 优化评审（已归档） | [`archive/desktop-review-2026-10-12.md`](archive/desktop-review-2026-10-12.md) | 2026-10-12 桌面端子树评审快照：1 项死代码（死依赖）+ 6 项优化（release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 打包元数据与 CSP / 依赖升级）+ 1 道防复发门禁（`unused_crate_dependencies`），逐条 `file:line` 证据 + 实跑命令 + 未实测项披露；**已归档** 2026-10-12 |

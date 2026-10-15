@@ -258,7 +258,7 @@ func TestApplyUniversalResponsesInitializesNilResponseMap(t *testing.T) {
 		t.Error("带请求体的端点未补挂 413")
 	}
 	if respKeys("/api/no-auth", "get")["401"] {
-		t.Error("NoAuth 豁免端点不应补挂 401（health / metrics 匿名可读）")
+		t.Error("NoAuth 豁免端点不应补挂 401（health 始终免鉴权）")
 	}
 }
 

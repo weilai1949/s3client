@@ -1071,8 +1071,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 健康检查（含 store 状态与版本）
-         * @description 健康检查（含 store 状态与版本）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
+         * 健康检查（status/store；有效 API token 可见 version）
+         * @description 健康检查（status/store；有效 API token 可见 version）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
          */
         get: operations["health"];
         put?: never;
@@ -1091,8 +1091,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）
-         * @description Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
+         * Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；S3C_METRICS_TOKEN 可选鉴权）
+         * @description Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；S3C_METRICS_TOKEN 可选鉴权）。分组：系统：健康检查、指标与 API 契约自身（docs/api.md「健康检查」「指标」「API 契约」）。成功状态码：200。
          */
         get: operations["metrics"];
         put?: never;
@@ -3981,7 +3981,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description partNumber 非法 */
+            /** @description partNumber / expiresIn 非法 */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5488,7 +5488,6 @@ export interface operations {
                     /**
                      * @example {
                      *       "status": "ok",
-                     *       "version": "v1.0.0",
                      *       "time": "2026-09-30T05:00:00Z",
                      *       "store": {
                      *         "ok": true
@@ -5504,7 +5503,6 @@ export interface operations {
                         };
                         /** Format: date-time */
                         time: string;
-                        version: string;
                     };
                 };
             };
@@ -5525,7 +5523,6 @@ export interface operations {
                         };
                         /** Format: date-time */
                         time: string;
-                        version: string;
                     };
                 };
             };
@@ -5554,6 +5551,7 @@ export interface operations {
                     "text/plain": unknown;
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description 默认关闭 */
             404: {
                 headers: {

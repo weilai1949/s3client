@@ -117,3 +117,27 @@ func TestAddTagAndNoAuthRenderTopLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionalSecurityRendersAlternatives(t *testing.T) {
+	reg := New("test", "1")
+	reg.Operation("GET", "/api/metrics", Op{
+		OperationID: "metrics",
+		Security: []map[string][]string{
+			{"metricsBearerAuth": {}},
+			{},
+		},
+	})
+	var doc map[string]any
+	raw, err := reg.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	op := doc["paths"].(map[string]any)["/api/metrics"].(map[string]any)["get"].(map[string]any)
+	reqs, ok := op["security"].([]any)
+	if !ok || len(reqs) != 2 {
+		t.Fatalf("security = %v, want two alternatives", op["security"])
+	}
+}

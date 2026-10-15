@@ -12,13 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weilai1949/s3client/apps/server/internal/config"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/s3wrap"
 )
 
 // TestAccRateLimiterAllowBranches 白盒覆盖 ipLimiter.allow 的：新桶 / 回满上限 / 饿死拒绝。
 func TestAccRateLimiterAllowBranches(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 
 	// 新 IP：建桶即放行
 	if !l.allow("10.0.0.1") {
@@ -59,7 +60,7 @@ func TestAccRateLimiterAllowBranches(t *testing.T) {
 
 // TestAccRateLimiterReapLocked 白盒：分片 reapLocked 只清理超过 10 分钟未活跃的桶。
 func TestAccRateLimiterReapLocked(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 	sh := l.shard("old")
 	sh.mu.Lock()
 	sh.byIP["old"] = &tokenBucket{tokens: 5, last: time.Now().Add(-11 * time.Minute)}
@@ -79,7 +80,7 @@ func TestAccRateLimiterReapLocked(t *testing.T) {
 // TestAccRateLimiterShardCapEvictsStaleFirst 分片超硬上限时先清过期桶：
 // 过期桶被移除、且未被「随机淘汰」误伤其它活跃桶（即 reap 先于 eviction）。
 func TestAccRateLimiterShardCapEvictsStaleFirst(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 	sh := l.shard("stale")
 	sh.mu.Lock()
 	sh.byIP["stale"] = &tokenBucket{tokens: 1, last: time.Now().Add(-11 * time.Minute)}
@@ -104,7 +105,7 @@ func TestAccRateLimiterShardCapEvictsStaleFirst(t *testing.T) {
 
 	// 再插一个新桶 → 超限：应先清掉唯一的过期桶，活跃桶全部保留。
 	sh.mu.Lock()
-	sh.addBucketLocked("fresh", time.Now())
+	sh.addBucketLocked("fresh", time.Now(), config.DefaultRateLimitBurst)
 	_, staleLeft := sh.byIP["stale"]
 	n := len(sh.byIP)
 	sh.mu.Unlock()
@@ -118,7 +119,7 @@ func TestAccRateLimiterShardCapEvictsStaleFirst(t *testing.T) {
 
 // TestAccRateLimiterShardHardCap 只灌同一分片：桶数必须停在硬上限，不得随 IP 数增长。
 func TestAccRateLimiterShardHardCap(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 	sh := l.shard("seed")
 	filled := 0
 	for i := 0; filled < maxBucketsPerShard*4; i++ {
@@ -140,7 +141,7 @@ func TestAccRateLimiterShardHardCap(t *testing.T) {
 // TestAccRateLimiterTotalBucketsBounded 分片后**总量**上限仍为 10_000 量级：
 // 灌入远超上限的 IP 后，驻留桶数不得超过 分片数 × (maxBucketsPerShard+1)。
 func TestAccRateLimiterTotalBucketsBounded(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 	const ips = 30_000
 	for i := 0; i < ips; i++ {
 		l.allow("ip-" + strconv.Itoa(i))
@@ -163,7 +164,7 @@ func TestAccRateLimiterTotalBucketsBounded(t *testing.T) {
 
 // TestAccRateLimiterConcurrent 并发 allow（go test -race 下验证分片锁无数据竞争）。
 func TestAccRateLimiterConcurrent(t *testing.T) {
-	l := newIPLimiter()
+	l := newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)
 	var wg sync.WaitGroup
 	for g := 0; g < 16; g++ {
 		wg.Add(1)
@@ -204,7 +205,7 @@ func TestAccWithRateLimitNilLimiter(t *testing.T) {
 
 // TestAccWithRateLimitOptionsBypass 白盒：OPTIONS 预检不计入限流。
 func TestAccWithRateLimitOptionsBypass(t *testing.T) {
-	h := &Handler{log: accDiscardLogger(), limiter: newIPLimiter()}
+	h := &Handler{log: accDiscardLogger(), limiter: newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst)}
 	called := false
 	wrapped := h.withRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true }))
 	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodOptions, "/api/accounts", nil))
@@ -216,6 +217,57 @@ func TestAccWithRateLimitOptionsBypass(t *testing.T) {
 	wrapped.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/assets/x.js", nil))
 	if !called {
 		t.Fatal("非 /api 路径应绕过限流")
+	}
+}
+
+// TestRateLimitKeyAggregatesIPv6Prefix R4：IPv6 按 /64 聚合，防攻击者用单 /64
+// 内海量地址各自换取独立令牌桶绕过限流；IPv4 与无法解析的地址原样作为桶键。
+func TestRateLimitKeyAggregatesIPv6Prefix(t *testing.T) {
+	if rateLimitKey("2001:db8:1::1") != rateLimitKey("2001:db8:1::ffff") {
+		t.Fatal("同 /64 的两个地址应聚合到同一限流桶")
+	}
+	if rateLimitKey("2001:db8:1::1") == rateLimitKey("2001:db8:2::1") {
+		t.Fatal("不同 /64 不得聚合到同一限流桶")
+	}
+	for _, ip := range []string{"192.0.2.1", "::ffff:192.0.2.1", "not-an-ip"} {
+		if got := rateLimitKey(ip); got != ip {
+			t.Fatalf("rateLimitKey(%q) = %q, want 原样（IPv4 / 无法解析不聚合）", ip, got)
+		}
+	}
+}
+
+// TestAccRateLimiterCustomParams R4：RPM 与突发容量可配置（S3C_RATE_LIMIT_*）。
+func TestAccRateLimiterCustomParams(t *testing.T) {
+	l := newIPLimiter(60, 1) // 60/min（1 token/s），突发 1
+	if !l.allow("10.0.0.1") {
+		t.Fatal("首次请求应放行")
+	}
+	if l.allow("10.0.0.1") {
+		t.Fatal("突发容量 1 已耗尽，第二次应拒绝")
+	}
+}
+
+// TestWithRateLimitIPv6SharesBucket 黑盒：同一 /64 的两个不同地址共享限流桶（首个 429），
+// 不同 /64 独立建桶；审计日志仍记完整 IP（audit 走 clientIP 原值，不经聚合键）。
+func TestWithRateLimitIPv6SharesBucket(t *testing.T) {
+	h := &Handler{log: accDiscardLogger()}
+	h.SetRateLimit(60, 1)
+	wrapped := h.withRateLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	do := func(remoteAddr string) int {
+		req := httptest.NewRequest(http.MethodGet, "/api/accounts", nil)
+		req.RemoteAddr = remoteAddr
+		rr := httptest.NewRecorder()
+		wrapped.ServeHTTP(rr, req)
+		return rr.Code
+	}
+	if code := do("[2001:db8:9::1]:1111"); code != http.StatusOK {
+		t.Fatalf("同 /64 首次请求 = %d, want 200", code)
+	}
+	if code := do("[2001:db8:9::2]:2222"); code != http.StatusTooManyRequests {
+		t.Fatalf("同 /64 第二个地址 = %d, want 429（共享桶）", code)
+	}
+	if code := do("[2001:db8:a::1]:3333"); code != http.StatusOK {
+		t.Fatalf("不同 /64 = %d, want 200（独立桶）", code)
 	}
 }
 

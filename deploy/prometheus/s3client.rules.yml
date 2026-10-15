@@ -17,8 +17,8 @@
 # ⚠️ 本服务**单实例**（`flock` 单写者锁，见 ADR-002）：以下全部只反映本机，**不含**上游 S3 的可用性
 #    ——上游故障只计入错误率，不构成本服务违约。
 #
-# 指标默认**不暴露**：需 `S3C_EXPOSE_METRICS=1`，且该端点**不受 `S3C_TOKEN` 保护**（匿名可读），
-# 只应经内网 / 反向代理鉴权后抓取（见 OPERATIONS.md §3）。
+# 指标默认**不暴露**：需 `S3C_EXPOSE_METRICS=1`；设置 S3C_METRICS_TOKEN 后还须独立 Bearer，
+# 未设置则保持匿名 scrape 兼容。只应经内网 / 反向代理鉴权后抓取（见 OPERATIONS.md §3）。
 
 groups:
   - name: s3client-recording

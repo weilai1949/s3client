@@ -33,6 +33,10 @@ S3C_LOG_JSON=1
 
 # 可选：SSRF 加固，拒绝私网 / 回环 S3 端点（默认关闭，自托管场景不设）
 # S3C_SSRF_DENY_PRIVATE=1
+
+# 可选：开启 metrics，并用独立 token 保护 Prometheus scrape（两者都需要）
+# S3C_EXPOSE_METRICS=1
+# S3C_METRICS_TOKEN=<openssl rand -hex 32>
 ```
 
 > **安全提醒（安全默认：明文存储拒绝启动）**：`json` / `sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时
@@ -106,7 +110,8 @@ cd apps/web && pnpm dev         # 前端 127.0.0.1:1949（Vite 代理到后端�
 
 ```bash
 curl http://127.0.0.1:5000/api/health
-# {"status":"ok","version":"v1.0.0","time":"...","store":{"ok":true}}
+# {"status":"ok","time":"...","store":{"ok":true}}
+# 带有效 S3C_TOKEN 时响应另含 "version":"v1.0.0"
 # store 探测失败返回 503（不做降级，见 ADR-002）
 ```
 
@@ -126,9 +131,9 @@ curl http://127.0.0.1:5000/api/health
 
 ### 6.3 指标
 
-`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`（存储可达性，掉线为 0）、`s3c_store_write_failures_total`（账号库写入失败，`json` / `encrypted` 驱动唯一的主动故障信号）、`s3c_volume_size_bytes` / `s3c_volume_free_bytes` / `s3c_volume_inode_capacity` / `s3c_volume_inode_free`（数据卷容量与 inode，取不到时不发序列）、`s3c_jobs_active`（在册异步任务数）、`s3c_last_shutdown_duration_seconds`（上次关停耗时）、`s3c_ssrf_deny_private`（SSRF 生效策略 0/1）与 `s3c_stream_interrupted_total`（流式传输中断计数）。完整清单见 [`OPERATIONS.md`](OPERATIONS.md) §3.2；`s3c_stream_interrupted_total` 用于发现大文件下载被上游读失败/写超时打断的情况——此前这类失败被 `io.Copy` 的返回值吞掉，日志与指标里都没有痕迹。
+`/api/metrics`（Prometheus 文本格式）**默认 404**，需显式 `S3C_EXPOSE_METRICS=1` 开启。含 HTTP 计数与延迟直方图、uptime、goroutine、内存、`s3c_build_info`，以及 `s3c_store_up`、`s3c_store_write_failures_total`、容量 / inode、`s3c_jobs_active`、`s3c_last_shutdown_duration_seconds`、`s3c_ssrf_deny_private`、`s3c_rate_limit_rpm` / `s3c_rate_limit_burst` 与 `s3c_stream_interrupted_total`。完整清单见 [`OPERATIONS.md`](OPERATIONS.md) §3.2。
 
-> **`/api/metrics` 不受 `S3C_TOKEN` 保护**：即使配置了 token，只要 `S3C_EXPOSE_METRICS=1`，该端点无需 `Authorization` 头即返回 200（有意为内网 Prometheus 免 token scrape）。代价是**匿名可读**（版本、存储可达性、S3 上游调用统计等运行信息）。请只在**内网 / 反向代理鉴权之后**暴露，切勿把开启 metrics 的实例直接放上公网。
+> **metrics 鉴权**：设置 `S3C_METRICS_TOKEN` 后必须携带该独立 Bearer；不设置则保持匿名 scrape 兼容。生产建议设置独立 token，并在 Prometheus 用 `authorization.credentials_file` 挂载 secret（示例见 [`OPERATIONS.md`](OPERATIONS.md) §3.2）。请只在内网 / 反向代理鉴权之后暴露。
 
 ### 6.4 升级
 

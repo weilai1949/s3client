@@ -2,7 +2,7 @@
 
 > 本文档描述 s3client 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
-> 最后更新：2026-10-10。
+> 最后更新：2026-10-15。
 
 ## 1. 威胁模型（STRIDE × 边界）
 
@@ -15,8 +15,8 @@
 | **S**poofing 仿冒 | Bearer 常量时间比较（sha256+subtle）、scheme 大小写不敏感（RFC 7235）、多 token 轮换、最短 16 字符 | ✅ 已缓解 |
 | **T**ampering 篡改 | Content-Type 非空时必须为 `application/json`（缺省放行，仍受 JSON 解码器约束）+ `DisallowUnknownFields` + 16MB body cap（超限回 413）；配合 CORS 使跨域变更必预检 | ✅ 已缓解 |
 | **R**epudiation 抵赖 | 安全审计日志（`handler/audit.go`）：401（malformed/bad_token）/ 账号 CRUD / 桶策略设置与清除 / 对象删除与前缀删除 / **移动与重命名**（同步批量 `copy-objects` + `deleteSource`、异步批量、`rename` 复制后删源）/ **版本永久删除**（`DELETE /version`，带 `versionId`）/ 回收站清空 / 限速命中，带固定事件名与操作者 IP；另有通用 access log | ✅ 已缓解（原 todo #17 闭环见 [FEATURES.md](FEATURES.md) §M；2026-09-28 补齐三处破坏性操作覆盖见 §AE） |
-| **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey | ✅ 已缓解 |
-| **D**oS 拒绝服务 | IP 令牌桶 120/min、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503 | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
+| **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey；health 匿名响应不含 `version`，metrics 可用独立 token 保护 | ✅ 已缓解 |
+| **D**oS 拒绝服务 | IP 令牌桶（默认 120/min·突发 30，`S3C_RATE_LIMIT_RPM` / `S3C_RATE_LIMIT_BURST` 可调；IPv6 按 /64 聚合防单 /64 海量地址换桶）、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503 | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
 | **E**levation 提权 | 默认单 token 全权模型；**可选最小权限作用域**（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号白名单 / 过期）按 token 收敛爆炸半径；token 轮换支持 | ✅ 已缓解（越权 403 + 审计 `auth.scope_denied`；未登记 token 保持全权，见下方「最小权限」） |
 
 **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：`S3C_TOKEN` 支持逗号分隔多 token，但历史上每个 token 都是全权。现可选用独立 env `S3C_TOKEN_SCOPES`（JSON：token → `{readonly, prefixes, accounts, expiresAt}`）为单个 token 声明最小权限：
@@ -103,12 +103,12 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 可选 token 作用域（`S3C_TOKEN_SCOPES` 非法即拒绝启动；未登记 token 保持全权） | `config.go` `parseTokenScopes` / `validateTokenScopes`、`handler/scope.go` |
 | `json`/`sqlite` 无 `S3C_STORE_KEY` 时拒绝启动（需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行） | `config.go` `Validate` |
 | `/api/metrics` 与 `/api/openapi.json` 默认 404 | `middleware.go` `withMetricsGate` / `withOpenAPIGate` |
-| `/api/metrics` 开启后**不受 token 保护**（有意为内网 scrape；匿名可读，勿直接暴露公网） | `middleware.go` `withAuth` 豁免 |
-| `/api/health` 同样免鉴权（探针用途；`version` 暴露为已接受项，见 §6.2） | `middleware.go` `withAuth` 豁免 |
-| XFF 默认不信任（`S3C_TRUSTED_PROXIES` 默认空；仅直连对端命中白名单才采信首段） | `config.go` `FromEnv`、`ratelimit.go` `clientIPWithProxies` |
+| `/api/metrics` 可用 `S3C_METRICS_TOKEN` 保护；未设置时保持匿名 scrape 兼容 | `config.go`、`middleware.go` `withMetricsGate` |
+| `/api/health` 免鉴权供探针；匿名不含 `version`，仅有效 `S3C_TOKEN` 可见版本号 | `middleware.go` `hasValidAPIToken`、`health.go` |
+| XFF 默认不信任（`S3C_TRUSTED_PROXIES` 默认空；仅直连对端命中白名单才采信其直连对端追加的最后一段） | `config.go` `FromEnv`、`ratelimit.go` `clientIPWithProxies` |
 | SSRF 私网 / 回环默认放行（`S3C_SSRF_DENY_PRIVATE` 默认关闭，可显式收紧，见 ADR-003） | `config.go` `FromEnv`、`s3wrap/ssrf.go` |
 | CORS 白名单仅 localhost/127.0.0.1/tauri + 跨域 403 硬阻断 | `middleware.go` `corsAllowedOrigin` / `withCORS` |
-| 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP | `middleware.go` `withSecurityHeaders` |
+| 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP；内联样式限 `style-src-attr`，内联 `<style>` 禁用 | `middleware.go` `withSecurityHeaders` |
 | TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3client-tls.example.conf` |
 | 容器非 root（`USER app`）、HEALTHCHECK、内存上限 | `apps/server/Dockerfile`、compose |
 | ReadHeaderTimeout 15s（防慢速请求头攻击） | `main.go` `runServer`（`http.Server` 字面量） |
@@ -263,7 +263,7 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 > 逐项证据见 [FEATURES.md](FEATURES.md) 与 [CHANGELOG.md](../CHANGELOG.md)；原始发现见
 > [archive/assessment.md](archive/assessment.md) §二。当前待办见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 技术债）与
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2（安全方向候选 #12 / #13）——
-> 安全 / 供应链类现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已于 2026-09-23 复审维持现状并移出待办台账（见 §6.2）。
+> 安全 / 供应链类现无 ⬜/⏳ 未闭环项；#18（health 暴露 version）已改为仅有效 API token 可见。
 
 - ~~Go 1.26.5 → 1.26.6（6 个可达 stdlib CVE）~~ ✅ 已升级 1.26.6 + `govulncheck` CI 门禁
 - ~~SQLite 明文密钥~~ ✅ 已修：设 `S3C_STORE_KEY` 时 secret_key 列加密；`S3C_STORE_KEY` 最短 16 字符
@@ -273,8 +273,8 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 
 ### 6.2 仍接受的风险（有意维持，非缺陷）
 
-- `/api/health` 暴露 `version`（KNOWN_ISSUES #18，2026-09-23 复审维持；清单条目已按「只收录尚未完成」移出）：开源项目版本与依赖本就公开、指纹价值≈0，而该响应是安全补丁验证与运维定位的廉价通道；`withAuth` **显式跳过**该端点（Docker HEALTHCHECK 需无 token 探测），故其为免鉴权端点、不依赖鉴权兜底。移除属行为变更。
-- `/api/metrics` 开启后免鉴权（内网 scrape 用途，见 §2；勿直接暴露公网）。
+- 未设置 `S3C_METRICS_TOKEN` 时，`/api/metrics` 开启后仍匿名可读（兼容既有内网 Prometheus scrape）；生产可用独立 token 收紧，见 §2。
+- 服务端 CSP 仍允许 `style-src-attr 'unsafe-inline'`（Vue `:style` 所需），但不再允许内联 `<style>` 块。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。
 - **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。**2026-10-10 把「无感知」降为「有告知」**（风险本体不变，仍需 TLS）：① 服务端在**创建 / 更新**账号时，若 `endpoint` 或 `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后是明文 `http://`，打一条 WARN（`handler/accounts.go` `warnPlaintextEndpoints`，与 `main.go` 的明文落盘告警同口径，**日志只记 id / 名称 / 端点，不含密钥**；**2026-10-10 评审 #84 起端点再经 `handler/accounts.go` 的 `redactEndpoint()` 去掉 URL userinfo**——`http://key:secret@host` 形式的 `key:secret` 不再落日志）；② 前端「使用 HTTPS/TLS」未勾选时在勾选框下给出同一句提示（`AccountsPanel.vue`，`accounts.useSSLWarn`）。两侧各由测试钉住：`internal/handler/accounts_plaintext_test.go` 四条（含「HTTPS 不打 WARN」防噪声、「日志不含 secretKey」、#84 新增的「端点 userinfo 不落日志」）+ `src/components/AccountsPanel.test.ts`「明文端点提示」用例。

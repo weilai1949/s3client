@@ -67,7 +67,7 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, token string
 	if !ok {
 		return true // 未登记 = 全权（向后兼容）
 	}
-	if !scope.ExpiresAt.IsZero() && time.Now().After(scope.ExpiresAt) {
+	if scopeExpired(scope) {
 		h.audit(r, auditAuthDenied, "reason", "token_expired")
 		h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 		return false
@@ -125,6 +125,18 @@ func (h *Handler) authorize(w http.ResponseWriter, r *http.Request, token string
 		}
 	}
 	return true
+}
+
+func (h *Handler) tokenExpired(token string) bool {
+	if h.tokenScopes == nil {
+		return false
+	}
+	scope, ok := h.tokenScopes(token)
+	return ok && scopeExpired(scope)
+}
+
+func scopeExpired(scope config.TokenScope) bool {
+	return !scope.ExpiresAt.IsZero() && time.Now().After(scope.ExpiresAt)
 }
 
 // denyScope 写审计事件与统一 403 JSON 错误（不回显 token）。

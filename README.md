@@ -85,13 +85,14 @@ docker-compose.yml   一键起 server + RustFS
 所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
 `.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源，且路径不存在 / 不可读时**拒绝启动**，不静默回退默认值）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
-**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 22 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
+**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 25 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `S3C_ADDR` | `127.0.0.1:5000` | 监听地址；回环更安全，需远程改为 `0.0.0.0:5000`（此时**必须**设 `S3C_TOKEN`） |
 | `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3client.lock`） |
-| `S3C_TOKEN` | 空 | 非空时所有 `/api/*` 需要 `Authorization: Bearer <token>`；**非回环监听时必填**（建议 `openssl rand -hex 32`，最低 16 字符）；逗号分隔支持多 token 轮换 |
+| `S3C_TOKEN` | 空 | 非空时业务 `/api/*` 需要 `Authorization: Bearer <token>`；health 免鉴权但仅有效 token 可见版本号；**非回环监听时必填**（最低 16 字符） |
+| `S3C_METRICS_TOKEN` | 空 | 设置后 `/api/metrics` 使用独立 Bearer；不设置则保持内网匿名 scrape 兼容（最低 16 字符） |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
 | `S3C_STORE_KEY` | 空 | 落盘加密口令（至少 16 字符）；`encrypted` 模式必填，`json`/`sqlite` 设置后启用加密。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
 
@@ -307,7 +308,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - 账号 SecretKey 仅服务端存储，对外返回**脱敏**（`AccountView.secretSet`，不回传 `secretKey`）。
 - 前端直传使用短时效 v4 签名 URL，密钥不暴露给前端。
 - 默认回环绑定、CORS 白名单、可选 Bearer 鉴权；S3C_TOKEN 短口令（< 16 字符）拒绝启动。
-- `/api/metrics` 默认 404，scrape 需显式 `S3C_EXPOSE_METRICS=1`。
+- `/api/metrics` 默认 404，scrape 需显式 `S3C_EXPOSE_METRICS=1`；生产可设 `S3C_METRICS_TOKEN` 保护。
 - 前端 Bearer Token 默认存 sessionStorage（关标签即清）；勾选「跨会话保留」才写 localStorage。
 - 生产部署请参考 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 与 [docs/threat-model.md](docs/threat-model.md)。
 

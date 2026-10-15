@@ -2,8 +2,8 @@ package handler
 
 // openapi_auth_test.go —— 契约的**鉴权与分组表达**门禁（WS1）。
 //
-// 背景：docs/api.md 规定除 `/api/health` 与 `/api/metrics` 外，所有 `/api/*` 需携带
-// `Authorization: Bearer <token>`（真值来源是 middleware.go 的 withAuth）。但此前
+// 背景：docs/api.md 规定业务 `/api/*` 需携带 `Authorization: Bearer <token>`，
+// health 始终免鉴权，metrics 可由独立 token 条件鉴权（真值来源是 middleware.go）。此前
 // 机器可读契约既没有文档级 `security`，也没有任何 operation 声明 `security` /
 // `security: []`，顶层 `tags` 也缺失 —— 代码生成器与 AI 代理从契约里读不出鉴权要求，
 // 只能去翻 Go 源码。
@@ -16,12 +16,11 @@ import (
 	"testing"
 )
 
-// bearerExemptPaths 是 withAuth 显式豁免鉴权的端点。
-// 真值与 middleware.go 的 `p == "/api/health" || p == "/api/metrics"` 一致；名单变更须同步此处。
-var bearerExemptPaths = map[string]bool{
-	"/api/health":  true,
-	"/api/metrics": true,
-}
+// bearerExemptPaths 是始终免鉴权的端点；metrics 可由 S3C_METRICS_TOKEN 条件鉴权，
+// 不能被当成完全豁免。名单变更须同步 middleware.go / withMetricsGate。
+var bearerExemptPaths = map[string]bool{"/api/health": true}
+
+const conditionalMetricsAuthPath = "/api/metrics"
 
 // declaredSecurity 提取某层 `security` 的 scheme 名集合。
 // present=false 表示该层**没有** security 字段（≠ 显式 `security: []`），
@@ -94,15 +93,25 @@ func TestOpenAPISpecDeclaresBearerAuthAndGuardsOperations(t *testing.T) {
 		}
 		for m, op := range methods {
 			id := strings.ToUpper(m) + " " + p
-			if got := effectiveSecurity(t, doc, op, id); !got["bearerAuth"] {
-				t.Errorf("%s 未要求 bearerAuth（有效 security = %v）", id, got)
+			got := effectiveSecurity(t, doc, op, id)
+			want := "bearerAuth"
+			if p == conditionalMetricsAuthPath {
+				want = "metricsBearerAuth"
+			}
+			if !got[want] {
+				t.Errorf("%s 未要求 %s（有效 security = %v）", id, want, got)
+			}
+			if p == conditionalMetricsAuthPath {
+				if schemes, present := declaredSecurity(op["security"]); !present || len(schemes) != 1 {
+					t.Errorf("%s 应显式声明可选 metricsBearerAuth，got %v", id, op["security"])
+				}
 			}
 		}
 	}
 }
 
 // TestOpenAPISpecExemptOperationsOptOutOfSecurity 断言豁免端点在 operation 上**显式**
-// 声明 `security: []`；同时反向拦截「非豁免端点被意外豁免」。
+// 声明 `security: []`；metrics 声明可选鉴权；同时反向拦截「非豁免端点被意外豁免」。
 func TestOpenAPISpecExemptOperationsOptOutOfSecurity(t *testing.T) {
 	t.Parallel()
 	doc := openAPIDoc(t)
@@ -126,6 +135,21 @@ func TestOpenAPISpecExemptOperationsOptOutOfSecurity(t *testing.T) {
 				t.Errorf("%s 是鉴权豁免端点，security 必须为空数组，got %v", id, schemes)
 			case !exempt && present && len(schemes) == 0:
 				t.Errorf("%s 非豁免端点却显式豁免了鉴权（security: []）", id)
+			}
+			if p == conditionalMetricsAuthPath {
+				reqs, ok := op["security"].([]any)
+				if !ok || len(reqs) != 2 {
+					t.Fatalf("%s 的可选鉴权应表达为两项 security alternatives，got %v", id, op["security"])
+				}
+				anonymous := false
+				for _, req := range reqs {
+					if obj, ok := req.(map[string]any); ok && len(obj) == 0 {
+						anonymous = true
+					}
+				}
+				if !anonymous {
+					t.Errorf("%s 的 security alternatives 必须允许匿名 scrape，got %v", id, op["security"])
+				}
 			}
 		}
 	}

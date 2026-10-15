@@ -11,23 +11,23 @@ func registerSystem(r *openapi.Registry) {
 		"error": openapi.Str(),
 	}, "ok")
 	healthBody := openapi.BuildObj(map[string]*openapi.Schema{
-		"status":  openapi.EnumStr("ok", "error"),
-		"version": openapi.Str(),
-		"time":    openapi.Str("date-time"),
-		"store":   healthStore,
-	}, "status", "version", "time", "store")
+		"status": openapi.EnumStr("ok", "error"),
+		"time":   openapi.Str("date-time"),
+		"store":  healthStore,
+	}, "status", "time", "store")
 
-	// NoAuth：middleware.go 的 withAuth 显式豁免 /api/health 与 /api/metrics；
-	// 契约必须显式写 `security: []`，否则会被读成继承文档级 bearerAuth。
+	// health 始终免鉴权；metrics 可由 S3C_METRICS_TOKEN 条件鉴权，
+	// 契约用「metricsBearerAuth 或匿名」两个 alternatives 表达。
 	r.Operation("GET", "/api/health", openapi.Op{
-		NoAuth: true, Tags: []string{"system"}, Summary: "健康检查（含 store 状态与版本）", OperationID: "health",
+		NoAuth: true, Tags: []string{"system"}, Summary: "健康检查（status/store；有效 API token 可见 version）", OperationID: "health",
 		Responses: map[string]openapi.Response{
 			"200": {Description: "OK", JSON: healthBody},
 			"503": {Description: "store 不可用", JSON: healthBody},
 		},
 	})
 	r.Operation("GET", "/api/metrics", openapi.Op{
-		NoAuth: true, Tags: []string{"system"}, Summary: "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；鉴权豁免）", OperationID: "metrics",
+		Tags: []string{"system"}, Summary: "Prometheus 文本指标（默认 404，需 S3C_EXPOSE_METRICS=1；S3C_METRICS_TOKEN 可选鉴权）", OperationID: "metrics",
+		Security: []map[string][]string{{"metricsBearerAuth": {}}, {}},
 		Responses: map[string]openapi.Response{
 			"200": {Description: "text/plain; version=0.0.4", JSON: nil},
 			"404": {Description: "默认关闭", JSON: nil},

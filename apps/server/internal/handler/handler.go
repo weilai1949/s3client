@@ -27,6 +27,7 @@ type Handler struct {
 	tokens         []string                               // Bearer 鉴权；可多个（S3C_TOKEN 逗号分隔，支持轮换）
 	tokenScopes    func(string) (config.TokenScope, bool) // S3C_TOKEN_SCOPES 查询（nil = 全权）
 	version        string                                 // 服务端版本号（ldflags 注入），用于 /api/health 上报
+	metricsToken   string                                 // S3C_METRICS_TOKEN；非空时 /api/metrics 仅接受该独立 Bearer
 	exposeMetrics  bool                                   // 是否暴露 /api/metrics（默认 false：404 假装不存在）
 	exposeOpenAPI  bool                                   // 是否暴露 /api/openapi.json（默认 false：404 假装不存在）
 	cspHeader      string                                 // 预计算的整条 CSP（含 connect-src）；空 = 用 defaultCSPHeader
@@ -56,7 +57,7 @@ func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins 
 		cspHeader:   buildCSP(defaultCSPConnectSrc),
 		clients:     newClientCache(),
 		migrateJobs: service.NewJobRegistry(),
-		limiter:     newIPLimiter(),
+		limiter:     newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst),
 		openapi:     reg,
 		schedActive: make(map[string]bool),
 	}
@@ -89,11 +90,23 @@ func (h *Handler) SetCSPConnectSrc(src string) {
 	}
 }
 
+// SetMetricsToken 启用 /api/metrics 的独立 Bearer 鉴权。空值保持匿名 scrape 兼容；
+// 需在 Routes() 前调用。
+func (h *Handler) SetMetricsToken(token string) {
+	h.metricsToken = token
+}
+
 // SetTrustedProxies 设置可信反向代理 IP 列表；仅来自这些对端的
 // X-Forwarded-For 才会被采信（否则回退 RemoteAddr，防直连伪造绕过限速）。
 // 需在 Routes() 前调用；不调用则完全不信任 XFF。
 func (h *Handler) SetTrustedProxies(proxies []string) {
 	h.trustedProxies = proxies
+}
+
+// SetRateLimit 覆盖限流参数（S3C_RATE_LIMIT_RPM / S3C_RATE_LIMIT_BURST）。
+// 需在 Routes() 前调用；默认值见 config.DefaultRateLimit*。
+func (h *Handler) SetRateLimit(rpm, burst int) {
+	h.limiter = newIPLimiter(rpm, burst)
 }
 
 // SetDataDir 记录数据目录，供 /api/metrics 的卷容量（statfs 目标）与

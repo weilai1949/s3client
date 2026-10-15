@@ -26,7 +26,7 @@
 - **发布节奏**：项目**不做固定周期发布**（当前没有「每 N 周发一版」这类承诺）。实际节奏是按里程碑与
   修复推进：稳定里程碑（`rcN` → `vX.Y.0`）之后转入时间戳版滚动发布，逐字历史见
   [`../CHANGELOG.md`](../CHANGELOG.md)，版本级规划见 [`ROADMAP.md`](ROADMAP.md)。
-- 运行时可核对版本：`GET /api/health` 的 `version` 字段（[`api.md`](api.md) 健康检查）。
+- 运行时可核对版本：带有效 `S3C_TOKEN` 请求 `GET /api/health` 时返回的 `version` 字段（[`api.md`](api.md) 健康检查）。
 - **发布硬前提**：质量门禁全绿、P0 未清零不发布（[`ROADMAP.md`](ROADMAP.md) §二 / §四）。
 
 ## 2. 支持窗口

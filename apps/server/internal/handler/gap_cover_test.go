@@ -65,6 +65,23 @@ func TestCSPOverrideAndDefaultBranch(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersRestrictInlineStylesToAttributes(t *testing.T) {
+	h := newTestHandler(t, nil, "")
+	rr := doJSON(t, h, "GET", "/api/health", "")
+	csp := rr.Header().Get("Content-Security-Policy")
+	for _, want := range []string{
+		"style-src 'self'",
+		"style-src-attr 'unsafe-inline'",
+	} {
+		if !strings.Contains(csp, want) {
+			t.Fatalf("CSP = %q, want directive %q", csp, want)
+		}
+	}
+	if strings.Contains(csp, "style-src 'self' 'unsafe-inline'") {
+		t.Fatalf("CSP 仍允许内联 <style>：%q", csp)
+	}
+}
+
 // desc：nil 直接返回 nil，非 nil 设置 Description（openapi_register.go 40-42）。
 func TestDescNilAndSet(t *testing.T) {
 	if d := desc(nil, "x"); d != nil {
