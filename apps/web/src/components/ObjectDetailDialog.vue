@@ -7,6 +7,7 @@ import { fmtDate, fmtSize } from '../format'
 import { t } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import { storageClassLabel } from '../storageClass'
+import { useSeqGuard } from '../composables/useSeqGuard'
 import type { ObjectLegalHold, ObjectMeta, ObjectRetention, RetentionMode, VerifyResult } from '../types'
 
 const props = defineProps<{
@@ -73,12 +74,12 @@ function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-/** 序号守卫：快速切换对象时丢弃过期的读取结果（与 useObjectActions 的 detailSeq 同口径）。 */
-let protectionSeq = 0
+/** 序号守卫：快速切换对象时丢弃过期的读取结果（与 useObjectActions 的 detailGuard 同口径）。 */
+const protectionGuard = useSeqGuard()
 
 async function loadProtection(): Promise<void> {
   if (!props.detail) return
-  const seq = ++protectionSeq
+  const seq = protectionGuard.next()
   protectionError.value = ''
   // 读取失败也归一为返回值：错误必须先过 seq 检查，不能绕过守卫写入过期状态。
   const outcome = await Promise.all([
@@ -88,7 +89,7 @@ async function loadProtection(): Promise<void> {
     (v): { ok: [ObjectRetention, ObjectLegalHold] } => ({ ok: v }),
     (e: unknown): { err: string } => ({ err: toErrorMessage(e) }),
   )
-  if (seq !== protectionSeq) return
+  if (!protectionGuard.isCurrent(seq)) return
   if ('err' in outcome) {
     protectionError.value = outcome.err
     return

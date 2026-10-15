@@ -53,7 +53,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <div class="act-head">{{ t('activity.title') }}</div>
       <div v-for="a in list" :key="a.key" class="act-item">
         <div class="act-name">{{ a.label }}</div>
-        <div class="progress" role="progressbar" :aria-valuenow="a.pct" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress" role="progressbar" :aria-label="a.label" :aria-valuenow="a.pct" aria-valuemin="0" aria-valuemax="100">
           <div class="bar" :style="{ width: a.pct + '%' }" />
         </div>
         <div class="badge">{{ a.done }}/{{ a.total }} · {{ a.pct }}%</div>

@@ -183,6 +183,14 @@ type listFake struct {
 	keys     map[string][]string // bucket -> keys
 	pageSize int                 // objects per response page
 	failList bool                // return HTTP 400 for list-type=2
+	calls    int                 // ListObjectsV2 请求次数（断言「不多取下一页」用）
+}
+
+// listCalls 返回累计列举请求次数。
+func (f *listFake) listCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
 func newListFake(t *testing.T) *listFake {
@@ -198,6 +206,9 @@ func (f *listFake) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unexpected request: "+r.Method+" "+r.URL.String(), http.StatusBadRequest)
 		return
 	}
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
 	if f.failList {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>`))
@@ -351,6 +362,34 @@ func TestListAllHardCap(t *testing.T) {
 	// 超出上限的对象没有被枚举 → 必须标记截断（review R6：旧实现静默返回）。
 	if !truncated {
 		t.Fatal("超过 listMaxTotal 必须标记 truncated")
+	}
+}
+
+func TestListAllStopsExactlyAtTotalCap(t *testing.T) {
+	// 单页正好收满 listMaxTotal、对端仍称有下一页：立即停止并标记截断，
+	// 不再多取一页（取回的对象也装不下）——「正好等于上限且对端声明未完 = 截断」的口径。
+	const total = 100_000
+	f := newListFake(t)
+	keys := make([]string, total+1)
+	for i := range keys {
+		keys[i] = "obj" + strconv.Itoa(i)
+	}
+	f.keys[listFakeBucket] = keys
+	f.pageSize = total // 第一页正好 total 个；余下 1 个让对端 IsTruncated=true
+
+	got, truncated, err := listAll(context.Background(), f.client(t), listFakeBucket, "")
+	if err != nil {
+		t.Fatalf("listAll: %v", err)
+	}
+	if len(got) != total {
+		t.Fatalf("listAll 返回 %d 个，want %d", len(got), total)
+	}
+	if !truncated {
+		t.Fatal("收满上限且对端仍称未完，必须标记 truncated")
+	}
+	// 只发一次列举：装不下的下一页不该再取（删掉「正好收满即停」分支会多取一页 → 红灯）。
+	if n := f.listCalls(); n != 1 {
+		t.Fatalf("列举请求 = %d 次，want 1（正好收满即停，不多取下一页）", n)
 	}
 }
 

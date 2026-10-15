@@ -176,7 +176,7 @@ function clearDone() {
 
       <template v-if="items.length">
         <div class="row" style="margin-bottom:10px">
-          <div class="progress" style="flex:1" role="progressbar" :aria-valuenow="totalPct" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress" style="flex:1" role="progressbar" :aria-label="t('upload.title')" :aria-valuenow="totalPct" aria-valuemin="0" aria-valuemax="100">
             <div class="bar" :style="{ width: totalPct + '%' }"></div>
           </div>
           <span class="badge">{{ doneCount }}/{{ items.length }} · {{ totalPct }}%</span>

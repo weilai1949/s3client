@@ -5,6 +5,7 @@ import { toErrorMessage } from '../errors'
 import { s3api } from '../api'
 import { state } from '../store'
 import { t } from '../i18n'
+import { useSeqGuard } from '../composables/useSeqGuard'
 import { fmtBytes, fmtCost } from '../storageReport'
 import type { BucketItem, StorageReport } from '../types'
 
@@ -20,10 +21,9 @@ const loading = ref(false)
 const error = ref('')
 const report = ref<StorageReport | null>(null)
 
-// 桶加载代际（评审 R6）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
-// 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 seq
-//（口径同 useObjectBrowser.loadBuckets）。
-let bucketSeq = 0
+// 桶加载代际守卫（评审 R6 / O1）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
+// 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 token。
+const bucketGuard = useSeqGuard()
 
 async function loadBuckets() {
   if (!accountId.value) {
@@ -31,21 +31,21 @@ async function loadBuckets() {
     bucket.value = ''
     return
   }
-  const seq = ++bucketSeq
+  const seq = bucketGuard.next()
   loadingBuckets.value = true
   try {
     const r = await s3api.listBuckets(accountId.value)
-    if (seq !== bucketSeq) return // 过期响应：当前账号的加载已接管状态，静默丢弃
+    if (!bucketGuard.isCurrent(seq)) return // 过期响应：当前账号的加载已接管状态，静默丢弃
     buckets.value = r.buckets
     bucket.value = r.buckets[0]?.name ?? ''
     error.value = ''
   } catch (err) {
-    if (seq !== bucketSeq) return // 过期失败：不污染当前账号的横幅
+    if (!bucketGuard.isCurrent(seq)) return // 过期失败：不污染当前账号的横幅
     buckets.value = []
     bucket.value = ''
     error.value = toErrorMessage(err)
   } finally {
-    if (seq === bucketSeq) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
+    if (bucketGuard.isCurrent(seq)) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
   }
 }
 

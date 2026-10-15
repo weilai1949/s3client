@@ -44,7 +44,7 @@ done
 
 # 与 CI / compose 对齐的默认值：RustFS 镜像 pin 在 docker-compose.yml
 # （一致性由 repo_infra_gate_test.go 的 TestRustFSImageIsConsistentlyPinned 守住）。
-RUSTFS_IMAGE="${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-rc.3}"
+RUSTFS_IMAGE="${RUSTFS_IMAGE:-rustfs/rustfs:1.0.0-rc.3@sha256:800cf3f352a0a27e3275ca854a51f0027975d7acc7a0d52089a35bcc9fcbf0b5}"
 RUSTFS_PORT="${RUSTFS_PORT:-9000}"
 SERVER_PORT="${SERVER_PORT:-5000}"
 RUSTFS_ACCESS_KEY="${RUSTFS_ACCESS_KEY:-rustfsadmin}"

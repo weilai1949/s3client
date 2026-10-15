@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/weilai1949/s3client/apps/server/internal/service"
 )
 
 // ---- 假 S3：可编排的 ListObjectsV2 ----
@@ -360,8 +362,8 @@ func TestStorageReportTruncatedAtPageLimit(t *testing.T) {
 	env := accNewEnv(t, srv.URL, "b")
 	rr := env.accDoRec(http.MethodGet, "/api/accounts/"+env.acc.ID+"/storage-report", "")
 	olExpectStatus(t, rr, http.StatusOK, "page limit report")
-	if calls != storageReportMaxPages {
-		t.Errorf("列举页数 = %d, want %d（页数上限必须生效）", calls, storageReportMaxPages)
+	if calls != service.ListMaxPages {
+		t.Errorf("列举页数 = %d, want %d（页数上限必须生效）", calls, service.ListMaxPages)
 	}
 	report := srDecode(t, rr.Body.String())
 	if got, _ := report["truncated"].(bool); !got {

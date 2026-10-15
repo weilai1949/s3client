@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weilai1949/s3client/apps/server/internal/httpx"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
@@ -127,14 +128,14 @@ func TestAccAccountClientAndBucketOr(t *testing.T) {
 	}
 }
 
-// TestAccStatusRecorderDoubleWrite 白盒：statusRecorder 第二次 WriteHeader 被忽略。
+// TestAccStatusRecorderDoubleWrite 白盒：StatusRecorder 第二次 WriteHeader 被忽略。
 func TestAccStatusRecorderDoubleWrite(t *testing.T) {
 	rr := httptest.NewRecorder()
-	rec := &statusRecorder{ResponseWriter: rr, status: 200}
+	rec := httpx.NewStatusRecorder(rr)
 	rec.WriteHeader(http.StatusCreated)
 	rec.WriteHeader(http.StatusBadGateway) // 应被忽略
-	if rec.status != http.StatusCreated || rr.Code != http.StatusCreated {
-		t.Fatalf("status=%d underlying=%d, want 201/201", rec.status, rr.Code)
+	if rec.Status() != http.StatusCreated || rr.Code != http.StatusCreated {
+		t.Fatalf("status=%d underlying=%d, want 201/201", rec.Status(), rr.Code)
 	}
 	// Flush/Unwrap 透传
 	if _, ok := rec.ResponseWriter.(interface{ Flush() }); ok {

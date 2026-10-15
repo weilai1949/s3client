@@ -45,7 +45,7 @@ func (h *Handler) withStreamLimit(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // beginStreamResponse 为流式响应设置初始写超时（大文件下载），在 WriteHeader 之前调用。
-// 依赖 statusRecorder.Unwrap，使 ResponseController 能触达底层 conn。
+// 依赖 httpx.StatusRecorder.Unwrap，使 ResponseController 能触达底层 conn。
 func beginStreamResponse(w http.ResponseWriter) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Now().Add(streamIdleTimeout))

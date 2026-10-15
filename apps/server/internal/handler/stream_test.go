@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/weilai1949/s3client/apps/server/internal/httpx"
 )
 
 type deadlineStub struct {
@@ -22,13 +24,13 @@ func (d *deadlineStub) SetWriteDeadline(t time.Time) error {
 // TestStatusRecorderUnwrap 确保日志包装器可被 ResponseController 穿透到底层连接。
 func TestStatusRecorderUnwrap(t *testing.T) {
 	inner := &deadlineStub{ResponseWriter: httptest.NewRecorder()}
-	rec := &statusRecorder{ResponseWriter: inner, status: 200}
+	rec := httpx.NewStatusRecorder(inner)
 	if got := rec.Unwrap(); got != inner {
 		t.Fatalf("Unwrap() = %T, want underlying ResponseWriter", got)
 	}
 	rc := http.NewResponseController(rec)
 	if err := rc.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
-		t.Fatalf("SetWriteDeadline via statusRecorder: %v (Unwrap missing?)", err)
+		t.Fatalf("SetWriteDeadline via httpx.StatusRecorder: %v (Unwrap missing?)", err)
 	}
 	if !inner.called {
 		t.Fatal("SetWriteDeadline was not forwarded to underlying writer")

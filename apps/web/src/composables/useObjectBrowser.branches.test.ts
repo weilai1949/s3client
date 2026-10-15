@@ -159,6 +159,28 @@ describe('useObjectBrowser final branches', () => {
     expect(browser.buckets.value.map((b) => b.name)).toEqual(['second'])
   })
 
+  it('loadBuckets 与对象 load 各自计数：切桶不会丢弃在飞的桶列表（回归：曾共用 loadSeq）', async () => {
+    let resolveBuckets!: (v: ListBucketsResult) => void
+    let resolveObjects!: (v: ListObjectsResult) => void
+    vi.mocked(s3api.listBuckets).mockImplementationOnce(
+      () => new Promise((r) => { resolveBuckets = r }),
+    )
+    vi.mocked(s3api.listObjects).mockImplementationOnce(
+      () => new Promise((r) => { resolveObjects = r }),
+    )
+    const browser = useObjectBrowser(makeBindings())
+    const pBuckets = browser.loadBuckets() // 在飞的桶列表请求（bucketSeq=1）
+    browser.currentBucket.value = 'b1'
+    const pObjects = browser.load(true) // 切桶触发的对象加载（旧实现会占用同一计数器 → 桶响应被误丢）
+    resolveBuckets({ buckets: [{ name: 'b1' }] } as unknown as ListBucketsResult)
+    await pBuckets
+    // 若两者共用计数器，load() 递增后 loadBuckets 的响应会被判过期丢弃、且 loadingBuckets 卡 true。
+    expect(browser.buckets.value.map((b) => b.name)).toEqual(['b1'])
+    expect(browser.loadingBuckets.value).toBe(false)
+    resolveObjects({ objects: [], commonPrefixes: [], nextToken: '', isTruncated: false } as unknown as ListObjectsResult)
+    await pObjects
+  })
+
   it('removeBucket returns early when confirm is cancelled', async () => {
     vi.mocked(confirmDialog).mockResolvedValue(false)
     const browser = useObjectBrowser(makeBindings())

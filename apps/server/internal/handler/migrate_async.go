@@ -111,7 +111,7 @@ func (h *Handler) migrateJobEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer job.Unsubscribe(ch)
-	// 初始写超时：依赖 statusRecorder.Unwrap 触达底层 conn。
+	// 初始写超时：依赖 httpx.StatusRecorder.Unwrap 触达底层 conn。
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Now().Add(streamIdleTimeout))
 

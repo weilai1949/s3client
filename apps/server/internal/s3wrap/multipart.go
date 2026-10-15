@@ -88,13 +88,18 @@ type MultipartPart struct {
 // listPartsPageSize 单次 ListParts 请求的分段上限（S3 协议上限 1000）。
 const listPartsPageSize = 1000
 
+// listPartsMaxPages 是 ListParts 翻页上限：1000 段/页 × 100 页 = 10 万段，十倍于协议 1 万段上限。
+// 与「游标不前进即停」共同保证循环**有界**（口径同 service/sync_list_gate_test.go）——
+// 对端始终返回 truncated 或游标原地打转时，没有守卫会让断点续传清单查询永久挂住。
+const listPartsMaxPages = 100
+
 // ListParts 列出某次分段上传已上传的分段（断点续传对齐服务端真实清单用）。
 // 自动按 NextPartNumberMarker 翻页，保证超过 1000 段的大文件清单完整；
 // uploadId 失效（NoSuchUpload）时错误透传，由调用方决定是否重新 init。
 func (c *Client) ListParts(ctx context.Context, bucket, key, uploadID string) ([]MultipartPart, error) {
 	parts := make([]MultipartPart, 0)
 	var marker *string
-	for {
+	for page := 0; ; page++ {
 		out, err := c.s3.ListParts(ctx, &s3.ListPartsInput{
 			Bucket:           aws.String(bucket),
 			Key:              aws.String(key),
@@ -115,6 +120,10 @@ func (c *Client) ListParts(ctx context.Context, bucket, key, uploadID string) ([
 		}
 		// 截断但缺下一页标记属异常响应：就地结束，避免死循环。
 		if !boolOrFalse(out.IsTruncated) || out.NextPartNumberMarker == nil {
+			return parts, nil
+		}
+		// 有界守卫（页上限 + 游标不前进即停）：对端异常不得让查询永久挂住。
+		if page+1 >= listPartsMaxPages || (marker != nil && *out.NextPartNumberMarker <= *marker) {
 			return parts, nil
 		}
 		marker = out.NextPartNumberMarker

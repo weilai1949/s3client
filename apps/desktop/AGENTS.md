@@ -17,3 +17,8 @@
   （`tauri build`；默认 feature `custom-protocol` 用于打包内嵌资源）。
 - **发布一致性**：`tauri.conf.json` 与 `Cargo.toml` 的版本必须与发布 tag 一致（`release-desktop.yml`
   会比对并 `exit 1`，见 `repo_infra_gate_test.go`）。
+- **CSP 取舍（`connect-src` 有意放宽，勿「顺手收紧」）**：`tauri.conf.json` 的 `connect-src` 为
+  `'self' http: https:`——桌面端要连接**任意用户配置**的 S3 endpoint 与后端（含自建 LAN http 实例），
+  构建期无法枚举主机，故不按主机收窄；其余指令（`default-src` / `script-src` / `object-src` /
+  `base-uri` / `frame-ancestors` / `form-action`）均已收紧。2026-10-14 评审 C1 复核：无「既收窄又不
+  破坏用户端点」的改法，维持现状并将该取舍显式记录于此（改宽需在 PR 说明理由）。

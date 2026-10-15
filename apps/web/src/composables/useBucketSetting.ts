@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue'
 import { toast } from '../store'
 import { toErrorMessage } from '../errors'
+import { useSeqGuard } from './useSeqGuard'
 
 /**
  * 桶级设置页签的公共骨架：桶变化自动加载（immediate）、loading/saving 状态、
@@ -19,18 +20,18 @@ export function useBucketSetting(opts: {
   const loading = ref(false)
   const saving = ref(false)
   // reload 竞态守卫：快速切桶/保存后刷新会让多个请求并发，
-  // 只有最后一次发起的响应才允许写入状态（ASSESSMENT S8）。
-  let reloadSeq = 0
+  // 只有最后一次发起的响应才允许写入状态（ASSESSMENT S8 / review O1）。
+  const reloadGuard = useSeqGuard()
 
   async function reload() {
-    const seq = ++reloadSeq
+    const seq = reloadGuard.next()
     loading.value = true
     try {
       await opts.load()
     } catch (e) {
-      if (seq === reloadSeq) opts.onError(toErrorMessage(e))
+      if (reloadGuard.isCurrent(seq)) opts.onError(toErrorMessage(e))
     } finally {
-      if (seq === reloadSeq) loading.value = false
+      if (reloadGuard.isCurrent(seq)) loading.value = false
     }
   }
 

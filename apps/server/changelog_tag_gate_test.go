@@ -43,13 +43,19 @@ var changelogSectionRe = regexp.MustCompile(`(?m)^## \[([^\]]+)\]`)
 // 第三、四列（性质 / 说明）不参与解析；表头行与 `---` 分隔行由调用方过滤。
 var changelogMappingRowRe = regexp.MustCompile("^\\|\\s*`?([^`|]*)`?\\s*\\|\\s*`?([^`|]*)`?\\s*\\|")
 
-// 扫描面自检基线（实测值，2026-09-30）：
+// 扫描面自检基线：
 //
-//	20 个 v* tag · 23 个版本段（含 [Unreleased]）· 8 行快照登记。
+//   - tag：按**上游实际存在**的 v* tag 校准（2026-10-15 复核 origin = 2 个：
+//     v1.0.0 + v1.0.0-rc1）。2026-09-30 实测的 20 个来自评审机**本地 refs**——
+//     导入前历史 tag 与同日快照 tag 未随迁、对象也不在上游，任何新克隆与 CI
+//     都读不到；阈值写 15 会让本门禁在 CI 构造性红灯（fetch-depth: 0 也只能
+//     拿到远端 tag）。阈值仍须 >0：refs 读取塌缩到 0 时必须红灯，不得安静通过。
+//   - 版本段 / 映射表行数是 CHANGELOG 文件内事实，与克隆方式无关（实测 23 段含
+//     [Unreleased]、8 行快照登记），塌缩即解析口径失效。
 //
 // 低于阈值说明解析 / 读取口径塌缩，必须红灯而不是安静通过。
 const (
-	minChangelogTags     = 15
+	minChangelogTags     = 2
 	minChangelogSections = 15
 	minChangelogMapRows  = 6
 )

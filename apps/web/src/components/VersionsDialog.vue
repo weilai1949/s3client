@@ -8,6 +8,7 @@ import { confirmDialog } from '../confirm'
 import { fmtDate, fmtSize } from '../format'
 import { ROW_HEIGHT } from '../virtualList'
 import { useVirtualRows } from '../composables/useVirtualRows'
+import { useSeqGuard } from '../composables/useSeqGuard'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import CompareDialog from './CompareDialog.vue'
@@ -71,12 +72,12 @@ const contentVersions = computed<CompareVersion[]>(() =>
     })),
 )
 
-// 加载代次：每次 load +1。关闭再打开另一个对象时，上一个对象的列举可能仍在飞，
+// 加载代际守卫：每次 load 领取新 token。关闭再打开另一个对象时，上一个对象的列举可能仍在飞，
 // 过期响应不得写进 rows（否则标题已是新对象、列表却还是旧对象的版本）。
-let loadSeq = 0
+const loadGuard = useSeqGuard()
 
 async function load() {
-  const seq = ++loadSeq
+  const seq = loadGuard.next()
   rows.value = []
   truncated.value = false
   truncatedPages.value = 0
@@ -96,7 +97,7 @@ async function load() {
         keyMarker,
         versionIdMarker,
       })
-      if (seq !== loadSeq) return // 过期请求：新对象已接管 rows / loading，静默丢弃
+      if (!loadGuard.isCurrent(seq)) return // 过期请求：新对象已接管 rows / loading，静默丢弃
       for (const m of r.deleteMarkers ?? []) {
         if (m.key !== props.objectKey) continue
         merged.push({
@@ -138,10 +139,10 @@ async function load() {
     rows.value = merged
   } catch (err) {
     // 过期请求的失败不该报到已切走的对象头上
-    if (seq === loadSeq) emit('error', toErrorMessage(err))
+    if (loadGuard.isCurrent(seq)) emit('error', toErrorMessage(err))
   } finally {
     // 同理：过期请求不得把新对象的 loading 提前清掉（否则骨架屏闪走、列表未到位）
-    if (seq === loadSeq) loading.value = false
+    if (loadGuard.isCurrent(seq)) loading.value = false
   }
 }
 

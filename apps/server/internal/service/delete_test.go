@@ -293,8 +293,8 @@ func TestRunDeletePrefixStopsOnNonAdvancingToken(t *testing.T) {
 // 否则对端给「空页 + 前进 token」时计数永不增长，maxDelete 守卫永远不触发。
 func TestRunDeletePrefixStopsAtPageCap(t *testing.T) {
 	// 每页都空、但 token 逐页前进：maxDelete 的计数永不增长，只有页数上限停得住。
-	pages := make([]string, 0, listMaxPages+1)
-	for i := 0; i <= listMaxPages; i++ {
+	pages := make([]string, 0, ListMaxPages+1)
+	for i := 0; i <= ListMaxPages; i++ {
 		pages = append(pages, deleteListXML(nil, true, fmt.Sprintf("t%d", i)))
 	}
 	f := &deleteFake{pages: pages}

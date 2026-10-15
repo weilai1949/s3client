@@ -63,7 +63,7 @@ services:
         max-file: "3"
 
   nginx:
-    image: nginx:1.27.4-alpine
+    image: nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
     container_name: s3client-nginx
     restart: unless-stopped
     stop_signal: SIGQUIT
@@ -90,7 +90,7 @@ services:
 
   rustfs:
     # pin 版本避免 latest 漂移导致 E2E flaky
-    image: rustfs/rustfs:1.0.0-rc.3
+    image: rustfs/rustfs:1.0.0-rc.3@sha256:800cf3f352a0a27e3275ca854a51f0027975d7acc7a0d52089a35bcc9fcbf0b5
     container_name: s3client-rustfs
     restart: unless-stopped
     ports:

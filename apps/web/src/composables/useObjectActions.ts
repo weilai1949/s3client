@@ -12,6 +12,7 @@ import { BATCH_META_CONCURRENCY, boundedPool } from '../batchMetadata'
 import { DELETE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { t, tf } from '../i18n'
 import { useUploadQueue } from './useUploadQueue'
+import { useSeqGuard } from './useSeqGuard'
 import type { Account, ObjectItem, ObjectMeta } from '../types'
 import type { ComputedRef, Ref } from 'vue'
 import type { CtxMenu } from './useObjectBrowser'
@@ -41,7 +42,7 @@ export interface DestCtx {
 
 export function useObjectActions(ctx: ObjectBrowserCtx) {
   const detail = ref<ObjectMeta | null>(null)
-  const detailSeq = ref(0) // showDetail 序号守卫，过期响应丢弃
+  const detailGuard = useSeqGuard() // showDetail 序号守卫，过期响应丢弃
   // 进行中的异步任务 SSE 取消器；组件卸载时断开，避免流悬挂/回调写入已销毁的 ref。
   let activeUnsub: (() => void) | undefined
 
@@ -316,17 +317,17 @@ export function useObjectActions(ctx: ObjectBrowserCtx) {
 
   async function showDetail(key: string) {
     // seq 守卫：快速切对象时丢弃过期响应，避免旧详情覆盖新详情。
-    const seq = ++detailSeq.value
+    const seq = detailGuard.next()
     detail.value = null
     try {
       const got = await s3api.headObject(requireAccId(), {
         bucket: ctx.currentBucket.value,
         key,
       })
-      if (seq !== detailSeq.value) return
+      if (!detailGuard.isCurrent(seq)) return
       detail.value = got
     } catch (err) {
-      if (seq === detailSeq.value) ctx.error.value = toErrorMessage(err)
+      if (detailGuard.isCurrent(seq)) ctx.error.value = toErrorMessage(err)
     }
   }
 

@@ -119,16 +119,23 @@ func TestAiPolicyClaimsMatchRepoState(t *testing.T) {
 		t.Error("PR 模板缺少「AI 使用披露」块：AI_POLICY §5 的披露要求失去载体（块本身受本门禁保护）")
 	}
 
-	// 声明③：若存在其它 AI 工具入口，它必须是**纯指针**（不得复制规则形成第二事实源）。
+	// 声明③：其它 AI 工具入口（本仓库实际提交了 .github/copilot-instructions.md）必须是
+	// **纯指针**（不得复制规则形成第二事实源）。
+	//
+	// 该文件被 llms.txt / README 引用、且已在仓库提交，故**缺失即失败**——此前写法是
+	// `if err == nil {…}`，删掉该文件会让整段校验静默消失（fail-open，实测过的盲区）。
 	pointer := filepath.Join(root, ".github", "copilot-instructions.md")
-	if b, err := os.ReadFile(pointer); err == nil {
-		if len(b) > maxPointerBytes {
-			t.Errorf(".github/copilot-instructions.md 已 %d 字节，超出指针预算 %d："+
-				"AI 工具入口只应指向 AGENTS.md 等 SSOT，复制规则会产生第二事实源", len(b), maxPointerBytes)
-		}
-		if !strings.Contains(string(b), "AGENTS.md") {
-			t.Error(".github/copilot-instructions.md 未指向 AGENTS.md：指针文件失去唯一价值")
-		}
+	b, err := os.ReadFile(pointer)
+	if err != nil {
+		t.Fatalf("读取 .github/copilot-instructions.md: %v——该指针入口已在仓库提交且被 llms.txt 引用，"+
+			"缺失必须显式失败，不得静默跳过其指针性校验", err)
+	}
+	if len(b) > maxPointerBytes {
+		t.Errorf(".github/copilot-instructions.md 已 %d 字节，超出指针预算 %d："+
+			"AI 工具入口只应指向 AGENTS.md 等 SSOT，复制规则会产生第二事实源", len(b), maxPointerBytes)
+	}
+	if !strings.Contains(string(b), "AGENTS.md") {
+		t.Error(".github/copilot-instructions.md 未指向 AGENTS.md：指针文件失去唯一价值")
 	}
 }
 

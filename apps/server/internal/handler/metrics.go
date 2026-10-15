@@ -82,7 +82,7 @@ func readHeapAllocBytes() uint64 {
 // metrics 暴露 Prometheus 文本格式指标（无需鉴权，便于内网 scrape）。
 //
 // 整个响应先写进一个缓冲、最后一次性 Write：旧实现 30+ 次 fmt.Fprintf 直写
-// http.ResponseWriter，每次都经 statusRecorder / 连接写路径（S5）。
+// http.ResponseWriter，每次都经 httpx.StatusRecorder / 连接写路径（S5）。
 func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	heapAlloc := readHeapAllocBytes()
 	var buf bytes.Buffer

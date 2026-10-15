@@ -174,6 +174,54 @@ func TestTrivyImageIsVersionAndDigestPinned(t *testing.T) {
 	}
 }
 
+// ciImageLineRe 匹配 YAML 里的 `image: <ref>` 引用。
+var ciImageLineRe = regexp.MustCompile(`(?m)^[ \t]*image:[ \t]*(\S+)`)
+
+// ciServiceNameRe 匹配 `services:` 下的 `- name: <ref>`。
+var ciServiceNameRe = regexp.MustCompile(`(?m)^[ \t]*-[ \t]*name:[ \t]*(\S+)`)
+
+// TestCIBaseImagesAreDigestPinned（C2）：两套 CI 与 compose 引用的**外部**基础镜像必须
+// tag + `@sha256:` digest 双 pin——tag 会被上游重新推送，只有 digest 是不可变的内容寻址。
+//
+// 此前该纪律只有 Trivy 一处有门禁（TestTrivyImageIsVersionAndDigestPinned），而
+// golang / node / rust / docker / nginx / rustfs 全是可被重新推送的裸 tag——供应链纪律不成体系。
+//
+// 断言范围：
+//   - `.gitlab-ci.yml` 的全部 `image:` 行与 `services[].name`（rustfs）；
+//   - 三个 compose 文件里非本项目自建镜像（`s3client/server`）的 `image:` 行。
+//
+// GitHub Actions 侧用 setup-* / 容器 action，其 pin 由 TestWorkflowActionsAreShaPinned 单独覆盖。
+func TestCIBaseImagesAreDigestPinned(t *testing.T) {
+	gl := readRepoFile(t, ".gitlab-ci.yml")
+	scanned := 0
+	check := func(where, ref string) {
+		if !strings.Contains(ref, "@sha256:") {
+			t.Errorf("%s 的镜像 %q 未按 digest pin：tag 可被上游重新推送，供应链不可复现（C2）", where, ref)
+		}
+	}
+	for _, m := range ciImageLineRe.FindAllStringSubmatch(gl, -1) {
+		scanned++
+		check(".gitlab-ci.yml image:", m[1])
+	}
+	for _, m := range ciServiceNameRe.FindAllStringSubmatch(gl, -1) {
+		if strings.Contains(m[1], "rustfs/") {
+			scanned++
+			check(".gitlab-ci.yml service:", m[1])
+		}
+	}
+	if scanned < 6 {
+		t.Fatalf(".gitlab-ci.yml 只扫到 %d 个外部镜像引用（基线 ≥6）：解析口径塌缩", scanned)
+	}
+	for _, rel := range []string{"docker-compose.yml", "docker-compose.prod.yml", "docker-compose.tls.yml"} {
+		for _, m := range ciImageLineRe.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
+			if strings.HasPrefix(m[1], "s3client/server") {
+				continue // 本项目自建镜像，无上游 digest
+			}
+			check(rel+" image:", m[1])
+		}
+	}
+}
+
 // TestRustToolchainIsVersionPinned（#33）：dtolnay/rust-toolchain 必须按不可变 SHA pin，
 // 行尾注释给出具体版本，且与 apps/desktop/src-tauri/rust-toolchain.toml 的 channel 一致。
 func TestRustToolchainIsVersionPinned(t *testing.T) {
@@ -417,11 +465,32 @@ func TestMakefileMirrorsCIGates(t *testing.T) {
 	if strings.Contains(text, "pnpm install &&") {
 		t.Error("Makefile 使用了裸 `pnpm install`：会改写锁文件导致 CI 的 --frozen-lockfile 失败（R7）")
 	}
-	// ④ 所有定义的目标都必须进 .PHONY（test-cover / install-hooks 此前遗漏）。
+	// ④ 所有定义的目标都必须进 .PHONY（test-cover / install-hooks 此前遗漏），
+	// 且 .PHONY 里不得有**孤儿条目**（声明了却无目标：`make X` 会报 No rule to make target）。
+	//
+	// 自检：本门禁的判据依赖 `definedTargets` / `phonyTargets` 两个行解析器；若 Makefile 格式变化
+	// 让它们塌缩成空集，下面的两个循环都会变成 no-op 而**静默全绿**（实测过的失效形态）。
+	// 故先钉住解析出的条数下限，塌缩即 Fatal。
+	defined := definedTargets(text)
 	phony := phonyTargets(text)
-	for _, target := range definedTargets(text) {
+	const minMakeTargets = 20
+	if len(defined) < minMakeTargets || len(phony) < minMakeTargets {
+		t.Fatalf("Makefile 目标解析塌缩：definedTargets=%d phonyTargets=%d（下限 %d）——解析口径已失效，"+
+			"本门禁将「全绿但失明」，须同步解析逻辑", len(defined), len(phony), minMakeTargets)
+	}
+	for _, target := range defined {
 		if !phony[target] {
 			t.Errorf("Makefile 目标 %q 不在 .PHONY 中（R7）", target)
+		}
+	}
+	definedSet := make(map[string]bool, len(defined))
+	for _, target := range defined {
+		definedSet[target] = true
+	}
+	for name := range phony {
+		if !definedSet[name] {
+			t.Errorf("Makefile .PHONY 声明了 %q 但没有对应目标：`make %q` 会报 "+
+				"`No rule to make target`（R7：孤儿 .PHONY 条目）", name, name)
 		}
 	}
 }
@@ -530,8 +599,19 @@ func TestReleaseWorkflowVerifiesTagMatchesManifest(t *testing.T) {
 		}
 	}
 	// 必须真的做「比对 + 失败退出」，而不只是打印。
-	if !strings.Contains(text, "!=") || !strings.Contains(text, "exit 1") {
-		t.Error("release-desktop.yml 缺少 tag↔清单版本的实际比对/失败逻辑（R2）")
+	//
+	// 曾用 `strings.Contains(text, "!=")` 断言，但 `!=` 只出现在错误文案里
+	// （`echo "::error::… != tag …"`），删掉真正的比较逻辑、只留提示串仍会全绿——
+	// 属于「断言被文案满足」的假阴性。改为直接钉住两条实际比较的 shell 形态：
+	// 它们分别把 tauri.conf.json 与 Cargo.toml 的版本与解析出的 tag（$want）比对。
+	for _, cmp := range []string{`[ "$tauri" = "$want" ]`, `[ "$cargo" = "$want" ]`} {
+		if !strings.Contains(text, cmp) {
+			t.Errorf("release-desktop.yml 缺少 tag↔清单版本的实际比对 %q（R2：仅打印 ::error 提示不算比对）", cmp)
+		}
+	}
+	// 比对结果必须驱动失败退出（命中任一不一致即置 fail=1，最后据此 exit 1）。
+	if !strings.Contains(text, "exit 1") {
+		t.Error("release-desktop.yml 缺少比对失败后的退出逻辑（R2）")
 	}
 }
 
@@ -567,8 +647,10 @@ func TestTrivyScansUseCacheAndRetry(t *testing.T) {
 		if !strings.Contains(text, "--skip-db-update") {
 			t.Errorf("%s 的 Trivy 扫描未用 --skip-db-update 复用已就绪 DB（R4）", rel)
 		}
-		if !strings.Contains(text, "attempt") {
-			t.Errorf("%s 的 Trivy DB 下载缺少重试循环（R4）", rel)
+		// 断言真正的重试循环构造（`for attempt in 1 2 3 4; do`），而非裸词 "attempt"——
+		// 后者连注释里出现该词都能满足，删掉循环仍会「全绿」。
+		if !strings.Contains(text, "for attempt in") {
+			t.Errorf("%s 的 Trivy DB 下载缺少重试循环（R4：需 `for attempt in …; do … done`）", rel)
 		}
 	}
 	// GitHub 侧必须显式缓存 DB 目录（GitLab 侧由 cache: paths 承担，见 .gitlab-ci.yml）。

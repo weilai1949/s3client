@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-12（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CP 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· §CM（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）· §CN（apps/server 优化评审 S1–S5 闭环）· §CO（docs 复盘快照归档：其沿用的 14 项建议经逐项复核已被 §CJ 全部闭环）· **§CP**（`pnpm audit` 官方 registry 实跑 12 → 0 + a11y 扫描盲区三态补齐 + dev `strictPort`）。
+> 最后更新：2026-10-15（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CR 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· §CM（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）· §CN（apps/server 优化评审 S1–S5 闭环）· §CO（docs 复盘快照归档：其沿用的 14 项建议经逐项复核已被 §CJ 全部闭环）· §CP（`pnpm audit` 官方 registry 实跑 12 → 0 + a11y 扫描盲区三态补齐 + dev `strictPort`）· §CQ（2026-10-14 全仓代码质量评审：F1–F7 + A1–A2 + C2 闭环、C1 有意维持、O1–O3 转登记 #88–#90）· **§CR**（O1–O3 有测试环境闭环 + 门禁全量实跑全绿 + `changelog_tag` 门禁克隆口径校准）。
 
 ## 目录
 
@@ -43,7 +43,7 @@
   - CH 2026-10-10 A 组六项可机械优化（内置卷 inode 指标 + `S3ClientVolumeInodeLow` / 告警表 ⇔ `rules.yml` 双向门禁 / AI 政策「不自动合并」升级代码强制 / 网格态 axe 扫描 / 明文 `http://` 端点告知）（+ 一道门禁）
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
-  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档） · CO 2026-10-12 docs 复盘快照归档（其沿用的 14 项建议经逐项复核已被 §CJ 批次全部闭环；快照已归档） · CP 2026-10-12 晚（`pnpm audit` 官方 registry 实跑 12 → 0（vue 3.5.43 + 三传递依赖补丁版）· a11y 扫描盲区三态补齐（320×700 / 844×390 / 200% 缩放近似 640×450，e2e 23+1 → 26+1）· dev `strictPort`）
+  - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档） · CO 2026-10-12 docs 复盘快照归档（其沿用的 14 项建议经逐项复核已被 §CJ 批次全部闭环；快照已归档） · CP 2026-10-12 晚（`pnpm audit` 官方 registry 实跑 12 → 0（vue 3.5.43 + 三传递依赖补丁版）· a11y 扫描盲区三态补齐（320×700 / 844×390 / 200% 缩放近似 640×450，e2e 23+1 → 26+1）· dev `strictPort`） · CQ 2026-10-14 全仓代码质量评审（结论 Approve：F1 前端计数桶竞态 / F2 s3wrap 无界列举 / F3·F4·F6·F7 四道门禁假阴性 / F5 孤儿 `.PHONY` / A1·A2 可访问名 / C2 六镜像 digest pin + 门禁；C1 有意维持；O1–O3 转登记 #88–#90；**环境离线，未含门禁实跑结论**） · CR 2026-10-15 O1–O3 闭环（`useSeqGuard` 收敛 ×10 · `service.EnumeratePages` 五处循环 + `ListMaxPages` 常量收敛 · `httpx.StatusRecorder` 收敛）+ 门禁全量实跑全绿（race 11/11 包 · 覆盖率零 `count==0` 块 · lint 0 issues · 前端 88 文件 1364 例 / 四指标 100%）+ `changelog_tag` 门禁克隆口径校准（阈值 2 + 15 个「有段无 tag」段登记）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -2643,6 +2643,56 @@ functions 1095 / lines 3503）。
 | dev 端口快速失败（desktop 评审 C1） | [`apps/web/vite.config.ts`](../apps/web/vite.config.ts) `server.strictPort: true` + 注释（1949 被 Tauri `devUrl` 固定依赖） | 端口被占时 dev server 快速失败，不再静默换端口让桌面壳连旧进程后白屏；E2E 走 preview 4173、`make e2e-real` 走静态产物，均不受影响 |
 
 > **门禁实跑（2026-10-12 晚）**：`pnpm lint` 0 告警 / `pnpm typecheck` + `typecheck:e2e` exit 0 / `pnpm test` **87 文件 1360 例** / `pnpm test:coverage` 四指标 **100%（5108 / 3395 / 1290 / 4407）** / `pnpm build` OK / `pnpm e2e` **26 passed + 1 skipped** / `make e2e-real` **5 passed**（升级后产物复跑，`SERVER_PORT=8081` + 外部共享 RustFS `--no-rustfs`）/ `pnpm audit`（官方 registry）**0 漏洞**；后端无代码改动，`S3CLIENT_E2E=1` 七条真协议 E2E 同日复跑 **7/7 PASS**。
+
+### CQ. 2026-10-14 全仓代码质量评审（结论 Approve）：F1–F7 + A1–A2 + C2 闭环 + C1 有意维持 + O1–O3 转登记
+
+> **来源**：2026-10-14 全仓代码质量评审（[`archive/code-review-2026-10-14.md`](archive/code-review-2026-10-14.md)）。
+> 三路并行静态探察 + 关键结论回源码复核；**本环境无外网**，`go test` / `pnpm` 未跑全，故本批为**评审 + 修复**、非「门禁全绿」结论（快照 §1/§4 诚实披露）。发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+
+| 项 | 改动面 | 结果 |
+|---|---|---|
+| F1 前端计算桶竞态 | [`apps/web/src/composables/useObjectBrowser.ts`](../apps/web/src/composables/useObjectBrowser.ts) 拆出独立 `bucketSeq`（原 `loadBuckets` 与对象 `load` 共用 `loadSeq`） | 切桶触发的 `load` 不再丢弃在飞的桶列表响应 / 不再让 `loadingBuckets` 卡 true；回归用例见 [`useObjectBrowser.branches.test.ts`](../apps/web/src/composables/useObjectBrowser.branches.test.ts)（旧实现下失败） |
+| F2 `s3wrap` 无界列举 | [`internal/s3wrap/multipart.go`](../apps/server/internal/s3wrap/multipart.go) `ListParts` + [`internal/s3wrap/object.go`](../apps/server/internal/s3wrap/object.go) `PurgeObject` 补**页上限 + 游标不前进守卫**；新增 [`internal/s3wrap/pagination_bounds_test.go`](../apps/server/internal/s3wrap/pagination_bounds_test.go) | 对端「始终 truncated / 游标打转」不再死循环（5s 超时兜底）；口径对齐 `service/sync_list_gate_test.go` |
+| F3 / F4 / F6 / F7 门禁假阴性 | [`apps/server/repo_infra_gate_test.go`](../apps/server/repo_infra_gate_test.go)（release tag 比对断言改真实表达式 / Makefile 门禁补条数下限 + 反向检查 / Trivy 重试断言改 `for attempt in`）+ [`apps/server/ai_governance_gate_test.go`](../apps/server/ai_governance_gate_test.go)（Copilot 指针缺失即 Fatal） | 四道门禁从「断言被语义等价输入满足」改为**真实可判定形态** |
+| F5 孤儿 `.PHONY` | [`Makefile`](../Makefile) 移除声明了却无目标的 `restart` | `make restart` 不再落到「No rule to make target」；由 F4 的反向检查防复发 |
+| A1 / A2 可访问名 | [`ObjectToolbar.vue`](../apps/web/src/components/ObjectToolbar.vue)（图标按钮按状态补 `aria-label`）+ `MigratePanel.vue` / `UploadPanel.vue` / `ActivityCenter.vue` / `BatchMetadataDialog.vue` 四处进度条补 `aria-label` | 复用既有 i18n key，未新增文案；渲染态由 `e2e/a11y.spec.ts`（axe）兜底 |
+| C2 CI 基础镜像 digest pin | `.gitlab-ci.yml`（golang / node / rust / docker / rustfs）+ [`docker-compose.yml`](../docker-compose.yml) / [`docker-compose.prod.yml`](../docker-compose.prod.yml)（nginx / rustfs）+ [`scripts/e2e-real.sh`](../scripts/e2e-real.sh) 默认值均补 `@sha256:`（Docker Hub 官方 API 的**多架构 index** digest）；新增门禁 [`repo_infra_gate_test.go`](../apps/server/repo_infra_gate_test.go) `TestCIBaseImagesAreDigestPinned` | 与 Trivy 的 tag+digest 纪律对齐；tag 可被上游重新推送，digest 才是不可变内容寻址 |
+| C1 Tauri `connect-src` | [`apps/desktop/AGENTS.md`](../apps/desktop/AGENTS.md) 记录取舍 | 无「既收窄又不破坏任意用户 S3 端点」的改法 → **有意维持**并把「默认值」升级为「有意识的决策」 |
+| O1 / O2 / O3 可维护性 | 转登记 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#88 / #89 / #90** | 纯行为等价重构，其唯一验证是测试套件（本环境跑不了）→ **不盲改**；逐条拟改动写进 §二 |
+
+> **⚠️ 门禁实跑披露（与历史条目的差异）**：本条**未**包含 `go test` / `golangci-lint` / `pnpm` 的实跑结论
+> ——评审环境**无外网**（Go 依赖无法下载、`node_modules` 未安装、`golangci-lint` 未装）。F1–F7 / A1–A2 / C2
+> 的代码与测试已就位，**须在有外网的环境复跑 [`archive/code-review-2026-10-14.md`](archive/code-review-2026-10-14.md) §5 命令**确认全绿后再合并。这与既有台账条目「已实跑全绿」的口径不同，特此如实标注。
+> **2026-10-15 补记**：该复跑已在 §CR 完成并全绿（F1–F7 / A1–A2 / C2 与 O1–O3 一并验证）。
+
+### CR. 2026-10-15 O1–O3 闭环（有测试环境实跑）+ `changelog_tag` 门禁克隆口径校准
+
+> **来源**：§CQ 转登记的 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #88 / #89 / #90（2026-10-14 全仓代码质量评审 O1–O3）。
+> 三项均为**行为等价重构**，唯一验证即测试套件——本批在有依赖、可跑测试的环境落地，并把 §CQ 欠账的
+> 门禁实跑一并补齐。发版记录见 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
+
+| 项 | 改动面 | 结果 |
+|---|---|---|
+| O1 / #88 前端 seq 守卫 | 新增 [`useSeqGuard.ts`](../apps/web/src/composables/useSeqGuard.ts)（`next` / `isCurrent` / `invalidate`）+ [`useSeqGuard.test.ts`](../apps/web/src/composables/useSeqGuard.test.ts)；迁移登记点名的 8 处（`useObjectBrowser` 的 bucket / load 双 guard、`BucketsPanel` / `RecycleBinPanel` / `StorageReportPanel` / `MigratePanel` 源·目标 / `AccountsPanel` / `ObjectDetailDialog` / `useBucketSetting`）与同族 2 处（`VersionsDialog` / `useObjectActions`） | 逐处核对 **finally 条件复位语义逐字保留**（过期即不复位 loading / 不写 error 的既有竞态行为不变）；每个独立数据源各持一个 guard 实例，无 F1 形态的计数器混用。`useHealthPoll` 的轮询代次守卫**有意不迁移**（无 loading 复位、pass-current-gen 而非 take-token，惯用法不同） |
+| O2 / #89 后端分页骨架 | 新增 [`internal/service/paginate.go`](../apps/server/internal/service/paginate.go) 的 `EnumeratePages`（回调式：ctx 取消 / 页数上限 / token 缺失·不前进三条守卫统一）；`listAll` / `indexDst` / `deletePrefix` / handler `collectListing`（`listPrefixKeys` + `collectStorageReportObjects` 共用）五处循环改为只写「本页做什么」；页上限常量 `listMaxPages` / `listPrefixMaxPages` / `storageReportMaxPages` 三份 100 收敛为**导出的** [`service.ListMaxPages`](../apps/server/internal/service/sync.go) | 登记担心的 `deletePrefix`「按页带副作用删除」以 **fn 回调**纳入（非套「收集全部」），裁剪 / `DeleteObjects` 失败 / `counts>=maxDelete` 语义逐分支保留；新增 `TestListAllStopsExactlyAtTotalCap`（正好收满 100k 且对端仍称未完 ⇒ 立即停 + 只发一次列举，变异敏感） |
+| O3 / #90 状态包装器 | 新增 [`internal/httpx/status.go`](../apps/server/internal/httpx/status.go) `StatusRecorder`（`Flush` 统一走 `http.NewResponseController`、`Unwrap` 穿透到底层 conn）+ `status_test.go`；`handler.statusRecorder` 与 `tracing.statusWriter` 删除，调用点改 `httpx.NewStatusRecorder` | 无循环依赖（`httpx` 只依赖 `net/http`；`tracing` 不反向依赖 `handler`）；SSE / Range 下载 / 写超时路径行为不变，tracing 侧顺带对齐「首次写出定格状态码」的 §B11 口径（此前 `Write` 后再 `WriteHeader` 会把 span 状态写歪） |
+| `changelog_tag` 门禁校准 | [`changelog_tag_gate_test.go`](../apps/server/changelog_tag_gate_test.go) `minChangelogTags` 15 → **2**（上游事实：origin 仅 `v1.0.0` + `v1.0.0-rc1`）；[`CHANGELOG.md`](../CHANGELOG.md) 映射表补登记 15 个「有段无 tag」版本段（`v1.0.0-rc0` + `0.3.0`–`0.16.0`） | 复跑暴露的**克隆口径缺陷**：原阈值与映射表假设评审机本地存在 20 个 tag，新克隆与 CI（`fetch-depth: 0` 也只能拿到远端 tag）**构造性红灯**；校准后 tag↔段双向对账逻辑不变，读取塌缩到 0 仍红灯，门禁在任意克隆可真绿 |
+
+> **门禁实跑（2026-10-15，本机有依赖环境）**：`gofmt` 干净 / `go vet` 0 / `go build` OK /
+> `go test -race -count=1 ./...` **11/11 包全 PASS**（根包 `TestChangelogTagsAndSectionsReconcile` 在校准后亦绿）/
+> 覆盖率 **100.0% 语句、`awk $NF==0` 零未覆盖块**（含新增 `httpx` 包与 `EnumeratePages` 全分支）/
+> `golangci-lint`（v2.13.2，与 CI 同版本）**0 issues** / `govulncheck` 按 **CI 口径 `GOTOOLCHAIN=go1.26.9`（`go.mod` 钉住的版本）0 可达漏洞**
+> （本机默认工具链 go1.27.1 会扫出 10 个 stdlib 漏洞——均为 go1.27.2 已修的**工具链漂移**，非仓库代码问题，
+> 与评审快照 §1 记录的「本机 go1.27.1 ≠ go.mod 1.26.9」同源）/
+> 前端 `pnpm lint` 0 告警 + `pnpm typecheck` + `typecheck:e2e` exit 0 +
+> `pnpm test` **88 文件 1364 例全 PASS** + `pnpm test:coverage` 四指标 **100%（5114 / 3397 / 1294 / 4413）** +
+> `pnpm build` OK。**未跑**：真 RustFS E2E（`S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E` 与
+> `make e2e-real`）——本机 **docker 不可用**；本批未改 s3wrap 签名 / 协议面（F2 的 `pagination_bounds_test.go`
+> 单测已随全量套件复跑通过），真协议 E2E 留待有 docker 的环境按 AGENTS 门禁补跑。
+> **变异验证**：删掉 `EnumeratePages` 的 token 不前进守卫 → service/handler 五道具名用例
+> （`TestListAllStopsOnNonAdvancingToken` / `TestIndexDstStopsOnNonAdvancingToken` /
+> `TestListAllTruncationStopsWithoutToken` / `TestRunDeletePrefixStopsOnNonAdvancingToken` /
+> `TestOlListPrefixKeysStopsOnNonAdvancingToken`）同时红灯，还原即绿——共享骨架仍被逐调用方钉住。
 
 ## 三、质量与覆盖率现状
 

@@ -14,24 +14,38 @@
 >
 > **编号约定**：编号保持稳定、不因条目移除而重排——`apps/server/` 代码注释与历史提交仍以
 > `KNOWN_ISSUES #N` 引用本清单（2026-09-24 迁移前写作 `todolist #N`，两者同指），重排会使这些引用失真。
-> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71 / #72 / #73 / #74 / #75 / #76 / #77 / #78 / #79 / #80 / #81 / #82 / #83 / #84 / #85 / #86 / #87；
+> 已闭环移除的编号：#1–#24 / #26–#39 / #41 / #45 / #46 / #60–#64 / #69 / #70 / #71 / #72 / #73 / #74 / #75 / #76 / #77 / #78 / #79 / #80 / #81 / #82 / #83 / #84 / #85 / #86 / #87 / #88 / #89 / #90；
 > **从未启用（保留空号）**：#40 / #42 / #43 / #44——补登记时跳号，为保持既有编号稳定而**不回收**
 > （回收会让历史提交里的 `#N` 指向不同条目）。
 > **2026-09-24 迁出**：#47–#59 为 ROADMAP 派生的**功能候选（非问题）**，唯一来源改为
 > [`ROADMAP.md`](ROADMAP.md) §三 3.2，本文件不再收录。故本清单编号不连续属预期，不是漏登记。
 >
-> 最后更新：2026-10-12（**#87 闭环**：三道 Nit（#84–#86）修复后的提交前门禁**全量实跑全绿**——
+> 最后更新：2026-10-15（**#88 / #89 / #90 闭环**：2026-10-14 全仓代码质量评审的三项可维护性发现
+> 在**有测试环境**落地并复跑——O1 前端 seq 守卫抽 `useSeqGuard()` 收敛登记点名的 8 处（另迁移
+> `VersionsDialog` / `useObjectActions` 两处同族；`useHealthPoll` 为无 loading 复位的轮询代次守卫，
+> 惯用法不同、有意不迁移）；O2 五处分页循环骨架抽 `service.EnumeratePages`（ctx / 页上限 /
+> token 不前进守卫统一），页上限常量 `listMaxPages` / `listPrefixMaxPages` / `storageReportMaxPages`
+> 三份收敛为导出的 `service.ListMaxPages`；O3 两个 `http.ResponseWriter` 状态包装器收敛到
+> `internal/httpx.StatusRecorder`（无循环依赖）。**门禁全量实跑全绿**：`go test -race` **11/11 包** /
+> 覆盖率 **100.0% 零 `count==0` 块** / `golangci-lint` **0 issues** / 前端 **88 文件 1364 例** +
+> 四指标 **100%（5114 / 3397 / 1294 / 4413）**；真 RustFS E2E 因本机无 docker **未跑**（如实披露）。
+> 同批复跑还暴露并处置了 `changelog_tag` 门禁的**克隆口径缺陷**：阈值 15 与映射表假设评审机本地
+> 存在 20 个 tag，而上游只有 `v1.0.0` / `v1.0.0-rc1` 两个 → 新克隆与 CI 构造性红灯；已按上游事实
+> 校准（阈值 2 + 15 个「有段无 tag」版本段登记进 `CHANGELOG.md` 映射表）。台账 [`FEATURES.md`](FEATURES.md) §CR。
+> **上一轮 2026-10-14**（全仓代码质量评审 [`archive/code-review-2026-10-14.md`](archive/code-review-2026-10-14.md)，
+> 结论 **Approve**：F1–F7 + A1–A2 + C2 落地、C1 有意维持、O1–O3 转登记 #88–#90；证据见 §CQ）。**再上一轮 2026-10-12**（**#87 闭环**：三道 Nit（#84–#86）修复后的提交前门禁**全量实跑全绿**——
 > `gofmt` 干净 / `go vet` 0 / `go build` OK / `go test -race` **10/10 包** / 覆盖率 **100.0% 零 `count==0` 块** /
 > `golangci-lint` **0 issues** / `pnpm lint` 0 告警 / `pnpm test` **83 文件 1292 例** / `pnpm build` OK，
 > 证据见 [`FEATURES.md`](FEATURES.md) §CK；**同日 [`web-review-2026-10-12.md`](archive/web-review-2026-10-12.md) 收口**（`apps/web` UI / 交互批次，台账 §CL）后前端基线前进到 **87 文件 1360 例** / 四指标 **100%（5108 / 3395 / 1290 / 4407）**。上一行 2026-10-10：全仓代码质量评审
 > [`archive/code-review-2026-10-10.md`](archive/code-review-2026-10-10.md) 结论 **Approve**，三道非阻断 Nit
-> **#84–#86 同日全部闭环并移除**，快照按「归档四步」冻结入 `archive/`）。**存量：§一 #25 · §二 #63**。
+> **#84–#86 同日全部闭环并移除**，快照按「归档四步」冻结入 `archive/`）。**存量**：§一 #25 · §二 #63。
 >
 > **闭环批次索引**（本文件只收**未闭环**项，故历史批次不复述细节；逐条处置证据在
 > [`FEATURES.md`](FEATURES.md)，编号在 §四 台账）：
 >
 > | 日期 | 闭环并移除 | 证据 |
 > |---|---|---|
+> | 2026-10-15 | **#88–#90** 2026-10-14 评审 O1–O3 可维护性三项（前端 seq 守卫收敛 / 后端分页骨架 + 页上限常量收敛 / 状态包装器收敛到 `httpx`） | [`FEATURES.md`](FEATURES.md) §CR |
 > | 2026-10-12 | **#87** 评审修复批（#84–#86）的提交前门禁全量复跑全绿（收口自留项闭环） | [`FEATURES.md`](FEATURES.md) §CK |
 > | 2026-10-10 | **#84–#86 登记即闭环并移除**（全仓评审三道 Nit：凭据脱敏 / 指标命名 / 注释卫生） | [`FEATURES.md`](FEATURES.md) §CK |
 > | 2026-10-09 | #76 前端结构性重复收敛（`rowKey.ts` / `useVirtualRows.ts`） · #79 OpenAPI 状态码声明门禁 | [`FEATURES.md`](FEATURES.md) §CD |
@@ -43,7 +57,7 @@
 > | 2026-09-29 | #65–#68 死代码门禁改 TS AST · GitLab SAST 实跑 · 可访问性三处 · nginx 跨层日志关联 | §AO / §AP / §AQ |
 > | 2026-09-28 | #60–#64 前端测试拆分 · `SameEndpoint` 纳入 `useSSL` · 批量删除编排下沉 · 三路复审 19 条 | §AB–§AJ |
 >
-> **当前存量**：§一 **#25（⛔ 外部阻塞）** · §二 **#63（➖ 已决策）**；产品功能缺陷为零，仓内技术债不再为零
+> **当前存量**：§一 **#25（⛔ 外部阻塞）** · §二 **#63（➖ 已决策）**；产品功能缺陷为零、**仓内技术债归零**
 > （分类归零凭证见 §三）。**更早的逐条叙述按「细节已在 FEATURES 台账」收敛——不是删除历史**：
 > 原文仍在对应 `FEATURES.md` 小节与 §四 编号台账的「处置」列。
 
@@ -153,6 +167,7 @@
 | #82 | **已闭环移除** | 2026-10-09 评审 O11（R10 残留）：`make check` 补 `govulncheck` / `web-lint` / `build`；`e2e.yml` 与 `.gitlab-ci.yml` 的真 RustFS Go E2E 触发面放宽到 `apps/server/**`；DEVELOPMENT 的 `perf-budget`→`bench` / 覆盖率排除项 / 触发 job 计数三处修正；新增 `doc_ci_drift_gate_test.go` 与两道一致性门禁防回退。**2026-10-10 再处置**：补齐 `web-typecheck`（`pnpm typecheck`）与 `web-build`（`pnpm build`）以真正覆盖 CI `web` job 全部静态步，并**真跑 `make check` exit 0** 复核，证据见 [`FEATURES.md`](FEATURES.md) §CB |
 | #76 / #79 | **已闭环移除** | 2026-10-09 评审 O5 / O8：#76 前端 `newRowKey` ×7 → `src/rowKey.ts`、虚拟滚动管线 ×4 → `src/composables/useVirtualRows.ts`；#79 新增 `openapi_status_declared_test.go`（handler 直接写出的状态码必须声明）+ `bucket` required 门禁，补齐缺失状态码、`putObjectLock` 用 `anyOf` 表达二选一、`bucket` 请求体 required 归零并重生成规范。证据见 [`FEATURES.md`](FEATURES.md) §CD |
 | #84 / #85 / #86 | **已闭环移除** | 2026-10-10 全仓代码质量评审（[archive/code-review-2026-10-10.md](archive/code-review-2026-10-10.md)，结论 Approve）三道非阻断 Nit，**登记即同日闭环**：#84 新增 `redactEndpoint()` 让明文端点 WARN 不落 userinfo 凭据（`TestPlaintextWarnDoesNotLeakEndpointCredentials` 先红后绿）· #85 指标改名 `s3c_volume_inode_capacity`（rules / OPERATIONS §3.2·§4.2·§4.3·§10.2 / DEPLOYMENT / api.md 同步）· #86 删 `main.go` 重复注释行。证据见 [FEATURES.md](FEATURES.md) §CK |
+| #88 / #89 / #90 | **已闭环移除** | 2026-10-14 全仓代码质量评审（[archive/code-review-2026-10-14.md](archive/code-review-2026-10-14.md)，结论 Approve）的三项**可维护性**发现（O1 前端 seq 守卫惯用法 ×8 / O2 后端分页循环骨架 ×5 + 页上限常量 ×3 / O3 两个状态包装器 `Flush` 分叉），**2026-10-15 在有测试环境闭环**：O1 抽 `useSeqGuard()`（`next`/`isCurrent`/`invalidate`）收敛登记点名的 8 处（+ 同族 2 处；`useHealthPoll` 轮询代次守卫惯用法不同、有意不迁移）· O2 抽 `service.EnumeratePages` 回调式骨架统一五处循环（`deletePrefix` 按页副作用删除作为 fn 回调纳入，非套「收集全部」）+ 页上限常量三份收敛为导出的 `service.ListMaxPages` · O3 收敛到 `internal/httpx.StatusRecorder`（`Flush` 统一走 `http.NewResponseController` + `Unwrap`，`tracing` 不反向依赖 `handler`）。门禁全量实跑全绿（race 11/11 包 + 覆盖率零 `count==0` 块 + lint 0 issues + 前端 88 文件 1364 例 / 四指标 100%）。证据见 [FEATURES.md](FEATURES.md) §CR |
 | #87 | **已闭环移除** | 2026-10-10 评审 Nit #84–#86 修复后的**提交前门禁复跑未完成**（收口自留项，非评审发现），见 §二。**2026-10-12 闭环**：2026-10-12 上午沙箱会话先补齐 `gofmt` / `go vet` / `go build` / `golangci-lint` / 前端三项 / 根包文档门禁 / 变异验证 / 可运行包覆盖率（见 §二 与 [`FEATURES.md`](FEATURES.md) §CK 历史记录），随后**非沙箱会话**补齐此前受沙箱 `listen()` 限制的**全量** `go test -race -count=1 ./...` **10/10 包**与 `make test-cover`（每包 + 汇总 **100.0%** statements、`count==0` 零未覆盖块），全部门禁全绿，证据见 [FEATURES.md](FEATURES.md) §CK |
 
 ---

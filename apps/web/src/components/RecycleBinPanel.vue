@@ -4,6 +4,7 @@ import { toErrorMessage } from '../errors'
 
 import { state, selectAccount } from '../store'
 import { resolveAccountSelect } from '../composables/useAccountSelect'
+import { useSeqGuard } from '../composables/useSeqGuard'
 import { s3api } from '../api'
 import { toast } from '../store'
 import { confirmDialog } from '../confirm'
@@ -45,31 +46,30 @@ const { scrollEl, windowed, onListScroll, resetWindowScroll } = useVirtualRows(c
    为空 → 空白表。只监听数组身份、不做深监听：「加载更多」是原数组 push 追加，不重置滚动位置。 */
 watch(() => markers.value, () => resetWindowScroll())
 
-// 桶加载代际（评审 R6）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
-// 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 seq
-//（口径同 useObjectBrowser.loadBuckets）。loadingBuckets 配 finally 复位：
-// 异常时不得永久为 true（否则桶选择器永久禁用）。
-let bucketSeq = 0
+// 桶加载代际守卫（评审 R6 / O1）：切账号会连续发起两次 listBuckets，乱序返回时旧响应会把
+// 上一个账号的桶选择写进当前账号——写入 / 清错 / 清 loading 都须先验 token。
+// loadingBuckets 配 finally 复位：异常时不得永久为 true（否则桶选择器永久禁用）。
+const bucketGuard = useSeqGuard()
 
 async function loadBuckets() {
   if (!accSel.value) {
     buckets.value = []
     return
   }
-  const seq = ++bucketSeq
+  const seq = bucketGuard.next()
   loadingBuckets.value = true
   try {
     const r = await s3api.listBuckets(accSel.value)
-    if (seq !== bucketSeq) return // 过期响应：当前账号的加载已接管状态，静默丢弃
+    if (!bucketGuard.isCurrent(seq)) return // 过期响应：当前账号的加载已接管状态，静默丢弃
     buckets.value = r.buckets
     if (!bucketSel.value || !r.buckets.some((b) => b.name === bucketSel.value)) bucketSel.value = r.buckets[0]?.name ?? ''
     // 成功即清：横幅不得永久遮蔽整页（v-if 三分支互斥，error 一旦置位列表就再也出不来）。
     error.value = ''
   } catch (e) {
-    if (seq !== bucketSeq) return // 过期失败：不污染当前账号的横幅
+    if (!bucketGuard.isCurrent(seq)) return // 过期失败：不污染当前账号的横幅
     error.value = toErrorMessage(e)
   } finally {
-    if (seq === bucketSeq) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
+    if (bucketGuard.isCurrent(seq)) loadingBuckets.value = false // 过期 finally 不得抢清在途请求的 loading
   }
 }
 
@@ -80,13 +80,13 @@ async function retry() {
   await loadMarkers(true)
 }
 
-// 加载序号：每次 loadMarkers +1；过期循环在首个 await 后静默终止，
-// 避免「快速切桶时两个并发循环互相 push 覆盖 marker」的竞态（仿 useObjectBrowser 的 loadSeq）。
-let loadSeq = 0
+// 加载序号守卫：每次 loadMarkers next()；过期循环在首个 await 后静默终止，
+// 避免「快速切桶时两个并发循环互相 push 覆盖 marker」的竞态（review O1）。
+const loadGuard = useSeqGuard()
 
 async function loadMarkers(reset: boolean) {
   if (!accSel.value || !bucketSel.value) return
-  const seq = ++loadSeq
+  const seq = loadGuard.next()
   if (reset) {
     markers.value = []
     nextKeyMarker.value = ''
@@ -106,7 +106,7 @@ async function loadMarkers(reset: boolean) {
         versionIdMarker: nextVersionIdMarker.value,
         maxKeys: 1000,
       })
-      if (seq !== loadSeq) return // 过期请求：新加载已接管 markers / 游标，静默退出
+      if (!loadGuard.isCurrent(seq)) return // 过期请求：新加载已接管 markers / 游标，静默退出
       markers.value.push(...r.deleteMarkers)
       nextKeyMarker.value = r.nextKeyMarker
       nextVersionIdMarker.value = r.nextVersionIdMarker
@@ -116,9 +116,9 @@ async function loadMarkers(reset: boolean) {
     // 加载成功即清：横幅不得永久遮蔽整页（v-if / v-else-if 三分支互斥）。
     error.value = ''
   } catch (e) {
-    if (seq === loadSeq) error.value = toErrorMessage(e)
+    if (loadGuard.isCurrent(seq)) error.value = toErrorMessage(e)
   } finally {
-    if (seq === loadSeq) {
+    if (loadGuard.isCurrent(seq)) {
       loading.value = false
       loadingMore.value = false
     }

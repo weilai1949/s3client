@@ -332,11 +332,17 @@ func (c *Client) RestoreDeleteMarker(ctx context.Context, bucket, key, versionID
 	return err
 }
 
+// purgeMaxPages 是 PurgeObject 的版本翻页上限（1000/页 × 100 页 = 10 万个版本 / 删除标记）。
+// 与「游标不前进即停」共同保证循环**有界**（口径同 service/sync_list_gate_test.go）：
+// 单 key 的版本数远超此值不现实，而对端始终 truncated 或游标打转时必须终止，
+// 否则回收站「彻底清除」会永久挂住。
+const purgeMaxPages = 100
+
 // PurgeObject 彻底清除桶内某 key 的全部版本与删除标记。
 func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, error) {
 	deleted := 0
 	keyMarker, versionIDMarker := "", ""
-	for {
+	for page := 0; ; page++ {
 		out, err := c.ListObjectVersions(ctx, bucket, key, keyMarker, versionIDMarker, 1000)
 		if err != nil {
 			return deleted, err
@@ -383,7 +389,12 @@ func (c *Client) PurgeObject(ctx context.Context, bucket, key string) (int, erro
 		if !out.IsTruncated || out.NextKeyMarker == "" {
 			break
 		}
-		// 分页续读：marker 写入后由下一轮 ListObjectVersions 消费（测试中不触发分页分支）。
+		// 有界守卫（页上限 + 游标不前进即停）：对端始终 truncated 或游标原地打转时终止，
+		// 否则本循环会永久挂住「彻底清除」。
+		if page+1 >= purgeMaxPages || (out.NextKeyMarker == keyMarker && out.NextVersionIDMarker == versionIDMarker) {
+			break
+		}
+		// 分页续读：marker 写入后由下一轮 ListObjectVersions 消费。
 		keyMarker = out.NextKeyMarker
 		versionIDMarker = out.NextVersionIDMarker
 	}

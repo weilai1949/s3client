@@ -105,7 +105,7 @@ variables:
 # alpine 镜像两者都没有，`-race` 会直接报 "requires cgo" 而失败。Debian 镜像自带 gcc，
 # 也与 GitHub 的 ubuntu-latest 运行环境更接近。
 .go-base:
-  image: golang:1.26.9-bookworm
+  image: golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
   variables:
     GOPATH: "$CI_PROJECT_DIR/.go"
     GOCACHE: "$CI_PROJECT_DIR/.gocache"
@@ -123,9 +123,9 @@ variables:
     - go mod download
 
 # 前端各 job 的公共底座：镜像、缓存、before_script（安装依赖）。
-# 对应 GitHub ci.yml 的 pnpm/action-setup@v4 + actions/setup-node@v4（node 24 + pnpm 缓存）。
+# 对应 GitHub ci.yml 的 pnpm/action-setup@v4 + actions/setup-node@v4（node 26 + pnpm 缓存）。
 .web-base:
-  image: node:26.10.0-bookworm
+  image: node:26.10.0-bookworm@sha256:e6cfc3514df35d1cb534e83f9279a242ad6e578692ab7b56d73dadcc7c4354a0
   cache:
     key:
       files:
@@ -313,7 +313,7 @@ docker:
   extends: .ci-trigger
   stage: ci
   timeout: 30 minutes
-  image: docker:29-cli
+  image: docker:29-cli@sha256:1a4c7cb63513f349bdad01fcc6e0f3f2f67d37b9da86f14dc0d4a0942eecda00
   variables:
     IMAGE_TAG: "s3client/server:ci"
     # R4：Trivy DB 落在 CI 缓存目录，跨 job 复用；配合 script 里的重试与 --skip-db-update。
@@ -379,7 +379,7 @@ desktop:
   extends: .ci-trigger
   stage: ci
   timeout: 30 minutes
-  image: rust:1.98.1-bookworm
+  image: rust:1.98.1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
   cache:
     key:
       files:
@@ -410,7 +410,7 @@ desktop-build:
   extends: .ci-manual-only-trigger
   stage: ci
   timeout: 60 minutes
-  image: rust:1.98.1-bookworm
+  image: rust:1.98.1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
   cache:
     key:
       files:
@@ -456,7 +456,7 @@ rustfs-e2e:
   stage: e2e
   timeout: 25 minutes
   services:
-    - name: rustfs/rustfs:1.0.0-rc.3
+    - name: rustfs/rustfs:1.0.0-rc.3@sha256:800cf3f352a0a27e3275ca854a51f0027975d7acc7a0d52089a35bcc9fcbf0b5
       alias: rustfs
       variables:
         RUSTFS_VOLUMES: /data
@@ -571,9 +571,9 @@ e2e-real:
   extends: .e2e-real-trigger
   stage: e2e
   timeout: 30 minutes
-  image: golang:1.26.9-bookworm
+  image: golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
   services:
-    - name: rustfs/rustfs:1.0.0-rc.3
+    - name: rustfs/rustfs:1.0.0-rc.3@sha256:800cf3f352a0a27e3275ca854a51f0027975d7acc7a0d52089a35bcc9fcbf0b5
       alias: rustfs
       variables:
         RUSTFS_VOLUMES: /data

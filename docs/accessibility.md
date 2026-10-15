@@ -17,7 +17,7 @@
 ### 1.1 统计口径
 
 - 范围：`apps/web/src/` 下的 **`*.vue` 与 `*.ts`**。
-- **统计时点：2026-10-10**（数字随功能演进会变，回填时按下列命令重跑并更新本行日期）。
+- **统计时点：2026-10-14**（数字随功能演进会变，回填时按下列命令重跑并更新本行日期）。
 - **生产源码**＝排除 `*.test.ts`（测试文件里的 `aria-*` 是断言用字面量，不是界面属性；
   不排除会把数字抬高，本文所有数字都取排除后的值）。
 - **重复出现即重复计数**：一个属性在模板里写 N 次就计 N 次（同一组件内多行同理）；
@@ -36,16 +36,16 @@
 
 | 属性 | 次数 | 主要用途（本仓库） |
 |---|---:|---|
-| `aria-hidden` | 44 | 纯装饰元素：emoji、内联 SVG 图标、虚拟滚动的上下垫片行（`v-spacer`） |
-| `aria-label` | 30 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、批量改元数据三个控件（**2026-09-30 起与可见 `<label>` 同键**，见 §1.6）、列表与网格的行选择框、加载态容器（配合 `aria-busy`）、计划任务面板（`SchedulesSection`）的图标按钮 |
-| `aria-expanded` | 3 | 「⋯」更多操作触发器的展开态（`ObjectList.vue` 两处模板 + 1 处注释文字；配合 `ctxEntryKey` 反映当前打开的右键菜单条目） |
-| `aria-haspopup` | 2 | 同一「⋯」触发器声明弹出菜单语义（`aria-haspopup="menu"`） |
+| `aria-hidden` | 46 | 纯装饰元素：emoji、内联 SVG 图标、虚拟滚动的上下垫片行（`v-spacer`） |
+| `aria-label` | 37 | 无可见文字元素的名称：图标按钮（`✕` / `⋯` / `↻`）、语言与主题按钮、`<nav>` 与设置页 tab 行、批量改元数据三个控件（**2026-09-30 起与可见 `<label>` 同键**，见 §1.6）、列表与网格的行选择框、加载态容器（配合 `aria-busy`）、计划任务面板（`SchedulesSection`）的图标按钮；**2026-10-14 起**：`ObjectToolbar` 的路径编辑图标按钮（按编辑 / 确定态取键）与四处进度条（`MigratePanel` / `UploadPanel` / `ActivityCenter` / `BatchMetadataDialog`，见下行） |
+| `aria-expanded` | 4 | 「⋯」更多操作触发器的展开态（`ObjectList.vue` 两处模板 + 1 处注释文字；配合 `ctxEntryKey` 反映当前打开的右键菜单条目）+ 活动中心触发器（`ActivityCenter`） |
+| `aria-haspopup` | 3 | 「⋯」触发器（`ObjectList.vue`）与活动中心触发器声明弹出语义（`aria-haspopup="menu"`） |
 | `aria-selected` | 4 | **2026-09-30 起（#17③）**：四张有行选中的表，其数据行随选中集合变化（**刻意不用 `aria-multiselectable`**——axe 的 `aria-allowed-attr` 判定它在原生 `<table>` 上非法，见 §1.6） |
 | `aria-modal` | 4 | 四个模态容器，值均为 `"true"` |
 | `aria-labelledby` | 4 | **2026-09-30 起（#17③）**：`BucketTags` / `LifecycleDialog` 表格单元格里的输入框——一个 `<th>` 无法 `for` 到 N 行输入，故指向**可见列头**（见 §1.6） |
 | `aria-sort` | 3 | 列表视图三个可排序表头（名称 / 大小 / 时间） |
 | `aria-busy` | 3 | 列举中 / 加载中的容器（`ObjectList`、`MigratePanel`、`LifecycleDialog`） |
-| `aria-valuenow` / `aria-valuemin` / `aria-valuemax` | 2 / 2 / 2 | 两处 `role="progressbar"`（`UploadPanel` 总进度、`MigratePanel` 任务进度） |
+| `aria-valuenow` / `aria-valuemin` / `aria-valuemax` | 3 / 3 / 3 | 三处 `role="progressbar"`（`UploadPanel` 总进度、`MigratePanel` 任务进度、`ActivityCenter` 单任务进度）——**2026-10-14 起**均带可访问名（`aria-label`） |
 | `aria-live` | 2 | 见 §1.4 |
 | `aria-current` | 1 | 左侧主导航当前页（`aria-current="page"`，`App.vue`） |
 
@@ -58,8 +58,9 @@
 | `status` | 3 | `ObjectList.vue`（网格截断提示）、`UploadQueue.vue`、`Toasts.vue`（单条 toast） |
 | `dialog` | 3 | `ModalDialog.vue`、`PromptDialog.vue`、`PreviewOverlay.vue` |
 | `columnheader` | 3 | `ObjectList.vue` 三个可排序表头（配 `tabindex="0"` 与 `aria-sort`） |
-| `progressbar` | 2 | `UploadPanel.vue`、`MigratePanel.vue` |
+| `progressbar` | 3 | `UploadPanel.vue`、`MigratePanel.vue`、`ActivityCenter.vue` |
 | `button` | 2 | `UploadPanel.vue` 拖放区、`ObjectList.vue` 网格单元格（自定义可点区域） |
+| `region` | 1 | `ActivityCenter.vue`（活动明细弹层，配 `aria-label`） |
 | `menu` | 1 | `ObjectContextMenu.vue` 容器（`tabindex="-1"`） |
 | `alertdialog` | 1 | `ConfirmDialog.vue`（破坏性操作确认） |
 
@@ -111,7 +112,7 @@
 ### 1.6 表格可访问名称与表单可见标签（2026-09-30 起，ROADMAP §三 #17③）
 
 **表格 `caption`**：`src/components` 下 **19 张 `<table>`（分布在 17 个组件文件）全部带 `<caption class="sr-only">`**
-（统计时点 2026-10-10；`StorageReportPanel` 一个文件 3 张表。`.sr-only` 为 `src/styles.css` 新增的全局工具类——裁剪到 1px 但**不** `display:none`，
+（统计时点 2026-10-14；`StorageReportPanel` 一个文件 3 张表。`.sr-only` 为 `src/styles.css` 新增的全局工具类——裁剪到 1px 但**不** `display:none`，
 否则会一并从无障碍树里消失）。用 sr-only 而非可见 caption：这些表上方都已有可见标题 / 面板标题，
 再来一行可见 caption 只会视觉重复；WCAG 要的是「表有可访问名称」，不要求它可见。
 由 [`apps/web/src/a11y_gate.test.ts`](../apps/web/src/a11y_gate.test.ts) 的

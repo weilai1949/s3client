@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/weilai1949/s3client/apps/server/internal/httpx"
 )
 
 // withSecurityHeaders 为所有响应设置基础安全头（含静态资源与 API）。
@@ -75,55 +77,18 @@ func (h *Handler) withLogging(next http.Handler) http.Handler {
 			reqID = uuid.NewString()
 		}
 		w.Header().Set("X-Request-ID", reqID)
-		rec := &statusRecorder{ResponseWriter: w, status: 200}
+		rec := httpx.NewStatusRecorder(w)
 		next.ServeHTTP(rec, r)
 		// 耗时与状态类同处一次调用：HTTP 延迟直方图与请求计数必须同源（ROADMAP #18）。
 		dur := time.Since(start)
-		recordHTTPMetric(rec.status, dur)
-		attrs := []any{"method", r.Method, "path", r.URL.Path, "status", rec.status, "dur", dur.String(), "req", reqID}
+		recordHTTPMetric(rec.Status(), dur)
+		attrs := []any{"method", r.Method, "path", r.URL.Path, "status", rec.Status(), "dur", dur.String(), "req", reqID}
 		if r.URL.Path == "/api/health" || r.URL.Path == "/api/metrics" {
 			h.log.Debug("http", attrs...)
 			return
 		}
 		h.log.Info("http", attrs...)
 	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status  int
-	written bool
-}
-
-// WriteHeader 仅记录并透传第一次调用；后续多余调用忽略，
-// 避免日志状态与实际响应状态不一致（Go 服务端本身也会忽略多余 WriteHeader）。
-func (r *statusRecorder) WriteHeader(code int) {
-	if r.written {
-		return
-	}
-	r.written = true
-	r.status = code
-	r.ResponseWriter.WriteHeader(code)
-}
-
-// Write 必须覆写：只 Write 不 WriteHeader 时 Go 会隐式发出 200，
-// 若不在这里标记 written，后续显式 WriteHeader 会再次透传（Go 打 superfluous 日志），
-// 并把日志/指标里的状态改写成与实际响应不符的值（review §B11）。
-func (r *statusRecorder) Write(b []byte) (int, error) {
-	r.written = true
-	return r.ResponseWriter.Write(b)
-}
-
-func (r *statusRecorder) Flush() {
-	if f, ok := r.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-// Unwrap 让 http.ResponseController / http.NewResponseController 穿透到真实连接，
-// 否则 SetWriteDeadline 恒返回 ErrNotSupported 并被静默忽略。
-func (r *statusRecorder) Unwrap() http.ResponseWriter {
-	return r.ResponseWriter
 }
 
 // corsAllowedOrigin 依据配置与安全默认值返回允许的 Origin。

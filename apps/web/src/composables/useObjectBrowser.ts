@@ -5,6 +5,7 @@ import { s3api } from '../api'
 import { state, currentAccount, toast, selectAccount } from '../store'
 import { confirmDialog } from '../confirm'
 import { t, tf } from '../i18n'
+import { useSeqGuard } from './useSeqGuard'
 import type { BucketItem, ObjectItem } from '../types'
 import type { Entry, SortKey } from '../types'
 
@@ -39,6 +40,11 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   const isTruncated = ref(false)
   const loading = ref(false)
   const loadingBuckets = ref(false)
+  // 桶列表自己的请求代际守卫，**与对象列表的 loadGuard 分开**：两者是独立数据源，共用一个计数器时
+  // 「切桶/导航触发的 load」会把在飞的 loadBuckets 误判为过期——合法桶列表被丢弃，且其 finally
+  // 的 loadingBuckets 复位被跳过（桶选择器永久卡 loading）。各数据源各持一个 useSeqGuard（review O1），
+  // 天然隔离、不会再混用（review F1）。
+  const bucketGuard = useSeqGuard()
   const error = ref('')
   const selected = ref<Set<string>>(new Set())
 
@@ -194,11 +200,11 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   async function loadBuckets() {
     const acc = account.value
     if (!acc) return
-    const seq = ++loadSeq.value
+    const seq = bucketGuard.next()
     loadingBuckets.value = true
     try {
       const res = await s3api.listBuckets(acc.id)
-      if (seq !== loadSeq.value) return
+      if (!bucketGuard.isCurrent(seq)) return
       buckets.value = res.buckets ?? []
       // 控制台习惯：currentBucket 失效则回到 Bucket 列表页；有默认桶时自动进入
       if (currentBucket.value && !buckets.value.some((b) => b.name === currentBucket.value)) {
@@ -208,9 +214,9 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
         currentBucket.value = acc.bucket
       }
     } catch (e: unknown) {
-      if (seq === loadSeq.value) error.value = e instanceof Error ? e.message : String(e)
+      if (bucketGuard.isCurrent(seq)) error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      if (seq === loadSeq.value) loadingBuckets.value = false
+      if (bucketGuard.isCurrent(seq)) loadingBuckets.value = false
     }
   }
 
@@ -270,8 +276,8 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   // 赋值型变更（selectAll / load 重置 / 面板外部赋值）与列表变化在此同步重算。
   watch([selected, fileObjects], recomputeSelectedSize, { immediate: true, flush: 'sync' })
 
-  // 导航序号：进入目录/切桶/重置时 +1；过期响应直接丢弃，避免快速导航串数据。
-  const loadSeq = ref(0)
+  // 导航序号：进入目录/切桶/重置时 next()；过期响应直接丢弃，避免快速导航串数据。
+  const loadGuard = useSeqGuard()
   // 换源代次：仅在「整体替换列表」（切目录/切桶/刷新/换账号）时 +1，「加载更多」的
   // 追加不递增。ObjectList 据此区分「该把虚拟窗口归零」与「该保住用户滚动位置」——
   // entries 是过滤+排序后的 computed，每次重算都是新数组身份，单看它分不出这两种。
@@ -296,7 +302,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   async function load(reset = true, seqOverride?: number) {
     const acc = account.value
     if (!acc || !currentBucket.value) return
-    const seq = seqOverride ?? ++loadSeq.value
+    const seq = seqOverride ?? loadGuard.next()
     // 只有「不是 loadAll 自己发起的 reset」才清 loadingAll：loadAll 的首轮正是以
     // reset 语义加载第一页（needFirstPage），清了它就等于批次刚起步就把按钮重新打开，
     // 用户能重复点「加载全部」把当前批次顶掉（UI 进度失真、可重复触发）。
@@ -318,7 +324,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
       }
       if (!reset && nextToken.value) q.continuationToken = nextToken.value
       const res = await s3api.listObjects(acc.id, q, { signal: ctrl.signal })
-      if (seq !== loadSeq.value) return // 过期响应，丢弃
+      if (!loadGuard.isCurrent(seq)) return // 过期响应，丢弃
       if (reset) {
         objects.value = res.objects ?? []
         commonPrefixes.value = res.commonPrefixes ?? []
@@ -333,9 +339,9 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
       nextToken.value = res.nextToken
       isTruncated.value = res.isTruncated
     } catch (e: unknown) {
-      if (seq === loadSeq.value) error.value = e instanceof Error ? e.message : String(e)
+      if (loadGuard.isCurrent(seq)) error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      if (seq === loadSeq.value) loading.value = false
+      if (loadGuard.isCurrent(seq)) loading.value = false
     }
   }
 
@@ -509,7 +515,7 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
   async function loadAll() {
     const acc = account.value
     if (!acc || !currentBucket.value || loading.value) return
-    const seq = ++loadSeq.value
+    const seq = loadGuard.next()
     loadingAll.value = true
     error.value = ''
     // 进入时 nextToken 是否为空：为空说明「尚未分页」（刚进目录 / 旧列表残留），
@@ -521,19 +527,19 @@ export function useObjectBrowser(bindings: KeyBindings = {}) {
       // 旧实现 `while (nextToken.value && ...)` 在 nextToken 为空时一次都不请求，
       // 却 toast「已加载全部」——实际只显示旧列表（可能为空），属数据完整性缺陷。
       do {
-        if (seq !== loadSeq.value) break // 期间发生导航，中止
+        if (!loadGuard.isCurrent(seq)) break // 期间发生导航，中止
         guard++
         await load(needFirstPage && guard === 1, seq)
         if (error.value) break // 某页加载失败：停止续页（load 内部已捕获错误并置 error）
       } while (nextToken.value && guard < MAX_ALL_PAGES)
-      if (seq !== loadSeq.value) return
+      if (!loadGuard.isCurrent(seq)) return
       // 任一分页失败时不发「已加载全部」成功提示（error.value 已在 UI 展示）。
       if (error.value) return
       toast(tf('objects.toastLoadedAll', { files: fileObjects.value.length, folders: commonPrefixes.value.length }))
       if (isTruncated.value) toast(tf('objects.toastLoadedCap', { n: guard * PAGE_SIZE }), 'err')
     } finally {
       // load() 内部已捕获列表错误（不经 reject 上抛），此处无需 catch（原 catch 为死代码）。
-      if (seq === loadSeq.value) loadingAll.value = false
+      if (loadGuard.isCurrent(seq)) loadingAll.value = false
     }
   }
 

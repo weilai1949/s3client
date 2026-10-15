@@ -97,8 +97,8 @@ func TestIndexDstStopsAtPageCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("indexDst: %v", err)
 	}
-	if len(idx) != listMaxPages {
-		t.Fatalf("indexDst = %d entries, want %d（页数上限）", len(idx), listMaxPages)
+	if len(idx) != ListMaxPages {
+		t.Fatalf("indexDst = %d entries, want %d（页数上限）", len(idx), ListMaxPages)
 	}
 	if !truncated {
 		t.Fatal("页数上限耗尽而对端仍称有下一页，必须标记 truncated")
@@ -112,8 +112,8 @@ func TestListAllStopsAtPageCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listAll: %v", err)
 	}
-	if len(items) != listMaxPages {
-		t.Fatalf("listAll = %d items, want %d（页数上限）", len(items), listMaxPages)
+	if len(items) != ListMaxPages {
+		t.Fatalf("listAll = %d items, want %d（页数上限）", len(items), ListMaxPages)
 	}
 	if !truncated {
 		t.Fatal("页数上限耗尽而对端仍称有下一页，必须标记 truncated")

@@ -158,7 +158,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 前端依赖 | `pnpm-lock.yaml` + `packageManager: pnpm@9.15.0` + Node 精确 patch | `TestPackageManagerIsPinnedToCIPnpm` / `TestNodePinnedToPatchVersion` |
 | 桌面依赖 | `Cargo.lock` + `rust-toolchain.toml`（`channel = "1.98.1"`） | `TestRustToolchainIsVersionPinned` / `cargo audit` |
 | GitHub Actions | **全部 pin 到 commit SHA**（豁免 `./` 本地 action 与 `docker://`） | `TestWorkflowActionsAreShaPinned` |
-| 容器镜像（Trivy / RustFS） | 按 **digest** pin，不按可变 tag | `TestTrivyImageIsVersionAndDigestPinned` / `TestRustFSImageIsConsistentlyPinned` |
+| 容器镜像（CI / compose：golang / node / rust / docker / nginx / Trivy / RustFS） | 按 **tag + digest**（`@sha256:`）pin，不按可变 tag | `TestCIBaseImagesAreDigestPinned`（2026-10-14 新增，覆盖 `.gitlab-ci.yml` 全部 `image:` / `services[].name` + 三个 compose 的非自建镜像）/ `TestTrivyImageIsVersionAndDigestPinned` / `TestRustFSImageIsConsistentlyPinned` |
 | 运行镜像基础版 | alpine 受支持分支（EOL 即红灯） | `TestRuntimeBaseImageIsSupportedAlpine` |
 
 ### 5.2 第三方依赖与许可证清单

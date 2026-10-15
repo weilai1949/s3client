@@ -167,7 +167,9 @@ make rust-audit
 同一套门禁同时落在 **GitHub Actions** 与 **GitLab CI**，两边 job、命令、门禁阈值必须一致；
 改任一侧都要同步另一侧（含下表），否则会漂移成「GitHub 绿 / GitLab 红」。
 双侧一致性由 `apps/server/ci_consistency_gate_test.go` 机械钉住（评审 2026-10-09 C1）。两个易碎前提同为该批评审点名，两侧都已落地：
-**① 所有 checkout 必须 `fetch-depth: 0`**（`changelog_tag` 门禁从 `.git` 读 v* tag，浅克隆读不到即必红——C2）；
+**① 所有 checkout 必须 `fetch-depth: 0`**（`changelog_tag` 门禁从 `.git` 读 v* tag，浅克隆读不到即必红——C2；
+注意**深克隆只是必要条件**：阈值与映射表还须与上游实际 tag 对齐，2026-10-15 已把 `minChangelogTags` 校准为
+上游事实 2 并补登记 15 个「有段无 tag」版本段，口径见 `CHANGELOG.md` 映射表头注与 [`FEATURES.md`](FEATURES.md) §CR）；
 **② Go job 必须先真装前端依赖**（GitHub `server` job 加 pnpm/setup-node + `pnpm install --frozen-lockfile`，
 GitLab `server` 用 nodejs tarball + `npm install -g pnpm@9.15.0` + `.pnpm-store/` cache）——根包 `agent_evals_gate_test.go`
 的判据前置是 `apps/web/node_modules` 存在（gitignore 构建产物，**不得 `mkdir` 伪造**——C1）。
@@ -343,6 +345,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | [`archive/server-review-2026-10-12.md`](archive/server-review-2026-10-12.md)（apps/server **子树评审时点快照**，无结构性缺口 + 6 项微优化候选 S1–S6 + 1 项跨子树门禁现状 S0；**已归档** 2026-10-12） | 不复审——归档 = 冻结，不回写、不改写 | 2026-10-12（评审登记） |
 | [`archive/web-review-2026-10-12.md`](archive/web-review-2026-10-12.md)（apps/web **子树评审时点快照**，**冻结件**：页面 UI / 交互高 / 中 / 低三档 9 批全部实施 + 1 处实测抓到的对比度缺陷 D1；用户可见行为 / 台账 / 发版草稿已搬进 `user-guide.md` / `FEATURES.md` §CL / `CHANGELOG.md`） | 不复审——归档 = 冻结，不回写、不改写 | 2026-10-12（归档登记） |
 | [`archive/docs-review-2026-10-12.md`](archive/docs-review-2026-10-12.md)（`docs/` 全量**文档复盘时点快照**，**已归档** 2026-10-12：清单 / 体量 / 交叉观察；其沿用的 14 项建议经复核已被更早的 2026-10-10 批次全部闭环，见 [`FEATURES.md`](FEATURES.md) §CJ） | 不复审——归档 = 冻结，不回写、不改写 | 登记时基线（2026-10-12） |
+| [`archive/code-review-2026-10-14.md`](archive/code-review-2026-10-14.md)（全仓代码质量评审**时点快照**，**冻结件**：F1–F7 + A1–A2 + C2 同日闭环、C1 有意维持、O1–O3 转登记 `KNOWN_ISSUES` #88–#90；**因环境离线未含门禁实跑结论**，见 [`FEATURES.md`](FEATURES.md) §CQ） | 不复审——归档 = 冻结，不回写、不改写 | 2026-10-14（归档登记） |
 
 落地要求：
 

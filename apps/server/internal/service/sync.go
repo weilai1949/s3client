@@ -113,10 +113,13 @@ func SyncKeys(
 	}, nil
 }
 
-// 列举硬上限：最多 listMaxPages 页、每页 listMaxKeys 个、总量不超过 listMaxTotal。
+// 列举硬上限：最多 ListMaxPages 页、每页 listMaxKeys 个、总量不超过 listMaxTotal。
 // 三层上限共同保证「畸形/恶意对端返回不前进的 NextToken」时循环仍然终止。
+//
+// ListMaxPages 导出是因为 handler 的列举（copy-prefix / storage-report）与 service 同口径
+// （2026-10-14 评审 O2）：此前三处各写一份 100、只靠注释对齐，改为编译期共用一个值。
 const (
-	listMaxPages = 100
+	ListMaxPages = 100
 	listMaxKeys  = 1000
 	listMaxTotal = 100_000
 )
@@ -142,36 +145,31 @@ func cancelOrErr(ctx context.Context, partial SyncResult, err error) (SyncResult
 //  1. 累计超过 listMaxTotal——防御异常/恶意分页让内存与延迟无界；
 //  2. 对端声称还有下一页却给不出有效 token（空串，或与上一页相同的 token——
 //     后者会让循环空转）；
-//  3. 页数上限 listMaxPages 耗尽而对端仍称有下一页。
+//  3. 页数上限 ListMaxPages 耗尽而对端仍称有下一页。
 //
 // 截断必须透出（review R6）：静默截断会让「没枚举完」与「对端确实没有更多
 // 对象」不可区分——源侧第 100_001 个对象永不同步且无任何信号。
+//
+// 循环骨架（ctx / 页上限 / token 守卫）收敛于 EnumeratePages（2026-10-14 评审 O2 /
+// KNOWN_ISSUES #89），本函数只保留「整页 append 后按 listMaxTotal 裁剪」这一页内逻辑。
 func listAll(ctx context.Context, c *s3wrap.Client, bucket, prefix string) ([]s3wrap.ObjectItem, bool, error) {
 	out := make([]s3wrap.ObjectItem, 0, 256)
-	token := ""
-	for page := 0; page < listMaxPages; page++ {
-		if err := ctx.Err(); err != nil {
-			return out, false, err
-		}
-		p, err := c.ListObjectsPage(ctx, bucket, prefix, "", token, "", listMaxKeys)
-		if err != nil {
-			return out, false, err
-		}
-		out = append(out, p.Objects...)
-		if len(out) > listMaxTotal {
-			return out[:listMaxTotal], true, nil
-		}
-		if !p.IsTruncated {
-			return out, false, nil
-		}
-		// 对端声称未完：已达总量上限（无法安全续页）或 token 缺失/不前进，
-		// 都必须停并标记截断——否则要么静默截断，要么循环空转。
-		if len(out) >= listMaxTotal || p.NextToken == "" || p.NextToken == token {
-			return out, true, nil
-		}
-		token = p.NextToken
-	}
-	return out, true, nil
+	truncated, err := EnumeratePages(ctx, c, bucket, prefix, ListMaxPages, listMaxKeys,
+		func(p *s3wrap.ListPage) (bool, bool, error) {
+			out = append(out, p.Objects...)
+			if len(out) > listMaxTotal {
+				out = out[:listMaxTotal]
+				return true, true, nil
+			}
+			// 收满总量且对端仍称有下一页才算截断（正好等于上限且对端声明列举完成 ⇒
+			// 全部收录，不是截断）；对端声称未完却给不出有效 token 的情形由
+			// EnumeratePages 的 token 守卫兜住。
+			if len(out) == listMaxTotal && p.IsTruncated {
+				return true, true, nil
+			}
+			return false, false, nil
+		})
+	return out, truncated, err
 }
 
 // indexDst 列举目标 prefix 全部对象元数据；返回 key → ObjectMeta（仅 ETag/Size/LastModified）
@@ -180,47 +178,32 @@ func listAll(ctx context.Context, c *s3wrap.Client, bucket, prefix string) ([]s3
 // 与 listAll 用同一组硬上限：此前的循环条件是「已收集数 < 10 万」且循环内不查 ctx，
 // 对端只要返回不前进的 NextToken，任务就会一直挂到 2h 超时（review §B6）。
 // 目标侧截断同样必须透出（review R6）：索引不全会让已存在的对象每次同步被重拷。
+//
+// 循环骨架收敛于 EnumeratePages（2026-10-14 评审 O2 / KNOWN_ISSUES #89），本函数只保留
+// 「逐项收进 map 并按 listMaxTotal 判上限」这一页内逻辑。
 func indexDst(ctx context.Context, c *s3wrap.Client, bucket, prefix string) (map[string]*s3wrap.ObjectMeta, bool, error) {
 	out := make(map[string]*s3wrap.ObjectMeta)
-	token := ""
-	for page := 0; page < listMaxPages; page++ {
-		if err := ctx.Err(); err != nil {
-			return out, false, err
-		}
-		p, err := c.ListObjectsPage(ctx, bucket, prefix, "", token, "", listMaxKeys)
-		if err != nil {
-			return out, false, err
-		}
-		dropped := false
-		for _, o := range p.Objects {
+	truncated, err := EnumeratePages(ctx, c, bucket, prefix, ListMaxPages, listMaxKeys,
+		func(p *s3wrap.ListPage) (bool, bool, error) {
+			for _, o := range p.Objects {
+				if len(out) >= listMaxTotal {
+					// 本页还有对象装不进上限：明确截断，不得静默丢弃。
+					return true, true, nil
+				}
+				out[o.Key] = &s3wrap.ObjectMeta{
+					Size:         o.Size,
+					ETag:         o.ETag,
+					LastModified: o.LastModified,
+				}
+			}
 			if len(out) >= listMaxTotal {
-				dropped = true // 本页还有对象装不进上限：明确截断，不得静默丢弃
-				break
+				// 正好收满且本页无丢弃：对端还声称有下一页才算截断（正好等于上限且
+				// 对端声明列举完成 ⇒ 全部收录，不是截断）。
+				return true, p.IsTruncated, nil
 			}
-			out[o.Key] = &s3wrap.ObjectMeta{
-				Size:         o.Size,
-				ETag:         o.ETag,
-				LastModified: o.LastModified,
-			}
-		}
-		if dropped {
-			return out, true, nil
-		}
-		if len(out) >= listMaxTotal {
-			// 正好收满且本页无丢弃：对端还声称有下一页才算截断（正好等于上限且
-			// 对端声明列举完成 ⇒ 全部收录，不是截断）。
-			return out, p.IsTruncated, nil
-		}
-		if !p.IsTruncated {
-			return out, false, nil
-		}
-		// 同 listAll：token 缺失/不前进必须停并标记截断，否则空转到 2h 超时。
-		if p.NextToken == "" || p.NextToken == token {
-			return out, true, nil
-		}
-		token = p.NextToken
-	}
-	return out, true, nil
+			return false, false, nil
+		})
+	return out, truncated, err
 }
 
 // isEqual 按 mode 比对 src vs dst 元数据；dst 为 nil 视为不等。

@@ -214,7 +214,7 @@ async function onConfirm() {
     <div v-if="running || result" class="status" aria-live="polite">
       <span v-if="running">{{ tf('batchEdit.running', { done: progress.done, total: progress.total }) }}</span>
       <span v-else>{{ tf('batchEdit.done', { ok: result!.ok, failed: result!.failed }) }}</span>
-      <progress v-if="running" class="progress bar" :max="progress.total || 1" :value="progress.done"></progress>
+      <progress v-if="running" class="progress bar" :aria-label="t('batchEdit.title')" :max="progress.total || 1" :value="progress.done"></progress>
     </div>
 
     <div v-if="errors.length" class="errors">

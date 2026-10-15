@@ -14,14 +14,32 @@
 > 历史事实（2026-09-30 取证，KNOWN_ISSUES #69 闭环证据）：仓库 2026-09-02 以单 commit
 > （`12f39b1`）导入全栈历史，导入前的快照 tag 未随迁，故出现「有段无 tag / 有 tag 无段」
 > 两类快照登记——均为**历史事实台账**，不是待办。
+> 复核（2026-10-15）：上游 origin 仅存在 `v1.0.0` 与 `v1.0.0-rc1` 两个 tag——
+> `0.3.0`–`0.16.0` 与 `v1.0.0-rc0` 的 tag 同样未随迁（对象亦不在本仓历史，无法重打），
+> 相关版本段按「有段无 tag」一并登记；门禁扫描面自检阈值随之校准为「上游实际 tag 数」。
 
 | tag | 版本段 | 性质 | 说明 |
 |---|---|---|---|
 | `无` | `[v1.0.0-20260901182023]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
 | `无` | `[20260901.2]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
 | `无` | `[20260901]` | 快照段（无 tag） | 2026-09-01 快照段；导入时对应 tag 未随迁 |
-| `无` | `[0.1.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；git tag 自 v0.3.0 起存在 |
-| `无` | `[0.2.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；git tag 自 v0.3.0 起存在 |
+| `无` | `[v1.0.0-rc0]` | 快照段（无 tag） | 2026-09-02 预发布段；上游无对应 tag（2026-10-15 复核），同日被 rc1 取代 |
+| `无` | `[0.1.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；当时尚未打 tag（约定自 v0.3.0 起，而该批 tag 亦未随迁上游，见下） |
+| `无` | `[0.2.0]` | 导入前历史段（无 tag） | 2026-08-22 历史段；当时尚未打 tag（约定自 v0.3.0 起，而该批 tag 亦未随迁上游，见下） |
+| `无` | `[0.16.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.15.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.14.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.13.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.12.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.11.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.10.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.9.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.8.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.7.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.6.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.5.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.4.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
+| `无` | `[0.3.0]` | 导入前历史段（无 tag） | 2026-08-28 历史段；tag 未随迁上游（2026-10-15 复核） |
 | `v1.0.0-20260902164154` | `无` | 快照 tag（无独立段） | 2026-09-02 16:41 打在 `feat(web)` 提交（c33cc07）上，非 release 提交；同日 rc0/rc1 取代 |
 | `v1.0.0-20260902170212` | `无` | 快照 tag（无独立段） | 2026-09-02 17:02 打在 `feat` 提交（a77b878）上；同日 rc0/rc1 取代 |
 | `v1.0.0-20260902170253` | `无` | 快照 tag（无独立段） | 2026-09-02 17:02 打在 `fix(docs)` 提交（7d8ccec）上；同日 rc0/rc1 取代 |
@@ -30,6 +48,26 @@
 > 段内容未改写（历史结论不改写）；该段已移到 `[Unreleased]` 之后恢复倒序。
 
 ## [Unreleased]
+
+### 变更（2026-10-15：2026-10-14 评审 O1–O3 闭环 + 门禁全量实跑全绿）
+
+- **重构（前端，行为等价）**：新增 `composables/useSeqGuard()`（`next` / `isCurrent` / `invalidate`）收敛「自增代次 → 丢弃过期响应 → finally 条件复位 loading」惯用法——迁移 `useObjectBrowser`（bucket / load 双 guard，承接 F1 的分计数）/ `BucketsPanel` / `RecycleBinPanel` / `StorageReportPanel` / `MigratePanel`（源 · 目标）/ `AccountsPanel` / `ObjectDetailDialog` / `useBucketSetting` / `VersionsDialog` / `useObjectActions` 共 10 处；各处 finally 复位语义逐字保留（`KNOWN_ISSUES` #88 / 评审 O1 闭环）。
+- **重构（后端，行为等价）**：新增 `service.EnumeratePages` 回调式分页骨架，统一 `listAll` / `indexDst` / `deletePrefix` / handler `collectListing`（copy-prefix + storage-report 共用）五处循环的「ctx 取消 / 页数上限 / token 缺失·不前进」三条守卫；页上限常量 `listMaxPages` / `listPrefixMaxPages` / `storageReportMaxPages` 三份 100 收敛为导出的 `service.ListMaxPages`；新增 `TestListAllStopsExactlyAtTotalCap` 钉「正好收满 100k 即停、不多取一页」（#89 / O2 闭环）。
+- **重构（后端，行为等价）**：新增 `internal/httpx.StatusRecorder` 收敛 `handler.statusRecorder` 与 `tracing.statusWriter` 两份分叉实现——`Flush` 统一走 `http.NewResponseController` + `Unwrap` 穿透底层 conn，`tracing` 不反向依赖 `handler`（#90 / O3 闭环）。
+- **门禁校准（`changelog_tag`）**：`minChangelogTags` 15 → 2（上游 origin 仅 `v1.0.0` / `v1.0.0-rc1`——原阈值假设评审机本地的 20 个 tag，新克隆与 CI 构造性红灯）；`CHANGELOG.md` 映射表补登记 15 个「有段无 tag」版本段（`v1.0.0-rc0` + `0.3.0`–`0.16.0`），tag ↔ 段双向对账与「读取塌缩即红灯」语义不变。
+- **验证**：`go test -race ./...` **11/11 包全 PASS** · 覆盖率 **100.0% 零 `count==0` 块** · `golangci-lint` **0 issues** · 前端 **88 文件 1364 例** + 四指标 **100%（5114 / 3397 / 1294 / 4413）** · `pnpm build` OK。真 RustFS E2E 因本机无 docker **未跑**（下批在有 docker 环境按 AGENTS 门禁补跑）；§CQ 的「门禁实跑欠账」至此补齐。
+
+### 变更（2026-10-14 全仓代码质量评审：F1–F7 / A1–A2 / C2 闭环 + C1 有意维持 + O1–O3 转登记）
+
+- **修复（前端竞态）**：`useObjectBrowser` 的 `loadBuckets` 与对象 `load` 原先**共用同一个 `loadSeq` 计数器**——切桶触发的 `load` 会把在飞的桶列表响应误判过期而丢弃，并跳过 `finally` 的 `loadingBuckets` 复位（桶选择器永久卡 loading）。拆出独立 `bucketSeq`（与 `RecycleBinPanel` / `MigratePanel` 的「按关注点分开计数」口径一致）并加回归用例。
+- **修复（后端有界列举）**：`s3wrap.ListParts` 与 `s3wrap.PurgeObject` 的翻页循环补**页上限 + 游标不前进守卫**（此前只有「截断但缺标记」兜底）——对端始终 truncated / 游标原地打转时不再死循环；新增 `internal/s3wrap/pagination_bounds_test.go`（5s 超时兜底）。
+- **修复（门禁假阴性）**：四道门禁此前可被「语义等价输入」骗过——`TestReleaseWorkflowVerifiesTagMatchesManifest` 的 `!=` 只出现在错误文案、`TestMakefileMirrorsCIGates` 无解析条数下限且不查 `.PHONY` 反向、`TestTrivyScansUseCacheAndRetry` 断言裸词 `attempt`、`ai_governance_gate_test.go` 的 Copilot 指针校验在 `if err == nil` 内。已逐一改为**真实可判定形态**。
+- **修复（卫生）**：`Makefile` 移除声明了却无目标的孤儿 `.PHONY: restart`（`make restart` 会报 No rule to make target）。
+- **可访问性**：`ObjectToolbar.vue` 的图标按钮（`✓`/`✎`）与四处进度条（`MigratePanel` / `UploadPanel` / `ActivityCenter` / `BatchMetadataDialog`）补充 `aria-label`（复用既有 i18n key，未新增文案）。
+- **安全（供应链）**：CI / compose 的六个基础镜像（`golang` / `node` / `rust` / `docker` / `nginx` / `rustfs`）按**多架构 index digest**（`@sha256:`）双 pin，与 Trivy 的 tag+digest 纪律对齐；新增门禁 `TestCIBaseImagesAreDigestPinned`（`.gitlab-ci.yml` 全部 `image:` / `services[].name` + 三个 compose 的非自建镜像）。
+- **文档 / 安全（记录）**：Tauri `tauri.conf.json` 的 `connect-src`（`'self' http: https:`）复核后**有意维持**——桌面端须连**任意用户配置**的 S3 端点 / 后端，构建期无法枚举主机；取舍显式记入 `apps/desktop/AGENTS.md`。
+- **新增** 时点性快照 [`docs/archive/code-review-2026-10-14.md`](docs/archive/code-review-2026-10-14.md)——**2026-10-14 全仓代码质量评审**（结论 **Approve**）；三项**可维护性**发现转登记 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#88 / #89 / #90**（前端 seq 守卫惯用法 ×8 / 后端分页循环骨架 ×5 + 页上限常量 ×3 / 两个状态包装器 `Flush` 分叉），台账见 [`docs/FEATURES.md`](docs/FEATURES.md) §CQ。
+- **⚠️ 门禁实跑披露**：本轮评审环境**无外网**（Go 依赖无法下载、`node_modules` 未安装、`golangci-lint` 未装），**未**包含 `go test` / `golangci-lint` / `pnpm` 的实跑结论；代码与测试已就位，**须在有外网的环境复跑快照 §5 命令**确认全绿后再合并。
 
 ### 变更（2026-10-12 晚：依赖漏洞清零 + a11y 扫描盲区补齐 + dev strictPort）
 

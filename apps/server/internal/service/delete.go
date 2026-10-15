@@ -69,11 +69,9 @@ func RunDeletePrefix(
 
 // deletePrefix 是 RunDeletePrefix 的循环内核。
 //
-// 三道守卫与 sync.go 的 listAll / indexDst 同一形态（review §B6）：
-//  1. 页数上限 listMaxPages——空页 + 前进 token 时 maxDelete 的计数永远不增长，
-//     只靠计数守卫会一直空转到客户端断连（同步端点还会占住 withStreamLimit 的流槽位）；
-//  2. token 缺失或不前进——对端异常时立即停，避免同一页被反复删除、反复计数；
-//  3. 循环首行查 ctx——不依赖 SDK 调用间接响应取消。
+// 三道守卫与 sync.go 的 listAll / indexDst 同一形态（review §B6），已收敛于
+// EnumeratePages（2026-10-14 评审 O2 / KNOWN_ISSUES #89）：页数上限、token 缺失或
+// 不前进、循环首行查 ctx——本函数只保留「按页带副作用删除」这一页内逻辑。
 //
 // 进度以「已处理数」（成功 + 逐 key 失败）为准而不是「已删除数」：桶策略/保留期让删除全部
 // 失败时，只看 deleted 会让循环永不前进（同一页反复列出、反复失败直到 2h 任务超时）。
@@ -81,44 +79,35 @@ func deletePrefix(
 	ctx context.Context, client *s3wrap.Client, bucket, prefix string,
 ) (counts DeleteCounts, truncated bool, err error) {
 	const maxDelete = 100_000
-	token := ""
-	for page := 0; page < listMaxPages; page++ {
-		if err := ctx.Err(); err != nil {
-			return counts, false, err
-		}
-		p, listErr := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", listMaxKeys)
-		if listErr != nil {
-			return counts, false, listErr
-		}
-		keys := make([]string, 0, len(p.Objects))
-		for _, o := range p.Objects {
-			keys = append(keys, o.Key)
-		}
-		if len(keys) > 0 {
-			if counts.Deleted+counts.Failed+len(keys) > maxDelete {
-				keys = keys[:maxDelete-counts.Deleted-counts.Failed]
-				truncated = true
+	truncated, err = EnumeratePages(ctx, client, bucket, prefix, ListMaxPages, listMaxKeys,
+		func(p *s3wrap.ListPage) (bool, bool, error) {
+			keys := make([]string, 0, len(p.Objects))
+			for _, o := range p.Objects {
+				keys = append(keys, o.Key)
 			}
-			failures, delErr := client.DeleteObjects(ctx, bucket, keys)
-			if delErr != nil {
-				return counts, truncated, delErr
+			pageTruncated := false
+			if len(keys) > 0 {
+				if counts.Deleted+counts.Failed+len(keys) > maxDelete {
+					keys = keys[:maxDelete-counts.Deleted-counts.Failed]
+					pageTruncated = true
+				}
+				failures, delErr := client.DeleteObjects(ctx, bucket, keys)
+				if delErr != nil {
+					return true, pageTruncated, delErr
+				}
+				counts.Observe(len(keys), failures)
 			}
-			counts.Observe(len(keys), failures)
-		}
-		if truncated {
-			break // 本页有对象被裁掉 ⇒ 没枚举完
-		}
-		if !p.IsTruncated {
-			return counts, false, nil
-		}
-		// 对端声称未完：已达总量上限、token 缺失或不前进，都必须停并标记截断——
-		// 否则要么静默截断（review R6），要么循环空转（review §B6）。
-		if counts.Deleted+counts.Failed >= maxDelete || p.NextToken == "" || p.NextToken == token {
-			return counts, true, nil
-		}
-		token = p.NextToken
-	}
-	return counts, true, nil
+			if pageTruncated {
+				return true, true, nil // 本页有对象被裁掉 ⇒ 没枚举完
+			}
+			// 对端声称未完且已达总量上限：停并标记截断（token 缺失或不前进由
+			// EnumeratePages 的守卫兜住），否则要么静默截断（review R6）要么循环空转。
+			if counts.Deleted+counts.Failed >= maxDelete && p.IsTruncated {
+				return true, true, nil
+			}
+			return false, false, nil
+		})
+	return counts, truncated, err
 }
 
 // DeleteKeysBatched 按 1000 一批删除已列举出的 keys（异步删除任务体）。

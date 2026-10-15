@@ -2,7 +2,7 @@
 # 手动覆盖构建：make VERSION=v1.0.0-rc0 server-build
 VERSION ?= v1.0.0
 
-.PHONY: server server-build build tidy web web-build web-typecheck web-typecheck-e2e web-lint desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check bench e2e-real install-hooks docker all dev dev-nginx restart restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
+.PHONY: server server-build build tidy web web-build web-typecheck web-typecheck-e2e web-lint desktop-dev desktop-build rust-audit test test-cover web-test web-test-cover test-all vet lint govulncheck check bench e2e-real install-hooks docker all dev dev-nginx restart-server restart-web restart-nginx restart-docker restart-all stop status gcl gcl-list gcl-docker
 
 # Pin gitlab-ci-local，避免 npx latest 漂移。`.gitlab-ci-local-env` 已默认挂 docker.sock。
 GCL ?= npx --yes gitlab-ci-local@4.75.1

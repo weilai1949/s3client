@@ -114,7 +114,12 @@ const emit = defineEmits<{
         <span v-else class="cur">{{ c.name }}</span>
       </template>
     </div>
-    <button class="link path-edit-btn" :title="pathEditing ? '' : t('toolbar.editPath')" @click="emit('toggle-path-edit')">
+    <button
+      class="link path-edit-btn"
+      :title="pathEditing ? '' : t('toolbar.editPath')"
+      :aria-label="pathEditing ? t('common.ok') : t('toolbar.editPath')"
+      @click="emit('toggle-path-edit')"
+    >
       {{ pathEditing ? '✓' : '✎' }}
     </button>
     <span class="spacer" />

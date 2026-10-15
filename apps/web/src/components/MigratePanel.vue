@@ -8,6 +8,7 @@ import { fmtSize } from '../format'
 import { MIGRATE_MAX_KEYS_PER_REQUEST, batchKeys } from '../limits'
 import { ROW_HEIGHT } from '../virtualList'
 import { useVirtualRows } from '../composables/useVirtualRows'
+import { useSeqGuard } from '../composables/useSeqGuard'
 import { t, tf } from '../i18n'
 import ModalDialog from './ModalDialog.vue'
 import SchedulesSection from './SchedulesSection.vue'
@@ -38,13 +39,13 @@ const error = ref('')
 const sourceBuckets = ref<BucketItem[]>([])
 const targetBuckets = ref<BucketItem[]>([])
 
-// 源与目标是两条独立的列举，各有自己的 loading 与代次：
+// 源与目标是两条独立的列举，各有自己的 loading 与代际守卫：
 // 此前共用一个 loadingBuckets，先完成的一方在 finally 里把标志清掉，另一个 select
 // 会在请求未完成时就被解除禁用；也没有代次守卫，切账号后旧响应仍会落地。
 const loadingSourceBuckets = ref(false)
 const loadingTargetBuckets = ref(false)
-let sourceBucketGen = 0
-let targetBucketGen = 0
+const sourceBucketGuard = useSeqGuard()
+const targetBucketGuard = useSeqGuard()
 
 // 见上：objects 变化（重新列出/切换前缀）后虚拟窗口必须回到顶部。
 watch(objects, resetWindowScroll)
@@ -118,40 +119,40 @@ const selectedSize = computed(() => objects.value.filter((o) => selected.value.h
 async function loadSourceBuckets() {
   const acc = sourceAccount.value
   if (!acc) {
-    sourceBucketGen++ // 源账号消失：作废在飞的列举，过期结果不得落地
+    sourceBucketGuard.invalidate() // 源账号消失：作废在飞的列举，过期结果不得落地
     loadingSourceBuckets.value = false
     return
   }
-  const gen = ++sourceBucketGen
+  const gen = sourceBucketGuard.next()
   loadingSourceBuckets.value = true
   try {
     const res = await s3api.listBuckets(acc.id)
-    if (gen !== sourceBucketGen) return // 过期：源账号已切换
+    if (!sourceBucketGuard.isCurrent(gen)) return // 过期：源账号已切换
     sourceBuckets.value = res.buckets ?? []
   } catch {
-    if (gen === sourceBucketGen) sourceBuckets.value = []
+    if (sourceBucketGuard.isCurrent(gen)) sourceBuckets.value = []
   } finally {
-    if (gen === sourceBucketGen) loadingSourceBuckets.value = false
+    if (sourceBucketGuard.isCurrent(gen)) loadingSourceBuckets.value = false
   }
 }
 
 async function loadTargetBuckets() {
   if (!targetAccountId.value) {
-    targetBucketGen++ // 目标账号被清空：作废在飞的列举
+    targetBucketGuard.invalidate() // 目标账号被清空：作废在飞的列举
     loadingTargetBuckets.value = false
     targetBuckets.value = []
     return
   }
-  const gen = ++targetBucketGen
+  const gen = targetBucketGuard.next()
   loadingTargetBuckets.value = true
   try {
     const res = await s3api.listBuckets(targetAccountId.value)
-    if (gen !== targetBucketGen) return // 过期：目标账号已切换
+    if (!targetBucketGuard.isCurrent(gen)) return // 过期：目标账号已切换
     targetBuckets.value = res.buckets ?? []
   } catch {
-    if (gen === targetBucketGen) targetBuckets.value = []
+    if (targetBucketGuard.isCurrent(gen)) targetBuckets.value = []
   } finally {
-    if (gen === targetBucketGen) loadingTargetBuckets.value = false
+    if (targetBucketGuard.isCurrent(gen)) loadingTargetBuckets.value = false
   }
 }
 
@@ -168,35 +169,35 @@ function ensureTargetAccount() {
 const loadingAll = ref(false)
 const MAX_ALL_PAGES = 200 // 单页 1000 → 最多 20 万个对象
 
-/** 列举代次：每次列举（本函数 / loadAllSourceObjects）自增，用于丢弃过期响应
+/** 列举代际守卫：每次列举（本函数 / loadAllSourceObjects）领取新 token，用于丢弃过期响应
  *  （否则先后两次列举的结果会互相覆盖）。非响应式：只作比较，不驱动渲染。 */
-let listGen = 0
+const listGuard = useSeqGuard()
 
 async function loadSourceObjects() {
   const acc = sourceAccount.value
   if (!acc) return
-  const gen = ++listGen
+  const gen = listGuard.next()
   loading.value = true
   error.value = ''
   const bucket = sourceBucket.value
   const prefix = sourcePrefix.value
   try {
     const res = await s3api.listObjects(acc.id, { bucket, prefix, delimiter: '/', maxKeys: '200' })
-    if (gen !== listGen) return
+    if (!listGuard.isCurrent(gen)) return
     objects.value = res.objects.filter((o) => !o.isDir)
     selected.value = new Set()
   } catch (e) {
-    if (gen !== listGen) return
+    if (!listGuard.isCurrent(gen)) return
     error.value = toErrorMessage(e)
   } finally {
-    if (gen === listGen) loading.value = false
+    if (listGuard.isCurrent(gen)) loading.value = false
   }
 }
 
 async function loadAllSourceObjects() {
   const acc = sourceAccount.value
   if (!acc) return
-  const gen = ++listGen
+  const gen = listGuard.next()
   // 快照：分页循环内不得读实时 sourceBucket/sourcePrefix——用户在续页之间改前缀会把
   // 旧前缀的 continuationToken 带到新前缀上，列表混两个前缀（review §F5）。
   const bucket = sourceBucket.value
@@ -212,7 +213,7 @@ async function loadAllSourceObjects() {
       if (token) q.continuationToken = token
       const res = await s3api.listObjects(acc.id, q)
       // 代次守卫：期间用户重新列出（或切换账号/前缀）→ 丢弃本次全部结果。
-      if (gen !== listGen) return
+      if (!listGuard.isCurrent(gen)) return
       all.push(...res.objects.filter((o) => !o.isDir))
       if (!res.isTruncated || !res.nextToken) break
       if (++guard >= MAX_ALL_PAGES) {
@@ -225,10 +226,10 @@ async function loadAllSourceObjects() {
     selected.value = new Set()
     toast(tf('migrate.listedAll', { n: all.length }))
   } catch (e) {
-    if (gen !== listGen) return
+    if (!listGuard.isCurrent(gen)) return
     error.value = toErrorMessage(e)
   } finally {
-    if (gen === listGen) loadingAll.value = false
+    if (listGuard.isCurrent(gen)) loadingAll.value = false
   }
 }
 
@@ -515,7 +516,7 @@ onActivated(() => {
       </div>
 
       <!-- 迁移进度条 -->
-      <div v-if="busy" class="progress" style="margin:10px 0" role="progressbar" :aria-valuenow="progressPct" aria-valuemin="0" aria-valuemax="100">
+      <div v-if="busy" class="progress" style="margin:10px 0" role="progressbar" :aria-label="t('migrate.running')" :aria-valuenow="progressPct" aria-valuemin="0" aria-valuemax="100">
         <div class="bar" :style="{ width: progressPct + '%' }" />
       </div>
 

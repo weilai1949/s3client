@@ -231,7 +231,7 @@ func TestMiddlewareExportsServerSpan(t *testing.T) {
 		if err := http.NewResponseController(w).Flush(); err != nil {
 			t.Errorf("Flush: %v", err)
 		}
-		// SetWriteDeadline 需要经 statusWriter.Unwrap 触达底层 conn；httptest.ResponseRecorder
+		// SetWriteDeadline 需要经 httpx.StatusRecorder.Unwrap 触达底层 conn；httptest.ResponseRecorder
 		// 不支持 deadline，返回 ErrNotSupported 即为「Unwrap 已生效」。
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Second))
 		w.WriteHeader(http.StatusOK)

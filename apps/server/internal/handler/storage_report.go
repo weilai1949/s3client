@@ -16,8 +16,6 @@ import (
 // 100k 对象上限、token 缺失或不前进即停并标记 truncated，避免畸形对端把请求拖成无界循环。
 
 const (
-	// storageReportMaxPages 是列举页数硬上限（与 service.listMaxPages 同值）。
-	storageReportMaxPages = 100
 	// storageReportMaxObjects 是收录对象数硬上限（与 service.listMaxTotal 同值）。
 	storageReportMaxObjects = 100_000
 	// storageReportPageSize 是单页对象数（S3 ListObjectsV2 上限 1000）。
@@ -74,40 +72,7 @@ func (h *Handler) storageReport(w http.ResponseWriter, r *http.Request) {
 // 返回的 truncated 表示「有对象未被收录」，四种触发与 service.listAll / deletePrefix 一致：
 // 本页装不下、收满 100k、对端声称未完但 token 缺失/不前进、页数上限耗尽。
 func collectStorageReportObjects(ctx context.Context, client *s3wrap.Client, bucket, prefix string) ([]s3wrap.ObjectItem, bool, error) {
-	out := make([]s3wrap.ObjectItem, 0, 256)
-	token := ""
-	for page := 0; page < storageReportMaxPages; page++ {
-		if err := ctx.Err(); err != nil {
-			return out, false, err
-		}
-		p, err := client.ListObjectsPage(ctx, bucket, prefix, "", token, "", storageReportPageSize)
-		if err != nil {
-			return out, false, err
-		}
-		dropped := false
-		for _, o := range p.Objects {
-			if len(out) >= storageReportMaxObjects {
-				dropped = true // 本页还有对象装不进上限：明确截断，不得静默丢弃
-				break
-			}
-			out = append(out, o)
-		}
-		if dropped {
-			return out, true, nil
-		}
-		if len(out) >= storageReportMaxObjects {
-			// 正好收满且本页无丢弃：对端还声称有下一页才算截断（正好等于上限且对端
-			// 声明列举完成 ⇒ 全部收录）。
-			return out, p.IsTruncated, nil
-		}
-		if !p.IsTruncated {
-			return out, false, nil
-		}
-		// token 缺失或不前进必须停并标记截断，否则空转。
-		if p.NextToken == "" || p.NextToken == token {
-			return out, true, nil
-		}
-		token = p.NextToken
-	}
-	return out, true, nil
+	// 逐项收集语义见 collectListing；循环骨架收敛于 service.EnumeratePages
+	//（2026-10-14 评审 O2 / KNOWN_ISSUES #89），页数上限取 service.ListMaxPages。
+	return collectListing(ctx, client, bucket, prefix, storageReportMaxObjects, service.ListMaxPages, storageReportPageSize, func(o s3wrap.ObjectItem) s3wrap.ObjectItem { return o })
 }

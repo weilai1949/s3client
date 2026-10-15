@@ -22,6 +22,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/weilai1949/s3client/apps/server/internal/httpx"
 )
 
 // 运行时参数。声明为变量而非常量，便于测试用确定性参数验证批量阈值 / ticker 刷出 /
@@ -130,11 +132,11 @@ func (t *Tracer) Middleware(next http.Handler) http.Handler {
 		sp.setStr("url.path", r.URL.Path)
 		w.Header().Set("traceparent", formatTraceparent(traceID, sp.spanID, sampled))
 
-		rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		rec := httpx.NewStatusRecorder(w)
 		ctx := context.WithValue(r.Context(), activeSpanKey{}, &activeSpan{tracer: t, span: sp})
 		next.ServeHTTP(rec, r.WithContext(ctx))
 
-		sp.setInt("http.response.status_code", rec.status)
+		sp.setInt("http.response.status_code", rec.Status())
 		// request id 由 handler 链的 withLogging 写在响应头（客户端提供或服务端生成）；
 		// 在此读取即可把 trace 与既有日志 / 审计口径关联起来（不新增日志字段）。
 		if reqID := w.Header().Get("X-Request-ID"); reqID != "" {
@@ -278,24 +280,3 @@ func (t *Tracer) flush(spans []*span) {
 		t.logger.Warn("tracing: OTLP 采集端返回非 2xx", "status", resp.StatusCode)
 	}
 }
-
-// statusWriter 记录响应状态码并保持流式能力（Flush / Unwrap 供 SSE、Range 下载使用）。
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-// WriteHeader 记录状态码后透传。
-func (w *statusWriter) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-// Flush 透传到真实连接的 Flusher；底层不支持时静默忽略（与 net/http 同口径）。
-func (w *statusWriter) Flush() {
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
-}
-
-// Unwrap 让 http.ResponseController / SetWriteDeadline 穿透到真实 ResponseWriter，
-// 与 handler.statusRecorder 的既有口径一致。
-func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
