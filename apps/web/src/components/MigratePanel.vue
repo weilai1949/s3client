@@ -515,6 +515,8 @@ onActivated(() => {
         </button>
       </div>
 
+      <p class="badge" style="margin:8px 0">{{ t('migrate.limitHint') }}</p>
+
       <!-- 迁移进度条 -->
       <div v-if="busy" class="progress" style="margin:10px 0" role="progressbar" :aria-label="t('migrate.running')" :aria-valuenow="progressPct" aria-valuemin="0" aria-valuemax="100">
         <div class="bar" :style="{ width: progressPct + '%' }" />

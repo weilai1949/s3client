@@ -100,7 +100,7 @@ make rust-audit
 > `doc_link_gate_test.go`（全仓 md **相对链接目标 + 页内锚点**存在性，含扫描面自检）、
 > `doc_index_gate_test.go`（`docs/` 下每篇文档必须能从 [`docs/README.md`](README.md) 或所属子目录索引到达）、
 > `docs_naming_gate_test.go`（`docs/` 命名清单须在 `AGENTS.md` / 本文件 §4 / `llms.txt` 三处同步登记）、
-> `dependabot_gate_test.go`（`.github/dependabot.yml` 清单路径必须指向真实目录——路径错 Dependabot 会**静默跳过**）、
+> `dependabot_gate_test.go`（`.github/dependabot.yml` 清单路径必须指向真实目录——路径错 Dependabot 会**静默跳过**；`docker` 规则须覆盖每个 Dockerfile 所在目录）、
 > `third_party_licenses_gate_test.go`（[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) 与 `go.mod` / `Cargo.lock` / `package.json` 依赖全量一致，重新生成脚本见该文件 §5）、
 > `ci_consistency_gate_test.go`（两套 CI 的 job / 命令 / 版本 pin 逐项一致 + checkout 深克隆与前端依赖
 > 前置——评审 2026-10-09 C1/C2，见下节；并钉真 RustFS Go E2E 的 PR 触发面覆盖整个后端，
@@ -272,7 +272,8 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | 错误码 / 错误文案 | [`errors.md`](errors.md) |
 | **任何**新功能或 bug 修复 | [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段（Keep a Changelog：Added / Fixed / Changed） |
 | 发版 / 打 tag / 改名版本段 | [`CHANGELOG.md`](../CHANGELOG.md) 顶部「tag ↔ 版本段对应关系（唯一台账）」（快照 tag / 快照段登记；正式版本段由 `changelog_tag_gate_test.go` 正向校验）+ `scripts/release-version.sh`（缺段即 exit 1） |
-| 已实现 / 已修复能力的台账 | [`FEATURES.md`](FEATURES.md) |
+| 已实现 / 已修复能力的台账（§二 区块索引，每批一行） | [`FEATURES.md`](FEATURES.md) |
+| 某批次具体改了什么（逐批证据表，FEATURES §二 明细外移） | [`BATCHES.md`](BATCHES.md) |
 | 待办事项状态变化 | **问题**（缺陷 / 阻塞 / 技术债）→ [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)；**方向**（功能候选 / 版本级）→ [`ROADMAP.md`](ROADMAP.md) §三。两处各自唯一来源，同一事项只登记一处 |
 | 版本级规划 / 优先级 | [`ROADMAP.md`](ROADMAP.md)（不做逐条流水账） |
 | 分层 / 模块边界 / 目录结构 | [`architecture.md`](architecture.md)；重大决策另加 [`decisions/`](decisions/index.md) ADR；architecture §7「关键取舍」表每行必须含 ADR 链接（由 `apps/server/adr_coverage_gate_test.go` 守住） |
@@ -328,6 +329,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 | `docs/DEVELOPMENT.md` · `CONFIGURATION.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/DEPLOYMENT.md` · `OPERATIONS.md` · `POSTMORTEM_TEMPLATE.md` | 3 个月 | 登记时基线（2026-09-29） |
 | `docs/FEATURES.md` · `KNOWN_ISSUES.md` · `ROADMAP.md` | 每个版本发版前 | 登记时基线（2026-09-29） |
+| `docs/BATCHES.md`（逐批明细证据表，FEATURES §二 的活台账明细） | 每个版本发版前 | 登记时基线（2026-10-16） |
 | `docs/PERFORMANCE.md` · `AI_POLICY.md` | 6 个月 | 登记时基线（2026-09-29） |
 | [`AGENT_EVALS.md`](AGENT_EVALS.md)（AI 评测与贡献度量） | 6 个月，或评测口径 / 披露字段集变更时同 PR | 登记时基线（2026-09-30） |
 | [`.github/`](../.github/) 社区健康文件：`CONTRIBUTING.md` · `SECURITY.md` · `SUPPORT.md` · `GOVERNANCE.md` · `CODE_OF_CONDUCT.md` | 6 个月 | 登记时基线（2026-09-29） |
@@ -365,7 +367,7 @@ cp .gitlab-ci-local-variables.yml.example .gitlab-ci-local-variables.yml
 
 - **位置**：根目录只保留四个**约定文件**——`README.md`（社区约定）、`AGENTS.md`（agent 工具加载器**硬性要求**在根目录，放在 `docs/` 下不会被自动加载）、`CHANGELOG.md`（Keep a Changelog 约定名，release-please / semantic-release / standard-version / git-cliff 等工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)把位置固定为 `/llms.txt`，2026-09-29 登记——它是**给 LLM 的仓库导航索引**，只列入口不复述规范，规范正文仍以本文件与 [`AI_POLICY.md`](AI_POLICY.md) 为准）。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / `SUPPORT.md` / `GOVERNANCE.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放在最高优先级位置可避免被将来某个副本静默顶掉（`.github/SUPPORT.md` 已于 2026-09-29 落地，不再是「将来若加」的假设）；除上述根目录约定文件与 `.github/` 社区健康文件外的其余文档统一放 `docs/`。另有**工具固定名**留在根目录：`LICENSE` 与 `CITATION.cff`（GitHub 的 cite 功能只认根目录，2026-09-30 登记）。另有一类**工具固定名**放在 `.github/`：[`.github/copilot-instructions.md`](../.github/copilot-instructions.md)（GitHub Copilot 的仓库指令文件，位置与字面名由 Copilot 固定；本仓库只放**指针**，规则本体仍在根 `AGENTS.md`）。
 - **命名**：`docs/` 下按**文档性质**二分，外加工具固定名：
-  - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）、`CITATION.cff`（GitHub 引用元数据，只认根目录）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
+  - **大写** = ① 名字被外部工具固定的：`README.md`（含 [`docs/README.md`](README.md)——GitHub 按字面名渲染的**目录落地页**，同时是人类导航 SSOT）、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`LICENSE`、`CODEOWNERS`（GitHub 按字面名在 `CODEOWNERS` / `.github/CODEOWNERS` / `docs/CODEOWNERS` 三处查找，小写不生效）、`SUPPORT.md`、`GOVERNANCE.md`（社区健康文件固定名）、`CITATION.cff`（GitHub 引用元数据，只认根目录）；② `docs/` 下的**仓库元文档**——描述「**仓库自身如何运作**」（配置 / 部署 / 开发规范 / 运维 / 性能 / 政策 / 台账 / 规划）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`BATCHES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。
   - **小写 kebab-case** = `docs/` 下的**产品内容文档**——描述「**产品是什么 / 怎么用**」（接口 / 架构 / 错误码 / 安全设计 / 用户手册 / 兼容 / 术语 / 翻译 / 无障碍）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `docs/api/`（机器可读契约，如 `openapi.json`）、`docs/archive/`、`docs/decisions/`、`docs/en/` 下的全部文件。**时点性批次交接快照**同用小写（先例 `assessment.md`、`handoff-20260930.md`、`handoff-20261010.md`，结论绑定日期、批次收口后归档入 `docs/archive/`——三者均已归档）；时点性**代码评审快照**同样小写（先例 `code-review-2026-09-24.md`、`code-review-2026-10-09.md`、`code-review-2026-10-10.md`，结论绑定评审日期、全部闭环后归档入 `docs/archive/`——三者均已归档；`code-review-2026-10-15.md` 已于 2026-10-16 归档）；时点性**子树评审快照**同样小写（首例 `web-review-2026-10-12.md`、`desktop-review-2026-10-12.md`、`server-review-2026-10-12.md` 均已归档入 `docs/archive/`）；时点性**文档复盘快照**同样小写（先例 `docs-review-2026-10-12.md`，结论绑定复盘日期、建议项处置后归档入 `docs/archive/`——已归档）；时点性**渗透测试 / 对抗性验证快照**同样小写（首例 `pentest-2026-10-15.md`，结论绑定测试日期、发现闭环后归档入 `docs/archive/`——该首例已于 2026-10-16 归档，P-1..P-15 全部闭环）。
   - **新增 `docs/` 文档时先判性质再起名**：属「仓库怎么运作」→ 大写；属「产品是什么」→ 小写。**新增或变更任何大写文件名，必须在同一个 PR 里同时改本处与 [`AGENTS.md`](../AGENTS.md)**（防两处分叉）。
   - **沿革——不要凭直觉把某一类「修正」回去**：2026-09-17 曾把当时按「台账类大写」习惯命名的 `API.md` / `ASSESSMENT.md` / `ERRORS.md` / `FEATURES.md` / `ROADMAP.md` **全部小写化**（理由：无任何工具按文件名匹配）；2026-09-24 登记 `KNOWN_ISSUES.md` 为例外；**2026-09-29 改为现行的「元文档大写 / 内容文档小写」二分**，即元文档恢复大写、内容文档维持小写。三代规则的取舍逐条记在 [`CHANGELOG.md`](../CHANGELOG.md)，历史条目按惯例不改写。

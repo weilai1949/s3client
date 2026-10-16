@@ -293,7 +293,8 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 - [AI 代理评测与贡献度量](docs/AGENT_EVALS.md) — 黄金任务集 GT-1..GT-4 / 五维评分卡 / AI 贡献度量口径（与 AI_POLICY 互补）
 - [国际化与本地化](docs/i18n.md) — 语言现状 / 新增一门语言的步骤 / 文案覆盖率门禁
 - [可访问性](docs/accessibility.md) — ARIA / 键盘可达性 / 主题 / 已知限制（**未做正式 WCAG 审计**）
-- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录（单一事实来源）
+- [功能大全（Features）](docs/FEATURES.md) — 产品能力总览 + 已完成修复 / 优化记录的区块索引（单一事实来源）
+- [批次台账明细（Batches）](docs/BATCHES.md) — 已完成批次的逐批证据表（批次字母与 FEATURES §二 索引一一对应）：`file:line` 改动点 / 门禁实跑数字
 - [已知问题（Known Issues）](docs/KNOWN_ISSUES.md) — 缺陷 / 外部阻塞 / 技术债（唯一来源）
 - [路线图（Roadmap）](docs/ROADMAP.md) — 版本规划与里程碑（rc1 收口 → v1.0.0 → v1.0.x 加固 → v1.1.0 体验）
 - [贡献指南](.github/CONTRIBUTING.md) · [行为准则](.github/CODE_OF_CONDUCT.md) · [安全策略](.github/SECURITY.md) · [支持渠道](.github/SUPPORT.md) · [治理](.github/GOVERNANCE.md)
@@ -312,7 +313,7 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 
 ## 已知限制
 
-- **跨 endpoint 迁移的单对象上限 640GB**（`64MB × 10000 段`）：跨 endpoint 的文件迁移走 `GetObject` → `PutObject` 流式转发（`service.StreamCopy`），分段号受 S3 协议 10000 段上限约束——**超限对象在段号耗尽前被明确拒绝并 abort，绝不静默截断**。不按比例放大的原因是内存账：放大分段缓冲会突破容器 512MB 内存预算（`docker-compose*.yml` 的 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。口径与内存账见 [`apps/server/internal/service/stream_copy.go`](apps/server/internal/service/stream_copy.go) 注释，登记与决策见 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖ 维持现状），两个默认值与四条边界行为由 `TestMultipartStreamCopyPartSizeIs64MB` / `TestMaxMultipartPartsIsProtocolLimit` / `TestMultipartStreamCopyAcceptsExactlyMaxParts` / `TestMultipartStreamCopyRejectsPartOverLimit` / `TestMultipartStreamCopyByteCeiling` 钉住。
+- **跨 endpoint 迁移的单对象上限 640GB（仅当源对象大小未知时）**（`64MB × 10000 段`）：源对象大小已知时走无段缓冲直传，段长随对象放大到 5GiB，上限由 S3 单对象 5TiB 决定；同端点大对象走服务端分段落拷（`UploadPartCopy`），数据不经过本服务。只有源以 chunked 返回、拿不到 `Content-Length` 的对象才落回有缓冲分段并受 640GB 约束——**超限会被明确拒绝，绝不静默截断**。该路径不按比例放大的原因是内存账：段必须整段驻留，放大分段缓冲会突破容器 512MB 内存预算（`docker-compose*.yml` 的 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。口径见 [`apps/server/internal/service/stream_copy.go`](apps/server/internal/service/stream_copy.go) 注释与 [ADR-014](docs/decisions/0014-stream-copy-no-part-buffer.md)，登记见 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖）。
 - 已知限制的**唯一登记处**是 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)；本节只登用户可见的那一条，新增限制请先登记再在这里补一行。
 
 ## 安全说明

@@ -110,7 +110,7 @@ func TestMultipartStreamCopyReleasesBufferOnAbort(t *testing.T) {
 
 	f := newSvcFake(t)
 	f.failPart = true
-	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", strings.NewReader("data")); err == nil {
+	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", nil, strings.NewReader("data")); err == nil {
 		t.Fatal("expected part error")
 	}
 	if f.aborts != 1 {
@@ -131,7 +131,7 @@ func TestMultipartStreamCopyReleasesBufferOnSuccess(t *testing.T) {
 	t.Cleanup(func() { multipartPartSize = old })
 
 	f := newSvcFake(t)
-	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "ok", "", strings.NewReader("data")); err != nil {
+	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "ok", "", nil, strings.NewReader("data")); err != nil {
 		t.Fatalf("MultipartStreamCopy: %v", err)
 	}
 	buf := acquirePartBuf(multipartPartSize)

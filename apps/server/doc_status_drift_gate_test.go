@@ -20,7 +20,8 @@ package main
 //   2. TestOperationsTraceRowTracksOTelSection：`docs/OPERATIONS.md` 存在 §3.4 OTel tracing
 //      小节时，§4.3 的「跨服务 trace」行不得写「未接入」，且必须点名 `S3C_OTEL_ENDPOINT`
 //      （与同文件实现小节保持同一口径）。
-//   3. TestFeaturesOpenClaimsCarryTimeAnchor：`docs/FEATURES.md`（**已完成**台账）中出现
+//   3. TestFeaturesOpenClaimsCarryTimeAnchor：`docs/FEATURES.md`（**已完成**台账索引）与
+//      `docs/BATCHES.md`（§二 明细外移后的逐批证据表，2026-10-16 拆分）中出现
 //      「仍开放 / 仍未处置」的行必须自带日期（时点锚）；否则读者会把章节写作时点的状态
 //      当成当前事实。
 //   4. TestDocPageDateClaimNotStale（2026-10-10 交接快照 §5 未做第 10 项）：页头的**时点声明**
@@ -29,9 +30,10 @@ package main
 //      堵「正文改了、页头日期没动」的日期滞后。
 //
 // 扫描范围与刻意不做的（盲区，避免后来者误判覆盖面）：
-//   - 断言 1 排除**历史 / 时点台账**：`docs/archive/**`（归档冻结）、`docs/FEATURES.md` 与
+//   - 断言 1 排除**历史 / 时点台账**：`docs/archive/**`（归档冻结）、`docs/FEATURES.md` /
+//     `docs/BATCHES.md`（§二 索引与外移明细，2026-10-16 拆分后同一份批次史的两处载体）与
 //     `CHANGELOG.md`（「不追溯篡改 / 快照不回写」纪律保留原文）——它们的 `§三 #N + ⏳` 是
-//     当时的记录，不是现状声明；
+//     当时的记录（含对修复前原文的逐字引用），不是现状声明；
 //   - 断言 1 只认 `§三` 前缀的跨文件引用格式（DEVELOPMENT §4 约定），故 `KNOWN_ISSUES #N`
 //     与 `ROADMAP §三 #N` 两套编号空间互不误伤；**同行粒度**：同一行既有历史引用又另有
 //     开放标记时会误判（当前 6 处实测均无此形态）——遇到就把历史引用换行或去掉标记；
@@ -70,14 +72,21 @@ const (
 	docStatusRoadmap  = "docs/ROADMAP.md"
 	docStatusOps      = "docs/OPERATIONS.md"
 	docStatusFeatures = "docs/FEATURES.md"
+	docStatusBatches  = "docs/BATCHES.md"
 	// docStatusMinRefs / docStatusMinOpenRefs 是断言 1 的扫描面自检阈值。
 	// 实测基线（2026-10-10，作用域 58 个 md，排除历史台账后）：`§三 #N` 引用 26 处，
 	// 其中与开放标记同行 6 处（断言 1 修复后为 5 处）。低于阈值即正则或排除清单被改坏。
 	docStatusMinRefs     = 20
 	docStatusMinOpenRefs = 4
 	// docStatusMinFeatureClaims 是断言 3 的基线：FEATURES 中「仍开放 / 仍未处置」3 行
-	// （§P / §Q / §CA 头注，均已加时点锚）。归零说明措辞已收敛，需同步本阈值。
+	// （§P / §Q / §CA 三行索引 + 1 行 §二 头注说明，均已带时点锚）。归零说明措辞已收敛，
+	// 需同步本阈值。
 	docStatusMinFeatureClaims = 3
+	// docStatusMinBatchClaims 是断言 3 在 BATCHES（§二 明细外移后的逐批证据表）里的基线：
+	// §P / §Q / §CA 头注三行 + §CI 行内引述，原文均带时点锚（2026-09-19 / 2026-10-09 /
+	// 2026-10-10）。这些行 2026-10-10 随 FEATURES 受断言 3 保护，2026-10-16 外移后由本阈值
+	// 接续——拆分不得让保护面归零。
+	docStatusMinBatchClaims = 4
 	// docStatusMinLiveEntries 是 ROADMAP §3.1 + §3.2 现存条目数的下限
 	//（实测 6：#1 / #2 / #4 / #9 / #15 / #16）。
 	docStatusMinLiveEntries = 4
@@ -225,41 +234,50 @@ func TestOperationsTraceRowTracksOTelSection(t *testing.T) {
 	}
 }
 
-// TestFeaturesOpenClaimsCarryTimeAnchor 断言 3：FEATURES（已完成台账）里现在时的
-// 开放陈述必须带日期——章节头注描述的是**写作时点**，无锚点就会被读成现状。
+// TestFeaturesOpenClaimsCarryTimeAnchor 断言 3：已完成台账（FEATURES 索引 + BATCHES 明细）
+// 里现在时的开放陈述必须带日期——章节头注描述的是**写作时点**，无锚点就会被读成现状。
 func TestFeaturesOpenClaimsCarryTimeAnchor(t *testing.T) {
 	t.Parallel()
-	text := readRepoFile(t, docStatusFeatures)
+	for _, tc := range []struct {
+		rel string
+		min int
+	}{
+		{docStatusFeatures, docStatusMinFeatureClaims},
+		{docStatusBatches, docStatusMinBatchClaims},
+	} {
+		text := readRepoFile(t, tc.rel)
 
-	claims := 0
-	for i, line := range strings.Split(text, "\n") {
-		if !docStatusFeatureClaimRe.MatchString(line) {
-			continue
+		claims := 0
+		for i, line := range strings.Split(text, "\n") {
+			if !docStatusFeatureClaimRe.MatchString(line) {
+				continue
+			}
+			claims++
+			if !docStatusDateRe.MatchString(line) {
+				t.Errorf("%s:%d 无限定时点的开放陈述——已完成台账里，"+
+					"写作时点的状态必须带日期锚（如「2026-09-19 写作时点」）并给出闭环指针，"+
+					"否则读者会把历史状态当成现状：%s",
+					tc.rel, i+1, strings.TrimSpace(line))
+			}
 		}
-		claims++
-		if !docStatusDateRe.MatchString(line) {
-			t.Errorf("%s:%d 无限定时点的开放陈述——FEATURES 是**已完成**台账，"+
-				"写作时点的状态必须带日期锚（如「2026-09-19 写作时点」）并给出闭环指针，"+
-				"否则读者会把历史状态当成现状：%s",
-				docStatusFeatures, i+1, strings.TrimSpace(line))
+		if claims < tc.min {
+			t.Fatalf("扫描面塌缩：%s 中「仍开放 / 仍未处置」只剩 %d 行（基线 ≥%d）——"+
+				"措辞收敛或拆分迁移后需同步本阈值，别让门禁静默失效",
+				tc.rel, claims, tc.min)
 		}
+		t.Logf("%s 现在时开放陈述 %d 行（缺日期锚的行数见上方错误）", tc.rel, claims)
 	}
-	if claims < docStatusMinFeatureClaims {
-		t.Fatalf("扫描面塌缩：FEATURES 中「仍开放 / 仍未处置」只剩 %d 行（基线 ≥%d）——"+
-			"措辞收敛后需同步本阈值，别让门禁静默失效",
-			claims, docStatusMinFeatureClaims)
-	}
-	t.Logf("FEATURES 现在时开放陈述 %d 行（缺日期锚的行数见上方错误）", claims)
 }
 
 // docStatusIsHistoricalLedger 判断该 md 是否为**历史 / 时点台账**（不参与断言 1）：
-// 归档冻结件、FEATURES 已完成台账、CHANGELOG 逐字发布历史——三者按「不追溯篡改 /
-// 快照不回写」纪律保留原文，其中的 `§三 #N + ⏳` 是当时记录，不是现状声明。
+// 归档冻结件、FEATURES 已完成台账索引、BATCHES §二 明细（2026-10-16 拆分，内容同源）、
+// CHANGELOG 逐字发布历史——四者按「不追溯篡改 / 快照不回写」纪律保留原文，
+// 其中的 `§三 #N + ⏳` 是当时记录（含对修复前原文的逐字引用），不是现状声明。
 func docStatusIsHistoricalLedger(rel string) bool {
 	if strings.HasPrefix(rel, "docs/archive/") {
 		return true
 	}
-	return rel == docStatusFeatures || rel == "CHANGELOG.md"
+	return rel == docStatusFeatures || rel == docStatusBatches || rel == "CHANGELOG.md"
 }
 
 // TestDocPageDateClaimNotStale 断言 4：页头时点声明不得早于文内最新时点锚——

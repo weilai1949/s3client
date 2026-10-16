@@ -48,12 +48,20 @@ func migrateKeys(
 			var merr error
 			if sameEP {
 				merr = src.CopyObject(ctx, srcBucket, k, dstBucket, dstKey)
-				// 两类错误回退流式，粒度都是逐 key：
-				//   - EntityTooLarge：服务端复制的 5GB 单次上限，流式分段可越；
+				// 逐 key 回退，两条错误的处置不同：
+				//   - EntityTooLarge：服务端复制的 5GB 单次上限。先用 UploadPartCopy
+				//     分段落拷（数据仍不经过本进程，上限提到 5TiB）；它若被拒/不支持，
+				//     再回退流式分段。
 				//   - AccessDenied：CopyObject 用**源账号**凭证签名，目标桶私有时
 				//     必回 403；而流式路径 GET/PUT 各用各凭证本可成功（review R10，
 				//     两账号同一 MinIO/RustFS 是主场景）。不回退则整批 key 全失败。
-				if merr != nil && (s3wrap.IsEntityTooLarge(merr) || s3wrap.HasErrorCode(merr, "AccessDenied")) {
+				switch {
+				case merr == nil:
+				case s3wrap.IsEntityTooLarge(merr):
+					if merr = copyLargeSameEndpoint(ctx, src, dst, srcBucket, k, dstBucket, dstKey); merr != nil {
+						merr = StreamCopy(ctx, src, dst, srcBucket, k, dstBucket, dstKey)
+					}
+				case s3wrap.HasErrorCode(merr, "AccessDenied"):
 					merr = StreamCopy(ctx, src, dst, srcBucket, k, dstBucket, dstKey)
 				}
 			} else {

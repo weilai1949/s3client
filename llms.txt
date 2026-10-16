@@ -52,7 +52,8 @@ make test-all                                                                   
 - [docs/glossary.md](docs/glossary.md)：术语表（S3 领域词 + 本项目自造词）
 - [docs/i18n.md](docs/i18n.md)：国际化——新增一门语言的步骤、文案 key 与覆盖率门禁
 - [docs/accessibility.md](docs/accessibility.md)：可访问性现状与已知限制（**未做正式 WCAG 审计**）
-- [docs/FEATURES.md](docs/FEATURES.md)：已实现 / 已修复能力台账（单一事实来源）；**⚠️ 超大**（>200 KB）——按 §A–§BI 字母章节跳转检索，勿整篇读入
+- [docs/FEATURES.md](docs/FEATURES.md)：已实现 / 已修复能力**索引**（单一事实来源）——§二 按 8 个主题区块逐批一行（字母与明细节一一对应），逐批明细证据见 BATCHES.md
+- [docs/BATCHES.md](docs/BATCHES.md)：已完成批次的逐批明细证据表（FEATURES §二 的明细外移，活台账）；**⚠️ 超大**（>200 KB）——按 § 字母章节跳转检索，勿整篇读入
 - [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)：缺陷 / 外部阻塞 / 技术债（唯一来源）
 - [docs/ROADMAP.md](docs/ROADMAP.md)：版本规划与里程碑
 - [docs/threat-model.md](docs/threat-model.md)：威胁模型与安全边界
@@ -76,6 +77,7 @@ apps/desktop/  Tauri 2 桌面壳（无 IPC）
 docs/          文档（命名二分，与 AGENTS.md / docs/DEVELOPMENT.md §4 三处同步）：
                元文档大写 = `CONFIGURATION.md` `DEPLOYMENT.md` `DEVELOPMENT.md` `OPERATIONS.md`
                `PERFORMANCE.md` `AI_POLICY.md` `AGENT_EVALS.md` `KNOWN_ISSUES.md` `FEATURES.md`
+               `BATCHES.md`
                `ROADMAP.md` `POSTMORTEM_TEMPLATE.md` `THIRD_PARTY_LICENSES.md`（`README.md` 属
                工具固定名 = 本目录落地页）；内容文档小写 = `api.md` `architecture.md` `data-model.md`
                `errors.md` `threat-model.md` `user-guide.md` `compatibility.md` `glossary.md` `i18n.md`

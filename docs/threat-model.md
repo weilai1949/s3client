@@ -160,7 +160,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
   移除了 `unic-*` 传递依赖，告警数由 7 条降到 2 条（0 漏洞不变），
   不用 `.cargo/audit.toml` ignore 清单掩盖；新增可达漏洞会让 CI 红灯。
 - `.trivyignore`：仅策略注释、0 忽略条目（无掩盖性忽略）。
-- dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月）。
+- dependabot：gomod（周）/ npm（周）/ cargo（月）/ actions（月）/ docker（月，`/apps/server` 与 `/deploy/nginx` 各一条——后者跟随 nginx 边缘镜像基座 digest 刷新，2026-10-16 前此规则因 directory 写成 `/` 从未生效）。
 
 ### 5.1 锁定策略（构建输入的不可变性）
 
@@ -235,6 +235,8 @@ Trivy 镜像扫描命令与 CI 同一镜像 digest（见 [`.github/workflows/ci.
   [`../deploy/nginx/Dockerfile`](../deploy/nginx/Dockerfile)（pin 基座 digest + 构建期 `apk upgrade`），
   由 CI 扫描构建产物（实测 0 条）。**运维节奏**：在基座 Alpine 分支 EOL 前抬到下一个受支持分支并重解
   digest（当前 3.24 → 2028-06-01）；若上游将来重建出带补丁的 digest，可评估退回纯 pin。
+  **滚动刷新**：基座 digest 由 Dependabot `docker` 规则（`/deploy/nginx`，月度）跟随上游；digest 不变时
+  Alpine 新补丁只在下一次构建时生效，仓库尚无定时重建（见 KNOWN_ISSUES #91）。
 
 ### 5.5 GitHub 原生供应链 workflow（Scorecard + Dependency Review）
 

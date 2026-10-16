@@ -61,7 +61,8 @@
 
 | 我想…… | 看哪里 | 一句话 |
 |---|---|---|
-| 看已经做了什么 | [`FEATURES.md`](FEATURES.md) | 产品能力总览 + 已完成修复 / 优化的证据台账（**单一事实来源**） |
+| 看已经做了什么 | [`FEATURES.md`](FEATURES.md) | 产品能力总览 + 已完成批次的区块索引（**单一事实来源**，§二 每批一行） |
+| 看某一批次具体改了什么 | [`BATCHES.md`](BATCHES.md) | 逐批明细证据表（`file:line` 改动点 / 门禁实跑数字 / 测试与文档同步；批次字母与索引行一一对应）；[`FEATURES.md`](FEATURES.md) §二 索引的明细外移，**活台账**随新批次追加 |
 | 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，只收**未闭环**项；已闭环编号索引在文件头部，闭环证据在 [`FEATURES.md`](FEATURES.md) / [`../CHANGELOG.md`](../CHANGELOG.md)） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |

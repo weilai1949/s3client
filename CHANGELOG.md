@@ -49,6 +49,50 @@
 
 ## [Unreleased]
 
+### 文档（2026-10-16 `FEATURES.md` §二 收敛为 8 区块索引：102 批明细外移至新元文档 `docs/BATCHES.md`）
+
+- **区块收敛**：§二 从 102 个 `###` 批次长表（约 2580 行）改为 **8 个主题区块 · 逐批一行**（批次 / 日期 / 要点三列，批次字母直链明细锚点）；目录 §二 段与页头「按 A–CX 逐批枚举」同步改为区块名 + 指针，消灭同一清单两处维护。
+- **明细外移**：逐批证据表（`file:line` 改动点、门禁实跑数字、测试与文档同步记录）**原样**搬进新元文档 [`docs/BATCHES.md`](docs/BATCHES.md)——拆分时 102 批的 §A–§CX 字母节标题一字不改，跨批互引（「见 §S」）与全仓历史 `FEATURES §X` 引用不改即准；**活台账**随新批次追加（`archive/` 纪律不变，只约束时点性快照）——同日 ADR-014 批次已按新结构直写 §CY（索引一行 + 明细一节，收口时 103 批），新批次一律照此办理。
+- **体量**：[`docs/FEATURES.md`](docs/FEATURES.md) 428 KB / 2899 行 → **47 KB / 440 行**（<200 KB：[`llms.txt`](llms.txt) 摘要撤「⚠️ 超大」，陈旧的 `§A–§BI` 指法一并改为索引描述）；`BATCHES.md` ≈410 KB 在 `llms.txt` 标注 **⚠️ 超大**（按字母章节跳转检索，勿整篇读入）；导航面只保留「8 个主题区块」这类**结构**描述，逐批计数不进导航面（防追加即漂移——收口时点数只活在各文件页头）。
+- **登记面同 PR 同步**：`AGENTS.md`（命名清单 + 文档入口表）、`docs/DEVELOPMENT.md`（§4 命名约定 + 文档登记表 + 文档对照表）、[`docs/README.md`](docs/README.md) 导航行、根 [`README.md`](README.md)、[`llms.txt`](llms.txt)（目录 + 核心文档）、`docs/en/` 两页。
+- **门禁同步**：[`doc_status_drift_gate_test.go`](apps/server/doc_status_drift_gate_test.go) 断言 1 的历史台账排除面并入 `docs/BATCHES.md`（与同源 FEATURES 同类，含逐字引用修复前原文的行；实测 `§三 #N` 22 处 ≥ 基线 20、同行开放标记 5 处 ≥ 基线 4）；断言 3 扫描面扩到 BATCHES（新增 `docStatusMinBatchClaims = 4`：§P / §Q / §CA 头注 + §CI 行，四行全带时点锚）——**拆分不减保护面**；`cd apps/server && go test . -count=1` 全绿。
+
+### 变更（2026-10-16 跨 endpoint 大对象迁移：无段缓冲直传 + 同端点服务端分段落拷，ADR-014）
+
+- **已知大小的跨 endpoint 复制改为无段缓冲直传**：`service.directMultipartCopy` 用 `io.LimitReader` 把限定长度的流直接交给 `s3wrap.UploadPart`，进程内**不再分配整段缓冲**（原为每段 64MB）。因此段长可随对象放大到 5GiB（`planParts`：`clamp(ceil(size/10000), 64MiB, 5GiB)`），单对象上限由容器内存约束（640GB）提升为 S3 单对象上限（5TiB）。
+- **`s3wrap.UploadPart` 增加显式 `size` 参数**并写入 `Content-Length`：不可 seek 的流式 body 无法让 SDK 自行计算长度（ADR-014 实测，缺失时真实 RustFS 报 `request stream is not seekable`）。
+- **段级重试**：主源流顺序供给各段；某段失败后主源流已不可信，该段及之后的段改用 `GetObjectStream` 的 Range 按偏移重读，单段最多 3 次（`maxPartAttempts`），耗尽即 abort。**不使用 SDK 内置重试**（对不可 seek 的流无效）。
+- **同端点大对象改走 `UploadPartCopy`**：`CopyObject` 报 `EntityTooLarge` 时先以 `service.copyLargeSameEndpoint` 分段落拷（数据不经过本进程，内存与带宽为零），被拒（403）或不支持时仍回退流式；`AccessDenied` 的流式回退语义不变。
+- **`KNOWN_ISSUES` #63 范围收窄**：640GB 上限现仅适用于**源对象大小未知**（chunked、无 `Content-Length`）的路径，该路径保留有缓冲分段与段缓冲池，口径与测试不变。
+- **迁移面板新增限制说明**（`MigratePanel.vue` + i18n `migrate.limitHint`，中英同步）。
+- **测试**：新增 `stream_copy_direct_test.go`（直传/重试/放弃/上限/短源/段长自适应/取消）、`copy_large_test.go`（`UploadPartCopy` 与回退）、`s3wrap/e2e_multipart_copy_test.go`（真实 RustFS 验证流式 `UploadPart` 与 `UploadPartCopy`）。
+
+### 文档（2026-10-16 `FEATURES.md` 去「未完成」口气：只留完成项，5 处残留叙述改准或改指针）
+
+> 起因：FEATURES 是**已完成**台账，正文里却散着 5 处会被读成「还有活没干」的叙述。逐条复核后**没有一条是真正未完成的**，故**不新增任何待办条目**（[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 顶部规则是「只收录尚未闭环的项」，照搬会造假待办），只把叙述改准。
+
+- **§J「未纳入本轮」三条 → 已全部处置**（原文停留在 2026-09-16 时点）：① **Argon2 `t=1 → t≥2`** 已随 `S3C3` 信封格式落地——KDF 参数写入文件头、当前写入 `t=2`（`store/crypto.go` 的 `argonTimeV3` / `currentParams` / `kdfParamsValid`），`S3C2` 仅只读兼容、旧库免手工迁移；② `/api/health` 的 `version` 保留并收紧为**仅有效 API token 可见**（`handler/health.go` 的 `hasValidAPIToken` 分支，口径 [`docs/threat-model.md`](docs/threat-model.md) §6.1）；③ compose 默认改 encrypted **维持现状**——生产 compose 本就是 `S3C_STORE_DRIVER: "encrypted"`，base 默认 `sqlite` 且明文须 `S3C_ALLOW_PLAINTEXT_STORE=1` 显式放行（§6.2）。
+- **§W / §X / §Y / §Z 四处「残留 / 仍未机械覆盖」→ 改称「门禁的刻意断言范围（非待办）」**：这些是各门禁文件头已声明的断言边界（`openapi_examples_gate_test.go` / `internal/handler/openapi_query_params_test.go` / `apps/web/src/deadcode_gate.test.ts`），不是待办清单，原措辞会被读成「还有缺口要补」；现改为指向门禁文件头、不重复维护。
+- **顺带修掉 §Z 一处事实错误**：原文写「类型导出由 `vue-tsc` 承担」，而 `deadcode_gate.test.ts` 文件头自己标着该说法是**误判**（`vue-tsc` 不报未使用导出），2026-10-09 评审 R7 起已由该文件的「类型导出半边」覆盖。
+- **§CR 的「真协议 E2E 留待补跑」→ 标注已闭环**：2026-10-10 §三 全量复测的 `make e2e-real` **5 passed** + `S3CLIENT_E2E=1 … -run 'TestE2E'` **7/7 PASS** 已覆盖该批改动，2026-10-16 R3a 复核再跑 **5/5 PASS**。
+
+### 修复（2026-10-16 流式复制：超大对象分段路径丢失用户元数据 + 已知超限提前拒绝）
+
+- **用户元数据不再在分段复制中丢失**：跨 endpoint 复制超过 5GB 的对象走分段路径时，`x-amz-meta-*` 此前在 `CreateMultipartUpload` 处被静默丢弃。现经 `s3wrap.CreateMultipartUploadWithMeta` 随初始化请求带到目标端；空 body 的分段回退 PUT 同样保留元数据。
+- **已知大小超出段数上限时提前拒绝**：`StreamCopy` 在建立分段上传**之前**比较 `size` 与 `10000 × 64MB`，超限直接返回原有的 part-limit 错误，不再先白传完全部段才在第 N+1 段超限并 abort。上限本身不变（KNOWN_ISSUES #63 维持现状）。
+
+### 文档（2026-10-16 `KNOWN_ISSUES.md` 去「迁移说明」：不再叙述本文件的编辑史）
+
+- **删除「迁移说明」整段**（文件尾）：原为 `docs/todolist.md`、2026-09-24 `git mv` 更名、2026-10-16 精简掉了哪两节——都是**本文件自身的编辑史**，对读者无操作价值（README 硬约束、门禁、链接均不依赖它，全仓唯一命中即本段自身）。文件名沿革中**确实有用**的那一点（旧写法 `todolist #N`）已在页头编号约定里保留，`docs/ROADMAP.md` R5 等仍在用的 `todolist #25` 旧引用照旧可解析。
+- **页头一并收敛**：`最后更新` 行去掉「本文件按『只留未闭环项』精简，改为上面的编号索引 + 下表两个未闭环项」这类自述，编号约定压到 2 行。**保留**已闭环编号索引、空号与迁出说明——它们是**引用解析契约**（`#40` / `#42–#44` 空号、`#47–#59` 迁至 ROADMAP）而非变更史：删了会让「编号不连续」被误读成漏登记，或让 `apps/server/` 里 `KNOWN_ISSUES #N` 的旧引用无处回溯。
+- **纯文档改动**，无代码 / 门禁影响：`apps/server/doc_status_drift_gate_test.go` 断言 4（页头时点声明不得早于文内时点锚）实跑仍绿。
+
+### 修复（2026-10-16 nginx 基座 digest 滚动刷新：Dependabot `docker` 规则静默失效）
+
+- **缺陷**：`.github/dependabot.yml` 的 `docker` 规则 `directory: /`，仓库根没有 Dockerfile，该规则**从未生效**——nginx 边缘镜像（[`deploy/nginx/Dockerfile`](deploy/nginx/Dockerfile)）与 server 镜像的基座 digest 都不会被自动刷新。同时门禁只校验「目录存在」，对此无感知。
+- **修复**：`docker` 规则改为 `/apps/server` 与 `/deploy/nginx` 各一条（月度）；`dependabot_gate_test.go` 的 `docker` 清单改为要求 `Dockerfile`，新增 `TestDependabotDockerCoversEveryDockerfile` 钉住两个 Dockerfile 目录必须被覆盖。变异验证：把 `docker` 规则删回 `/` → 两条门禁红灯。
+- **仍开放**（[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) #91）：Dependabot 只在 digest 变化时开 PR，尚无定时重建；Alpine 索引在 digest 不变时出的新补丁仍需等下一次构建。
+
 ### 文档（2026-10-16 `code-review-2026-10-15` 归档：处置全部闭环 + R3a 人类复核通过）
 
 - **归档**：`docs/code-review-2026-10-15.md` 按「归档四步」`git mv` 入 [`docs/archive/code-review-2026-10-15.md`](docs/archive/code-review-2026-10-15.md)，2026-10-16 冻结。处置状态表 **R1 / R4 / R5 · R2a / R2b / R3a · 配置边界（CSP 启动期校验）· 限流可观测 · R6–R10（含两项低风险加固）全部闭环**。

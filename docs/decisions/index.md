@@ -27,6 +27,7 @@
 | [ADR-011](0011-single-instance-no-ha.md) | 单实例部署、无 HA 路径 | Accepted（已采纳） | 2026-09-19（回溯） | — |
 | [ADR-012](0012-rest-no-version-prefix.md) | REST 契约无版本前缀，破坏性变更靠发布节奏缓冲 | Accepted（已采纳） | 2026-09-18（回溯） | — |
 | [ADR-013](0013-zero-dep-otlp-tracing.md) | 零第三方依赖自研 OTLP tracing（W3C traceparent + OTLP/HTTP JSON，默认关闭） | Accepted（已采纳） | 2026-10-08 | — |
+| [ADR-014](0014-stream-copy-no-part-buffer.md) | 跨 endpoint 流式复制改为无段缓冲直传（显式长度 + 段级 Range 重试，段大小自适应） | Proposed（待评审） | 2026-10-16 | — |
 
 > 「日期（决策）」是决策成立的时间；`（回溯）` 表示该日期是事后补记，决策自项目初版沿用。
 > 「最新更新」列指向篇内 `## Update（…）` 小节——本列的每一条都必须在对应 ADR 里真实存在

@@ -22,8 +22,16 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+  # docker 规则的 directory 必须指向 Dockerfile 所在目录（仓库根没有 Dockerfile，写 `/` 会静默失效）。
+  # 两个目录各一条：server 镜像（多阶段）与 nginx 边缘镜像（P-4，基座 digest 滚动刷新）。
+  # 覆盖关系由 dependabot_gate_test.go::TestDependabotDockerCoversEveryDockerfile 钉住。
   - package-ecosystem: docker
-    directory: /
+    directory: /apps/server
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+  - package-ecosystem: docker
+    directory: /deploy/nginx
     schedule:
       interval: monthly
     open-pull-requests-limit: 3

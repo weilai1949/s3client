@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -20,32 +22,87 @@ import (
 // ---- 多端点 fake S3：支持 GET/PUT/COPY/multipart 全套 + 注入失败 ----
 
 type svcFake struct {
-	mu      sync.Mutex
-	src     map[string][]byte // 源端对象
-	dst     map[string][]byte // 目标端对象
-	dstMeta map[string]string // 目标端 PUT 元数据头
-	dstCT   map[string]string // 目标端 PUT content-type
-	copies  []string          // COPY 请求的 CopySource
-	aborts  int               // AbortMultipartUpload 次数
-	comps   int               // CompleteMultipartUpload 次数
-	parts   int               // UploadPart 次数
-	created chan struct{}     // CreateMultipartUpload 已返回
+	mu         sync.Mutex
+	src        map[string][]byte // 源端对象
+	dst        map[string][]byte // 目标端对象（分段上传完成后由各段拼接而成）
+	dstMeta    map[string]string // 目标端 PUT 元数据头
+	dstCT      map[string]string // 目标端 PUT content-type
+	copies     []string          // COPY 请求的 CopySource
+	aborts     int               // AbortMultipartUpload 次数
+	comps      int               // CompleteMultipartUpload 次数
+	parts      int               // UploadPart 次数
+	creates    int               // CreateMultipartUpload 次数
+	createMeta string            // CreateMultipartUpload 请求携带的 x-amz-meta-color
+	gets       int               // 源端 GET 次数（不含 HEAD / COPY）
+	ranges     []string          // 源端 GET 携带的 Range 头，按请求顺序
+	copyParts  int               // UploadPartCopy 次数
+	copyRanges []string          // UploadPartCopy 的 x-amz-copy-source-range，按请求顺序
+	partData   map[int32][]byte  // 已上传分段内容（UploadPart / UploadPartCopy），完成时按段号拼接
+	created    chan struct{}     // CreateMultipartUpload 已返回
 	// 注入点
-	failCreate   bool  // POST ?uploads → 403
-	failPart     bool  // UploadPart → 500
-	failComplete bool  // Complete → 500
-	failGet      bool  // GET → 404
-	copyDenied   bool  // COPY → 403 AccessDenied（目标桶私有、跨账号服务端复制被拒）
-	copyTooLarge bool  // COPY → EntityTooLarge
-	lieLength    int64 // GET 返回伪 Content-Length（实际 body 更小）
-	noLength     bool  // GET 不带 Content-Length
-	srcSrv       *httptest.Server
-	dstSrv       *httptest.Server
+	failCreate     bool   // POST ?uploads → 403
+	failPart       bool   // UploadPart → 500（每次都失败）
+	failParts      int    // UploadPart → 500 的次数（前 N 次失败，之后成功）
+	failComplete   bool   // Complete → 500
+	failGet        bool   // GET → 404
+	copyDenied     bool   // COPY → 403 AccessDenied（目标桶私有、跨账号服务端复制被拒）
+	copyTooLarge   bool   // COPY → EntityTooLarge
+	copyPartDenied bool   // UploadPartCopy → 403 AccessDenied
+	failRangeGet   bool   // 带 Range 头的 GET → 500（主流失效后的重读失败）
+	failHead       bool   // HEAD → 404
+	onPart         func() // 每次段上传（UploadPart / UploadPartCopy）前调用一次
+	onRangeGet     func() // 每次带 Range 的 GET 前调用一次（用于在重读时取消 ctx）
+	lieLength      int64  // GET / HEAD 返回伪 Content-Length（实际 body 更小）
+	noLength       bool   // GET 不带 Content-Length
+	srcSrv         *httptest.Server
+	dstSrv         *httptest.Server
+}
+
+// declared 返回对外声明的对象长度（lieLength 注入时以它为准）。
+func (f *svcFake) declared(n int) int {
+	if f.lieLength > 0 {
+		return int(f.lieLength)
+	}
+	return n
+}
+
+// parseByteRange 解析 "bytes=a-b"（闭区间）。
+func parseByteRange(h string) (start, end int64, ok bool) {
+	if _, err := fmt.Sscanf(h, "bytes=%d-%d", &start, &end); err != nil {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+// sliceRange 按闭区间截取；越界按 S3 语义截到末尾，起点越界返回空。
+func sliceRange(body []byte, start, end int64) []byte {
+	n := int64(len(body))
+	if start >= n {
+		return nil
+	}
+	if end >= n {
+		end = n - 1
+	}
+	return body[start : end+1]
+}
+
+// assemble 按段号升序拼接已上传分段。
+func assemble(parts map[int32][]byte) []byte {
+	nums := make([]int, 0, len(parts))
+	for n := range parts {
+		nums = append(nums, int(n))
+	}
+	sort.Ints(nums)
+	var out []byte
+	for _, n := range nums {
+		out = append(out, parts[int32(n)]...)
+	}
+	return out
 }
 
 func newSvcFake(t *testing.T) *svcFake {
 	t.Helper()
-	f := &svcFake{src: map[string][]byte{}, dst: map[string][]byte{}, dstMeta: map[string]string{}, dstCT: map[string]string{}, created: make(chan struct{}, 4)}
+	f := &svcFake{src: map[string][]byte{}, dst: map[string][]byte{}, dstMeta: map[string]string{}, dstCT: map[string]string{}, partData: map[int32][]byte{}, created: make(chan struct{}, 4)}
 	mk := func(end func(w http.ResponseWriter, r *http.Request) bool) *httptest.Server {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if end(w, r) {
@@ -59,15 +116,55 @@ func newSvcFake(t *testing.T) *svcFake {
 	srcEnd := func(w http.ResponseWriter, r *http.Request) bool {
 		key := strings.TrimPrefix(r.URL.Path, "/bkt/")
 		switch r.Method {
+		case http.MethodHead:
+			if f.failHead {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>`))
+				return true
+			}
+			f.mu.Lock()
+			n := len(f.src[key])
+			f.mu.Unlock()
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", f.declared(n)))
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("x-amz-meta-color", "red")
+			w.WriteHeader(http.StatusOK)
+			return true
 		case http.MethodGet:
 			if f.failGet {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>`))
 				return true
 			}
+			rng := r.Header.Get("Range")
+			if rng != "" && f.onRangeGet != nil {
+				f.onRangeGet()
+			}
+			if rng != "" && f.failRangeGet {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>InternalError</Code></Error>`))
+				return true
+			}
 			f.mu.Lock()
+			f.gets++
+			if rng != "" {
+				f.ranges = append(f.ranges, rng)
+			}
 			body := f.src[key]
 			f.mu.Unlock()
+			if rng != "" {
+				start, end, ok := parseByteRange(rng)
+				if !ok {
+					return false
+				}
+				part := sliceRange(body, start, end)
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(part)))
+				w.Header().Set("Content-Type", "text/plain")
+				w.Header().Set("x-amz-meta-color", "red")
+				w.WriteHeader(http.StatusPartialContent)
+				_, _ = w.Write(part)
+				return true
+			}
 			if f.lieLength > 0 {
 				w.Header().Set("Content-Length", fmt.Sprintf("%d", f.lieLength))
 			} else if f.noLength {
@@ -113,15 +210,65 @@ func newSvcFake(t *testing.T) *svcFake {
 				w.WriteHeader(http.StatusForbidden)
 				return true
 			}
-			f.created <- struct{}{}
+			f.mu.Lock()
+			f.creates++
+			f.createMeta = r.Header.Get("x-amz-meta-color")
+			f.partData = map[int32][]byte{}
+			f.mu.Unlock()
+			select {
+			case f.created <- struct{}{}:
+			default:
+			}
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`<?xml version="1.0"?><InitiateMultipartUploadResult><UploadId>upid-1</UploadId></InitiateMultipartUploadResult>`))
 			return true
+		case r.Method == http.MethodPut && q.Get("uploadId") != "" && r.Header.Get("X-Amz-Copy-Source") != "":
+			pn, _ := strconv.Atoi(q.Get("partNumber"))
+			srcKey := ""
+			if u, err := url.PathUnescape(r.Header.Get("X-Amz-Copy-Source")); err == nil {
+				srcKey = strings.TrimPrefix(u, "bkt/")
+			}
+			rng := r.Header.Get("X-Amz-Copy-Source-Range")
+			start, end, _ := parseByteRange(rng)
+			f.mu.Lock()
+			f.copyParts++
+			f.copyRanges = append(f.copyRanges, rng)
+			onPart := f.onPart
+			denied := f.copyPartDenied
+			if !denied {
+				f.partData[int32(pn)] = sliceRange(f.src[srcKey], start, end)
+			}
+			f.mu.Unlock()
+			if onPart != nil {
+				onPart()
+			}
+			if denied {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>`))
+				return true
+			}
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`<?xml version="1.0"?><CopyPartResult><ETag>"cp"</ETag></CopyPartResult>`))
+			return true
 		case r.Method == http.MethodPut && q.Get("uploadId") != "" && q.Get("partNumber") != "":
+			body, _ := io.ReadAll(r.Body)
+			pn, _ := strconv.Atoi(q.Get("partNumber"))
 			f.mu.Lock()
 			f.parts++
+			fail := f.failPart || f.failParts > 0
+			if f.failParts > 0 {
+				f.failParts--
+			}
+			if !fail {
+				f.partData[int32(pn)] = body
+			}
+			onPart := f.onPart
 			f.mu.Unlock()
-			if f.failPart {
+			if onPart != nil {
+				onPart()
+			}
+			if fail {
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`<?xml version="1.0"?><Error><Code>InternalError</Code></Error>`))
 				return true
@@ -132,8 +279,13 @@ func newSvcFake(t *testing.T) *svcFake {
 		case r.Method == http.MethodPost && q.Get("uploadId") != "":
 			f.mu.Lock()
 			f.comps++
+			fail := f.failComplete
+			if !fail {
+				f.dst[key] = assemble(f.partData)
+			}
+			f.partData = map[int32][]byte{}
 			f.mu.Unlock()
-			if f.failComplete {
+			if fail {
 				w.WriteHeader(http.StatusInternalServerError)
 				return true
 			}
@@ -143,6 +295,7 @@ func newSvcFake(t *testing.T) *svcFake {
 		case r.Method == http.MethodDelete && q.Get("uploadId") != "":
 			f.mu.Lock()
 			f.aborts++
+			f.partData = map[int32][]byte{}
 			f.mu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 			return true
@@ -195,15 +348,15 @@ func TestStreamCopySrcError(t *testing.T) {
 
 // TestStreamCopyMultipartPaths 伪 Content-Length / 无 Content-Length 都走 multipart。
 func TestStreamCopyMultipartPaths(t *testing.T) {
-	t.Run("declared oversize", func(t *testing.T) {
+	t.Run("declared oversize but short body fails", func(t *testing.T) {
 		f := newSvcFake(t)
 		f.lieLength = 6_000_000_000
 		f.src["big.bin"] = []byte("tiny")
-		if err := StreamCopy(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "big.bin", "dst", "big.bin"); err != nil {
-			t.Fatalf("StreamCopy: %v", err)
+		if err := StreamCopy(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "big.bin", "dst", "big.bin"); err == nil {
+			t.Fatal("声明 6GB 而实际 4B：必须失败，不得静默产生残缺对象")
 		}
-		if f.comps != 1 || f.parts != 1 || f.aborts != 0 {
-			t.Fatalf("comps=%d parts=%d aborts=%d", f.comps, f.parts, f.aborts)
+		if f.comps != 0 || f.aborts != 1 {
+			t.Fatalf("comps=%d aborts=%d, want 0/1", f.comps, f.aborts)
 		}
 	})
 	t.Run("unknown size", func(t *testing.T) {
@@ -225,7 +378,7 @@ func TestMultipartStreamCopyMultiParts(t *testing.T) {
 	t.Cleanup(func() { multipartPartSize = old })
 	f := newSvcFake(t)
 	body := strings.Repeat("01234567", 3) // 24B / 8B = 3 段
-	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader(body)); err != nil {
+	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", nil, strings.NewReader(body)); err != nil {
 		t.Fatalf("MultipartStreamCopy: %v", err)
 	}
 	if f.parts != 3 || f.comps != 1 || f.aborts != 0 {
@@ -235,7 +388,7 @@ func TestMultipartStreamCopyMultiParts(t *testing.T) {
 
 func TestMultipartStreamCopyEmptyBodyFallsBackToPut(t *testing.T) {
 	f := newSvcFake(t)
-	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "e.bin", "", strings.NewReader("")); err != nil {
+	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "e.bin", "", nil, strings.NewReader("")); err != nil {
 		t.Fatalf("MultipartStreamCopy: %v", err)
 	}
 	if len(f.dst["e.bin"]) != 0 || f.comps != 0 {
@@ -247,14 +400,14 @@ func TestMultipartStreamCopyFailures(t *testing.T) {
 	t.Run("create fails", func(t *testing.T) {
 		f := newSvcFake(t)
 		f.failCreate = true
-		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", strings.NewReader("d")); err == nil {
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", nil, strings.NewReader("d")); err == nil {
 			t.Fatal("expected create error")
 		}
 	})
 	t.Run("part fails aborts", func(t *testing.T) {
 		f := newSvcFake(t)
 		f.failPart = true
-		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", strings.NewReader("d")); err == nil {
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", nil, strings.NewReader("d")); err == nil {
 			t.Fatal("expected part error")
 		}
 		if f.aborts != 1 {
@@ -264,7 +417,7 @@ func TestMultipartStreamCopyFailures(t *testing.T) {
 	t.Run("complete fails aborts", func(t *testing.T) {
 		f := newSvcFake(t)
 		f.failComplete = true
-		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", strings.NewReader("d")); err == nil {
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", nil, strings.NewReader("d")); err == nil {
 			t.Fatal("expected complete error")
 		}
 		if f.aborts != 1 {
@@ -274,7 +427,7 @@ func TestMultipartStreamCopyFailures(t *testing.T) {
 	t.Run("read error aborts", func(t *testing.T) {
 		f := newSvcFake(t)
 		rerr := errors.New("read boom")
-		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", io.MultiReader(strings.NewReader("ab"), errReader{rerr})); err == nil {
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "x", "", nil, io.MultiReader(strings.NewReader("ab"), errReader{rerr})); err == nil {
 			t.Fatal("expected read error")
 		}
 		if f.aborts != 1 {
@@ -285,7 +438,7 @@ func TestMultipartStreamCopyFailures(t *testing.T) {
 		f := newSvcFake(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		// create 无竞态地成功；首次 Read 时才取消 → 循环内 readErr 分支命中 abort
-		err := MultipartStreamCopy(ctx, f.dstClient(t), "dst", "x", "", &cancelReader{ctx: ctx, cancel: cancel})
+		err := MultipartStreamCopy(ctx, f.dstClient(t), "dst", "x", "", nil, &cancelReader{ctx: ctx, cancel: cancel})
 		if err == nil {
 			t.Fatal("expected ctx error")
 		}
@@ -328,19 +481,6 @@ func TestMigrateKeysSameEndpointCopies(t *testing.T) {
 	// 同端点迁移 = 源端点服务端 COPY（目标桶写在 CopyObject 请求体内），不走 GET/PUT。
 	if len(f.copies) != 2 || !strings.Contains(f.copies[0], "bkt%2Fk") {
 		t.Fatalf("copies = %v", f.copies)
-	}
-}
-
-func TestMigrateKeysEntityTooLargeFallsBackToStream(t *testing.T) {
-	f := newSvcFake(t)
-	f.copyTooLarge = true
-	f.src["big"] = []byte("payload")
-	out := MigrateKeys(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "dst", []string{"big"}, "", true, 1, nil)
-	if out.OK != 1 {
-		t.Fatalf("fallback copy should succeed: %+v", out)
-	}
-	if string(f.dst["big"]) != "payload" {
-		t.Fatalf("stream fallback body = %q", f.dst["big"])
 	}
 }
 

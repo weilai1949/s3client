@@ -13,8 +13,9 @@
 #   docker pull nginx:1.30.6-alpine
 #   docker inspect --format '{{index .RepoDigests 0}}' nginx:1.30.6-alpine
 #   -> nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5
-# 升级节奏：基座 Alpine 分支 EOL（3.24 → 2028-06-01）前抬到下一个受支持分支并重解 digest；
-# `apk upgrade` 的补丁面来自构建当时的 v3.24 索引。
+# 升级节奏：基座 digest 由 Dependabot `docker` 规则（`.github/dependabot.yml`，`/deploy/nginx`，月度）
+# 跟随上游刷新，PR 触发 CI 重建 + Trivy 扫描；基座 Alpine 分支 EOL（3.24 → 2028-06-01）前抬到下一个
+# 受支持分支并重解 digest。`apk upgrade` 的补丁面来自构建当时的 v3.24 索引。
 #
 # 门禁：apps/server/repo_infra_gate_test.go::TestNginxEdgeDockerfilePinsBaseAndAppliesPatches
 #   （digest pin + `apk upgrade` 缺一即红）；compose 侧一致性见

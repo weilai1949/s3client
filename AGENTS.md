@@ -39,6 +39,7 @@ make e2e-real
 | 问题（缺陷 / 外部阻塞 / 技术债，唯一来源） | [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) |
 | 功能候选 / 版本级规划（唯一来源） | [`docs/ROADMAP.md`](docs/ROADMAP.md) §三 |
 | 已实现 / 已修复台账 | [`docs/FEATURES.md`](docs/FEATURES.md) |
+| 某批次具体改了什么（逐批 `file:line` 证据 / 门禁实跑数字） | [`docs/BATCHES.md`](docs/BATCHES.md) |
 | 每个 PR 都要补发版记录（`[Unreleased]`） | [`CHANGELOG.md`](CHANGELOG.md) |
 | 架构与关键决策 | [`docs/architecture.md`](docs/architecture.md) · [`docs/decisions/`](docs/decisions/index.md) |
 | 提交规范 / 环境搭建 / 发版流程 | [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) |
@@ -57,7 +58,7 @@ make e2e-real
 
 - **根目录只放四个约定文件**：`README.md`（社区约定）、`AGENTS.md`（工具加载器**硬性要求**在根目录）、`CHANGELOG.md`（Keep a Changelog 约定名，主流 changelog 工具默认 `./CHANGELOG.md`）、`llms.txt`（[llms.txt 约定](https://llmstxt.org/)固定查 `/llms.txt`，2026-09-29 登记——LLM 导航索引，非规范正文）。另有两个**工具固定名**文件按 GitHub 约定留在根目录：`LICENSE`（许可证）与 `CITATION.cff`（引用元数据——GitHub 的 cite 功能**只认根目录**，2026-09-30 登记），不计入上面「四个约定文件」。**社区健康文件**（`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`）放 `.github/`——GitHub 对这类文件的查找优先级是 `.github/` > 根目录 > `docs/`，放最高优先级位置可避免被将来的副本静默顶掉；其余文档统一放 `docs/`。
 - **`docs/` 下按性质二分命名**（细则与沿革见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) 命名约定）：
-  - **大写** = 工具固定名（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`SUPPORT.md`、`GOVERNANCE.md`、`LICENSE`、`CODEOWNERS`、`CITATION.cff`）+ `docs/` 下的**仓库元文档**（仓库自身如何运作）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。其中 `docs/README.md` 属「工具固定名」一类的特殊情形——它是 GitHub 的 **docs 目录落地页**，同时是人类导航 SSOT（每个 docs 文档都必须能从它到达，见 `doc_index_gate_test.go`）。
+  - **大写** = 工具固定名（`README.md`、`AGENTS.md`、`CHANGELOG.md`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`SUPPORT.md`、`GOVERNANCE.md`、`LICENSE`、`CODEOWNERS`、`CITATION.cff`）+ `docs/` 下的**仓库元文档**（仓库自身如何运作）：`CONFIGURATION.md`、`DEPLOYMENT.md`、`DEVELOPMENT.md`、`OPERATIONS.md`、`PERFORMANCE.md`、`AI_POLICY.md`、`AGENT_EVALS.md`、`KNOWN_ISSUES.md`、`FEATURES.md`、`BATCHES.md`、`ROADMAP.md`、`POSTMORTEM_TEMPLATE.md`、`THIRD_PARTY_LICENSES.md`。其中 `docs/README.md` 属「工具固定名」一类的特殊情形——它是 GitHub 的 **docs 目录落地页**，同时是人类导航 SSOT（每个 docs 文档都必须能从它到达，见 `doc_index_gate_test.go`）。
   - **小写 kebab-case** = `docs/` 下的**产品内容文档**（产品是什么 / 怎么用）：`api.md`、`architecture.md`、`data-model.md`、`errors.md`、`threat-model.md`、`user-guide.md`、`compatibility.md`、`glossary.md`、`i18n.md`、`accessibility.md`，以及 `api/`（机器可读契约）、`archive/`、`decisions/`、`en/`（英文快照）下全部文件。**时点性批次交接快照**同用小写（先例 `assessment.md`、`handoff-20260930.md`、`handoff-20261010.md`，结论绑定日期、批次收口后归档入 `archive/`——三者均已归档）；时点性**代码评审快照**同样小写（先例 `code-review-2026-09-24.md`、`code-review-2026-10-09.md`，闭环后归档入 `archive/`——三者均已归档；`code-review-2026-10-15.md` 已于 2026-10-16 归档）；时点性**子树评审快照**同样小写（首例 `web-review-2026-10-12.md`、`desktop-review-2026-10-12.md`、`server-review-2026-10-12.md` 均已归档入 `archive/`）；时点性**文档复盘快照**同样小写（先例 `docs-review-2026-10-12.md`，结论绑定复盘日期、建议项处置后归档入 `archive/`——已归档）；时点性**渗透测试 / 对抗性验证快照**同样小写（首例 `pentest-2026-10-15.md`，结论绑定测试日期、发现闭环后归档入 `archive/`——该首例已于 2026-10-16 归档，P-1..P-15 全部闭环）。
   - 新增 `docs/` 文档先判性质再起名；**变更任何大写文件名必须同 PR 同步本处与该命名约定两处**（防分叉）。
 - **任何两个路径不得仅大小写不同**——macOS / Windows 的大小写不敏感文件系统会让它们互相覆盖、检出即丢内容。

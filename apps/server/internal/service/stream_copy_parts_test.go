@@ -30,16 +30,16 @@ func TestMultipartStreamCopyPartSizeIs64MB(t *testing.T) {
 // shrinkParts 把段上限/段大小临时改成小值，用小数据精确覆盖段号边界。
 func shrinkParts(t *testing.T, limit int32) {
 	t.Helper()
-	oldLimit, oldSize := maxMultipartParts, multipartPartSize
-	maxMultipartParts, multipartPartSize = limit, 1
-	t.Cleanup(func() { maxMultipartParts, multipartPartSize = oldLimit, oldSize })
+	oldLimit, oldSize, oldMax := maxMultipartParts, multipartPartSize, maxPartBytes
+	maxMultipartParts, multipartPartSize, maxPartBytes = limit, 1, 1
+	t.Cleanup(func() { maxMultipartParts, multipartPartSize, maxPartBytes = oldLimit, oldSize, oldMax })
 }
 
 // TestMultipartStreamCopyAcceptsExactlyMaxParts 段号等于上限的那一段是合法的，必须完成上传。
 func TestMultipartStreamCopyAcceptsExactlyMaxParts(t *testing.T) {
 	shrinkParts(t, 3)
 	f := newSvcFake(t)
-	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("xxx")); err != nil {
+	if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", nil, strings.NewReader("xxx")); err != nil {
 		t.Fatalf("MultipartStreamCopy(恰好 3 段): %v", err)
 	}
 	if f.parts != 3 || f.comps != 1 || f.aborts != 0 {
@@ -51,7 +51,7 @@ func TestMultipartStreamCopyAcceptsExactlyMaxParts(t *testing.T) {
 func TestMultipartStreamCopyRejectsPartOverLimit(t *testing.T) {
 	shrinkParts(t, 3)
 	f := newSvcFake(t)
-	err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("xxxx"))
+	err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", nil, strings.NewReader("xxxx"))
 	if err == nil || !strings.Contains(err.Error(), "3 parts") {
 		t.Fatalf("err = %v, want part-limit error", err)
 	}
@@ -73,7 +73,7 @@ func TestMultipartStreamCopyByteCeiling(t *testing.T) {
 
 	t.Run("exactly ceiling passes", func(t *testing.T) {
 		f := newSvcFake(t)
-		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("12345678")); err != nil {
+		if err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", nil, strings.NewReader("12345678")); err != nil {
 			t.Fatalf("8B / 4B = 正好 2 段应完成: %v", err)
 		}
 		if f.parts != 2 || f.comps != 1 || f.aborts != 0 {
@@ -83,7 +83,7 @@ func TestMultipartStreamCopyByteCeiling(t *testing.T) {
 
 	t.Run("one byte over ceiling rejected", func(t *testing.T) {
 		f := newSvcFake(t)
-		err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", strings.NewReader("123456789"))
+		err := MultipartStreamCopy(context.Background(), f.dstClient(t), "dst", "m.bin", "text/plain", nil, strings.NewReader("123456789"))
 		if err == nil || !strings.Contains(err.Error(), "2 parts x 4 bytes") {
 			t.Fatalf("err = %v, want limit error carrying 段数×段大小", err)
 		}
@@ -91,4 +91,20 @@ func TestMultipartStreamCopyByteCeiling(t *testing.T) {
 			t.Fatalf("parts=%d aborts=%d, want 2/1（第 3 段不应发出，且必须 abort）", f.parts, f.aborts)
 		}
 	})
+}
+
+// TestStreamCopyRejectsKnownOversizeBeforeCreate 已知大小超出段数上限时，必须在建立分段上传之前拒绝：
+// 不创建 upload、不发出任何段（此前会先白传到第 N+1 段才发现超限）。
+func TestStreamCopyRejectsKnownOversizeBeforeCreate(t *testing.T) {
+	shrinkParts(t, 3)
+	f := newSvcFake(t)
+	f.lieLength = 6_000_000_000 // 声明大小 > MaxSinglePutBytes，走分段路径；上限 3B 远小于它
+	f.src["big.bin"] = []byte("tiny")
+	err := StreamCopy(context.Background(), f.srcClient(t), f.dstClient(t), "bkt", "big.bin", "dst", "big.bin")
+	if err == nil || !strings.Contains(err.Error(), "3 parts") {
+		t.Fatalf("err = %v, want part-limit error", err)
+	}
+	if f.creates != 0 || f.parts != 0 || f.aborts != 0 {
+		t.Fatalf("creates=%d parts=%d aborts=%d, want 0/0/0（建立前即拒绝）", f.creates, f.parts, f.aborts)
+	}
 }

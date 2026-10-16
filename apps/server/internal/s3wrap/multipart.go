@@ -2,7 +2,9 @@ package s3wrap
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,12 +21,21 @@ type UploadPartSpec struct {
 
 // CreateMultipartUpload 初始化分段上传，返回 UploadID。
 func (c *Client) CreateMultipartUpload(ctx context.Context, bucket, key, contentType string) (string, error) {
+	return c.CreateMultipartUploadWithMeta(ctx, bucket, key, contentType, nil)
+}
+
+// CreateMultipartUploadWithMeta 初始化分段上传并携带用户元数据（x-amz-meta-*）。
+// 分段复制超大对象时必须走这里，否则元数据在完成分段上传后会丢失。
+func (c *Client) CreateMultipartUploadWithMeta(ctx context.Context, bucket, key, contentType string, metadata map[string]string) (string, error) {
 	in := &s3.CreateMultipartUploadInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}
 	if contentType != "" {
 		in.ContentType = aws.String(contentType)
+	}
+	if len(metadata) > 0 {
+		in.Metadata = metadata
 	}
 	out, err := c.s3.CreateMultipartUpload(ctx, in)
 	if err != nil {
@@ -33,19 +44,43 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, bucket, key, content
 	return derefString(out.UploadId), nil
 }
 
-// UploadPart 服务端上传单个分段（跨 endpoint 大文件迁移），返回 ETag。
-func (c *Client) UploadPart(ctx context.Context, bucket, key, uploadID string, partNumber int32, body io.Reader) (string, error) {
+// UploadPart 上传单个分段（跨 endpoint 大文件迁移），返回 ETag。
+//
+// size 必须是 body 的确切字节数，并显式写入 Content-Length：流式 body 不可 seek，
+// SDK 无法自行计算长度（缺失时请求失败，ADR-014 实测）。
+func (c *Client) UploadPart(ctx context.Context, bucket, key, uploadID string, partNumber int32, body io.Reader, size int64) (string, error) {
 	out, err := c.s3.UploadPart(ctx, &s3.UploadPartInput{
-		Bucket:     aws.String(bucket),
-		Key:        aws.String(key),
-		UploadId:   aws.String(uploadID),
-		PartNumber: aws.Int32(partNumber),
-		Body:       body,
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(key),
+		UploadId:      aws.String(uploadID),
+		PartNumber:    aws.Int32(partNumber),
+		Body:          body,
+		ContentLength: aws.Int64(size),
 	})
 	if err != nil {
 		return "", err
 	}
 	return strings.Trim(derefString(out.ETag), `"`), nil
+}
+
+// UploadPartCopy 服务端分段复制：把源对象 [offset, offset+length) 直接拷为一个分段，
+// 数据不经过本进程。返回 ETag。源与目标的凭证都需要相应权限（与 CopyObject 同口径）。
+func (c *Client) UploadPartCopy(ctx context.Context, srcBucket, srcKey, dstBucket, dstKey, uploadID string, partNumber int32, offset, length int64) (string, error) {
+	out, err := c.s3.UploadPartCopy(ctx, &s3.UploadPartCopyInput{
+		Bucket:          aws.String(dstBucket),
+		Key:             aws.String(dstKey),
+		UploadId:        aws.String(uploadID),
+		PartNumber:      aws.Int32(partNumber),
+		CopySource:      aws.String(url.PathEscape(srcBucket + "/" + srcKey)),
+		CopySourceRange: aws.String(fmt.Sprintf("bytes=%d-%d", offset, offset+length-1)),
+	})
+	if err != nil {
+		return "", err
+	}
+	if out.CopyPartResult == nil {
+		return "", nil
+	}
+	return strings.Trim(derefString(out.CopyPartResult.ETag), `"`), nil
 }
 
 // CompleteMultipartUpload 汇总已上传分段，完成分段上传。

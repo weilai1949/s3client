@@ -353,7 +353,7 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
 | Architecture & ADRs | [`architecture.md`](../architecture.md) · [`decisions/index.md`](../decisions/index.md) |
 | Development rules / gates (TDD-first) | [`DEVELOPMENT.md`](../DEVELOPMENT.md) |
 | AI governance & agent evals | [`AI_POLICY.md`](../AI_POLICY.md) · [`AGENT_EVALS.md`](../AGENT_EVALS.md) |
-| Changelog / roadmap / known issues / feature ledger | [`../../CHANGELOG.md`](../../CHANGELOG.md) · [`ROADMAP.md`](../ROADMAP.md) · [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) · [`FEATURES.md`](../FEATURES.md) |
+| Changelog / roadmap / known issues / feature ledger | [`../../CHANGELOG.md`](../../CHANGELOG.md) · [`ROADMAP.md`](../ROADMAP.md) · [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) · [`FEATURES.md`](../FEATURES.md) · [`BATCHES.md`](../BATCHES.md) |
 | Contributing / support / governance / security policy | [`CONTRIBUTING.md`](../../.github/CONTRIBUTING.md) · [`SUPPORT.md`](../../.github/SUPPORT.md) · [`GOVERNANCE.md`](../../.github/GOVERNANCE.md) · [`SECURITY.md`](../../.github/SECURITY.md) |
 | Agent / LLM entry points | [`AGENTS.md`](../../AGENTS.md) · [`llms.txt`](../../llms.txt) |
 

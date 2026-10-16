@@ -41,7 +41,7 @@ authoritative pages (browser translation works reasonably well on them); they ar
 | Contribute code (TDD-first rules, gates) | [`../DEVELOPMENT.md`](../DEVELOPMENT.md) |
 | Use an AI coding agent safely | [`../AI_POLICY.md`](../AI_POLICY.md) · [`../AGENT_EVALS.md`](../AGENT_EVALS.md) |
 | Record / review architecture decisions | [`../decisions/index.md`](../decisions/index.md) |
-| Track features, known issues, roadmap | [`../FEATURES.md`](../FEATURES.md) · [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) · [`../ROADMAP.md`](../ROADMAP.md) |
+| Track features / batch ledger, known issues, roadmap | [`../FEATURES.md`](../FEATURES.md) · [`../BATCHES.md`](../BATCHES.md) · [`../KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) · [`../ROADMAP.md`](../ROADMAP.md) |
 | See release history | [`../../CHANGELOG.md`](../../CHANGELOG.md) |
 | Report a vulnerability / ask a question / read governance | [`../../.github/SECURITY.md`](../../.github/SECURITY.md) · [`../../.github/SUPPORT.md`](../../.github/SUPPORT.md) · [`../../.github/GOVERNANCE.md`](../../.github/GOVERNANCE.md) · [`../../.github/CODE_OF_CONDUCT.md`](../../.github/CODE_OF_CONDUCT.md) |
 | Read frozen historical snapshots | [`../archive/index.md`](../archive/index.md) |

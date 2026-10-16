@@ -76,7 +76,7 @@ func TestUploadPartTrimsQuotesFromETag(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	ctx := context.Background()
-	etag, err := c.UploadPart(ctx, "bkt", "k", "upid-1", 2, strings.NewReader("part-2"))
+	etag, err := c.UploadPart(ctx, "bkt", "k", "upid-1", 2, strings.NewReader("part-2"), 6)
 	if err != nil {
 		t.Fatalf("UploadPart: %v", err)
 	}
@@ -86,11 +86,11 @@ func TestUploadPartTrimsQuotesFromETag(t *testing.T) {
 	if gotPart != "2" || gotUploadID != "upid-1" {
 		t.Fatalf("part=%q uploadID=%q", gotPart, gotUploadID)
 	}
-	etag, err = c.UploadPart(ctx, "bkt", "k", "upid-1", 3, strings.NewReader("x"))
+	etag, err = c.UploadPart(ctx, "bkt", "k", "upid-1", 3, strings.NewReader("x"), 1)
 	if err != nil || etag != "plain-etag" {
 		t.Fatalf("unquoted etag=%q err=%v", etag, err)
 	}
-	if _, err := c.UploadPart(ctx, "bkt", "k", "upid-1", 4, strings.NewReader("x")); err == nil {
+	if _, err := c.UploadPart(ctx, "bkt", "k", "upid-1", 4, strings.NewReader("x"), 1); err == nil {
 		t.Fatal("expected error for failed part upload")
 	}
 }
@@ -153,5 +153,78 @@ func TestAbortMultipartUploadSendsUploadID(t *testing.T) {
 	}
 	if got := UserMessage(err); got != "multipart upload not found" {
 		t.Fatalf("UserMessage = %q", got)
+	}
+}
+
+// TestCreateMultipartUploadWithMetaSendsUserMetadata 用户元数据必须随分段初始化请求发出
+// （分段路径复制超大对象时，元数据若不在这里带上就会永久丢失）。
+func TestCreateMultipartUploadWithMetaSendsUserMetadata(t *testing.T) {
+	var gotColor string
+	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotColor = r.Header.Get("x-amz-meta-color")
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><InitiateMultipartUploadResult ` + xmlNS + `><Bucket>bkt</Bucket><Key>k</Key><UploadId>upid-9</UploadId></InitiateMultipartUploadResult>`))
+	}))
+	id, err := c.CreateMultipartUploadWithMeta(context.Background(), "bkt", "big.bin", "", map[string]string{"color": "red"})
+	if err != nil {
+		t.Fatalf("CreateMultipartUploadWithMeta: %v", err)
+	}
+	if id != "upid-9" {
+		t.Fatalf("upload id = %q", id)
+	}
+	if gotColor != "red" {
+		t.Fatalf("x-amz-meta-color = %q, want red", gotColor)
+	}
+}
+
+// TestUploadPartSendsExplicitContentLength 流式分段必须显式带 Content-Length：
+// 不可 seek 的 body 无法让 SDK 自动算长度，缺失时请求会失败（ADR-014 实测）。
+func TestUploadPartSendsExplicitContentLength(t *testing.T) {
+	var gotLen string
+	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotLen = r.Header.Get("Content-Length")
+		w.Header().Set("ETag", `"e-part"`)
+		w.WriteHeader(http.StatusOK)
+	}))
+	body := io.LimitReader(strings.NewReader("0123456789"), 10)
+	etag, err := c.UploadPart(context.Background(), "bkt", "k", "upid-1", 1, body, 10)
+	if err != nil {
+		t.Fatalf("UploadPart: %v", err)
+	}
+	if gotLen != "10" {
+		t.Fatalf("Content-Length = %q, want 10", gotLen)
+	}
+	if etag != "e-part" {
+		t.Fatalf("etag = %q", etag)
+	}
+}
+
+// TestUploadPartCopySendsSourceRange 服务端分段复制：携带 copy-source 与闭区间 Range，
+// 并从 CopyPartResult 读取 ETag（去引号）。
+func TestUploadPartCopySendsSourceRange(t *testing.T) {
+	var gotSource, gotRange, gotPart, gotUpload string
+	c, _ := newFakeS3(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSource = r.Header.Get("x-amz-copy-source")
+		gotRange = r.Header.Get("x-amz-copy-source-range")
+		gotPart = r.URL.Query().Get("partNumber")
+		gotUpload = r.URL.Query().Get("uploadId")
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><CopyPartResult ` + xmlNS + `><ETag>"cp-etag"</ETag></CopyPartResult>`))
+	}))
+	etag, err := c.UploadPartCopy(context.Background(), "src-bkt", "a/b.bin", "dst-bkt", "dst.bin", "upid-7", 3, 5<<20, 5<<20)
+	if err != nil {
+		t.Fatalf("UploadPartCopy: %v", err)
+	}
+	if gotSource != "src-bkt%2Fa%2Fb.bin" { // 与 CopyObjectCond 同口径：整体 PathEscape
+		t.Fatalf("x-amz-copy-source = %q", gotSource)
+	}
+	if gotRange != "bytes=5242880-10485759" {
+		t.Fatalf("x-amz-copy-source-range = %q", gotRange)
+	}
+	if gotPart != "3" || gotUpload != "upid-7" {
+		t.Fatalf("partNumber=%q uploadId=%q", gotPart, gotUpload)
+	}
+	if etag != "cp-etag" {
+		t.Fatalf("etag = %q", etag)
 	}
 }

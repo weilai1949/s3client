@@ -32,14 +32,50 @@ var (
 )
 
 // dependabotManifest 登记每个 ecosystem 在其 directory 下**必须存在**的清单文件；
-// 值为空串表示只要求目录存在（`github-actions` 看 `.github/workflows/`，`docker` 看仓库根）。
+// 值为空串表示只要求目录存在（`github-actions` 看 `.github/workflows/`）。
+// `docker` 看 `Dockerfile`：仓库根没有 Dockerfile，曾把 directory 写成 `/` 导致该规则静默失效，
+// 而「只看目录存在」的旧口径放行了这个错误（P-4 复核 2026-10-16）。
 // 新增一条 dependabot 规则时必须在此登记，否则门禁红灯点名。
 var dependabotManifest = map[string]string{
 	"gomod":          "go.mod",
 	"npm":            "package.json",
 	"cargo":          "Cargo.toml",
 	"github-actions": "",
-	"docker":         "",
+	"docker":         "Dockerfile",
+}
+
+// dependabotDockerDirs 登记必须由 docker 生态监控的 Dockerfile 所在目录。
+// 漏登记 = 该镜像的基座 digest 永远不会被 Dependabot 刷新（nginx 边缘镜像的 zlib 补丁窗口依赖此刷新）。
+var dependabotDockerDirs = []string{"/apps/server", "/deploy/nginx"}
+
+// TestDependabotDockerCoversEveryDockerfile（P-4 复核 2026-10-16）：每个 Dockerfile 所在目录
+// 都必须有一条 `package-ecosystem: docker` 规则覆盖，否则基座 digest 不会按上游滚动刷新。
+//
+// 为什么需要它：上一条门禁只校验「directory 存在且含 Dockerfile」，对「某个 Dockerfile 根本没被监控」
+// 无能为力——deploy/nginx/Dockerfile 恰是这样被漏掉的。
+func TestDependabotDockerCoversEveryDockerfile(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "dependabot.yml"))
+	if err != nil {
+		t.Fatalf("读取 .github/dependabot.yml: %v", err)
+	}
+	src := string(b)
+	ecos := dependabotEcosystemRe.FindAllStringSubmatch(src, -1)
+	dirs := dependabotDirectoryRe.FindAllStringSubmatch(src, -1)
+	if len(ecos) != len(dirs) {
+		t.Fatalf("解析结果不成对：ecosystem %d 条 / directory %d 条", len(ecos), len(dirs))
+	}
+	covered := map[string]bool{}
+	for i := range ecos {
+		if ecos[i][1] == "docker" {
+			covered[dirs[i][1]] = true
+		}
+	}
+	for _, dir := range dependabotDockerDirs {
+		if !covered[dir] {
+			t.Errorf("Dockerfile 目录 %s 未被 `package-ecosystem: docker` 规则覆盖——其基座 digest 不会被 Dependabot 刷新", dir)
+		}
+	}
 }
 
 func TestDependabotDirectoriesExistAndHoldManifests(t *testing.T) {
