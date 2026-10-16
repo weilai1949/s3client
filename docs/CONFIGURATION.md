@@ -58,7 +58,7 @@
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
 | `S3C_TOKEN` | 空 | ≥ 16 字符；逗号分隔可多值 | 非空时业务 `/api/*` 需 `Authorization: Bearer <token>`；`/api/health` 仍免鉴权供探针使用，但仅带**有效** token 时响应含 `version`。非回环监听时**必填**。多 token 轮换时按**最短者**判定长度；删掉旧值即吊销。生成：`openssl rand -hex 32` |
-| `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（已落地，证据见 [`FEATURES.md`](FEATURES.md) §BS）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号；`POST /api/accounts` 创建账号一律 403）、`expiresAt`（RFC3339，过期返回 401）。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
+| `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（已落地，证据见 [`FEATURES.md`](FEATURES.md) §BS）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号；`POST /api/accounts` 创建账号一律 403）、`expiresAt`（RFC3339，过期返回 401）。**声明 `prefixes` 时必须同时声明 `accounts`**：`prefixes` 只约束桶/键、**不含账号维度**，缺省 `accounts` 会让「只能碰某个桶前缀」的 token 实际变成「**任意账号的**那个桶前缀」（可对任意 `{id}` 执行界内操作、并以该账号凭据签发预签名 URL）——账号维度在这种配置下不可判定，运行时无法补救，故一律拒绝启动；`accounts`-only 是**有界**作用域（爆炸半径 = 该账号），安全，不要求反配。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀 / **声明 `prefixes` 却缺 `accounts`** 一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
 | `S3C_METRICS_TOKEN` | 空 | ≥ 16 字符 | 设置后 `GET /api/metrics` 必须携带该独立 `Authorization: Bearer`；不设置则保持匿名 scrape 兼容。它不替代 `S3C_TOKEN`，通用 API token 不能访问受保护 metrics。短值拒绝启动 |
 | `S3C_CORS_ORIGINS` | 空 | 逗号分隔 Origin 列表 | CORS 白名单。留空 = 仅同源 + `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（含 `tauri` 自定义协议）。`*` 可行但不推荐 |
 | `S3C_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` | 日志级别 |
@@ -91,7 +91,7 @@
 | `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行，或为纯空白 | 防止 CSP 响应头异常，或把 connect-src 配成空源列表导致前端静默全断 |
 | `S3C_STORE_DRIVER` 不在 `json` / `sqlite` / `encrypted` 内 | 防止未知值被当 `json` 绕过明文闸 |
 | `S3C_TOKEN` 非空但最短 token < 16 字符 | 短口令易被暴力猜测 |
-| `S3C_TOKEN_SCOPES` 非法（JSON 语法 / 未知字段 / 末尾多余数据 / token 不在 `S3C_TOKEN` 列表内 / `prefixes`、`accounts` 元素为空 / `expiresAt` 不可解析为 RFC3339） | 防止作用域配置静默失效或被整段忽略（否则运维以为已限权、实际仍是全权） |
+| `S3C_TOKEN_SCOPES` 非法（JSON 语法 / 未知字段 / 末尾多余数据 / token 不在 `S3C_TOKEN` 列表内 / `prefixes`、`accounts` 元素为空 / `expiresAt` 不可解析为 RFC3339 / **声明了 `prefixes` 却缺 `accounts`**） | 防止作用域配置静默失效或被整段忽略（否则运维以为已限权、实际仍是全权）。最后一条尤其重要：`prefixes` 不含账号维度，缺 `accounts` 时该 token 可对**任意账号**执行界内操作并以他人凭据签发预签名 URL —— 这类「以为限了一个桶、实际放开全部账号」的配置必须在启动期拦下 |
 | `S3C_ADDR` 非回环且 `S3C_TOKEN` 为空 | 防止账号管理 API 无鉴权暴露 |
 | `S3C_STORE_KEY` 非空但 < 16 字符 | 落盘加密口令过短会被暴力破解 |
 | `S3C_STORE_DRIVER` 为 `json` / `sqlite` 且 `S3C_STORE_KEY` 为空且未开 `S3C_ALLOW_PLAINTEXT_STORE` | 防止 `secretKey` 明文落盘 |

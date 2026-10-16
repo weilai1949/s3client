@@ -7,7 +7,14 @@ package config
 //   - 未在该 JSON 中登记的 token 仍是全权（向后兼容，零配置行为与历史完全一致）；
 //   - 字段全部可选、缺省即不限制：`readonly` / `prefixes` / `accounts` / `expiresAt`；
 //   - 严格解析（DisallowUnknownFields）；登记的 token 必须在 `S3C_TOKEN` 列表中、
-//     prefixes / accounts 元素非空、expiresAt 可解析为 RFC3339，否则拒绝启动（fail-closed）。
+//     prefixes / accounts 元素非空、**声明 prefixes 时必须同时声明 accounts**、
+//     expiresAt 可解析为 RFC3339，否则拒绝启动（fail-closed）。
+//
+// 「prefixes 必须配 accounts」的由来：prefixes 只约束桶/键、不含账号维度，缺省 accounts
+// 会让「只能碰某个桶前缀」的 token 实际变成「**任意账号的**那个桶前缀」（可对任意 {id}
+// 执行界内操作、并以他人凭据签发预签名 URL）。账号维度在这种配置下不可判定，运行时无法
+// 补救，因此把「账号说清楚」变成配置期的硬约束。accounts-only 是**有界**作用域（爆炸半径
+// = 该账号），安全，不要求反配 prefixes。
 //
 // 安全：错误文案**不回显 token 明文**（凭证不落日志）。
 
@@ -100,6 +107,19 @@ func validateTokenScopes(token string, scopes map[string]TokenScope) error {
 			if strings.TrimSpace(a) == "" {
 				return fmt.Errorf("%w: accounts 元素不得为空", ErrInvalidTokenScopes)
 			}
+		}
+		// prefixes 只约束**桶/键**，不含**账号维度**：未声明 accounts 时，该 token 可对
+		// **任意账号**执行界内桶/键的操作，并以该账号的凭据签发预签名 URL（2026-10-16
+		// 实测：prefixes-only token 调 `POST /api/accounts/{victim}/presign` 返回 200，
+		// URL 的 X-Amz-Credential 是受害账号的 AccessKey）。账号维度在 prefixes-only 下
+		// **不可判定**——攻击者只需挑一个恰好有该桶名的账号，运行时无法补救，故在此
+		// fail-closed；accounts 非空后，运行时的 {id} 闸与账号引用闸本来就在生效，
+		// 一条配置规则即可覆盖整类问题，运行时判据保持单一来源。
+		if len(scope.Prefixes) > 0 && len(scope.Accounts) == 0 {
+			return fmt.Errorf("%w: 声明 prefixes 的 token 必须同时声明 accounts"+
+				"（prefixes 只约束桶/键、不含账号维度：缺省 accounts 会让该 token 对任意账号"+
+				"执行界内操作并以他人凭据签发预签名 URL）；确需跨账号请显式列出账号 id",
+				ErrInvalidTokenScopes)
 		}
 	}
 	return nil

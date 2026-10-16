@@ -182,3 +182,61 @@ func TestTokenScopesTokenWithSpacesMustMatchTrimmedList(t *testing.T) {
 		t.Fatal("裁剪后应命中 scopeTokA")
 	}
 }
+
+// TestTokenScopesRejectPrefixesWithoutAccounts：`prefixes` 只约束**桶/键**、不含**账号维度**。
+// 只声明 prefixes 而不声明 accounts 时，该 token 可对**任意账号**执行界内桶/键的操作，并以
+// 该账号的凭据签发预签名 URL（2026-10-16 实测：`POST /api/accounts/{victim}/presign`
+// 返回 200，且 URL 的 `X-Amz-Credential` 是受害账号的 AccessKey）——运维写 prefixes 的本意
+// 是「这个 token 只能碰这个桶前缀」，实际却是「任意账号的这个桶前缀」。
+//
+// 账号维度在 prefixes-only 下**不可判定**（攻击者只需挑一个恰好有该桶名的账号），运行时无法
+// 补救，因此在配置期 fail-closed：拒绝启动，并在文案里给出修法。这条规则同时让运行时保持
+// 单一判据——accounts 非空后，`{id}` 闸与账号引用闸本来就在生效。
+func TestTokenScopesRejectPrefixesWithoutAccounts(t *testing.T) {
+	cases := []struct {
+		name, raw string
+	}{
+		{"prefixes-only 整桶", `{"` + scopeTokA + `":{"prefixes":["bucket-a"]}}`},
+		{"prefixes-only 键前缀", `{"` + scopeTokA + `":{"prefixes":["bucket-a/logs/"]}}`},
+		{"readonly + prefixes-only", `{"` + scopeTokA + `":{"readonly":true,"prefixes":["bucket-a/logs/"]}}`},
+		{"expiresAt + prefixes-only", `{"` + scopeTokA + `":{"expiresAt":"2027-01-01T00:00:00Z","prefixes":["bucket-a"]}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := scopeFromEnv(t, scopeTokA, c.raw).Validate()
+			if !errors.Is(err, ErrInvalidTokenScopes) {
+				t.Fatalf("Validate() = %v, want wraps ErrInvalidTokenScopes", err)
+			}
+			// 报错必须点出修法（同时声明 accounts），否则运维只能靠猜。
+			if !strings.Contains(err.Error(), "accounts") {
+				t.Errorf("错误文案未提示补 accounts：%v", err)
+			}
+			// 与其它作用域错误同口径：不得回显 token 明文。
+			if strings.Contains(err.Error(), scopeTokA) {
+				t.Errorf("错误文案回显了 token 明文：%v", err)
+			}
+		})
+	}
+}
+
+// TestTokenScopesWithoutPrefixesStillValid：新规则**只**针对 prefixes-only 这一条轴。
+// `accounts`-only 是**有界**作用域（爆炸半径 = 该账号的桶），安全，不要求反配 prefixes；
+// `readonly` / `expiresAt` 是能力与时间限制而非资源维度；空对象 = 不限制——四者均须保持可启动。
+func TestTokenScopesWithoutPrefixesStillValid(t *testing.T) {
+	cases := []struct {
+		name, raw string
+	}{
+		{"accounts-only", `{"` + scopeTokA + `":{"accounts":["acc-1"]}}`},
+		{"readonly-only", `{"` + scopeTokA + `":{"readonly":true}}`},
+		{"expiresAt-only", `{"` + scopeTokA + `":{"expiresAt":"2027-01-01T00:00:00Z"}}`},
+		{"empty scope", `{"` + scopeTokA + `":{}}`},
+		{"prefixes + accounts", `{"` + scopeTokA + `":{"prefixes":["bucket-a/logs/"],"accounts":["acc-1"]}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := scopeFromEnv(t, scopeTokA, c.raw).Validate(); err != nil {
+				t.Fatalf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+}

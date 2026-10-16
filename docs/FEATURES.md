@@ -2734,6 +2734,18 @@ functions 1095 / lines 3503）。
 | 既有用例按新口径更新 | `TestScopeBodyEdgeCases` 的 `null` / 空 chunked body 由「400 放行到 handler」改为 **403 零引用**；`TestScopeBucketNameEndpoints` 的 `GET .../bucket`（未注册方法组合）由「不 403」改为 **403** | 三处断言改为新口径并注明理由（不可判定一律 fail-closed） |
 | 文档 | [`threat-model.md`](threat-model.md) 边界A 最小权限节（三条口径 + 残留更正）· [`api.md`](api.md) §最小权限 · [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` | 原「残留（有意）：桶列表不受 `prefixes` 约束」一句已不成立并就地更正 |
 
+### CW. 2026-10-16 收口账号维度残留：`prefixes` 必须与 `accounts` 同时声明
+
+> 来源：渗透测试报告的相邻残留（`prefixes` 只约束桶/键、不约束账号维度），经复核确认可对任意账号生效。
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| 配置期 fail-closed | [`internal/config/scopes.go`](../apps/server/internal/config/scopes.go) `validateTokenScopes` 新增交叉约束：**声明 `prefixes` 而未声明 `accounts` → 拒绝启动**（`ErrInvalidTokenScopes`，文案点出修法且不回显 token 明文） | 消除「运维写 prefixes 的本意是『这个 token 只能碰这个桶前缀』，实际却是『**任意账号的**这个桶前缀』」；账号维度在 prefixes-only 下**不可判定**（攻击者只需挑一个有该桶名的账号），运行时无补救手段，故只在配置期拦 |
+| 不动运行时 | `authorize` 未改动——`accounts` 非空后 `{id}` 闸与账号引用闸本就在生效 | 判据保持单一来源；`accounts`-only（有界）不要求反配 `prefixes`，`readonly` / `expiresAt` / 空对象不受影响 |
+| 示例同步 | [`apps/server/.env.example`](../apps/server/.env.example) 原示例是 prefixes-only（改动后会拒绝启动），补 `accounts` 并写明规则 | 避免仓库自带示例在启动期被自己的门禁拦下 |
+| 文档 | [`CONFIGURATION.md`](CONFIGURATION.md)（变量表 + fail-closed 表）· [`threat-model.md`](threat-model.md) 边界A（残留重写为「账号维度已不是缺口」+ 保留笛卡尔积边界）· [`api.md`](api.md) §最小权限 · [`CHANGELOG.md`](../CHANGELOG.md) | 原「prefixes 不约束账号维度」的残留声明已不成立并就地更正 |
+| 测试 | `internal/config/scopes_test.go`：`TestTokenScopesRejectPrefixesWithoutAccounts`（整桶 / 键前缀 / readonly 组合 / expiresAt 组合 4 例拒绝）+ `TestTokenScopesWithoutPrefixesStillValid`（accounts-only、readonly-only、expiresAt-only、空对象、prefixes+accounts 5 例仍可启动） | 后者是防「过度收紧」的对照，避免把有界作用域一并误杀 |
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过

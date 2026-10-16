@@ -49,6 +49,16 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-16 收口账号维度残留：声明 `prefixes` 必须同时声明 `accounts`）
+
+- **收紧（配置边界，fail-closed）**：`S3C_TOKEN_SCOPES` 中**声明了 `prefixes` 却没有 `accounts`** 的 token，现在**拒绝启动**（`ErrInvalidTokenScopes`，文案点出修法且不回显 token 明文）。原因：`prefixes` 只约束桶/键、**不含账号维度**，缺省 `accounts` 会让「只能碰某个桶前缀」实际变成「**任意账号的**那个桶前缀」——实测 prefixes-only token 调 `POST /api/accounts/{victim}/presign` 返回 `200`，且签发 URL 的 `X-Amz-Credential` 是**受害账号的 AccessKey**；该 token 还可对任意 `{id}` 执行界内桶/键的读/写/删。
+- **为什么放在配置期**：账号维度在 prefixes-only 下**不可判定**（攻击者只需挑一个恰好有该桶名的账号），任何运行时启发式都挡不住；把「账号说清楚」变成配置期硬约束，一条规则覆盖整类问题。
+- **运行时零改动**：`accounts` 非空后，`authorize` 的 `{id}` 闸与账号引用闸本就在生效，判据保持**单一来源**。`accounts`-only 是**有界**作用域（爆炸半径 = 该账号），安全，**不要求**反配 `prefixes`；`readonly` / `expiresAt` / 空对象同样不受影响。
+- **迁移**：存量 prefixes-only 配置会启动失败，按其错误文案补 `accounts:["<账号 id>", …]` 即可；确需「同一桶前缀作用于全部账号」请改用全权 token，或把账号 id 全部列出（显式、可审计，新增账号不会被自动覆盖 = fail-closed）。
+- **已知边界（保留）**：`prefixes × accounts` 是**笛卡尔积**，无法表达「A 只能碰 bucketA、B 只能碰 bucketB」；因仍在许可账号集合内，不构成跨账号越权。
+- **测试**：`TestTokenScopesRejectPrefixesWithoutAccounts`（整桶 / 键前缀 / readonly 组合 / expiresAt 组合）+ `TestTokenScopesWithoutPrefixesStillValid`（accounts-only、readonly-only、expiresAt-only、空对象、prefixes+accounts —— 防过度收紧的对照）。
+- **文档同步**：[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)（变量表 + fail-closed 表）· [`docs/threat-model.md`](docs/threat-model.md)（边界A 残留重写：账号维度已不是缺口）· [`docs/api.md`](docs/api.md) §最小权限 · [`docs/FEATURES.md`](docs/FEATURES.md) §CW · [`apps/server/.env.example`](apps/server/.env.example)（原 prefixes-only 示例已失效，补 `accounts`）。
+
 ### 修复（2026-10-16 对抗性渗透测试两条 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）
 
 > 缺陷来源与原始证据：[`docs/pentest-2026-10-15.md`](docs/pentest-2026-10-15.md)（P-1 / P-2，均经第三方对抗性复核确认；其中 P-1 的「服务端以受害者 SecretKey 对攻击者主机签名」为 SigV4 逐位重算实证）。
