@@ -2722,6 +2722,18 @@ functions 1095 / lines 3503）。
 | GitLab Node | 移除 NodeSource `curl ... \| bash`，下载 Node 26.10.0 官方压缩包并校验 SHA256 | 供应链不再无条件执行远端脚本；`TestGitLabCIDoesNotPipeRemoteInstaller` |
 | 下载名清洗 | `sanitizeDownloadFilename` 清洗控制字符、路径分隔符与跨平台非法字符，限长 255，空结果回退 | `downloadProxyObject` 单流/并行入口统一生效；`src/api/download.test.ts` + `src/proxy.test.ts` |
 
+### CV. 2026-10-16 对抗性渗透测试 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一
+
+> 来源：[`pentest-2026-10-15.md`](pentest-2026-10-15.md)（P-1 / P-2，两条 High，经第三方对抗性复核确认）。
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| P-1 零引用 fail-closed | [`handler/scope.go`](../apps/server/internal/handler/scope.go) `authorize`：`prefixes` 下 `requestScopeRefs` 返回**空集**时不再放行，一律 `403`（`reason=unjudgeable`）；新增白名单 `scopeRefLessPaths`（`GET|HEAD /api/accounts`、`/api/schedules`、`/api/openapi.json`）与 `scopeRefLessAllowed` | 堵住「仅声明 `prefixes` 的 token 可读 / 改写 / 删除 / 新建任意账号，并越权操作任意账号**默认桶**的桶级配置」；`TestScopePrefixZeroRefsIsDenied`（14 条端点）+ `TestScopePrefixZeroRefsAllowlistedReads`（白名单不误伤 + 写方法不豁免） |
+| P-1 账号写入面 | 新增 `isAccountItemPath` / `isAccountWriteEndpoint`：`POST /api/accounts`、`PUT|DELETE /api/accounts/{id}` 对**任何**资源受限 token 一律 `403`（`reason=account_write`，取代原 `accounts_create`） | 堵住「整桶授权的前缀 token 在 body 里写界内桶名即可 201 建出指向攻击者的账号」；该闸不看引用，故界内桶名不再能成为跳板。`TestScopeAccountWriteDeniedForRestrictedTokens`（整桶 / 子前缀 / accounts 三组） |
+| P-2 解析器归一 | `peekJSONObject` 改为 `json.Decoder` 逐 token 解析：键名**归一化为小写** + **重复键 fail-closed**；新增 `scopeField`，`requestScopeRefs` / `requestAccountRefs` 全部改走大小写不敏感取值 | 消除「授权侧 `map[string]any` 精确键名 vs 执行侧 `encoding/json` struct case-fold + `null` no-op」的口径分歧（原可只改键名大小写即让作用域看到零引用而 handler 照常执行）；`TestScopeBodyKeyCaseAndDuplicatesDenied`（大小写 / 界内诱饵 / 重复键 `null` / 大小写+`null` 组合）+ `TestScopeAccountsBodyKeyCaseDenied`（`SourceAccountId` 变体打穿 accounts 判定） |
+| 既有用例按新口径更新 | `TestScopeBodyEdgeCases` 的 `null` / 空 chunked body 由「400 放行到 handler」改为 **403 零引用**；`TestScopeBucketNameEndpoints` 的 `GET .../bucket`（未注册方法组合）由「不 403」改为 **403** | 三处断言改为新口径并注明理由（不可判定一律 fail-closed） |
+| 文档 | [`threat-model.md`](threat-model.md) 边界A 最小权限节（三条口径 + 残留更正）· [`api.md`](api.md) §最小权限 · [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` | 原「残留（有意）：桶列表不受 `prefixes` 约束」一句已不成立并就地更正 |
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过

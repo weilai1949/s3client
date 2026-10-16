@@ -49,6 +49,17 @@
 
 ## [Unreleased]
 
+### 修复（2026-10-16 对抗性渗透测试两条 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）
+
+> 缺陷来源与原始证据：[`docs/pentest-2026-10-15.md`](docs/pentest-2026-10-15.md)（P-1 / P-2，均经第三方对抗性复核确认；其中 P-1 的「服务端以受害者 SecretKey 对攻击者主机签名」为 SigV4 逐位重算实证）。
+
+- **修复（鉴权语义，P-1）**：`prefixes` 作用域下，**请求不携带任何可判定桶/键引用时一律 `403`**（`reason=unjudgeable`）。旧实现里 `requestScopeRefs` 返回空集时前缀校验循环一次都不执行 → 放行；而 handler 会回退到路径账号的**默认桶**执行真实操作，于是仅声明 `prefixes` 的 token 可读 / 改写 / 删除 / 新建任意账号，并越权改写任意账号默认桶的桶级配置。新增白名单 `scopeRefLessPaths` 仅豁免「与桶/键无关」的只读端点（`GET|HEAD /api/accounts`、`GET|HEAD /api/schedules`、`GET|HEAD /api/openapi.json`）。
+- **修复（鉴权语义，P-1）**：**账号写入面**（`POST /api/accounts`、`PUT|DELETE /api/accounts/{id}`）对**任何**资源受限 token 一律 `403`（`reason=account_write`，取代原 `accounts_create`）——创建账号凭空铸造凭据、改写账号把 endpoint/凭据指向他处、删除账号让凭据与配置全损，都不是「访问某个桶/键」而是凭据面。该闸**不看请求引用**，因此整桶授权的前缀 token 在 body 里写一个界内桶名不再能成为绕过前缀判定的跳板（旧实现实测可 201 建出指向攻击者的账号）。`readonly` 方法闸语义不变（仍先判 readonly）。
+- **修复（鉴权语义，P-2）**：作用域侧的 body 解析改为与 handler **同口径**——键名归一化为小写（`encoding/json` 对 struct 字段做 case-fold 匹配，`{"Bucket":…}` 命中 `json:"bucket"`，map 键查找没有这个回退），且**重复键 fail-closed**（map 与 struct 对重复键语义不同）。旧实现下只改键名大小写即可让作用域看到「零引用」而 handler 照常执行；本批新加的 `requestAccountRefs` 同源，`SourceAccountId` 变体亦可打穿 `accounts` 判定。
+- **行为变更（不可判定一律 fail-closed 的副作用）**：受限 token 对**零引用**请求的响应由「放行到 handler 后 400 / 404 / 405」变为 **403**（含 `null` / 空 chunked body、未注册的方法+路径组合）。全权与未登记 token 不受影响。
+- **测试**：新增 `TestScopePrefixZeroRefsIsDenied` / `TestScopePrefixZeroRefsAllowlistedReads` / `TestScopeAccountWriteDeniedForRestrictedTokens` / `TestScopeBodyKeyCaseAndDuplicatesDenied` / `TestScopeAccountsBodyKeyCaseDenied`；按新口径更新 `TestScopeBodyEdgeCases`（`null` 与空 chunked body → 403）与 `TestScopeBucketNameEndpoints`（`GET .../bucket` → 403）并注明理由。
+- **文档同步**：[`docs/threat-model.md`](docs/threat-model.md)（边界A 最小权限节三条口径 + 残留更正：原「桶列表不受 `prefixes` 约束」已不成立）· [`docs/api.md`](docs/api.md) §最小权限（新 `reason` 与白名单、fail-closed 副作用）· [`docs/FEATURES.md`](docs/FEATURES.md) §CV · [`docs/en/README.md`](docs/en/README.md) 源修订推进到 `2a462a5`。
+
 ### 变更（2026-10-15 安全评审防御纵深收口：nginx / GitLab Node / 下载名）
 
 - **加固（R8，部署防线）**：nginx 的 Docker 与 TLS 示例 vhost 均设置 `X-Content-Type-Options: nosniff`，防绕过后端中间件的静态响应或未来新 vhost 缺头。

@@ -378,10 +378,20 @@ func TestScopeUnparsableBodyIsDenied(t *testing.T) {
 	e := newScopeEnv(t, map[string]config.TokenScope{
 		scopeTokReadonly: {Prefixes: []string{"bucket-a"}},
 	})
-	for _, body := range []string{"{not json", `[1,2]`} {
-		if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/"+e.acc.ID+"/presign", body); rr.Code != http.StatusForbidden {
-			t.Errorf("body=%q = %d, want 403（无法判定范围）", body, rr.Code)
-		}
+	for _, c := range []struct{ name, body string }{
+		{"第二个 token 处报错", "{not json"},
+		{"顶层不是对象", `[1,2]`},
+		{"第一个 token 处报错", `}`},
+		{"对象未闭合", `{"bucket":"bucket-a","key":"logs/x"`},
+		// 尾部数据必须 fail-closed：少了这道检查，界内桶/键会被放行（handler 随后报 400），
+		// 而作用域侧已「判定通过」——歧义请求体不得成为绕过判定口径的载体。
+		{"对象之后有多余数据", `{"bucket":"bucket-a","key":"logs/x"} trailing`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/"+e.acc.ID+"/presign", c.body); rr.Code != http.StatusForbidden {
+				t.Errorf("body=%q = %d, want 403（无法判定范围）", c.body, rr.Code)
+			}
+		})
 	}
 }
 

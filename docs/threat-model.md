@@ -22,15 +22,20 @@
 **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：`S3C_TOKEN` 支持逗号分隔多 token，但历史上每个 token 都是全权。现可选用独立 env `S3C_TOKEN_SCOPES`（JSON：token → `{readonly, prefixes, accounts, expiresAt}`）为单个 token 声明最小权限：
 
 - `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
-- `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
-- `accounts`：仅允许路径 `{id}` **以及请求引用的账号 id**（迁移 / 计划 body 的 `sourceAccountId` / `targetAccountId`，与 `run` / `DELETE` / `PUT` 按已存计划注入的两个账号 id）命中的账号；`POST /api/accounts`（创建账号，无 `{id}` 可判）对 `accounts` 作用域 token 一律 403（`reason=accounts_create`，KNOWN_ISSUES #81）——创建新账号不属于「访问被授权账号」，会凭空铸造凭证面；
-- 端点级闸（评审 2026-10-09 R1/R2，请求不携带可判定引用、通用判定落空的端点）：`POST /api/accounts/preview-buckets`（自带 endpoint/凭据由服务端拨号的 SSRF 拨号面）对声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；`/api/migrate/jobs*`（任务记录不带归属、无法按桶细判）对声明了 `prefixes` / `accounts` 的 token 一律 403（`reason=migrate_jobs`，`readonly` 读放行）；
+- `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限/**含重复键（键名归一化后同名）**时 fail-closed；**请求不携带任何可判定桶/键引用时一律 403**（`reason=unjudgeable`，评审 2026-10-15 P-1）——handler 会回退到路径账号的**默认桶**执行真实操作，放行零引用等于让「最小权限」变成全权；仅 `GET|HEAD /api/accounts`（账号列表）、`GET|HEAD /api/schedules`（已按作用域裁剪）、`GET|HEAD /api/openapi.json`（静态契约）三个「与桶/键无关」的只读端点豁免；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
+- `accounts`：仅允许路径 `{id}` **以及请求引用的账号 id**（迁移 / 计划 body 的 `sourceAccountId` / `targetAccountId`，与 `run` / `DELETE` / `PUT` 按已存计划注入的两个账号 id）命中的账号；
+- 端点级闸（请求不携带可判定引用、通用判定落空的端点，对受限 token 整体拒绝）：
+  - **账号写入面**（`POST /api/accounts`、`PUT|DELETE /api/accounts/{id}`）对**任何**资源受限 token 一律 403（`reason=account_write`，评审 2026-10-15 P-1，取代原 `accounts_create`）——创建账号凭空铸造凭据、改写账号把 endpoint/凭据指向他处、删除账号让凭据与配置全损，都不是「访问某个桶/键」而是**凭据面**；该闸**不看请求引用**，故 body 里的界内桶名不能成为绕过前缀判定的跳板（旧实现曾被这样 201 建出指向攻击者的账号）；
+  - `POST /api/accounts/preview-buckets`（自带 endpoint/凭据由服务端拨号的 SSRF 拨号面）对声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；
+  - `/api/migrate/jobs*`（任务记录不带归属、无法按桶细判）对声明了 `prefixes` / `accounts` 的 token 一律 403（`reason=migrate_jobs`，`readonly` 读放行）；
+- **body 解析口径**：作用域侧与 handler 侧必须同口径——键名**归一化为小写**（`encoding/json` 对 struct 字段做 case-fold 匹配，`{"Bucket":…}` 命中 `json:"bucket"`，而 map 键查找没有这个回退），且**重复键 fail-closed**（map 与 struct 对重复键语义不同：前者末值覆盖、后者顺序赋值且 `null` 对标量字段 no-op）。两侧口径不一致即授权绕过（评审 2026-10-15 P-2：只把 `bucket` 写成 `Bucket`，作用域看到「零引用」而 handler 照常执行）；
 - `expiresAt`：过期后 401（审计 `reason=token_expired`）。
 
-未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs` / `accounts_create`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
+未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `unjudgeable` / `account_write` / `preview_buckets` / `migrate_jobs`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
-> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表不受其约束；`accounts` 作用域约束路径 `{id}` 与请求引用的账号 id（列表 `GET /api/accounts` 仍放行，返回不含 `SecretKey` 的 `AccountView`，但创建账号 `POST /api/accounts` 已拒）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
+> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 约束**请求涉及的桶/键**，但**不约束账号维度**：仅声明 `prefixes` 的 token 仍可对任意 `{id}` 发起**携带界内桶/键引用**的操作（要连账号一并收敛必须同时声明 `accounts`）；账号列表（`GET /api/accounts`）与计划列表（`GET /api/schedules`，已按作用域裁剪）作为「与桶/键无关」的只读端点在白名单内放行，返回不含 `SecretKey` 的 `AccountView`；账号**写入面**已由端点级闸一律拒绝。需要更细粒度授权时应在账号侧用 S3 策略收敛。
 > **2026-10-15 收口两条残留**：① 计划列表（`GET /api/schedules`）改为按作用域裁剪，越界计划的桶名 / 账号 id 不再可见（`readonly` 与全权 token 不变）；② 迁移 / 计划 body 与已存计划里的账号 id 纳入 `accounts` 判定（原「body 账号 id 不受约束」使 `accounts:[A]` 的 token 能让服务端用 B 的存储凭据执行迁移）。证据与用例见 [FEATURES.md](FEATURES.md) §CT。
+> **2026-10-16 对抗性渗透测试收口**：同日渗透测试（[`pentest-2026-10-15.md`](pentest-2026-10-15.md)）实测两条 High——`prefixes` 的**零引用 fail-open**（可越权增删改任意账号、并以受害者 SecretKey 对攻击者主机签名）与**授权解析器 ≠ 执行解析器**（JSON 键名大小写 / 重复键 `null` 绕过）；两者已按上文口径修复（零引用 → `unjudgeable` 403、账号写入面 → `account_write` 403、键名归一化 + 重复键 fail-closed）。原「残留」中「桶列表不受 `prefixes` 约束」一句**已不成立**（`GET /api/accounts/{id}/buckets` 零引用，现 403）。证据与用例见 [FEATURES.md](FEATURES.md) §CU。
 
 ### 边界 B：预签名 URL 直传
 

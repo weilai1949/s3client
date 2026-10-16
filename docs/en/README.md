@@ -2,7 +2,7 @@
 
 > **Source (Chinese SSOT)**: [`docs/README.md`](../README.md) — the Chinese docs landing page is the single
 > source of truth (SSOT); this page is the English navigation adaptation, not a translation of it.
-> **Source revision**: `e34116e` (2026-10-15); adapted from the working tree on 2026-10-15.
+> **Source revision**: `2a462a5` (2026-10-16); adapted from the working tree on 2026-10-16.
 
 This directory holds the **English snapshots** of a documentation set whose authoritative language is
 Chinese. It is deliberately small: only pages with independent value for English readers are translated.

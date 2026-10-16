@@ -384,10 +384,11 @@ func peekJSONObject(r *http.Request) (map[string]any, bool) {
 		if err != nil {
 			return nil, false
 		}
-		key, ok := kt.(string)
-		if !ok {
-			return nil, false
-		}
+		// 对象内键位上的 Token 只可能是 string——实测 `{1:2}` / `{[]}` / `{,}` / `{true:1}`
+		// 等一切畸形输入都在上面的 Token() 处直接返回 error，因此不设不可达的 !ok 分支
+		//（仓库禁死代码，且 100% 覆盖门禁会抓住它）。若解码器语义将来变化，这里退化为
+		// 空键：匹配不到任何 DTO 字段，仍然 fail-closed。
+		key, _ := kt.(string)
 		norm := strings.ToLower(key)
 		if _, dup := out[norm]; dup {
 			return nil, false
