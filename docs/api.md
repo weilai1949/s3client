@@ -147,7 +147,7 @@ GET /api/accounts
 ```json
 200 {"accounts":[{"id":"...","name":"...","endpoint":"...","accessKey":"...","secretSet":true,"bucket":"...","pathStyle":true,"useSSL":false}]}
 ```
-响应为 `AccountView`：**不回传 `secretKey`**，用 `secretSet`（boolean）表示是否已设置密钥，客户端无法从响应中区分占位与真实密钥。
+响应为 `AccountView`：**不回传 `secretKey`**，用 `secretSet`（boolean）表示是否已设置密钥，客户端无法从响应中区分占位与真实密钥。`endpoint` / `publicEndpoint` **只回传脱敏值**（URL userinfo 一律剥离，`http://key:secret@host` → `http://host`，P-3）。
 
 ### 创建
 ```
@@ -157,11 +157,13 @@ POST /api/accounts
 {"name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
 ```
 必填：`name`、`endpoint`、`accessKey`、`secretKey`。`pathStyle` 用于 MinIO/OSS 等第三方；`useSSL` 启用 TLS；`publicEndpoint` 是浏览器直传/预签名使用的对外端点（留空则用 `endpoint`）。
+**端点为不可用时创建即 400 `invalid endpoint configuration`**（`s3wrap.ValidateEndpoint` 判定，写入侧 fail-closed）：① 内嵌 **userinfo**（`http://key:secret@host`、仅用户名 `http://user@host`、裸 `key:secret@host`）；② 云元数据主机名（`metadata.google.internal` / `metadata` / `instance-data` / `kubernetes.default` 等）；③ 链路本地 / 元数据 IP（`169.254.0.0/16`、`fe80::/10`、`100.100.100.200`、`100.96.0.2`、`fd00:ec2::254`，含 DNS 解析命中这些地址）；④ 非 ASCII（IDN）主机名（改填 punycode `xn--`）；⑤ 退化端点（`http://`、`/`、`http://:5000`、`file:///...`、`http://%zz`、`http://host:notaport`）。**唯一不在此列的是 DNS 解析失败**——仍按设计 fail-open，留给连接阶段。SigV4 凭据请填 `accessKey` / `secretKey` 字段（P-3）。
 
 ### 获取
 ```
 GET /api/accounts/{id}
 ```
+响应为 `AccountView`（`endpoint` / `publicEndpoint` 为脱敏值，不会回传 userinfo 凭据）。
 
 ### 更新
 ```
@@ -171,7 +173,8 @@ PUT /api/accounts/{id}
 {"name":"minio","endpoint":"http://localhost:9000","publicEndpoint":"https://s3.example.com","region":"us-east-1","accessKey":"ak","secretKey":"sk","bucket":"b","pathStyle":true,"useSSL":false}
 ```
 必填：`name`、`endpoint`、`accessKey`（`secretKey` 可省略，传空或不传则保留原值）；其余字段同创建。
-响应为 `AccountView`，`secretSet` 反映更新后是否仍有密钥。
+`endpoint` / `publicEndpoint` 的校验同创建：任何 `ValidateEndpoint` 判定不可用的端点（userinfo / 元数据主机名 / 链路本地 IP / IDN / 退化端点）均返回 **400 `invalid endpoint configuration`**。
+响应为 `AccountView`，`secretSet` 反映更新后是否仍有密钥（端点同样为脱敏值）。
 
 ### 删除
 ```

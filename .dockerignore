@@ -48,6 +48,10 @@ apps/web/coverage
 # ---- 环境变量（含密钥，绝不进镜像）----
 .env
 .env.*
+# P-8：compose 的文件型 secret 目录（真实密钥）。build context 是仓库根 `.`，不排除就会
+# 随上下文交给 daemon（buildx / 远端 daemon 场景等于外传）；`*.example` 占位文件也不需要
+# 进构建上下文（无任何 COPY 引用它）。
+secrets/
 
 # ---- 服务端本地产物 ----
 apps/server/data

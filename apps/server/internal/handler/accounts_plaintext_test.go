@@ -10,6 +10,13 @@ package handler
 // 断言的外部可见行为：HTTP 201 / 200 之外，服务端日志必须出现一条 WARN，且
 // **不含任何密钥**（根 AGENTS.md「SecretKey 不落日志」）；HTTPS 端点则不得出现该 WARN
 // （否则告警噪声会让人忽略真正的明文告警）。
+//
+// P-3（2026-10-15 渗透测试，2026-10-16 收口）在同一文件里补齐「端点 userinfo 凭据」的
+// 外部可见行为：建号 / 更新带 userinfo 的 endpoint → **400**（fail-closed，不落库）；日志、
+// 400 响应体、`AccountView` 都不得出现凭据；历史落盘数据由 `AccountView` 回传脱敏值。
+// 原 `TestPlaintextWarnDoesNotLeakEndpointCredentials` 的期望随之下调为 400 并**改名为**
+// `TestUserinfoEndpointNeverLeaksCredentials`（原为 201 + 脱敏 WARN，路径已不再产生 WARN）；
+// 明文 WARN 路径由 `TestPlaintextWarnStaysCredentialFreeForLegacyAccount` 明确保活。
 
 import (
 	"bytes"
@@ -20,8 +27,186 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
 )
+
+// 端点 userinfo 凭据哨兵（P-3）：任何对外可见的日志 / 响应里出现它们即为泄漏。
+const (
+	endpointUserinfoUser = "AKIAUSER-SENTINEL"
+	endpointUserinfoPass = "URLPASS-SENTINEL"
+)
+
+// assertNoEndpointCredential 断言文本里没有端点凭据哨兵。
+func assertNoEndpointCredential(t *testing.T, s string) {
+	t.Helper()
+	if strings.Contains(s, endpointUserinfoUser) || strings.Contains(s, endpointUserinfoPass) {
+		t.Fatalf("端点 userinfo 凭据泄漏: %s", s)
+	}
+}
+
+// TestCreateAccountRejectsUserinfoEndpoint P-3：带 userinfo 的 endpoint 建号必须 fail-closed（400），
+// 不得落库、不得把凭据写进日志或响应体。旧行为是 201 + 落库（凭据随 `AccountView` 回传）。
+func TestCreateAccountRejectsUserinfoEndpoint(t *testing.T) {
+	var buf bytes.Buffer
+	h := newCapturingHandler(t, &buf)
+	rr := doJSON(t, h, http.MethodPost, "/api/accounts",
+		accountBody(t, "http://"+endpointUserinfoUser+":"+endpointUserinfoPass+"@127.0.0.1:9000", "", false))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400（endpoint userinfo 必须 fail-closed）:\n%s", rr.Code, rr.Body.String())
+	}
+	assertNoEndpointCredential(t, rr.Body.String())
+	assertNoEndpointCredential(t, buf.String())
+	if strings.Contains(buf.String(), "SECRET-SENTINEL") {
+		t.Errorf("日志泄漏了 secretKey：\n%s", buf.String())
+	}
+	// 建号失败 ⇒ 账号不得落库。
+	list := doJSON(t, h, http.MethodGet, "/api/accounts", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d", list.Code)
+	}
+	var got struct {
+		Accounts []json.RawMessage `json:"accounts"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &got); err != nil {
+		t.Fatalf("解析账号列表失败: %v\n%s", err, list.Body.String())
+	}
+	if len(got.Accounts) != 0 {
+		t.Fatalf("被拒账号仍落库：%s", list.Body.String())
+	}
+}
+
+// TestUpdateAccountRejectsUserinfoEndpoint P-3：更新路径同样 fail-closed，且已有账号不被改动。
+func TestUpdateAccountRejectsUserinfoEndpoint(t *testing.T) {
+	var buf bytes.Buffer
+	h := newCapturingHandler(t, &buf)
+	create := doJSON(t, h, http.MethodPost, "/api/accounts",
+		accountBody(t, "https://s3.example.com", "", false))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d：\n%s", create.Code, create.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &created); err != nil || created.ID == "" {
+		t.Fatalf("解析创建响应 id 失败（err=%v）：\n%s", err, create.Body.String())
+	}
+	buf.Reset()
+
+	rr := doJSON(t, h, http.MethodPut, "/api/accounts/"+created.ID,
+		accountBody(t, "http://"+endpointUserinfoUser+":"+endpointUserinfoPass+"@127.0.0.1:9000", "", false))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("update status = %d, want 400：\n%s", rr.Code, rr.Body.String())
+	}
+	assertNoEndpointCredential(t, rr.Body.String())
+	assertNoEndpointCredential(t, buf.String())
+
+	// 账号未被改写：endpoint 仍是原值且列表响应不含任何凭据。
+	after := doJSON(t, h, http.MethodGet, "/api/accounts/"+created.ID, "")
+	if after.Code != http.StatusOK {
+		t.Fatalf("get status = %d：\n%s", after.Code, after.Body.String())
+	}
+	var view struct {
+		Endpoint string `json:"endpoint"`
+	}
+	if err := json.Unmarshal(after.Body.Bytes(), &view); err != nil {
+		t.Fatalf("解析账号视图失败: %v\n%s", err, after.Body.String())
+	}
+	if view.Endpoint != "https://s3.example.com" {
+		t.Fatalf("被拒的更新改动了账号 endpoint：%q", view.Endpoint)
+	}
+	assertNoEndpointCredential(t, after.Body.String())
+}
+
+// TestAccountViewRedactsEndpointCredentials P-3 通道③：`AccountView.endpoint` / `publicEndpoint`
+// 回传脱敏值，防御**历史落盘数据**（契约上线前已存下的带 userinfo 端点）。覆盖 5 种形态：
+// 带 scheme 有/无 userinfo、裸端点有/无 userinfo、url.Parse 失败原样返回。
+func TestAccountViewRedactsEndpointCredentials(t *testing.T) {
+	cases := []struct{ name, endpoint, want string }{
+		{"scheme 带 userinfo", "http://" + endpointUserinfoUser + ":" + endpointUserinfoPass + "@minio.local:9000", "http://minio.local:9000"},
+		{"scheme 无 userinfo", "http://minio.local:9000", "http://minio.local:9000"},
+		{"裸端点带 userinfo", endpointUserinfoUser + ":" + endpointUserinfoPass + "@minio.local:9000", "minio.local:9000"},
+		{"裸端点无 userinfo", "minio.local:9000", "minio.local:9000"},
+		{"解析失败原样返回", "http://%zz:9000", "http://%zz:9000"},
+	}
+	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	for _, c := range cases {
+		// 直接建库（绕过 handler 校验）模拟历史数据：这些端点在新契约下不可能再被写入。
+		if _, err := st.Create(&model.Account{
+			Name: c.name, Endpoint: c.endpoint, PublicEndpoint: c.endpoint,
+			AccessKey: "AKIATEST", SecretKey: "SECRET-SENTINEL",
+		}); err != nil {
+			t.Fatalf("seed %s: %v", c.name, err)
+		}
+	}
+	h := New(st, slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil)), t.TempDir(), nil, "", "test", false, false).Routes()
+	rr := doJSON(t, h, http.MethodGet, "/api/accounts", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status = %d：\n%s", rr.Code, rr.Body.String())
+	}
+	assertNoEndpointCredential(t, rr.Body.String())
+	var got struct {
+		Accounts []struct {
+			Name           string `json:"name"`
+			Endpoint       string `json:"endpoint"`
+			PublicEndpoint string `json:"publicEndpoint"`
+		} `json:"accounts"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("解析账号列表失败: %v\n%s", err, rr.Body.String())
+	}
+	if len(got.Accounts) != len(cases) {
+		t.Fatalf("账号数 = %d, want %d：\n%s", len(got.Accounts), len(cases), rr.Body.String())
+	}
+	for _, a := range got.Accounts {
+		want := ""
+		for _, c := range cases {
+			if c.name == a.Name {
+				want = c.want
+			}
+		}
+		if a.Endpoint != want || a.PublicEndpoint != want {
+			t.Errorf("%s: endpoint=%q publicEndpoint=%q, want %q（脱敏后的值）", a.Name, a.Endpoint, a.PublicEndpoint, want)
+		}
+	}
+}
+
+// TestClientInitFailureLogHidesEndpointCredentials P-3 通道②：历史数据里的 userinfo 端点在
+// `clients.get` 失败时由 handler.go 打 Debug 日志（"s3 client init"）；错误串必须已脱敏，
+// 否则任意已认证 token 都能用「故意让客户端构建失败」把凭据写进日志。
+func TestClientInitFailureLogHidesEndpointCredentials(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	acc, err := st.Create(&model.Account{
+		Name: "legacy", Endpoint: "http://" + endpointUserinfoUser + ":" + endpointUserinfoPass + "@127.0.0.1:9000",
+		AccessKey: "AKIATEST", SecretKey: "SECRET-SENTINEL",
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	h := New(st, logger, t.TempDir(), nil, "", "test", false, false).Routes()
+
+	rr := doJSON(t, h, http.MethodPost, "/api/accounts/"+acc.ID+"/test", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("test status = %d, want 400（userinfo 端点必须 fail-closed）：\n%s", rr.Code, rr.Body.String())
+	}
+	log := buf.String()
+	if !strings.Contains(log, "s3 client init") {
+		t.Fatalf("未捕获到 clients.get 失败日志（用例失效）：\n%s", log)
+	}
+	assertNoEndpointCredential(t, log)
+	assertNoEndpointCredential(t, rr.Body.String())
+	if strings.Contains(log, "SECRET-SENTINEL") {
+		t.Errorf("日志泄漏了 secretKey：\n%s", log)
+	}
+}
 
 // plaintextWarnMarker 是 WARN 消息里必含的稳定片段（改动文案需同步本测试）。
 const plaintextWarnMarker = "载荷完整性"
@@ -137,24 +322,60 @@ func TestCreateAccountWarnsOnPlaintextPublicEndpoint(t *testing.T) {
 	}
 }
 
-// TestPlaintextWarnDoesNotLeakEndpointCredentials（评审 2026-10-10 N1 / KNOWN_ISSUES #84）：
-// endpoint 里的 URL userinfo（`http://key:secret@host`）是**用户输入**，可能携带凭据。
-// 断言的外部可见行为：明文 WARN 仍然出现（告知义务不能丢），但日志里**搜不到** userinfo 的
-// 用户名与口令——`s3wrap.ValidateEndpoint` / `NormalizeEndpoint` 都不剥离 userinfo，故必须由
-// 日志侧脱敏（根 AGENTS.md「密钥不落日志」）。
-func TestPlaintextWarnDoesNotLeakEndpointCredentials(t *testing.T) {
+// TestUserinfoEndpointNeverLeaksCredentials（原 TestPlaintextWarnDoesNotLeakEndpointCredentials，
+// 评审 2026-10-10 N1 / KNOWN_ISSUES #84；2026-10-16 P-3 改名 + 更新期望）：
+// 带 userinfo 的 endpoint 外部行为已由「201 + WARN 脱敏」变为 **fail-closed 400**（冻结合同：
+// `ValidateEndpoint` 拒绝 → 建号/更新 400），这条路径已不再产生 WARN，用例名若再提「WARN」会误导。
+// **原始意图不变**：endpoint 里的 userinfo 是用户输入、可能携带凭据，断言凭据绝不进日志与响应体
+// （根 AGENTS.md「密钥不落日志」）。
+func TestUserinfoEndpointNeverLeaksCredentials(t *testing.T) {
 	var buf bytes.Buffer
 	h := newCapturingHandler(t, &buf)
 	rr := doJSON(t, h, http.MethodPost, "/api/accounts",
-		accountBody(t, "http://AKIAUSER:URLPASS-SENTINEL@127.0.0.1:9000", "", false))
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201（本用例只关心日志脱敏）：\n%s", rr.Code, rr.Body.String())
+		accountBody(t, "http://"+endpointUserinfoUser+":"+endpointUserinfoPass+"@127.0.0.1:9000", "", false))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400（P-3：endpoint userinfo fail-closed）:\n%s", rr.Code, rr.Body.String())
+	}
+	assertNoEndpointCredential(t, buf.String())
+	assertNoEndpointCredential(t, rr.Body.String())
+}
+
+// TestPlaintextWarnStaysCredentialFreeForLegacyAccount —— 明文 WARN 路径的**保活**用例。
+//
+// 为什么需要它：P-3 后 `redactEndpoint` 变成 `model.RedactEndpointUserinfo` 的一层薄委托，而
+// `warnPlaintextEndpoints` 是 handler 侧唯一的调用点——若哪天这条日志路径被整段移除，覆盖率与
+// 「日志无凭据」两道防线会一起静默失效。本用例从 **store 预置的历史账号**（模拟契约上线前
+// 落盘的 `http://` 账号，不带 userinfo）出发，更新为明文端点，断言：① WARN 出现；
+// ② 日志里既没有 userinfo 哨兵、也没有 secretKey；③ 脱敏没有把正常端点也吃掉。
+func TestPlaintextWarnStaysCredentialFreeForLegacyAccount(t *testing.T) {
+	st, err := store.New(filepath.Join(t.TempDir(), "accounts.json"))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	legacy, err := st.Create(&model.Account{
+		Name: "legacy-plain", Endpoint: "http://minio.local:9000",
+		AccessKey: "AKIATEST", SecretKey: "SECRET-SENTINEL",
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	var buf bytes.Buffer
+	h := New(st, slog.New(slog.NewJSONHandler(&buf, nil)), t.TempDir(), nil, "", "test", false, false).Routes()
+
+	rr := doJSON(t, h, http.MethodPut, "/api/accounts/"+legacy.ID,
+		accountBody(t, "http://127.0.0.1:9000", "", false))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update status = %d, want 200：\n%s", rr.Code, rr.Body.String())
 	}
 	log := buf.String()
 	if !strings.Contains(log, plaintextWarnMarker) {
-		t.Errorf("明文端点的告知不能因脱敏而消失：\n%s", log)
+		t.Fatalf("明文 WARN 路径失去覆盖/被移除：\n%s", log)
 	}
-	if strings.Contains(log, "URLPASS-SENTINEL") || strings.Contains(log, "AKIAUSER") {
-		t.Errorf("WARN 泄漏了 endpoint 的 userinfo 凭据（应在落日志前脱敏）：\n%s", log)
+	if !strings.Contains(log, "http://127.0.0.1:9000") {
+		t.Errorf("WARN 未记录明文端点（脱敏不应吃掉正常端点）：\n%s", log)
+	}
+	assertNoEndpointCredential(t, log)
+	if strings.Contains(log, "SECRET-SENTINEL") {
+		t.Errorf("日志泄漏了 secretKey：\n%s", log)
 	}
 }

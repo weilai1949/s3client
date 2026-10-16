@@ -150,11 +150,25 @@ func WriteObjectsZip(
 }
 
 // SanitizeZipName 把对象 key 转成安全的 ZIP 条目名，避免 zip-slip。
+//
+// P-11（2026-10-15 渗透测试）：除把 `.` / `..` 段归一为 `_` 外，输出还必须**不含任何 ASCII
+// 控制字符**——`..\x00/evil` 的 NUL 既不被 FieldsFunc（只按 `/` `\` 切分）切开、也不被
+// TrimRight(". ") 去掉，而部分解压器按 C 串处理 NUL 后会把它当 `..`（zip slip）。故每个段在
+// 判空 / 判点段之前先删掉控制字符，使 `..\x00` 归一到 `_`。
 func SanitizeZipName(key string) string {
 	name := strings.TrimPrefix(key, "/")
 	parts := strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' })
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
+		p = strings.TrimRight(p, ". ")
+		// 删掉 ASCII 控制字符（NUL / DEL / C0）：它们不是路径分隔符，留下就会成为条目名的一部分。
+		p = strings.Map(func(r rune) rune {
+			if r < 0x20 || r == 0x7f {
+				return -1
+			}
+			return r
+		}, p)
+		// 删字符可能暴露新的尾部 `.` / 空白（如 ".\x00." → "."），故再 trim 一次。
 		p = strings.TrimRight(p, ". ")
 		if p == "" || p == "." || p == ".." {
 			p = "_"

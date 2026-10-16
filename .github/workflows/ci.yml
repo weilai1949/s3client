@@ -245,6 +245,91 @@ jobs:
             --ignorefile /trivy/.trivyignore \
             s3client/server:ci
 
+      # P-4（2026-10-15 渗透测试快照）：此前 Trivy 只扫 workflow 内构建的 server 镜像，
+      # compose 里声明的 **nginx 边缘镜像**从不被扫——而它是唯一直接面向公网的进程，
+      # 基础镜像的 CRITICAL/HIGH 恰恰最可能落在它身上（alpine 分支 EOL 亦在此）。
+      #
+      # 扫的是「实际部署的那个镜像」：
+      #   - compose 已把 nginx 改为**仓库自建**（`build:` + `image: s3client/nginx:<tag>`，
+      #     Dockerfile 内 `apk upgrade` 把基础镜像待修 CVE 一并补齐）⇒ 先 build 再扫构建产物；
+      #   - 若 compose 仍 pin 上游镜像（无 `build.dockerfile:`）⇒ 拉取后扫。
+      # 镜像 tag 与 Dockerfile 路径**都从 docker-compose.yml 解析**（单一来源）：workflow 里
+      # 不写死版本号/路径，否则 compose 升级后扫描面会静默停在旧版本，两处必然漂移。
+      # 只解析 dev 一份：prod compose 的 nginx 与之完全一致，且有门禁
+      # `TestNginxEdgeImageIsConsistentAcrossCompose` 钉住（两处不一致即红）。
+      #
+      # 口径与上面的 server 镜像完全一致：同一 Trivy pin（tag + digest）、同一 DB 缓存
+      # （复用上一步已就绪的 DB，故 --skip-db-update）、同样的
+      # `--exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed`；拉取失败带重试并与
+      # 「真的扫出漏洞」区分（R4：网络抖动不应表现为安全门禁变红）。
+      - name: Build/pull nginx edge image
+        id: nginx-edge
+        run: |
+          set -euo pipefail
+          # 从 compose 的 `services.nginx` 解析 `image:`（4 空格）与 `build.dockerfile:`（6 空格）。
+          read_nginx_field() {
+            awk -v svc=nginx -v field="$1" '
+              {
+                if ($0 ~ /^services:[[:space:]]*$/) { in_services = 1; next }
+                if ($0 ~ /^[^[:space:]#]/) { in_services = 0 }
+                if (!in_services) { next }
+                if ($0 ~ /^  [^[:space:]#][^:]*:[[:space:]]*$/) {
+                  current = $1; sub(/:$/, "", current); next
+                }
+                if (current != svc) { next }
+                if (field == "image" && $0 ~ /^    image:[[:space:]]/) { print $2 }
+                if (field == "dockerfile" && $0 ~ /^      dockerfile:[[:space:]]/) { print $2 }
+              }
+            ' docker-compose.yml
+          }
+          image=$(read_nginx_field image)
+          dockerfile=$(read_nginx_field dockerfile)
+          if [ -z "$image" ]; then
+            echo "未能从 docker-compose.yml 的 nginx 服务解析 image（解析口径需同步）" >&2
+            exit 1
+          fi
+          if [ -n "$dockerfile" ]; then
+            echo "==> 构建仓库自建边缘镜像：$image（Dockerfile: $dockerfile，均来自 compose）"
+            docker build -f "$dockerfile" -t "$image" .
+          else
+            echo "==> compose 未声明 build，按上游镜像处理：拉取 $image"
+            ok=0
+            for attempt in 1 2 3 4; do
+              if docker pull "$image"; then
+                ok=1
+                break
+              fi
+              echo "nginx 镜像拉取第 $attempt 次失败；$((attempt * 15))s 后重试" >&2
+              sleep $((attempt * 15))
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "nginx 镜像拉取 4 次仍失败（不是扫出了漏洞）：$image" >&2
+              exit 1
+            fi
+          fi
+          # 把「镜像没进本地 daemon」这一结构性失败与「真的扫出漏洞」区分开（同 server 一步）。
+          docker image inspect "$image" > /dev/null
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy nginx edge image scan (CRITICAL/HIGH 失败门禁)
+        env:
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.trivy-cache
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE_DIR:/root/.cache/trivy" \
+            -v "${{ github.workspace }}/.trivyignore:/trivy/.trivyignore:ro" \
+            aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 image \
+            --severity CRITICAL,HIGH \
+            --pkg-types os,library \
+            --exit-code 1 \
+            --no-progress \
+            --ignore-unfixed \
+            --skip-db-update \
+            --ignorefile /trivy/.trivyignore \
+            "${{ steps.nginx-edge.outputs.image }}"
+
   # R10：镜像发布。此前没有任何 workflow 推送镜像（docker job 恒 push:false），
   # 「发布」只有 tag + 桌面安装包，用户无法 docker pull 到 CI 构建的产物。
   # 设计取舍：独立 job 且 needs: docker —— 只有镜像构建成功且 Trivy 扫描通过才推送，

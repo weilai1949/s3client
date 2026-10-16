@@ -59,6 +59,11 @@ apps/web/playwright/.cache/
 data/
 .run/
 
+# Docker Compose secrets（P-8）：真实密钥文件禁止入库；`.example` 占位文件要入库
+# （内容 REPLACE_ME 短于 config.MinStoreKeyLength/MinTokenLength，照抄必 fail-closed）。
+/secrets/*
+!/secrets/*.example
+
 # Agent 本地覆盖文件（个人偏好，不提交）
 AGENTS.local.md
 CLAUDE.local.md

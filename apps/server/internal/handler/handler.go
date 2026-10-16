@@ -37,6 +37,8 @@ type Handler struct {
 	clients        *clientCache
 	migrateJobs    *service.JobRegistry
 	limiter        *ipLimiter
+	probeLimiter   *ipLimiter        // 探针端点（health/metrics/openapi）独立宽松桶；nil = 不限（手工构造）
+	pingCache      *pingCache        // store.Ping 结果短 TTL 缓存；nil = 每次实打
 	openapi        *openapi.Registry // 路由旁登记；/api/openapi.json 直接复用
 	// 计划任务（ROADMAP #6）：schedules 为计划注册表 + 调度循环；
 	// schedMu/schedActive 实现触发防叠加（check-and-set 原子，见 schedules.go）。
@@ -58,8 +60,11 @@ func New(st store.AccountStore, log *slog.Logger, staticDir string, corsOrigins 
 		clients:     newClientCache(),
 		migrateJobs: service.NewJobRegistry(),
 		limiter:     newIPLimiter(config.DefaultRateLimitRPM, config.DefaultRateLimitBurst),
-		openapi:     reg,
-		schedActive: make(map[string]bool),
+		// 探针端点豁免主限流，但不能完全不限：独立宽松桶 + Ping 缓存抵御匿名高频轮询（P-12）。
+		probeLimiter: newIPLimiter(config.DefaultProbeRateLimitRPM, config.DefaultProbeRateLimitBurst),
+		pingCache:    newPingCache(config.DefaultHealthPingCacheSeconds),
+		openapi:      reg,
+		schedActive:  make(map[string]bool),
 	}
 	// 调度器以 runScheduleJob 为触发器；persister 默认纯内存，SetSchedulePersister
 	// 在 Routes() 前替换为落盘版（同 SetJobPersister 的 setter 口径）。
@@ -107,6 +112,21 @@ func (h *Handler) SetTrustedProxies(proxies []string) {
 // 需在 Routes() 前调用；默认值见 config.DefaultRateLimit*。
 func (h *Handler) SetRateLimit(rpm, burst int) {
 	h.limiter = newIPLimiter(rpm, burst)
+}
+
+// SetProbeRateLimit 覆盖探针端点的独立宽松桶参数
+// （S3C_PROBE_RATE_LIMIT_RPM / S3C_PROBE_RATE_LIMIT_BURST，默认见 config.DefaultProbeRateLimit*）。
+// 需在 Routes() 前调用；这三个端点仍豁免主限流（P-12）。
+func (h *Handler) SetProbeRateLimit(rpm, burst int) {
+	h.probeLimiter = newIPLimiter(rpm, burst)
+}
+
+// SetHealthPingCacheSeconds 覆盖 store.Ping 结果的 TTL 缓存秒数
+// （S3C_HEALTH_PING_CACHE_SECONDS，默认 config.DefaultHealthPingCacheSeconds）。
+// 0 = 关闭缓存、每次实打；失败结果同样缓存，避免 store 掉线时探针每次都穿透。
+// 需在 Routes() 前调用。
+func (h *Handler) SetHealthPingCacheSeconds(seconds int) {
+	h.pingCache = newPingCache(seconds)
 }
 
 // SetDataDir 记录数据目录，供 /api/metrics 的卷容量（statfs 目标）与

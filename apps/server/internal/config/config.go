@@ -30,6 +30,24 @@ const (
 	DefaultRateLimitBurst = 30
 )
 
+// DefaultProbeRateLimitRPM / DefaultProbeRateLimitBurst 是探针端点
+// （/api/health、/api/metrics、/api/openapi.json）独立令牌桶的默认值。
+// 这三个端点豁免主限流（K8s 探针 / Prometheus scrape 不能被业务限流打成失败），
+// 但匿名且会被高频轮询，故用更宽松的独立桶约束（P-12）。
+const (
+	DefaultProbeRateLimitRPM   = 600
+	DefaultProbeRateLimitBurst = 100
+)
+
+// DefaultHealthPingCacheSeconds 是 store.Ping 结果 TTL 缓存的默认秒数（P-12）：
+// 探针高频轮询时避免每次都打存储；0 = 关闭缓存（每次实打）。
+const DefaultHealthPingCacheSeconds = 2
+
+// allowedCSPSourceChars 是 CSP source-list 允许出现的非字母数字字符：
+// RFC 9110 URI 安全字符集 + 单引号（关键字）与空格（source 分隔符）。
+// `;`（指令注入）、`,`、双引号、反斜杠等一律不在集内（P-5a）。
+const allowedCSPSourceChars = "-._~:/?#[]@!$&'()*+=%^*'"
+
 // ErrShortToken 表示 S3C_TOKEN 长度低于 MinTokenLength。
 var ErrShortToken = errors.New("S3C_TOKEN too short")
 
@@ -53,6 +71,22 @@ var ErrUnknownStoreDriver = errors.New("unknown store driver")
 // ErrInvalidEnvValue 表示数值型环境变量（如 S3C_SHUTDOWN_TIMEOUT）取非法值。
 // 静默回退默认值会让运维误以为配置已生效，改为拒绝启动。
 var ErrInvalidEnvValue = errors.New("invalid numeric environment variable")
+
+// ErrSecretFileUnreadable 表示 <X>_FILE（S3C_STORE_KEY_FILE / S3C_TOKEN_FILE）指向的口令
+// 文件不存在 / 不可读，或读出的内容去掉首尾空白后为空。
+// 独立于 ErrInvalidEnvValue：文件类失败不是「数值写错」，混用会把运维引向错误的排查方向
+// （实测文案曾显示为「invalid numeric environment variable: S3C_STORE_KEY_FILE=… 读取失败」）。
+var ErrSecretFileUnreadable = errors.New("unreadable secret file")
+
+// ErrSecretFileAmbiguous 表示同一口令的明文变量与 <X>_FILE 同时（非空）设置——配置歧义（ambiguous）。
+// 取任一个都可能锁死或放开不该放开的口令，故 fail-closed 拒绝启动，不静默取其一。
+var ErrSecretFileAmbiguous = errors.New("ambiguous secret configuration")
+
+// ErrInvalidCSPValue 表示 S3C_CSP_CONNECT_SRC 不是合法的 CSP source-list
+// （含控制字符 / 纯空白 / 允许字符集之外的字符）。
+// 独立于 ErrInvalidEnvValue：这是**字符串语法**校验，复用「invalid numeric …」文案会把
+// 运维引向「是不是数字写错了」的错误排查方向（Lead 端到端实测踩到）。
+var ErrInvalidCSPValue = errors.New("invalid CSP source-list")
 
 // ErrInvalidEnvFile 表示显式指定的 S3C_ENV_FILE 不存在或不可读。
 // 显式路径是运维的显式选择：静默回退默认值会让写在该文件里的加固项静默失效
@@ -166,6 +200,9 @@ type Config struct {
 	SSRFDenyPrivate     bool                  // true = 连私网/回环端点也拒绝（默认 false：自托管场景放行，见 ADR-003）
 	RateLimitRPM        int                   // 每 IP（IPv6 按 /64 聚合）每分钟放行请求数；默认 DefaultRateLimitRPM
 	RateLimitBurst      int                   // 令牌桶突发容量；默认 DefaultRateLimitBurst
+	ProbeRateLimitRPM   int                   // 探针端点（health/metrics/openapi）独立桶每分钟放行数；默认 DefaultProbeRateLimitRPM
+	ProbeRateLimitBurst int                   // 探针端点独立桶突发容量；默认 DefaultProbeRateLimitBurst
+	HealthPingCacheSec  int                   // store.Ping 结果 TTL 缓存秒数；默认 DefaultHealthPingCacheSeconds，0 = 每次实打
 	OTelEndpoint        string                // OTLP/HTTP 采集端基址；空 = 关闭 tracing（默认）
 	OTelSampleRatio     float64               // 新建 trace 采样比例，取值 [0,1]（默认 1）
 	OTelServiceName     string                // OTLP resource attribute service.name（默认 s3client）
@@ -217,6 +254,84 @@ func envOrFloat(key string, def float64) (float64, error) {
 	return f, nil
 }
 
+// envOrNonNegInt 解析**非负**整数环境变量：未设置（空串）取默认值；非数字或 <0 返回错误。
+// 与 envOrInt 的唯一区别是 0 合法（S3C_HEALTH_PING_CACHE_SECONDS=0 = 关闭 Ping 缓存），
+// 故不复用后者的 >=1 约束，也不静默回退。
+func envOrNonNegInt(key string, def int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s=%q 不是合法整数", ErrInvalidEnvValue, key, v)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("%w: %s=%q 必须是 >=0 的整数", ErrInvalidEnvValue, key, v)
+	}
+	return n, nil
+}
+
+// envOrFile 解析「明文变量 或 <fileKey> 文件」二选一形式的密钥配置
+// （S3C_STORE_KEY / S3C_STORE_KEY_FILE、S3C_TOKEN / S3C_TOKEN_FILE，P-8）：
+// 容器编排（docker secrets）把密钥挂成文件，避免明文出现在 docker inspect /
+// /proc/<pid>/environ。
+//
+//   - 未设置 fileKey 时原样返回明文变量（历史语义不变，含空串）；
+//   - 设置了 fileKey 时读文件，内容去掉首尾空白与换行后作为值；
+//   - 明文变量（去空白后**非空**）与 fileKey 同时设置 = 配置歧义，fail-closed
+//     拒绝启动（不得静默取其一；「存在但为空串」不算设置，避免显式传空值的编排被误杀）；
+//   - 文件不可读、或内容去空白后为空 = fail-closed（静默空值会让加固项失效、
+//     甚至变成无鉴权启动）。
+//
+// 三类失败都 fail-closed 拒绝启动，且各自返回语义正确的 sentinel：文件不可读 / 内容为空 →
+// ErrSecretFileUnreadable；明文与文件同时设置 → ErrSecretFileAmbiguous。错误串只含**变量名与
+// 路径**，绝不回显文件内容（口令不得进日志）。
+// 两个变量名都以字面量传入（而非拼 `_FILE` 后缀）：config_doc_gate_test.go 靠
+// 源码里的 `"S3C_*"` 字面量核对文档收录，拼后缀会让新变量对门禁不可见。
+func envOrFile(key, fileKey string) (string, error) {
+	direct := os.Getenv(key)
+	path := strings.TrimSpace(os.Getenv(fileKey))
+	if path == "" {
+		return direct, nil
+	}
+	if strings.TrimSpace(direct) != "" {
+		return "", fmt.Errorf("%w: %s 与 %s 不能同时设置（明文赋值与文件挂载二选一，取错一个会锁死或放开口令）",
+			ErrSecretFileAmbiguous, key, fileKey)
+	}
+	// 路径来自运维显式配置（S3C_STORE_KEY_FILE / S3C_TOKEN_FILE，docker secrets /
+	// systemd LoadCredential 的挂载点），与 S3C_DATA_DIR 同信任级、不是终端用户输入，
+	// 且这里没有更窄的路径约束可用。G304（同族规则）已按同一理由在 .golangci.yml
+	// 排除，G703 是它在 gosec v2 的 taint 变体。
+	b, err := os.ReadFile(path) // #nosec G703 -- 路径来自运维显式配置的 *_FILE 挂载点，非用户输入
+	if err != nil {
+		return "", fmt.Errorf("%w: %s=%s 不存在或不可读: %v", ErrSecretFileUnreadable, fileKey, path, err)
+	}
+	v := strings.TrimSpace(string(b))
+	if v == "" {
+		return "", fmt.Errorf("%w: %s=%s 内容为空（去掉首尾空白后无有效值）", ErrSecretFileUnreadable, fileKey, path)
+	}
+	return v, nil
+}
+
+// validateCSPSourceList 校验 CSP source-list 语法（P-5a）：只允许空格分隔的
+// source 字符集。`;` 会被浏览器当作**下一条指令**的分隔符——S3C_CSP_CONNECT_SRC
+// 注入 `; frame-ancestors *` 可架空 X-Frame-Options: DENY，因此启动期必须拒绝。
+func validateCSPSourceList(src string) error {
+	for _, r := range src {
+		switch {
+		case r == ' ':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case strings.ContainsRune(allowedCSPSourceChars, r):
+		default:
+			return fmt.Errorf("%w: S3C_CSP_CONNECT_SRC=%q 含非法字符 %q"+
+				"（source-list 只允许空格分隔的 [A-Za-z0-9%s]）",
+				ErrInvalidCSPValue, src, string(r), allowedCSPSourceChars)
+		}
+	}
+	return nil
+}
+
 // FromEnv 从环境变量构建配置；启动时按 envFileCandidates 加载 .env（真实环境变量优先）。
 // 显式 S3C_ENV_FILE 不可读、或数值型环境变量解析失败，都记入 Config.envErr
 // 由 Validate 首查上抛使启动失败——**不静默回退默认值**。
@@ -225,37 +340,36 @@ func FromEnv() Config {
 	shutdownTimeout, secErr := envOrInt("S3C_SHUTDOWN_TIMEOUT", 30)
 	rateLimitRPM, rpmErr := envOrInt("S3C_RATE_LIMIT_RPM", DefaultRateLimitRPM)
 	rateLimitBurst, burstErr := envOrInt("S3C_RATE_LIMIT_BURST", DefaultRateLimitBurst)
+	probeRPM, probeRPMErr := envOrInt("S3C_PROBE_RATE_LIMIT_RPM", DefaultProbeRateLimitRPM)
+	probeBurst, probeBurstErr := envOrInt("S3C_PROBE_RATE_LIMIT_BURST", DefaultProbeRateLimitBurst)
+	pingCacheSec, pingCacheErr := envOrNonNegInt("S3C_HEALTH_PING_CACHE_SECONDS", DefaultHealthPingCacheSeconds)
+	storeKey, storeKeyErr := envOrFile("S3C_STORE_KEY", "S3C_STORE_KEY_FILE")
+	token, tokenErr := envOrFile("S3C_TOKEN", "S3C_TOKEN_FILE")
 	tokenScopes, scopeErr := parseTokenScopes(os.Getenv("S3C_TOKEN_SCOPES"))
 	otelSampleRatio, ratioErr := envOrFloat("S3C_OTEL_SAMPLE_RATIO", 1)
 	envErr := loadErr
-	if envErr == nil {
-		envErr = secErr
-	}
-	if envErr == nil {
-		envErr = scopeErr
-	}
-	if envErr == nil {
-		envErr = ratioErr
-	}
-	if envErr == nil {
-		envErr = rpmErr
-	}
-	if envErr == nil {
-		envErr = burstErr
+	// 逐个补齐第一个非 nil 错误（保持既有链式风格：先发生的配置错误优先上抛）。
+	for _, err := range []error{
+		secErr, scopeErr, ratioErr, rpmErr, burstErr,
+		probeRPMErr, probeBurstErr, pingCacheErr, storeKeyErr, tokenErr,
+	} {
+		if envErr == nil {
+			envErr = err
+		}
 	}
 	return Config{
 		Addr:                envOr("S3C_ADDR", "127.0.0.1:5000"),
 		DataDir:             envOr("S3C_DATA_DIR", "./data"),
 		StaticDir:           envOr("S3C_STATIC_DIR", "../web/dist"),
 		Region:              envOr("S3C_REGION", "us-east-1"),
-		Token:               os.Getenv("S3C_TOKEN"),
+		Token:               token,
 		TokenScopes:         tokenScopes,
 		MetricsToken:        os.Getenv("S3C_METRICS_TOKEN"),
 		CORSOrigins:         splitList(envOr("S3C_CORS_ORIGINS", "")),
 		LogLevel:            envOr("S3C_LOG_LEVEL", "info"),
 		LogJSON:             envTruthy("S3C_LOG_JSON"),
 		StoreDriver:         normalizeStoreDriver(envOr("S3C_STORE_DRIVER", "json")),
-		StoreKey:            os.Getenv("S3C_STORE_KEY"),
+		StoreKey:            storeKey,
 		AllowPlaintextStore: envTruthy("S3C_ALLOW_PLAINTEXT_STORE"),
 		ShutdownTimeoutSec:  shutdownTimeout,
 		ExposeMetrics:       envTruthy("S3C_EXPOSE_METRICS"),
@@ -265,6 +379,9 @@ func FromEnv() Config {
 		SSRFDenyPrivate:     envTruthy("S3C_SSRF_DENY_PRIVATE"),
 		RateLimitRPM:        rateLimitRPM,
 		RateLimitBurst:      rateLimitBurst,
+		ProbeRateLimitRPM:   probeRPM,
+		ProbeRateLimitBurst: probeBurst,
+		HealthPingCacheSec:  pingCacheSec,
 		OTelEndpoint:        envOr("S3C_OTEL_ENDPOINT", ""),
 		OTelSampleRatio:     otelSampleRatio,
 		OTelServiceName:     envOr("S3C_OTEL_SERVICE_NAME", "s3client"),
@@ -311,7 +428,8 @@ func IsLoopbackAddr(addr string) bool {
 //   - S3C_STORE_DRIVER 必须在白名单 json|sqlite|encrypted（空串 = 未显式指定，默认 json），
 //     未知值拒绝启动——此前未知值被 store.Open 静默当 json，绕过下面的明文落盘闸（R4）；
 //   - 短 S3C_TOKEN 拒绝启动（强制使用足够长度的随机值）；
-//   - 非空 S3C_METRICS_TOKEN 必须达到最短长度；S3C_CSP_CONNECT_SRC 不得含控制字符 / 纯空白；
+//   - 非空 S3C_METRICS_TOKEN 必须达到最短长度；S3C_CSP_CONNECT_SRC 不得含控制字符 / 纯空白，
+//     且必须是合法 source-list（拒 `;` 指令注入 / `,` / 允许字符集外的字符，P-5a）；
 //   - 非回环监听必须设置 S3C_TOKEN；
 //   - 非空 S3C_STORE_KEY 必须达到最短长度（落盘加密口令，已闭环：FEATURES.md §M）；
 //   - json / sqlite 且 S3C_STORE_KEY 为空时必须显式 opt-in 明文落盘，否则拒绝启动（KNOWN_ISSUES #29/#31）。
@@ -340,10 +458,15 @@ func (c Config) Validate() error {
 	// S3C_CSP_CONNECT_SRC：空串 = 未指定（SetCSPConnectSrc 忽略空值、沿用默认 CSP，
 	// 与 StoreDriver 空串口径一致）；一旦指定则必须可用——控制字符（含换行）会让
 	// CSP 响应头写出失败或被客户端丢弃（加固项静默失效），纯空白会把 connect-src
-	// 变成空源列表（阻断所有连接）。启动期 fail-closed，不静默降级。
+	// 变成空源列表（阻断所有连接），而 source-list 非法字符（尤其 `;`）可注入基策略
+	// 中不存在的指令（如 `; frame-ancestors *` 架空 X-Frame-Options: DENY，P-5a）。
+	// 启动期 fail-closed，不静默降级。
 	if src := c.CSPConnectSrc; src != "" {
 		if strings.TrimSpace(src) == "" || strings.ContainsFunc(src, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-			return fmt.Errorf("%w: S3C_CSP_CONNECT_SRC=%q 含控制字符或为空白", ErrInvalidEnvValue, src)
+			return fmt.Errorf("%w: S3C_CSP_CONNECT_SRC=%q 含控制字符或为空白", ErrInvalidCSPValue, src)
+		}
+		if err := validateCSPSourceList(src); err != nil {
+			return err
 		}
 	}
 	driver := normalizeStoreDriver(c.StoreDriver)

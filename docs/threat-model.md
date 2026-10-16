@@ -2,7 +2,7 @@
 
 > 本文档描述 s3client 的威胁模型、安全边界与默认值。漏洞报告流程见 [SECURITY.md](../.github/SECURITY.md)。
 > 本文档基于 2026-09-16 综合安全审计（详见 [archive/assessment.md](archive/assessment.md) §二），其后按修复进展滚动更新。
-> 最后更新：2026-10-15。
+> 最后更新：2026-10-16。
 
 ## 1. 威胁模型（STRIDE × 边界）
 
@@ -15,8 +15,8 @@
 | **S**poofing 仿冒 | Bearer 常量时间比较（sha256+subtle）、scheme 大小写不敏感（RFC 7235）、多 token 轮换、最短 16 字符 | ✅ 已缓解 |
 | **T**ampering 篡改 | Content-Type 非空时必须为 `application/json`（缺省放行，仍受 JSON 解码器约束）+ `DisallowUnknownFields` + 16MB body cap（超限回 413）；配合 CORS 使跨域变更必预检 | ✅ 已缓解 |
 | **R**epudiation 抵赖 | 安全审计日志（`handler/audit.go`）：401（malformed/bad_token）/ 账号 CRUD / 桶策略设置与清除 / 对象删除与前缀删除 / **移动与重命名**（同步批量 `copy-objects` + `deleteSource`、异步批量、`rename` 复制后删源）/ **版本永久删除**（`DELETE /version`，带 `versionId`）/ 回收站清空 / 限速命中，带固定事件名与操作者 IP；另有通用 access log | ✅ 已缓解（原 todo #17 闭环见 [FEATURES.md](FEATURES.md) §M；2026-09-28 补齐三处破坏性操作覆盖见 §AE） |
-| **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey；health 匿名响应不含 `version`，metrics 可用独立 token 保护 | ✅ 已缓解 |
-| **D**oS 拒绝服务 | IP 令牌桶（默认 120/min·突发 30，`S3C_RATE_LIMIT_RPM` / `S3C_RATE_LIMIT_BURST` 可调；IPv6 按 /64 聚合防单 /64 海量地址换桶）、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503 | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
+| **I**nfo disclosure 泄露 | 错误脱敏、S3 错误稳定映射、AccountView 不含 secretKey 且端点回传脱敏值（URL userinfo 一律剥离，见 §6.2）；health 匿名响应不含 `version`，metrics 可用独立 token 保护 | ✅ 已缓解 |
+| **D**oS 拒绝服务 | IP 令牌桶（默认 120/min·突发 30，`S3C_RATE_LIMIT_RPM` / `S3C_RATE_LIMIT_BURST` 可调；IPv6 按 /64 聚合防单 /64 海量地址换桶）、流式并发 32、批量上限齐备；XFF 仅 `S3C_TRUSTED_PROXIES` 命中才采信（默认空 = 不信任，防伪造绕过限速）；在册任务 ≤256 超限 503；探针面（`/api/health` / `/api/metrics` / `/api/openapi.json`）豁免主限流桶但另有**独立宽松令牌桶**（`S3C_PROBE_RATE_LIMIT_RPM` 默认 600 / `S3C_PROBE_RATE_LIMIT_BURST` 默认 100），匿名探针无法把主限流桶耗空、也无法无限高频打穿 `store.Ping`（短 TTL 缓存见 §2） | ✅ 已缓解（原 todo #17 两项缺口均已闭环） |
 | **E**levation 提权 | 默认单 token 全权模型；**可选最小权限作用域**（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号白名单 / 过期）按 token 收敛爆炸半径；token 轮换支持 | ✅ 已缓解（越权 403 + 审计 `auth.scope_denied`；未登记 token 保持全权，见下方「最小权限」） |
 
 **最小权限（`S3C_TOKEN_SCOPES`，ROADMAP §三 #13）**：`S3C_TOKEN` 支持逗号分隔多 token，但历史上每个 token 都是全权。现可选用独立 env `S3C_TOKEN_SCOPES`（JSON：token → `{readonly, prefixes, accounts, expiresAt}`）为单个 token 声明最小权限：
@@ -35,7 +35,7 @@
 
 > 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM。**账号维度已不再是缺口**——声明 `prefixes` 时必须同时声明 `accounts`（配置期 fail-closed，见下条），因此 `prefixes` 的生效范围恒为「许可账号集合 × 许可桶/键」，不存在「任意账号的这个桶前缀」。仍然存在的边界：① `prefixes × accounts` 是**笛卡尔积**，无法表达「A 只能碰 bucketA、B 只能碰 bucketB」（但仍在许可账号集合内，不跨账号）；② 账号列表（`GET /api/accounts`）与计划列表（`GET /api/schedules`，已按作用域裁剪）作为「与桶/键无关」的只读端点在白名单内放行，返回不含 `SecretKey` 的 `AccountView`；③ 账号**写入面**已由端点级闸一律拒绝。需要更细粒度授权时应在账号侧用 S3 策略收敛。
 > **2026-10-15 收口两条残留**：① 计划列表（`GET /api/schedules`）改为按作用域裁剪，越界计划的桶名 / 账号 id 不再可见（`readonly` 与全权 token 不变）；② 迁移 / 计划 body 与已存计划里的账号 id 纳入 `accounts` 判定（原「body 账号 id 不受约束」使 `accounts:[A]` 的 token 能让服务端用 B 的存储凭据执行迁移）。证据与用例见 [FEATURES.md](FEATURES.md) §CT。
-> **2026-10-16 对抗性渗透测试收口**：同日渗透测试（[`pentest-2026-10-15.md`](pentest-2026-10-15.md)）实测两条 High——`prefixes` 的**零引用 fail-open**（可越权增删改任意账号、并以受害者 SecretKey 对攻击者主机签名）与**授权解析器 ≠ 执行解析器**（JSON 键名大小写 / 重复键 `null` 绕过）；两者已按上文口径修复（零引用 → `unjudgeable` 403、账号写入面 → `account_write` 403、键名归一化 + 重复键 fail-closed）。原「残留」中「桶列表不受 `prefixes` 约束」一句**已不成立**（`GET /api/accounts/{id}/buckets` 零引用，现 403）。证据与用例见 [FEATURES.md](FEATURES.md) §CV。
+> **2026-10-16 对抗性渗透测试收口**：同日渗透测试（[`archive/pentest-2026-10-15.md`](archive/pentest-2026-10-15.md)）实测两条 High——`prefixes` 的**零引用 fail-open**（可越权增删改任意账号、并以受害者 SecretKey 对攻击者主机签名）与**授权解析器 ≠ 执行解析器**（JSON 键名大小写 / 重复键 `null` 绕过）；两者已按上文口径修复（零引用 → `unjudgeable` 403、账号写入面 → `account_write` 403、键名归一化 + 重复键 fail-closed）。原「残留」中「桶列表不受 `prefixes` 约束」一句**已不成立**（`GET /api/accounts/{id}/buckets` 零引用，现 403）。证据与用例见 [FEATURES.md](FEATURES.md) §CV。
 > **2026-10-16 收口账号维度残留**：原「`prefixes` 不约束账号维度」使 prefixes-only token 可对**任意 `{id}`** 执行界内桶/键操作、并以该账号凭据签发预签名 URL（实测 `POST /api/accounts/{victim}/presign` → 200，URL 的 `X-Amz-Credential` 是受害账号的 AccessKey）。现改为**配置期硬约束**：声明 `prefixes` 必须同时声明 `accounts`，否则拒绝启动（[`CONFIGURATION.md`](CONFIGURATION.md) 变量表 + fail-closed 表；[`.env.example`](../apps/server/.env.example) 示例同步补 `accounts`）。**运行时无需改动**——`accounts` 非空后 `{id}` 闸与账号引用闸本就在生效，判据保持单一来源；`accounts`-only 是有界作用域，不要求反配。证据与用例见 [FEATURES.md](FEATURES.md) §CW。
 
 ### 边界 B：预签名 URL 直传
@@ -96,7 +96,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | **S**poofing 仿冒 | 纯 B/S：无 IPC、无自定义 command（无 `invoke_handler`，[ADR-001](decisions/0001-desktop-no-ipc.md)），不存在可被仿冒的本地命令面 | ✅ 已缓解 |
 | **T**ampering 篡改 | ➖ 不适用：壳层不持有数据、不改写存储（落盘与校验在 Go 后端，见边界 A / C） | ➖ |
 | **R**epudiation 抵赖 | ➖ 不适用：壳层无业务操作 | ➖ |
-| **I**nfo disclosure 泄露 | 前端 0 处 `v-html` / `innerHTML` / `eval`（XSS 面为零）+ 后端 CSP `script-src 'self'`（`middleware.go` `withSecurityHeaders`） | ✅ 已缓解 |
+| **I**nfo disclosure 泄露 | 前端 0 处 `v-html` / `innerHTML` / `eval`（XSS 面为零，并由 ESLint `vue/no-v-html` + `web_xss_gate_test.go` 机械化钉住，P-6）+ 后端 CSP `script-src 'self'`（`middleware.go` `withSecurityHeaders`） | ✅ 已缓解 |
 | **D**oS 拒绝服务 | ➖ 不适用：壳层无服务监听面 | ➖ |
 | **E**levation 提权 | capabilities 空权限集（`capabilities/default.json` `permissions: []`，[ADR-001](decisions/0001-desktop-no-ipc.md)）——无 fs / shell / 进程 API 暴露给 JS，权限完全取决于同源策略 + 服务端鉴权 | ✅ 已缓解 |
 
@@ -111,13 +111,14 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | `json`/`sqlite` 无 `S3C_STORE_KEY` 时拒绝启动（需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行） | `config.go` `Validate` |
 | `/api/metrics` 与 `/api/openapi.json` 默认 404 | `middleware.go` `withMetricsGate` / `withOpenAPIGate` |
 | `/api/metrics` 可用 `S3C_METRICS_TOKEN` 保护；未设置时保持匿名 scrape 兼容 | `config.go`、`middleware.go` `withMetricsGate` |
-| `/api/health` 免鉴权供探针；匿名不含 `version`，仅有效 `S3C_TOKEN` 可见版本号 | `middleware.go` `hasValidAPIToken`、`health.go` |
+| `/api/health` 免鉴权供探针；匿名不含 `version`，仅有效 `S3C_TOKEN` 可见版本号；`store.Ping` 结果按 `S3C_HEALTH_PING_CACHE_SECONDS`（默认 2，**0 = 不缓存**）短 TTL 缓存，匿名与已认证同一口径（失败结果同样缓存，恢复最多延迟一个 TTL） | `middleware.go` `hasValidAPIToken`、`health.go` |
 | XFF 默认不信任（`S3C_TRUSTED_PROXIES` 默认空；仅直连对端命中白名单才采信其直连对端追加的最后一段） | `config.go` `FromEnv`、`ratelimit.go` `clientIPWithProxies` |
 | SSRF 私网 / 回环默认放行（`S3C_SSRF_DENY_PRIVATE` 默认关闭，可显式收紧，见 ADR-003） | `config.go` `FromEnv`、`s3wrap/ssrf.go` |
-| CORS 白名单仅 localhost/127.0.0.1/tauri + 跨域 403 硬阻断 | `middleware.go` `corsAllowedOrigin` / `withCORS` |
-| 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP；内联样式限 `style-src-attr`，内联 `<style>` 禁用 | `middleware.go` `withSecurityHeaders` |
+| CORS 默认只信任 http/https 的 `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（**端口不限**，兼容本地 Vite 随机端口）与 `tauri://localhost`；`tauri` 协议不再信任任意 host、`Origin: null` 不信任；跨域 403 硬阻断 | `middleware.go` `corsAllowedOrigin` / `withCORS` |
+| 安全头：nosniff / X-Frame-Options DENY / Referrer-Policy / CSP（含 `frame-ancestors 'none'`）；内联样式限 `style-src-attr`，内联 `<style>` 禁用 | `middleware.go` `withSecurityHeaders` |
+| 探针面（`/api/health` / `/api/metrics` / `/api/openapi.json`）豁免主限流桶，但受独立探针令牌桶约束（`S3C_PROBE_RATE_LIMIT_RPM` 默认 600 / `S3C_PROBE_RATE_LIMIT_BURST` 默认 100，超限 429 + `Retry-After: 1`） | `config.go` `FromEnv`、`ratelimit.go` `withRateLimit` / `probePaths`、`handler.go` `SetProbeRateLimit` |
 | TLS 站点额外下发 HSTS（180 天）+ Permissions-Policy | `deploy/nginx/conf.d/s3client-tls.example.conf` |
-| 容器非 root（`USER app`）、HEALTHCHECK、内存上限 | `apps/server/Dockerfile`、compose |
+| 容器非 root（`USER app`）、HEALTHCHECK、内存上限、`read_only: true` + `no-new-privileges` + `cap_drop: [ALL]`（server 与 nginx；nginx 另需 `cap_add: [CHOWN, SETGID, SETUID]`）与 tmpfs 可写路径 | `apps/server/Dockerfile`、compose（迁移与坑见 [DEPLOYMENT.md](DEPLOYMENT.md) §2.1.1 / §3） |
 | ReadHeaderTimeout 15s（防慢速请求头攻击） | `main.go` `runServer`（`http.Server` 字面量） |
 
 ## 3. 前端安全
@@ -125,7 +126,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 - **Token 存储**：默认 `sessionStorage`（关标签即清）；「跨会话保留」显式开启才写 `localStorage`。
   多服务器 `s3c.servers` 只存 `{id,name,base}` **不落 token**；每服务器 token 按 `s3c.token.<serverId>`
   独立存储、策略同上（原 todo #15「token 明文进 localStorage」已闭环，见 [FEATURES.md](FEATURES.md) §H）。
-- **XSS**：全库 0 处 `v-html`；对象名/错误消息全部经 Vue 插值转义。
+- **XSS**：全库 0 处 `v-html`；对象名/错误消息全部经 Vue 插值转义。**机械化（P-6，2026-10-16）**：ESLint 启用 `'vue/no-v-html': 'error'`（`apps/web/eslint.config.js`），并有根门禁 `apps/server/web_xss_gate_test.go`——对 `apps/web/src/**` 的**生产源码**（排除 `*.test.ts` / `__tests__`，剥离注释后）断言 `v-html` / `innerHTML` / `outerHTML` / `insertAdjacentHTML` / `srcdoc` / `document.write` 命中数为 **0**（注释里提到这些词不算违规）。
 - **预览管线**：服务端三模式代理（`download` 强制附件 / `inline` 类型白名单 / `text` 强制纯文本）+ `sandbox`。
 
 ## 4. 输入校验
@@ -134,7 +135,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 |---|---|---|
 | 桶名 | 3–63 字符 / 仅小写字母数字与 `.-` / 首尾必须字母数字 / 相邻字符不得同为 `.` 或 `-`（禁 `..` `.-` `-.` `--`） | `accounts.go` `validBucketName` |
 | 对象 key | 禁控制字符（代理层） | `proxy.go` `proxyObject` |
-| ZIP 条目名 | 防 zip-slip（trim + `..`→`_` + path.Clean） | `service/zip.go` `SanitizeZipName` |
+| ZIP 条目名 | 防 zip-slip（trim + `..`→`_` + path.Clean）：删除每个路径段里的 ASCII 控制字符（NUL / C0 / DEL），归一化后把 `.` / `..` 段替换为 `_`——`..\x00/evil` 产出 `_/evil`，**输出保证不含任何 ASCII 控制字符**（评审 2026-10-15 P-11） | `service/zip.go` `SanitizeZipName` |
 | 批量 key | delete ≤1000 / copy ≤10000 / zip ≤1000 / migrate ≤10000 | `objects.go` `maxDeleteKeys`、`handler.go` `maxBatchKeys` / `maxZipKeys` |
 | 请求体 | 16MB cap（超限回 413 而非 400）+ `DisallowUnknownFields` + 尾部数据拒绝 | `handler.go` `readJSON` / `maxBody` |
 | X-Request-ID | ≤128 可见 ASCII（防日志/响应头注入） | `middleware.go` `validRequestID` / `maxRequestIDLen` |
@@ -142,7 +143,11 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 
 ## 5. 依赖与供应链
 
-- **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败）+ `govulncheck@v1.8.0`（Go 可达漏洞，
+- **CI 门禁**：Trivy（容器 OS/库，CRITICAL/HIGH 失败；扫描面除本地构建的 `s3client/server` 外，还覆盖
+  compose 声明的**仓库自建 nginx 边缘镜像**——workflow 从 `docker-compose.yml` 解析镜像 tag 与
+  `deploy/nginx/Dockerfile` 路径（单一来源，不在 CI 里写死版本），先构建再以与 server 镜像**完全相同**的
+  `--exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed` 扫描**实际部署的那个镜像**；实测构建产物
+  已由 `zlib-1.3.2-r0` 升到 `r1`，该镜像当日 DB 扫描 0 条）+ `govulncheck@v1.8.0`（Go 可达漏洞，
   go1.26.9 下 0 告警）+ `cargo audit 0.22.2`（RustSec，桌面依赖；0 漏洞）+
   **OpenSSF Scorecard**（每周六 + 手动，仓库健康度评分发布到 OpenSSF API 与 code scanning，见 §5.5）+
   **Dependency Review**（每个 PR 对依赖 diff 做漏洞 / 许可证审查，见 §5.5）+
@@ -165,7 +170,7 @@ S3C2 旧格式仍可读（升级路径）。`S3C_STORE_KEY` 非空时要求 ≥ 
 | 前端依赖 | `pnpm-lock.yaml` + `packageManager: pnpm@9.15.0` + Node 精确 patch | `TestPackageManagerIsPinnedToCIPnpm` / `TestNodePinnedToPatchVersion` |
 | 桌面依赖 | `Cargo.lock` + `rust-toolchain.toml`（`channel = "1.98.1"`） | `TestRustToolchainIsVersionPinned` / `cargo audit` |
 | GitHub Actions | **全部 pin 到 commit SHA**（豁免 `./` 本地 action 与 `docker://`） | `TestWorkflowActionsAreShaPinned` |
-| 容器镜像（CI / compose：golang / node / rust / docker / nginx / Trivy / RustFS） | 按 **tag + digest**（`@sha256:`）pin，不按可变 tag | `TestCIBaseImagesAreDigestPinned`（2026-10-14 新增，覆盖 `.gitlab-ci.yml` 全部 `image:` / `services[].name` + 三个 compose 的非自建镜像）/ `TestTrivyImageIsVersionAndDigestPinned` / `TestRustFSImageIsConsistentlyPinned` |
+| 容器镜像（CI / compose：golang / node / rust / docker / Trivy / RustFS，以及**仓库内构建**的 nginx 边缘镜像） | 拉取的镜像按 **tag + digest**（`@sha256:`）pin，不按可变 tag；nginx 改为 `deploy/nginx/Dockerfile` 构建——`FROM` 基座 digest pin（可复现）+ `RUN apk upgrade --no-cache`（构建期拿到 alpine 分支内的安全补丁，消除「digest 冻结吃不到补丁」） | `TestCIBaseImagesAreDigestPinned`（2026-10-14 新增，覆盖 `.gitlab-ci.yml` 全部 `image:` / `services[].name` 与 compose 的非自建镜像；2026-10-16 起 nginx 转为构建产物、基座 digest 在 Dockerfile 内校验）/ `TestTrivyImageIsVersionAndDigestPinned` / `TestRustFSImageIsConsistentlyPinned` |
 | 运行镜像基础版 | alpine 受支持分支（EOL 即红灯） | `TestRuntimeBaseImageIsSupportedAlpine` |
 
 ### 5.2 第三方依赖与许可证清单
@@ -224,6 +229,12 @@ Trivy 镜像扫描命令与 CI 同一镜像 digest（见 [`.github/workflows/ci.
   依赖仓库自身的规则集 / 分支保护配置，未配置时表现为该项低分而不是流水线失败。
 - **Dependency Review 只覆盖「PR 内变更的依赖」**：发布时点的全量漏洞门禁仍是 Trivy /
   govulncheck / cargo audit（见 §5 开头），两者互补不互替。
+- **nginx 边缘镜像必须仓库内构建（不是上游镜像直引）**：实测上游**所有** nginx alpine tag
+  （1.30.6 / stable / mainline）当前都 ship `zlib-1.3.2-r0`（CVE-2026-85091 HIGH），而 Alpine 3.24
+  分支已有修复版 `1.3.2-r1`——直接引用上游镜像（即使 digest pin）吃不到补丁，故改为
+  [`../deploy/nginx/Dockerfile`](../deploy/nginx/Dockerfile)（pin 基座 digest + 构建期 `apk upgrade`），
+  由 CI 扫描构建产物（实测 0 条）。**运维节奏**：在基座 Alpine 分支 EOL 前抬到下一个受支持分支并重解
+  digest（当前 3.24 → 2028-06-01）；若上游将来重建出带补丁的 digest，可评估退回纯 pin。
 
 ### 5.5 GitHub 原生供应链 workflow（Scorecard + Dependency Review）
 
@@ -284,7 +295,9 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 - 服务端 CSP 仍允许 `style-src-attr 'unsafe-inline'`（Vue `:style` 所需），但不再允许内联 `<style>` 块。
 - SSRF 默认放行私网 / 回环（自托管刚需，[ADR-003](decisions/0003-ssrf-private-allow.md)；严格部署用 `S3C_SSRF_DENY_PRIVATE=1` 收紧）。
 - `S3C_ALLOW_PLAINTEXT_STORE=1` 可放行明文 store（仅限本地联调；生产必须 `encrypted` 或 `sqlite` + key，见「边界 C」）。
-- **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。**2026-10-10 把「无感知」降为「有告知」**（风险本体不变，仍需 TLS）：① 服务端在**创建 / 更新**账号时，若 `endpoint` 或 `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后是明文 `http://`，打一条 WARN（`handler/accounts.go` `warnPlaintextEndpoints`，与 `main.go` 的明文落盘告警同口径，**日志只记 id / 名称 / 端点，不含密钥**；**2026-10-10 评审 #84 起端点再经 `handler/accounts.go` 的 `redactEndpoint()` 去掉 URL userinfo**——`http://key:secret@host` 形式的 `key:secret` 不再落日志）；② 前端「使用 HTTPS/TLS」未勾选时在勾选框下给出同一句提示（`AccountsPanel.vue`，`accounts.useSSLWarn`）。两侧各由测试钉住：`internal/handler/accounts_plaintext_test.go` 四条（含「HTTPS 不打 WARN」防噪声、「日志不含 secretKey」、#84 新增的「端点 userinfo 不落日志」）+ `src/components/AccountsPanel.test.ts`「明文端点提示」用例。
+- **对 `http://` endpoint 的带 body 操作无 SigV4 载荷完整性**（KNOWN_ISSUES #72）：数据面签名对**带 body** 的 `PutObject` / `UploadPart` 使用 `UNSIGNED-PAYLOAD`（流式 body 无法预读哈希），且 `RequestChecksumCalculation=WhenRequired` 不自动附带校验和——明文 `http://` 上前述负载可被中间人改写。**部分收敛**：2026-10-09 起 `UNSIGNED-PAYLOAD` 只注入带 body 的请求，无 body 的 GET/HEAD/DELETE/List 恢复 SigV4 空体哈希签名。残留需 TLS 兜底（自托管可 `useSSL=true` 或前置反向代理终止 TLS）；完整性敏感场景用已实现的端到端校验和（ROADMAP §三 #5，`verify-checksum`）做事后核对。**2026-10-10 把「无感知」降为「有告知」**（风险本体不变，仍需 TLS）：① 服务端在**创建 / 更新**账号时，若 `endpoint` 或 `publicEndpoint` 经 `s3wrap.NormalizeEndpoint` 归一化后是明文 `http://`，打一条 WARN（`handler/accounts.go` `warnPlaintextEndpoints`，与 `main.go` 的明文落盘告警同口径，**日志只记 id / 名称 / 脱敏端点，不含密钥**；**2026-10-10 评审 #84 起该 WARN 的端点先经脱敏**——`http://key:secret@host` 形式的 `key:secret` 不再落日志。**但 #84 当时只覆盖这一条 WARN 路径**：`ValidateEndpoint` 错误串回显、`clients.get` 失败 Debug 日志、`AccountView` 回传、预签名 / 拨号复用端点这四条通道仍在，2026-10-16 P-3 才全部闭环，见下方「P-3 收口」）；② 前端「使用 HTTPS/TLS」未勾选时在勾选框下给出同一句提示（`AccountsPanel.vue`，`accounts.useSSLWarn`）。两侧各由测试钉住：`internal/handler/accounts_plaintext_test.go` **八条**（明文告知 4 条：建号 / 更新 / 明文 `publicEndpoint` 告警 + 「端点 userinfo 不落 WARN」；P-3 端点凭据闭环 4 条：建号 400 / 更新 400 / `AccountView` 脱敏 / `clients.get` 失败日志无凭据）+ `src/components/AccountsPanel.test.ts`「明文端点提示」用例。
+
+> **2026-10-16 P-3 收口（端点凭据泄漏四条通道全部闭环）**：① **归一化入口剥离**——`s3wrap.NormalizeEndpoint` 及其下游（拨号 / 签名 / 预签名 URL）一律去掉 URL userinfo，日志、直传与拨号都拿不到内嵌凭据；② **建号 / 更新 fail-closed**——`ValidateEndpoint` 对含 userinfo 的 endpoint **直接拒绝**（判定在 `NormalizeEndpoint` **之前**：归一化一旦剥离 userinfo 就查不到了；错误文案固定、不回显原始端点），因此 `POST /api/accounts` / `PUT /api/accounts/{id}` 回 **400**（**外部可见行为变化**：`http://key:secret@host` 过去能建号 / 更新，现在被拒——SigV4 凭据来自独立字段，endpoint userinfo 无正当用途）；③ **日志只记脱敏值**——`model.RedactEndpointUserinfo` 是唯一实现，`handler/accounts.go` 的 `redactEndpoint` 改为调用它（消除重复实现），错误串不再回显原始 endpoint 的用户名 / 口令；④ **读路径脱敏**——`model.Account.View()` 的 `Endpoint` / `PublicEndpoint` 也回传脱敏值，防御历史落盘数据经 `AccountView` 回传任意已认证 token。**同一道写入闸还顺带收紧了端点主机面**：任何 `s3wrap.ValidateEndpoint` 判定为不可用的端点（云元数据主机名、链路本地 / 元数据 IP、非 ASCII（IDN）主机名、退化端点）在建号 / 更新时即 **400 `invalid endpoint configuration`**——这类端点此前只在 `preview-buckets` 或首次调用时才被拒（**唯一例外是 DNS 解析失败：仍按设计 fail-open，留给连接阶段**）。完整触发清单与等价概括句见 [`api.md`](api.md) 的「创建 / 更新」段。证据见 [`FEATURES.md`](FEATURES.md) §CX 与 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`。
 
 ---
 
@@ -294,6 +307,8 @@ Scorecard 评**仓库整体健康度**，Dependency Review 审**PR 的依赖 dif
 > （对应 GitHub 侧 `codeql.yml`）。**它是报告型而非阈值门禁**——`semgrep-sast` 继承模板
 > `.sast-analyzer` 的 `allow_failure: true`，发现项本身不会让流水线变红。
 > 因此**本节就是它的「处置账」**：不写下来，那份 `gl-sast-report.json` 就只是跑一次没人看的产物。
+>
+> **2026-10-16 状态**：根目录那份 **2026-09-29 的过期产物已清理**（`gl-sast-report.json` 是未入库的工作目录残留，干净检出里本就不存在——故本节只以代码字面量提及它，不做文件链接）。**需要新发现时重跑下面的命令**读实时输出，而不是读旧产物；产物仍在 `.gitignore` 中、不入库。
 
 实跑命令（本地，无需 GitLab 实例）：
 
@@ -304,20 +319,43 @@ make gcl GCL_JOBS=semgrep-sast     # 产物 gl-sast-report.json（已在 .gitign
 **扫描面**：默认的 `$DEFAULT_SAST_EXCLUDED_PATHS`（`spec, test, tests, tmp`）是**目录名**式的，
 与本仓库命名约定不匹配，故 `.gitlab-ci.yml` 的 `semgrep-sast` job 显式追加
 `**/*_test.go` / `**/*.test.ts` / `apps/web/e2e{, -real}` / `apps/web/coverage`。
-效果：**66 项 → 10 项**（4 High + 6 Medium）——被排除的 56 项里 50 项在测试代码、
+2026-09-29 首跑效果：**66 项 → 10 项**（4 High + 6 Medium）——被排除的 56 项里 50 项在测试代码、
 6 项在**生成的** Istanbul HTML 报告资产（第三方 `prettify.js` / `sorter.js`）中，
 二者都不是本仓库的生产代码（与覆盖率 instrumentation 排除 `*.test.ts` 同一口径）。
 
-**当前 10 项全部判定为「误报 / 设计使然」**，逐条如下（改动相关代码时请连带复核）：
+**2026-10-16 重跑（Semgrep analyzer 6.26.1，`Targets scanned: 192` / `Rules run: 125`，`PASS`）**：
+**20 条 = 8 High + 12 Medium**。原 2026-09-29 的 **10 条全部仍命中**（location 已按当前 HEAD 刷新，见下表
+#1–#10）；新增 **10 条**（#11–#20，见下表）。**20 是「规则命中数」**——按「发现事实」去重为 **16 件**：
+`volume_windows.go` 的 3 条是**同一次** syscall 的 3 个指针参数、`checksum.go` 的 2 条是同一行 MD5/SHA1
+被两条规则命中、`useSeqGuard.ts` 的 2 条是同一条 `===` 被两条规则命中（去重不改变任何裁定）。
+另有两条 semgrep 解析器 WARN（`deploy/prometheus/s3client.rules.yml` / `scripts/evals/golden-tasks.yaml`
+的 YAML 转义字符）属工具告警，不计入 findings。产物 `gl-sast-report.json` 本轮清理过一份过期残留、
+重跑产物**未入库**（已在 `.gitignore`）。
+
+**当前 20 项全部有明确判定**（无「无法判定」的悬空项），逐条如下（改动相关代码时请连带复核）：
 
 | # | 严重度 | 位置 | 规则 | 判定与依据 |
 |---|---|---|---|---|
-| 1 | High | `internal/store/sqlite.go`（`PRAGMA user_version`） | SQL Injection | **误报**：`fmt.Sprintf` 的插值是**编译期常量** `sqliteUserVersion`（int 常量），无任何用户输入进入该语句；`PRAGMA` 也不接受参数绑定，故不是「该用占位符却拼接」 |
-| 2–4 | High | `api/http.ts` ×2、`api/jobs.ts` ×1 | SSRF | **设计使然**：`fetch(getBase() + path)` 的 `getBase()` 是**用户自己配置的后端地址**——「多后端」就是这个产品的功能。请求由**用户自己的浏览器**发往**用户自己指定的服务器**，不构成服务端 SSRF；服务端侧的出站校验另见「边界 D」与 `s3wrap/ssrf.go` |
-| 5–7 | Medium | `handler/trash.go`、`handler/metadata.go`、`handler/objects.go` | Integer overflow | **误报**：三处都是 `int32(n)`，而 **紧邻上一行**就是范围守卫 `n > 0 && n <= 1000`，不可能溢出。该规则不做区间追踪，看不到前置 guard |
-| 8 | Medium | `internal/store/open.go`（`ensureDataDirPerm`） | Incorrect permission assignment | **误报（且方向相反）**：`os.Chmod(dir, 0o700)` 是**主动加固**——`os.MkdirAll` 的 mode 只在新建时生效，预建目录（Docker volume / systemd StateDirectory）常为 0755，故此处收紧到属主独占 |
-| 9 | Medium | `internal/store/lock_unix.go` | Path Traversal | **误报**：拼接的是**常量**文件名 `.s3client.lock`，目录来自 `S3C_DATA_DIR`（运维配置，非用户输入） |
-| 10 | Medium | `api/storage.ts`（`newId`） | Weak PRNG | **可接受**：主路径是 `crypto.randomUUID()`（CSPRNG），`Math.random()` 仅在**前者不可用**时兜底；且该 id 是本地服务器条目的标识，**不是密钥**（token 另存 `s3c.token.<id>`，且匿名可写的 localStorage 早已是失陷前提） |
+| 1 | High | `internal/store/sqlite.go:140`（`PRAGMA user_version`） | SQL Injection（G202） | **误报**：`fmt.Sprintf` 的插值是**编译期常量** `sqliteUserVersion`（int 常量），无任何用户输入进入该语句；`PRAGMA` 也不接受参数绑定，故不是「该用占位符却拼接」 |
+| 2–4 | High | `api/http.ts:79` / `api/http.ts:92` / `api/jobs.ts:59` | SSRF | **设计使然**：`fetch(getBase() + path)` 的 `getBase()` 是**用户自己配置的后端地址**——「多后端」就是这个产品的功能。请求由**用户自己的浏览器**发往**用户自己指定的服务器**，不构成服务端 SSRF；服务端侧的出站校验另见「边界 D」与 `s3wrap/ssrf.go` |
+| 5–7 | Medium | `handler/trash.go:26`、`handler/metadata.go:278`、`handler/objects.go:33` | Integer overflow（G109） | **误报**：三处都是 `int32(n)`，而 **紧邻上一行**就是范围守卫 `n > 0 && n <= 1000`，不可能溢出。该规则不做区间追踪，看不到前置 guard |
+| 8 | Medium | `internal/store/open.go:18`（`ensureDataDirPerm`） | Incorrect permission assignment（G302） | **误报（且方向相反）**：`os.Chmod(dir, 0o700)` 是**主动加固**——`os.MkdirAll` 的 mode 只在新建时生效，预建目录（Docker volume / systemd StateDirectory）常为 0755，故此处收紧到属主独占 |
+| 9 | Medium | `internal/store/lock_unix.go:17` | Path Traversal（G304） | **误报**：拼接的是**常量**文件名 `.s3client.lock`，目录来自 `S3C_DATA_DIR`（运维配置，非用户输入）——见下方「运维配置输入 ≠ 用户输入」口径 |
+| 10 | Medium | `api/storage.ts:110`（`newId`） | Weak PRNG | **可接受**：主路径是 `crypto.randomUUID()`（CSPRNG），`Math.random()` 仅在**前者不可用**时兜底；且该 id 是本地服务器条目的标识，**不是密钥**（token 另存 `s3c.token.<id>`，且匿名可写的 localStorage 早已是失陷前提） |
+| 11–13 | High | `internal/handler/volume_windows.go:31` / `:32` / `:33` | G103（unsafe） | **误报 / 设计使然（不排除，如实 triage）**：该文件是 `//go:build windows` 专属，**不参与 Linux 运行时构建**（本身即最强的不达性证据）；三处命中是**同一次** kernel32 `GetDiskFreeSpaceExW` 调用的三个指针参数，`unsafe.Pointer` 只指向栈上 `uint64` 与 `syscall.UTF16PtrFromString` 缓冲，无用户控制的内存布局；ADR-004 禁引 `golang.org/x/sys`，故无更优解。**未**加入 `SAST_EXCLUDED_PATHS`（保持扫描面稳定） |
+| 14 | High | `apps/web/src/api/download.ts:187` | SSRF（node_ssrf） | **设计使然**：与上表 #2–#4 同族——浏览器对**用户自配后端**发 `fetch`（此处仅多带 `Range` 分段下载头）；不是服务端出站请求，服务端 SSRF 面见「边界 D」 |
+| 15 | Medium | `internal/handler/shutdown_metric.go:35` | G304（Path Traversal） | **误报**：`filepath.Join(h.dataDir, shutdownFileName)` 拼的是**常量** `shutdown.json`，目录来自 `S3C_DATA_DIR`（运维配置）——见下方「运维配置输入 ≠ 用户输入」口径，与 #9 同族 |
+| 16 | Medium | `internal/config/config.go:288`（`envOrFile`） | G304（Path Traversal） | **设计使然（本轮裁定）**：读的是**运维挂载点**（`S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE`，docker secrets / systemd `LoadCredential`），与 `S3C_DATA_DIR` 同信任级，不是用户输入；**明确不**加「路径必须落在允许前缀内」的限制（那会打断 `/run/secrets/*`、`/run/credentials/*` 等标准挂载点、把功能修坏）。golangci 侧同一行以 `#nosec` + 理由收口，`golangci-lint run` 0 issues——两条工具结论一致 |
+| 17–18 | Medium | `internal/s3wrap/checksum.go:12` ×2 | G501（MD5）/ G505（SHA1） | **误报（行内已有 `//nolint:gosec` + 理由）**：`crypto/md5` / `crypto/sha1` 仅用于**复现 S3 单段 ETag 与厂商兼容校验和**做逐字节比对（校验和阶梯第 4/5 位），**非密码学安全用途**；semgrep 不读 `//nolint` 注释，故同一行被两条规则各报一次 |
+| 19–20 | Medium | `apps/web/src/composables/useSeqGuard.ts:41` ×2 | Timing attack（eslint / nodejs_scan） | **误报 / 不适用**：`isCurrent: (token) => token === seq` 比较的是**客户端内存自增的请求代次整数**——既不是秘密、也不跨信任边界（两端都在同一浏览器 JS 内），无时序侧信道；同一条 `===` 被两条规则各报一次 |
+
+> **运维配置输入 ≠ 用户输入**：`*_FILE` / `S3C_DATA_DIR` 这类由部署方设定的路径，不作为不可信输入处理；
+> 用户可控输入（HTTP body / path / query / S3 key）一律按不可信处理。
+>
+> 这一条统一解释表中 **#9（`store/lock_unix.go:17`）、#15（`handler/shutdown_metric.go:35`）、
+> #16（`config/config.go:288`）** 三条同族 Medium，以及 golangci 侧同一行的 G703/G304 为何以 `#nosec` +
+> 理由收口（`golangci-lint run` 0 issues）——前提是**进程 env 已被篡改**时，攻击者已具备等价或更高权限，
+> 不构成新的信任边界。
 
 **为什么不做规则级抑制**：`.gitlab/sast-ruleset.toml` 与 `SAST_RULESET_GIT_REFERENCE` 属
 **Ultimate 专属**，本项目按 Free 档设计，故没有「集中的 ignore 文件」可用（Trivy 的
@@ -326,4 +364,5 @@ make gcl GCL_JOBS=semgrep-sast     # 产物 gl-sast-report.json（已在 .gitign
 同时保持「新增发现项 = 需要重新 triage」的可见性。
 
 > ⚠️ **本节随扫描面变化而失效**：一旦新代码引入新的 High/Medium，或上游规则集更新，
-> 上表就不再完整。判断方法：重跑上面的命令，比对 `gl-sast-report.json` 与本表的条数。
+> 上表就不再完整。判断方法：重跑上面的命令，比对 `gl-sast-report.json` 与本表的条数
+> （**2026-10-16 基线：20 条规则命中 = 8 High + 12 Medium（去重后 16 件事实）**；旧产物已清理，不要拿它当基准）。

@@ -15,15 +15,20 @@
 
 ## 2. 生产部署（推荐）
 
-### 2.1 环境变量（生产必填）
+### 2.1 密钥注入与环境变量（生产必填）
+
+compose 部署（推荐）经 **docker secrets** 注入两枚密钥，服务端用 `*_FILE` 读取（见 §2.1.1）；
+非 compose 部署（`docker run -e` / systemd `LoadCredential`）也可直接注入同名环境变量：
 
 ```bash
 # 鉴权（必填，openssl rand -hex 32 生成）
-S3C_TOKEN=<随机 token>
+# compose：S3C_TOKEN_FILE=/run/secrets/api_token（见 §2.1.1）；直接注入则用 S3C_TOKEN=<随机 token>
+S3C_TOKEN_FILE=/run/secrets/api_token
 
 # 存储：生产推荐 encrypted（密钥落盘加密）
 S3C_STORE_DRIVER=encrypted
-S3C_STORE_KEY=<强密钥>
+# compose：S3C_STORE_KEY_FILE=/run/secrets/store_key；直接注入则用 S3C_STORE_KEY=<强密钥>
+S3C_STORE_KEY_FILE=/run/secrets/store_key
 
 # 监听：经 nginx 反向代理时绑定 0.0.0.0
 S3C_ADDR=0.0.0.0:5000
@@ -39,20 +44,68 @@ S3C_LOG_JSON=1
 # S3C_METRICS_TOKEN=<openssl rand -hex 32>
 ```
 
-> **安全提醒（安全默认：明文存储拒绝启动）**：`json` / `sqlite` 驱动只有在设置 `S3C_STORE_KEY` 时
-> 才会把 `secretKey` 加密落盘（AES-256-GCM）；**不设 key 时进程直接拒绝启动**，除非显式设置
-> `S3C_ALLOW_PLAINTEXT_STORE=1`（仅限本地联调，启动日志会打出「secretKey 将明文落盘」WARN）。
-> 生产推荐 `encrypted` 驱动（整文件加密）或 `sqlite` + `S3C_STORE_KEY`（至少 16 字符，
-> `openssl rand -hex 32`）。`docker-compose.yml`（base）已用 `${S3C_STORE_KEY:?…}` 做非空守卫，
-> 未填 key 时 `docker compose up` 直接失败；`docker-compose.prod.yml` 用 `encrypted` + 强制 key。
+> **安全提醒（安全默认：明文存储拒绝启动）**：`json` / `sqlite` 驱动只有在设置 `S3C_STORE_KEY`
+> （或 `S3C_STORE_KEY_FILE`）时才会把 `secretKey` 加密落盘（AES-256-GCM）；**不设 key 时进程直接
+> 拒绝启动**，除非显式设置 `S3C_ALLOW_PLAINTEXT_STORE=1`（仅限本地联调，启动日志会打出「secretKey
+> 将明文落盘」WARN）。生产推荐 `encrypted` 驱动（整文件加密）或 `sqlite` + key（至少 16 字符，
+> `openssl rand -hex 32`）。
 > 加密文件格式为 S3C3（Argon2id 参数随文件头保存），并兼容读取旧的 S3C2 库。
 > 详见 [threat-model.md](threat-model.md)。
+
+### 2.1.1 密钥经文件注入（docker secrets，compose 默认形态）
+
+`S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE` 非空时从该文件读取，值 = 文件内容去掉**首尾空白与换行**；
+多 token 仍按逗号分隔写在文件内容里。三条 **fail-closed** 规则（任一命中即拒绝启动，退出码 1）：
+文件不可读 / 不存在、读出内容为空、与同名明文变量（`S3C_STORE_KEY` / `S3C_TOKEN`）**同时非空设置**
+（配置歧义，不静默取其一；明文变量为空串不算「设置」）。
+
+两个 compose 文件已内置 secret 定义（base 与 prod 一致）：`store_key` → `./secrets/store_key`、
+`api_token` → `./secrets/api_token`；容器内路径为 `/run/secrets/<name>`，server 服务用
+`S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE` 指向它们，**明文 `environment:` 注入已删除**——
+`docker inspect` 与 `/proc/<pid>/environ` 不再能看到两枚密钥（渗透测试 2026-10-15 P-8）。
+
+首次部署 / 从明文 `.env` 迁移：
+
+```bash
+mkdir -p secrets
+openssl rand -hex 32 > secrets/store_key
+openssl rand -hex 32 > secrets/api_token
+chmod 600 secrets/store_key secrets/api_token
+# compose 的**文件型** secret 按宿主机属主 / 权限原样 bind-mount；server 容器以 uid 1000（USER app）运行。
+# 只 chmod 600、属主仍是 root 的话容器读不到 → 进程 fail-closed 起不来：
+sudo chown 1000:1000 secrets/store_key secrets/api_token   # 生成用户本身就是 uid 1000 时可跳过
+docker compose -f docker-compose.yml up -d --build          # 生产：-f docker-compose.prod.yml
+```
+
+> ⚠️ `uid` / `gid` / `mode` **长语法**在 file 型 secret 下会被 compose 接受但**忽略**（实测无效）——
+> 不要指望用它改属主 / 权限，必须在宿主机上按上面的 `chmod` + `chown` 处理。
+>
+> **属主不对会怎样（实测负向证据）**：把 `secrets/store_key` 改回 `root:root` + `chmod 600` 后重启，
+> 容器 `exit=1` 反复重启，日志为
+> `配置校验失败 err="unreadable secret file: S3C_STORE_KEY_FILE=/run/secrets/store_key`
+> `不存在或不可读: open /run/secrets/store_key: permission denied"`——所以 `chown 1000:1000` **不是可选项**；
+> 恢复属主后重新 `healthy`。
+
+验证（三行都应给出预期输出）：
+
+```bash
+docker compose exec -T server sh -c 'test -r /run/secrets/store_key && test -r /run/secrets/api_token && echo READABLE'
+docker compose exec -T server env | grep -E '^S3C_(STORE_KEY|TOKEN)_FILE='
+docker inspect "$(docker compose ps -q server)" --format '{{json .Config.Env}}' | tr ',' '\n' \
+  | grep -E '^"?S3C_(STORE_KEY|TOKEN)=' || echo '无明文密钥注入'
+```
+
+- `secrets/` 目录建议 `0700`，且已在 `.gitignore` 中忽略（`/secrets/*`，仅 `*.example` 例外）；
+- 迁移完成后可删掉根 `.env` 里的 `S3C_STORE_KEY` / `S3C_TOKEN`（compose 已不再插值这两个键）；
+- **零配置冒烟不受影响**：`docker compose config -q` 在 secret 文件缺失时仍 exit 0，`e2e.yml` 只起
+  RustFS、不启 server；但全栈 `docker compose up -d` 前必须先按上面生成两个文件。
 
 ### 2.2 生产 compose
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入 S3C_TOKEN / S3C_STORE_KEY
+# 编辑 .env 填入非密钥项（S3C_IMAGE_TAG / S3C_CORS_ORIGINS / 限流等）；
+# 两枚密钥改由 secrets 注入，见 §2.1.1
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -81,6 +134,29 @@ docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
 - **流式兼容**：`proxy_buffering off` + `proxy_read_timeout 3600s`（大文件下载/迁移 SSE 不被截断）。
 - **内存上限**：`deploy.resources.limits.memory: 128M`。
 - **优雅 reload**：`docker compose exec nginx nginx -s reload`；优雅停止用 `SIGQUIT`。
+- **边缘镜像自建（渗透测试 2026-10-15 P-4，方案：仓库内构建）**：`deploy/nginx/Dockerfile`
+  以 `FROM nginx:1.30.6-alpine@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5`
+  为基座（**digest pin 保证可复现**）+ `RUN apk upgrade --no-cache`（**构建期保证拿到 alpine 分支内的
+  安全补丁**）；两个 compose 的 nginx 服务改为 `build:` 该 Dockerfile（镜像名 `s3client/nginx:<tag>`）。
+  这样「digest 冻结吃不到补丁」的问题**从结构上消除**——实测上游所有 nginx alpine tag
+  （1.30.x / 1.31 / mainline / stable）当前都 ship `zlib-1.3.2-r0` 而 `1.3.2-r1` 已发布，
+  直接引用上游镜像无法在运行时升级；构建产物实测为 `zlib-1.3.2-r1`（`libssl3` / `libcrypto3` 亦
+  全部 `=`、无待升级项）。**仍未引入任何 `.trivyignore` 忽略条目**：edge 镜像构建产物由 CI
+  用同一套阻塞式 Trivy（`--exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed`）扫描，实测 0 条。
+  **基座升级节奏**：抬 `deploy/nginx/Dockerfile` 的基座 digest（当前 Alpine 3.24 分支支持至 2028-06-01）。
+- **升级 / 运维命令（注意 nginx 不再是拉取的上游镜像）**：改完 Dockerfile 或需要重建边缘镜像时
+  `docker compose build nginx` → `docker compose up -d --build`；**`docker compose pull` 不会覆盖 nginx**
+  （它是本地构建产物），配置变更仍需 `build` + `up -d --build`。
+- **容器加固（渗透测试 2026-10-15 P-14）**：两个 compose 的 server 与 nginx 均启用
+  `read_only: true` + `security_opt: [no-new-privileges:true]` + `cap_drop: [ALL]`。server 额外挂
+  `tmpfs: /tmp`（可写临时目录），`/data` 仍是 named volume（`read_only` 下仍可写）；
+  nginx 的 `read_only` 需要两条可写路径：`tmpfs: /var/cache/nginx`（临时目录与 `client_body_temp` 等）
+  与 `tmpfs: /run`（或 `/var/run`，pid 文件 `/var/run/nginx.pid` 落在这里）；`cap_drop: [ALL]` 之外还需
+  `cap_add: [CHOWN, SETGID, SETUID]`——官方 entrypoint 要 `chown` `/var/cache/nginx` 并切换到 `nginx`
+  用户，只 drop 不给这三个 cap 时会以 `chown("/var/cache/nginx/client_temp", 101) failed
+  (1: Operation not permitted)` 启动失败。**不要**给 `/var/log/nginx` 挂 tmpfs：官方镜像的
+  `access.log` / `error.log` 是指向 `/dev/stdout` / `/dev/stderr` 的**符号链接**，覆盖挂载会把软链挡住，
+  nginx 启动失败、日志也无法被 json-file 采集。
 
 ## 4. 本机运行
 
@@ -122,6 +198,13 @@ curl http://127.0.0.1:5000/api/health
 3. 恢复后无需重启：下一次探测成功即回到 200，前端健康轮询会自动恢复界面。
 
 > 告警建议：`s3c_store_up == 0` 持续 1 分钟即告警；硬失败意味着此时所有写操作都在拒绝，不能等业务 5xx 才发现。
+>
+> **探针限流与 Ping 缓存（P-12）**：`/api/health` / `/api/metrics` / `/api/openapi.json` 不被主限流桶
+> （`S3C_RATE_LIMIT_RPM`）拖累，但受**独立探针令牌桶**约束（`S3C_PROBE_RATE_LIMIT_RPM` 默认 600、
+> `S3C_PROBE_RATE_LIMIT_BURST` 默认 100，超限 429 + `Retry-After: 1`）——监控 probe 频率过高时先看 429
+> 再排查存储。`store.Ping` 结果按 `S3C_HEALTH_PING_CACHE_SECONDS`（默认 2 秒，`0` = 不缓存）短 TTL
+> 缓存，匿名与已认证同一口径，**失败结果同样缓存**：TTL 窗口内 503 会稳定复现、恢复最多延迟一个 TTL
+> 才转 200，告警 `for` 窗口要按此留余量。
 
 ### 6.2 优雅关闭
 
@@ -143,7 +226,7 @@ curl http://127.0.0.1:5000/api/health
 
 1. **升级前备份**：按 [`OPERATIONS.md`](OPERATIONS.md) §6 做一次 `/data` 卷备份，并确认 `S3C_STORE_KEY` 可用（丢了 key 备份也解不开）；读 CHANGELOG 确认目标版本无破坏性变更。
 2. **换 tag**：改根 `.env` 的 `S3C_IMAGE_TAG=<新版本>`（prod compose 的镜像为 `s3client/server:${S3C_IMAGE_TAG:-v1.0.0}`；基础 `docker-compose.yml` 则**写死** tag，升级需直接改该文件）。
-3. **拉新版并重启**：`docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml stop && docker compose -f docker-compose.prod.yml up -d`（宽限期见 [`OPERATIONS.md`](OPERATIONS.md) R-9）。
+3. **拉新版并重启**：`docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml build nginx && docker compose -f docker-compose.prod.yml stop && docker compose -f docker-compose.prod.yml up -d`（`pull` 只对 `s3client/server` 生效；nginx 是 §3 的**本地构建**边缘镜像，`pull` 不会覆盖它，需 `build nginx` 或直接 `up -d --build`；宽限期见 [`OPERATIONS.md`](OPERATIONS.md) R-9）。
 4. **验证六项**：① `GET /api/health` 返回 200；② `/api/metrics` 的 `s3c_build_info{version=...}` 与目标 tag 一致（需 `S3C_EXPOSE_METRICS=1`）；③ 服务端日志无启动期 fail-closed 报错；④ 抽查一次流式下载；⑤ 抽查一次写操作；⑥ 前端页面版本与后端一致（前端「关于 / 版本」处核对）。
 5. **异常即回滚**：见 §7（tag 指回旧版本，回滚前先备份 `/data`）。
 

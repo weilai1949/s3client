@@ -20,6 +20,8 @@
 > 需要 `S3C_SSRF_DENY_PRIVATE` / `S3C_TRUSTED_PROXIES` 这类服务端专属项时，请直接用
 > `docker run -e` / systemd 注入，或自行把该键加入 compose 白名单。三个 compose 文件与根
 > `.env.example` 的这层双向一致性由 `apps/server/env_example_gate_test.go` 守住。
+> 例外：两枚密钥 `S3C_STORE_KEY` / `S3C_TOKEN` 已改经 **docker secrets + `*_FILE`** 注入
+> （见 [DEPLOYMENT.md](DEPLOYMENT.md) §2.1.1），**不**出现在 compose 的 `environment:` 白名单里。
 
 ## 1. 配置来源与优先级
 
@@ -58,21 +60,26 @@
 | `S3C_STATIC_DIR` | `../web/dist` | 目录路径（相对进程 CWD） | Web 静态资源目录；`make server` / `cd apps/server` 启动时指向 `apps/web/dist` |
 | `S3C_REGION` | `us-east-1` | 区域字符串 | 账号缺省 region（账号可单独覆盖） |
 | `S3C_TOKEN` | 空 | ≥ 16 字符；逗号分隔可多值 | 非空时业务 `/api/*` 需 `Authorization: Bearer <token>`；`/api/health` 仍免鉴权供探针使用，但仅带**有效** token 时响应含 `version`。非回环监听时**必填**。多 token 轮换时按**最短者**判定长度；删掉旧值即吊销。生成：`openssl rand -hex 32` |
+| `S3C_TOKEN_FILE` | 空 | 文件路径 | `S3C_TOKEN` 的**文件变体**（docker secrets / systemd `LoadCredential` 注入用，避免口令进入 `environment:` 与 `/proc/<pid>/environ`）：非空时从该文件读取，值 = 文件内容去掉首尾空白与换行；多 token 仍按逗号分隔写在文件内容里。**文件不可读 / 内容为空 → `ErrSecretFileUnreadable`；与 `S3C_TOKEN` 同时非空设置（配置歧义）→ `ErrSecretFileAmbiguous`；三类都拒绝启动**，不静默取其一（明文变量为空串不算「设置」，避免显式传空值的编排被误杀）。错误串只含变量名与路径、**不回显文件内容** |
 | `S3C_TOKEN_SCOPES` | 空 | JSON 对象（token → 作用域） | 按 token 的最小权限声明（已落地，证据见 [`FEATURES.md`](FEATURES.md) §BS）。键必须是 `S3C_TOKEN` 列表中的 token；值字段**全部可选、缺省即不限制**：`readonly`（仅放行 GET/HEAD，预签名 POST 等写请求一律 403）、`prefixes`（`"<bucket>"` 整桶或 `"<bucket>/<key前缀>"`；请求涉及的桶/键与列表 `prefix` 都必须落在许可内，桶级操作需整桶授权）、`accounts`（仅允许路径 `{id}` 命中的账号；`POST /api/accounts` 创建账号一律 403）、`expiresAt`（RFC3339，过期返回 401）。**声明 `prefixes` 时必须同时声明 `accounts`**：`prefixes` 只约束桶/键、**不含账号维度**，缺省 `accounts` 会让「只能碰某个桶前缀」的 token 实际变成「**任意账号的**那个桶前缀」（可对任意 `{id}` 执行界内操作、并以该账号凭据签发预签名 URL）——账号维度在这种配置下不可判定，运行时无法补救，故一律拒绝启动；`accounts`-only 是**有界**作用域（爆炸半径 = 该账号），安全，不要求反配。**未登记的 token 仍是全权**（向后兼容）。非法 JSON / 未知字段 / 未登记 token / 空元素 / 坏时间 / 坏前缀 / **声明 `prefixes` 却缺 `accounts`** 一律**拒绝启动**。示例：`{"tokB":{"readonly":true,"prefixes":["bucket-a/","bucket-b/logs/"],"accounts":["acc-id"],"expiresAt":"2027-01-01T00:00:00Z"}}` |
 | `S3C_METRICS_TOKEN` | 空 | ≥ 16 字符 | 设置后 `GET /api/metrics` 必须携带该独立 `Authorization: Bearer`；不设置则保持匿名 scrape 兼容。它不替代 `S3C_TOKEN`，通用 API token 不能访问受保护 metrics。短值拒绝启动 |
-| `S3C_CORS_ORIGINS` | 空 | 逗号分隔 Origin 列表 | CORS 白名单。留空 = 仅同源 + `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（含 `tauri` 自定义协议）。`*` 可行但不推荐 |
+| `S3C_CORS_ORIGINS` | 空 | 逗号分隔 Origin 列表 | CORS 白名单。留空 = 仅同源 + http/https 的 `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（**端口不限**，兼容本地 Vite 随机端口）+ 自定义协议 `tauri://localhost`（scheme 为 `tauri` 时**只**信任 host 为 `localhost`，不再信任任意 `tauri://*`）；`Origin: null` 不信任。`*` 可行但不推荐 |
 | `S3C_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` | 日志级别 |
 | `S3C_LOG_JSON` | 关 | 布尔 | 开 = `slog` JSON 输出（容器 / 生产更易采集）。compose 已默认注入 `1`，设 `0` 可退回纯文本 |
 | `S3C_SHUTDOWN_TIMEOUT` | `30` | 整数秒，**1–3600** | 收到 `SIGTERM` 后等待活跃连接结束的最长时间。超上界拒绝启动（秒数过大会让 `time.Duration` 溢出为负时长，优雅关停被静默跳过） |
 | `S3C_STORE_DRIVER` | `json` | `json` / `sqlite` / `encrypted` | 账号存储驱动。空串 = 未指定（按 `json`）；未知值**拒绝启动**（历史上被静默当 `json`，绕过明文闸）。取值大小写 / 空白先归一化再比较 |
 | `S3C_STORE_KEY` | 空 | ≥ 16 字符 | 落盘加密口令。`encrypted` 模式**必填**（整文件 AES-256-GCM，格式 `S3C3`，兼容读旧 `S3C2`）；`json` / `sqlite` 设置后启用加密（`sqlite` 加密 `secret_key` 列）。Argon2id + 盐派生，参数随文件头保存 |
+| `S3C_STORE_KEY_FILE` | 空 | 文件路径 | `S3C_STORE_KEY` 的**文件变体**（docker secrets / systemd `LoadCredential` 注入用）：非空时从该文件读取，值 = 文件内容去掉首尾空白与换行。**文件不可读 / 内容为空 → `ErrSecretFileUnreadable`；与 `S3C_STORE_KEY` 同时非空设置（配置歧义）→ `ErrSecretFileAmbiguous`；三类都拒绝启动**，不静默取其一；明文变量单独设置时行为不变。错误串只含变量名与路径、**不回显文件内容** |
 | `S3C_ALLOW_PLAINTEXT_STORE` | 关 | 布尔 | **仅本地联调**：允许 `json` / `sqlite` 在无 `S3C_STORE_KEY` 下运行，`secretKey` 明文落盘并在启动日志打出 WARN。**不要在生产设置** |
 | `S3C_EXPOSE_METRICS` | 关 | 布尔 | 开 = 暴露 `GET /api/metrics`（Prometheus 文本）；默认 404。设置 `S3C_METRICS_TOKEN` 后需 Bearer，否则保持匿名可读；应仅在内网 / 反代鉴权后放行 |
 | `S3C_EXPOSE_OPENAPI` | 关 | 布尔 | 开 = 暴露 `GET /api/openapi.json`（API 契约）；默认 404，避免公网泄露端点信息 |
-| `S3C_CSP_CONNECT_SRC` | `'self' http://127.0.0.1:* http://localhost:*` | CSP `connect-src` 值 | 前端可连接的后端白名单。默认仅同源 + 本地 Tauri 后端；**多后端 / 远程后端需显式放宽**，否则浏览器按 CSP 拦截。含换行 / 控制字符或纯空白时拒绝启动 |
+| `S3C_CSP_CONNECT_SRC` | `'self' http://127.0.0.1:* http://localhost:*` | CSP `connect-src` 值 | 前端可连接的后端白名单。默认仅同源 + 本地 Tauri 后端；**多后端 / 远程后端需显式放宽**，否则浏览器按 CSP 拦截。除控制字符 / 纯空白外还做 **CSP source-list 语法校验**：拒绝 `;`（指令注入）、`,` 与任何不在允许集（`A-Za-z0-9` 与 `-._~:/?#[]@!$&'()*+=%^*`、单引号、空格）内的字符——非法即**拒绝启动**（`ErrInvalidCSPValue`，**字符串语法**校验，不再是「数值非法」） |
 | `S3C_TRUSTED_PROXIES` | 空 | 逗号分隔 IP | 可信反向代理 IP。**仅**这些对端的 `X-Forwarded-For` 被采信用于限速与审计。默认不信任 XFF，防直连伪造绕过限速；直连部署应保持留空 |
 | `S3C_RATE_LIMIT_RPM` | `120` | 正整数 | 每 IP（IPv6 按 /64 前缀聚合）每分钟放行的 `/api/*` 请求数。非法值（非整数 / `< 1`）拒绝启动，不静默回退默认 |
 | `S3C_RATE_LIMIT_BURST` | `30` | 正整数 | 限流令牌桶的突发容量（一次性可消耗的令牌数）。与 `S3C_RATE_LIMIT_RPM` 同为 fail-closed 校验；公网部署可按需调小 |
+| `S3C_PROBE_RATE_LIMIT_RPM` | `600` | 正整数 | **探针豁免面**（`/api/health` / `/api/metrics` / `/api/openapi.json`）的**独立**令牌桶：这三个端点不被主限流器（`S3C_RATE_LIMIT_RPM`）拖累，但仍按 IP 受本桶约束，超限回 429 + `Retry-After: 1`。默认刻意宽松（监控 scrape 频率远高于业务请求）。非法值（非整数 / `< 1`）拒绝启动 |
+| `S3C_PROBE_RATE_LIMIT_BURST` | `100` | 正整数 | 探针令牌桶的突发容量，与 RPM 同 fail-closed 校验 |
+| `S3C_HEALTH_PING_CACHE_SECONDS` | `2` | 非负整数（秒） | `/api/health` 对 `store.Ping` 结果的短 TTL 缓存（匿名与已认证**同一口径**）：TTL 内只打一次 `Ping`，探测失败的结果**同样缓存**（窗口内稳定回 503，恢复最多延迟一个 TTL）。`0` = 不缓存（每次实打）。非整数 / 负数拒绝启动 |
 | `S3C_SSRF_DENY_PRIVATE` | 关 | 布尔 | 开 = 连私网 / 回环 S3 端点也拒绝（SSRF 加固）。默认关闭：自托管 MinIO / RustFS / 局域网放行，见 [ADR-003](decisions/0003-ssrf-private-allow.md) |
 | `S3C_OTEL_ENDPOINT` | 空 | http(s) URL | OTLP/HTTP 采集端基址，导出到 `POST {Endpoint}/v1/traces`（OTLP JSON）。**留空 = 关闭 tracing**（默认，零开销：中间件原样透传、不注入响应头、不导出）；非 http(s) / 无法解析时**拒绝启动**。见 [ADR-013](decisions/0013-zero-dep-otlp-tracing.md) |
 | `S3C_OTEL_SAMPLE_RATIO` | `1` | 浮点，**[0,1]** | 新建 trace 的采样比例。入站 `traceparent` 的采样位被继承（为 1 时即使本值为 `0` 也采样；为 0 时不重新采样）；非数字 / `NaN` / 越界**拒绝启动** |
@@ -87,8 +94,11 @@
 | 显式 `S3C_ENV_FILE` 不存在 / 不可读 | 防止加固项与 `S3C_DATA_DIR` 静默失效 |
 | `S3C_SHUTDOWN_TIMEOUT` 非整数 / `< 1` / `> 3600` | 防止优雅关停窗口被静默清零 |
 | `S3C_RATE_LIMIT_RPM` / `S3C_RATE_LIMIT_BURST` 非整数 / `< 1` | 防止限流配置静默失效（运维以为已收紧，实际仍是默认值） |
+| `S3C_PROBE_RATE_LIMIT_RPM` / `S3C_PROBE_RATE_LIMIT_BURST` 非整数 / `< 1` | 防止探针限流配置静默回退默认值（`ErrInvalidEnvValue`，数值类） |
+| `S3C_HEALTH_PING_CACHE_SECONDS` 非整数 / 负数 | 防止探针缓存配置静默失效（`ErrInvalidEnvValue`，数值类；`0` 合法 = 不缓存） |
+| `S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE` 不可读、内容为空，或与对应的 `S3C_STORE_KEY` / `S3C_TOKEN` 同时非空设置 | 口令文件是 docker secrets / systemd `LoadCredential` 的注入面：读不到就静默回退等于加固项失效（`ErrSecretFileUnreadable`）；两个来源同时非空则是配置歧义（`ErrSecretFileAmbiguous`），取错一个都会锁死或放开不该放开的口令 |
 | `S3C_METRICS_TOKEN` 非空但 `< 16` 字符 | 防止指标端点被弱口令保护后仍易遭暴力猜测 |
-| `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行，或为纯空白 | 防止 CSP 响应头异常，或把 connect-src 配成空源列表导致前端静默全断 |
+| `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行、为纯空白，或不符合 CSP source-list 语法（`;` / `,` / 允许集外的字符） | 防止 CSP 响应头异常、把 connect-src 配成空源列表导致前端静默全断，或注入基策略中**不存在**的指令（如 `frame-ancestors *` 让 `X-Frame-Options: DENY` 失效，评审 2026-10-15 P-5）。**字符串语法类**（`ErrInvalidCSPValue`），不是数值解析错误 |
 | `S3C_STORE_DRIVER` 不在 `json` / `sqlite` / `encrypted` 内 | 防止未知值被当 `json` 绕过明文闸 |
 | `S3C_TOKEN` 非空但最短 token < 16 字符 | 短口令易被暴力猜测 |
 | `S3C_TOKEN_SCOPES` 非法（JSON 语法 / 未知字段 / 末尾多余数据 / token 不在 `S3C_TOKEN` 列表内 / `prefixes`、`accounts` 元素为空 / `expiresAt` 不可解析为 RFC3339 / **声明了 `prefixes` 却缺 `accounts`**） | 防止作用域配置静默失效或被整段忽略（否则运维以为已限权、实际仍是全权）。最后一条尤其重要：`prefixes` 不含账号维度，缺 `accounts` 时该 token 可对**任意账号**执行界内操作并以他人凭据签发预签名 URL —— 这类「以为限了一个桶、实际放开全部账号」的配置必须在启动期拦下 |
@@ -101,8 +111,10 @@
 
 ## 4. 安全默认值摘要
 
-回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标与契约端点默认隐藏 +
-CSP `connect-src` 收窄 + 不信任 `X-Forwarded-For` + 可选 token 作用域（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号 / 过期，未登记 token 保持全权）。
+回环绑定 + CORS 白名单（默认只信任 http/https 的本地来源与 `tauri://localhost`）+ 短 token 拒绝启动 +
+**明文存储拒绝启动** + 指标与契约端点默认隐藏 + CSP `connect-src` 收窄（source-list 语法校验 +
+`frame-ancestors 'none'`）+ 探针面独立限流 + `store.Ping` 短 TTL 缓存 + 端点内嵌 userinfo 一律拒绝
+（建号 / 更新 400）+ 不信任 `X-Forwarded-For` + 可选 token 作用域（`S3C_TOKEN_SCOPES`：只读 / 桶前缀 / 账号 / 过期，未登记 token 保持全权）。
 
 生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + `encrypted`，无内置 RustFS）。
 威胁模型与边界见 [threat-model.md](threat-model.md)。

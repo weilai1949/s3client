@@ -159,6 +159,11 @@ func TestLoadDotEnvFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
+	// loadDotEnvFile 用 os.Setenv 写真实进程环境（本身不是 t.Setenv，不会自动恢复）；
+	// 先 unset 才能验证「文件值被读入」，并由 cleanup 恢复——否则 S3C_TOKEN 会泄漏到
+	// 后续用例，让它们看到一个 11 字符的短 token 而误判为配置错误。
+	unsetEnv(t, "S3C_TOKEN")
+	unsetEnv(t, "S3C_REGION")
 	loadDotEnvFile(path)
 	if got := os.Getenv("S3C_TOKEN"); got != "from-dotenv" {
 		t.Errorf("S3C_TOKEN = %q, want from-dotenv", got)

@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-15（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CR 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CJ（交接快照 §5 未做清单 14 项收口）· §CK（全仓代码质量评审 Approve + Nit #84–#86 闭环）· §CL（apps/web 页面 UI / 交互优化）· §CM（apps/desktop 优化：死依赖 + release profile / 打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁）· §CN（apps/server 优化评审 S1–S5 闭环）· §CO（docs 复盘快照归档：其沿用的 14 项建议经逐项复核已被 §CJ 全部闭环）· §CP（`pnpm audit` 官方 registry 实跑 12 → 0 + a11y 扫描盲区三态补齐 + dev `strictPort`）· §CQ（2026-10-14 全仓代码质量评审：F1–F7 + A1–A2 + C2 闭环、C1 有意维持、O1–O3 转登记 #88–#90）· **§CR**（O1–O3 有测试环境闭环 + 门禁全量实跑全绿 + `changelog_tag` 门禁克隆口径校准）。
+> 最后更新：2026-10-16（`v1.0.0` 之后的 Unreleased 区间）。**逐批次台账见下方[§二 的目录行](#二已完成修复与优化)**——该行按 A–CX 列出全部台账节（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CR（O1–O3 闭环 + 门禁全量实跑全绿 + `changelog_tag` 门禁克隆口径校准）· §CS（安全评审 R2a/R2b/R3a + CSP 配置校验 + 限流可观测收口）· §CT（作用域对迁移 / 计划的账号引用 + 计划列表裁剪）· §CU（防御纵深：nginx / GitLab Node / 下载名）· §CV（对抗性渗透测试 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）· §CW（`prefixes` 必须与 `accounts` 同时声明）· **§CX**（2026-10-16 渗透测试 **P-3..P-15** 收口 + SAST 台账刷新为 20 条）。
 
 ## 目录
 
@@ -44,7 +44,7 @@
   - CI 2026-10-10 全 docs 通读问题清单收口（含 openapi 通用状态码接线 / en 页数字 / docs 导航表格修复）（+ 三道门禁）
   - CJ 2026-10-10 交接快照 §5「未做清单」收口（14 项：5 道新门禁 + 9 处文档结构 + ADR 体例）
   - CK 2026-10-10 全仓代码质量评审（结论 Approve，五轴复核 2026-10-09 闭环批次）· Nit #84–#86 凭据脱敏 / 指标改名 `s3c_volume_inode_capacity` / 注释去重 **登记即闭环** · 评审快照归档入 `archive/` · **自留项 #87 门禁复跑于 2026-10-12 闭环** · CL 2026-10-12 apps/web 页面 UI / 交互优化（H1–H3 / M1–M3 / L1–L2 + 对比度缺陷 D1；快照已归档） · CM 2026-10-12 apps/desktop 优化（死依赖 D1 + release profile / 收窄打包目标 / CI CLI pin / Makefile 依赖 / 元数据·CSP / tauri 2.12 升级 + `unused_crate_dependencies` 门禁 G1；快照已归档） · CN 2026-10-12 apps/server 优化评审 S1–S5 闭环（有界复用缓冲 + 写 deadline 节流 / 限流器分片与总量硬上限 / S3 指标桶无锁 / CSP 预计算 / metrics 去 STW 且整包一次写；S6 维持现状、S0 由 web 批次解除；快照已归档） · CO 2026-10-12 docs 复盘快照归档（其沿用的 14 项建议经逐项复核已被 §CJ 批次全部闭环；快照已归档） · CP 2026-10-12 晚（`pnpm audit` 官方 registry 实跑 12 → 0（vue 3.5.43 + 三传递依赖补丁版）· a11y 扫描盲区三态补齐（320×700 / 844×390 / 200% 缩放近似 640×450，e2e 23+1 → 26+1）· dev `strictPort`） · CQ 2026-10-14 全仓代码质量评审（结论 Approve：F1 前端计数桶竞态 / F2 s3wrap 无界列举 / F3·F4·F6·F7 四道门禁假阴性 / F5 孤儿 `.PHONY` / A1·A2 可访问名 / C2 六镜像 digest pin + 门禁；C1 有意维持；O1–O3 转登记 #88–#90；**环境离线，未含门禁实跑结论**） · CR 2026-10-15 O1–O3 闭环（`useSeqGuard` 收敛 ×10 · `service.EnumeratePages` 五处循环 + `ListMaxPages` 常量收敛 · `httpx.StatusRecorder` 收敛）+ 门禁全量实跑全绿（race 11/11 包 · 覆盖率零 `count==0` 块 · lint 0 issues · 前端 88 文件 1364 例 / 四指标 100%）+ `changelog_tag` 门禁克隆口径校准（阈值 2 + 15 个「有段无 tag」段登记）
-- CS 2026-10-15 安全评审 R2a / R2b / R3a + CSP 配置校验 + 限流可观测收口（health version token-gated、metrics 独立 token、CSP style-src 收紧、限流 gauge）
+- CS 2026-10-15 安全评审 R2a / R2b / R3a + CSP 配置校验 + 限流可观测收口（health version token-gated、metrics 独立 token、CSP style-src 收紧、限流 gauge） · CT 2026-10-15 作用域对迁移 / 计划 body 的账号引用判定 + `GET /api/schedules` 按作用域裁剪 · CU 2026-10-15 防御纵深收口（nginx 响应头 / GitLab Node 供应链 / 下载文件名清洗） · CV 2026-10-16 对抗性渗透测试两条 High 收口（零引用 fail-closed `unjudgeable` / 账号写入面 `account_write` / body 键名归一化 + 重复键 fail-closed；快照见 `archive/pentest-2026-10-15.md`） · CW 2026-10-16 `prefixes` 必须与 `accounts` 同时声明（配置期 fail-closed） · **CX 2026-10-16 渗透测试 P-3..P-15 收口**（端点 userinfo 四通道 / CSP 语法与 `frame-ancestors` / ZIP 控制字符 / CORS 收紧 / 密钥 `*_FILE` + compose secrets / 探针限流与 Ping 缓存 / 镜像 digest 与容器加固 / SAST 台账刷新为 20 条；快照归档）
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -2724,7 +2724,7 @@ functions 1095 / lines 3503）。
 
 ### CV. 2026-10-16 对抗性渗透测试 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一
 
-> 来源：[`pentest-2026-10-15.md`](pentest-2026-10-15.md)（P-1 / P-2，两条 High，经第三方对抗性复核确认）。
+> 来源：[`archive/pentest-2026-10-15.md`](archive/pentest-2026-10-15.md)（P-1 / P-2，两条 High，经第三方对抗性复核确认）。
 
 | 项 | 改动 | 行为 / 证据 |
 |---|---|---|
@@ -2745,6 +2745,28 @@ functions 1095 / lines 3503）。
 | 示例同步 | [`apps/server/.env.example`](../apps/server/.env.example) 原示例是 prefixes-only（改动后会拒绝启动），补 `accounts` 并写明规则 | 避免仓库自带示例在启动期被自己的门禁拦下 |
 | 文档 | [`CONFIGURATION.md`](CONFIGURATION.md)（变量表 + fail-closed 表）· [`threat-model.md`](threat-model.md) 边界A（残留重写为「账号维度已不是缺口」+ 保留笛卡尔积边界）· [`api.md`](api.md) §最小权限 · [`CHANGELOG.md`](../CHANGELOG.md) | 原「prefixes 不约束账号维度」的残留声明已不成立并就地更正 |
 | 测试 | `internal/config/scopes_test.go`：`TestTokenScopesRejectPrefixesWithoutAccounts`（整桶 / 键前缀 / readonly 组合 / expiresAt 组合 4 例拒绝）+ `TestTokenScopesWithoutPrefixesStillValid`（accounts-only、readonly-only、expiresAt-only、空对象、prefixes+accounts 5 例仍可启动） | 后者是防「过度收紧」的对照，避免把有界作用域一并误杀 |
+
+### CX. 2026-10-16 渗透测试 P-3..P-15 收口（端点凭据 / CSP / ZIP / CORS / 密钥注入 / 镜像与容器加固 / SAST 台账）
+
+> 来源：[`archive/pentest-2026-10-15.md`](archive/pentest-2026-10-15.md)（2026-10-15 全仓对抗性渗透测试快照，**已归档**）。
+> 其中 **P-1 / P-2 两条 High** 已于 §CV / §CW 闭环；本批收口其余 **13 条（P-3..P-15）**，并把 SAST 台账刷新到 2026-10-16 口径。
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| P-3 端点 userinfo 凭据泄漏（4 条通道） | [`model.RedactEndpointUserinfo`](../apps/server/internal/model/account.go) 为**唯一**脱敏实现；[`s3wrap.NormalizeEndpoint`](../apps/server/internal/s3wrap/client.go) 在归一化口剥离 userinfo（拨号 / 签名 / 预签名 URL 都拿不到）；[`ValidateEndpoint`](../apps/server/internal/s3wrap/ssrf.go) 对含 userinfo 的端点 **fail-closed**；[`Account.View()`](../apps/server/internal/model/account.go) 回传脱敏值；`handler/accounts.go` 的 `redactEndpoint` 改为调用唯一实现 | 建号 / 更新 **400 `invalid endpoint configuration`**（外部可见行为变化）；日志 / 400 响应 / `AccountView` 都不再出现 `key:secret`。写入口顺带收紧主机面：元数据主机名 / 链路本地与元数据 IP / 非 ASCII（IDN）/ 退化端点一律 400（DNS 解析失败仍 fail-open）。测试：`internal/s3wrap/ssrf_userinfo_test.go`、`internal/model/account_test.go`、`internal/handler/accounts_plaintext_test.go`（**8 条**：明文告知 4 + P-3 闭环 4） |
+| P-4 nginx 边缘镜像既有高危 + 从不被扫 | 新增 [`deploy/nginx/Dockerfile`](../deploy/nginx/Dockerfile)：`FROM nginx:1.30.6-alpine@sha256:97036422…`（Alpine 3.24.2）+ `RUN apk upgrade --no-cache`；两个 compose 的 nginx 改为 `build:` 该 Dockerfile（`image: s3client/nginx:1.30.6-alpine`）；CI 的 Trivy 从 `docker-compose.yml` 解析镜像与 Dockerfile 路径（单一来源），**构建后扫构建产物**，沿用 `--exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed` | 实测上游**所有** nginx alpine tag 仍 ship `zlib-1.3.2-r0`（HIGH）而 `1.3.2-r1` 已发布 → 「digest 冻结吃不到补丁」由「仓库内构建 + 构建期升级」结构性消除；构建产物实测 zlib r1、Trivy 0 条；**未新增任何 `.trivyignore` 忽略条目**。维护义务登记为 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) **#91**（基座滚动 + Alpine 3.24 于 2028-06-01 EOL）；门禁 `TestNginxEdgeImageIsConsistentAcrossCompose` / `TestNginxEdgeDockerfilePinsBaseAndAppliesPatches` |
+| P-5 CSP source-list 语法未校验 | `config.Validate` 新增 [`validateCSPSourceList`](../apps/server/internal/config/config.go)：拒 `;`（指令注入）/ `,` / 允许集外字符，非法 → `ErrInvalidCSPValue`（**字符串语法**类，不再误报为数值非法）；[`buildCSP`](../apps/server/internal/handler/middleware.go) 补 `frame-ancestors 'none'`（与桌面壳同值） | 注入 `; frame-ancestors *` 类配置在启动期即被拒；`X-Frame-Options: DENY` 不再可被架空。测试：`internal/config/validate_test.go` / `internal/handler` 安全头与共享指令门禁 |
+| P-6 「禁 `v-html`」无机械门禁 | [`apps/web/eslint.config.js`](../apps/web/eslint.config.js) 启用 `'vue/no-v-html': 'error'`；新增根门禁 [`web_xss_gate_test.go`](../apps/server/web_xss_gate_test.go)：对 `apps/web/src/**` **生产源码**（排除 `*.test.ts` / `__tests__`，**剥离注释**后）断言 `v-html` / `innerHTML` / `outerHTML` / `insertAdjacentHTML` / `srcdoc` / `document.write` 命中 **0** | 注释里提到这些词不算违规（现状 `HighlightText.vue` 注释即含 `v-html`）；变异验证：去掉规则 / 注入 sink → 门禁红 |
+| P-7 `Dockerfile` FROM 仅 tag pin + zlib 高危 | `apps/server/Dockerfile` 三个 `FROM` 改 `tag@sha256` digest pin；运行阶段 `apk upgrade --no-cache` 拿 `zlib-1.3.2-r1` | 基础镜像不可变 + 构建期补丁；门禁 `TestRuntimeStageUpgradesAlpinePackages` 防退化 |
+| P-8 密钥经 `environment:` 明文注入 | 新增 `S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE`（`ErrSecretFileUnreadable` / `ErrSecretFileAmbiguous`，读出的值照走长度与明文落盘闸）；两个 compose 用 `secrets:` 挂 `./secrets/{store_key,api_token}` → `/run/secrets/*`，**删除**明文 environment；`.gitignore` 忽略 `/secrets/*`（`*.example` 例外）；示例文件 `secrets/*.example` 为必失败占位串 | `docker inspect` / `/proc/<pid>/environ` 不再有密钥明文；实测负向：属主 `root:root` + 0600 → 容器 `exit=1`（`unreadable secret file … permission denied`），故 `chown 1000:1000` 是迁移必做项。文档：[`CONFIGURATION.md`](CONFIGURATION.md) / [`DEPLOYMENT.md`](DEPLOYMENT.md) §2.1.1 / [`OPERATIONS.md`](OPERATIONS.md) §6 / 根 `.env.example` / [`README.md`](../README.md) |
+| P-9 GitLab CI cache key 无分支维度 | `.gitlab-ci.yml` 全部 cache key 加分支维度（同一分支内仍可复用） | MR 不再能写入 `main` 会复用的缓存 |
+| P-10 `curl \| bash -` 以 root 执行远端脚本 | **复核关闭**：既有批次已消除 `deb.nodesource.com/setup_*` 形态、Node 改「下载固定版本 + `sha256sum -c`」；本批把 `server` job 残留的免校验 `curl … \| tar -xz` 管线一并收敛为「下载 + 校验 + 解包」 | 门禁 `TestGitLabCIDoesNotPipeRemoteInstaller` 在；正文保留原始判定以备追溯 |
+| P-11 ZIP 条目名 NUL 绕过 | [`SanitizeZipName`](../apps/server/internal/service/zip.go) 删除每个路径段里的 ASCII 控制字符（NUL / C0 / DEL），归一化后把 `.` / `..` 段替换为 `_` | `..\x00/evil` → `_/evil`，输出保证不含任何 ASCII 控制字符；`a:..` / `../x` / 反斜杠等既有行为不变。测试：`internal/service/zip_test.go` |
+| P-12 探针端点匿名且被限流器豁免、`Ping` 每次实打 | 新增独立探针令牌桶 `S3C_PROBE_RATE_LIMIT_RPM`（默认 600）/ `S3C_PROBE_RATE_LIMIT_BURST`（默认 100），覆盖**开启后**的 `/api/health` + `/api/metrics` + `/api/openapi.json`（未开启时外层 404、不进限流），按 `rateLimitKey(IP)` 计桶，超限 **429 + `Retry-After: 1`**（主桶 5），审计复用 `rate_limit.exceeded`；`store.Ping` 结果按 `S3C_HEALTH_PING_CACHE_SECONDS`（默认 2，`0` = 每次实打）短 TTL 缓存，匿名与已认证同一口径、**失败结果同样缓存** | 匿名探针既不能耗空主限流桶，也不能无限高频打穿存储；恢复最多延迟一个 TTL（告警 `for` 窗口需留余量）。未新增限流指标序列（合同未要求）。测试：`internal/handler/pentest_p12_p13_test.go` |
+| P-13 默认 CORS 信任任意 `tauri://*` | 默认信任收紧为 http/https 的 `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（端口不限）+ `tauri://localhost`；`Origin: null` 仍不信任；`S3C_CORS_ORIGINS` 显式白名单语义不变 | `Origin: tauri://evil` 不再回 ACAO 且跨域 403；本地 Vite 随机端口仍放行。测试：`internal/handler/pentest_p12_p13_test.go` |
+| P-14 容器加固缺口 | 两个 compose 的 server / nginx 均 `read_only: true` + `no-new-privileges` + `cap_drop: [ALL]`；server `tmpfs: /tmp`（`/data` 仍是 named volume）；nginx `cap_add: [CHOWN, SETGID, SETUID]` + `tmpfs: /var/cache/nginx` `/run`，**`/var/log/nginx` 不挂 tmpfs**（官方镜像日志是指向 `/dev/stdout` `/dev/stderr` 的软链） | 实测加固态起服 healthy、反代真实后端 200、访问日志仍进 json-file；只 `cap_drop: ALL` 会让 nginx 因 `chown /var/cache/nginx` 失败退出 |
+| P-15 过期 SAST 产物 + 台账停在 10 条 | 删除根目录 2026-09-29 的过期 `gl-sast-report.json`（未入库残留；`docs/pentest` 里指向它的相对链接同步改为代码字面量）；重跑 `make gcl GCL_JOBS=semgrep-sast`（Semgrep 6.26.1，192 targets / 125 rules）刷新台账 | **[`threat-model.md`](threat-model.md) §7 重建为 20 条（8 High + 12 Medium；规则命中 20 = 去重后 16 件事实）**，原 10 条全部仍命中 + 新增 10 条逐条 triage（含 `volume_windows.go` 不排除的理由、`config.go:288` 的「运维配置输入 ≠ 用户输入」口径）；`.trivyignore` 仍 **0 忽略条目** |
+| 文档 | [`threat-model.md`](threat-model.md)（§1/§2/§3/§4/§5/§5.1/§5.4/§6.2/§7）· [`CONFIGURATION.md`](CONFIGURATION.md) · [`DEPLOYMENT.md`](DEPLOYMENT.md) · [`OPERATIONS.md`](OPERATIONS.md) · [`api.md`](api.md) · [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（#91）· [`README.md`](../README.md) · [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` | 改文档与改代码属**同一个 commit**（仓库硬约束 2） |
 
 ## 三、质量与覆盖率现状
 

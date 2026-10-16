@@ -40,12 +40,15 @@ func repoRoot(t *testing.T) string {
 // envTokenRe 匹配 `.env.example` 中 S3C_TOKEN 的赋值行。
 var envTokenRe = regexp.MustCompile(`(?m)^[ \t]*S3C_TOKEN[ \t]*=[ \t]*(.*)$`)
 
-// TestEnvExampleTokenIsNotAValidCredential 断言仓库根 `.env.example` 的 S3C_TOKEN
-// 是空值（或至少短于 MinTokenLength，保证 compose 守卫之外还有一层失败）。
+// TestEnvExampleTokenIsNotAValidCredential 断言仓库根 `.env.example` **不得**内置一枚
+// 「公开已知的有效口令」（`change-me-use-openssl-rand-hex-32` 长 33 ≥ MinTokenLength=16，
+// 会让 `cp .env.example .env && docker compose up -d` 以公开已知 token 上线）。
 //
-// 背景：`change-me-use-openssl-rand-hex-32` 长 33 ≥ MinTokenLength=16，满足
-// `${S3C_TOKEN:?}` 的非空校验 → 快速开始会以公开已知口令上线。正确写法见
-// `apps/server/.env.example`（`S3C_TOKEN=` 空值 + 注释提示生成命令）。
+// 口径变更（P-8，2026-10-16）：凭据已改由 docker compose `secrets:` 文件注入
+// （`S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE`），根模板**不再要求**存在 `S3C_TOKEN=` 赋值行，
+// 故缺失不再是失败（旧口径会在 secrets 化后误报红）。但若该赋值行仍被保留（历史形态或
+// 回退），其值必须为空或短于 MinTokenLength——这一层防线性断言继续保留。
+// secrets/文件型凭据的**正向**断言见 TestComposeCredentialsAreFileBasedNotPlaintextEnv。
 func TestEnvExampleTokenIsNotAValidCredential(t *testing.T) {
 	path := filepath.Join(repoRoot(t), ".env.example")
 	data, err := os.ReadFile(path)
@@ -54,7 +57,7 @@ func TestEnvExampleTokenIsNotAValidCredential(t *testing.T) {
 	}
 	m := envTokenRe.FindStringSubmatch(string(data))
 	if m == nil {
-		t.Fatalf("%s 缺少 S3C_TOKEN 赋值行（compose 的 ${S3C_TOKEN:?} 依赖它）", path)
+		return // 正确：凭据不再经 .env 注入（见 TestComposeCredentialsAreFileBasedNotPlaintextEnv）。
 	}
 	value := strings.TrimSpace(m[1])
 	// 允许行尾注释：`S3C_TOKEN=  # 生成：openssl rand -hex 32`
@@ -105,6 +108,295 @@ func TestRuntimeBaseImageIsSupportedAlpine(t *testing.T) {
 		t.Errorf("%s 运行镜像为 alpine:%s：该分支安全支持已结束，叠加 Trivy 的 --ignore-unfixed "+
 			"会让漏洞门禁结构性失明。请升级到 alpine:3.%d 或更高（当前最新 3.24，支持至 2028-06-01）。",
 			path, last[1]+"."+last[2], minSupportedAlpineMinor)
+	}
+}
+
+// ---- P-4 / P-7 / P-14：镜像供应链 pin 与容器加固（2026-10-16 pentest）----
+
+// dockerfileFromRe 匹配 Dockerfile 的 `FROM <image-ref> [AS <stage>]`。
+var dockerfileFromRe = regexp.MustCompile(`(?m)^[ \t]*FROM[ \t]+(\S+)(?:[ \t]+AS[ \t]+\S+)?[ \t]*$`)
+
+// dockerDigestPinRe 是「tag + 内容寻址 digest」的形态判据。
+var dockerDigestPinRe = regexp.MustCompile(`@sha256:[0-9a-f]{64}$`)
+
+// TestDockerfileAllFROMsAreDigestPinned（P-7）：Dockerfile 的每个 FROM 都必须 **tag + digest**
+// 双 pin。此前的供应链门禁只覆盖 CI / compose，Dockerfile 的 FROM 是盲区——而它决定服务端镜像
+// 的运行层内容。tag 会被上游重新推送（同一 tag 在不同时间指向不同层），只有 digest 不可变。
+//
+// 变异验证：删掉任一 FROM 的 `@sha256:…` 即红。
+func TestDockerfileAllFROMsAreDigestPinned(t *testing.T) {
+	text := readRepoFile(t, filepath.Join("apps", "server", "Dockerfile"))
+	matches := dockerfileFromRe.FindAllStringSubmatch(text, -1)
+	// 解析口径自检：当前是三阶段（node/golang/alpine）。条数塌缩说明正则失效、门禁会「全绿但失明」。
+	if len(matches) < 3 {
+		t.Fatalf("只从 Dockerfile 解析到 %d 个 FROM（基线 3：web/build/runtime）：解析口径塌缩", len(matches))
+	}
+	for _, m := range matches {
+		if !dockerDigestPinRe.MatchString(m[1]) {
+			t.Errorf("FROM %q 未按 digest pin（P-7）：tag 可被上游重新推送，同一 commit 会构建出不同镜像", m[1])
+		}
+	}
+}
+
+// TestRuntimeStageUpgradesAlpinePackages（P-7）：digest pin 把 alpine 基础层**冻结**在构建当时，
+// 而该层 ship 的 `zlib-1.3.2-r0` 命中 CVE-2026-85091（HIGH，分支内已有修复版 1.3.2-r1）。
+// 运行阶段必须显式 `apk upgrade --no-cache` 才能在同一次构建里拿到补丁。
+//
+// 变异验证：删掉该行即红（实测：alpine:3.24 → zlib 1.3.2-r0，upgrade 后 1.3.2-r1）。
+func TestRuntimeStageUpgradesAlpinePackages(t *testing.T) {
+	text := readRepoFile(t, filepath.Join("apps", "server", "Dockerfile"))
+	idx := strings.LastIndex(text, "FROM alpine:")
+	if idx < 0 {
+		t.Fatalf("未找到运行阶段 `FROM alpine:…` 行（解析口径需同步）")
+	}
+	if !strings.Contains(text[idx:], "apk upgrade --no-cache") {
+		t.Error("运行阶段缺少 `apk upgrade --no-cache`（P-7）：digest pin 冻结的 alpine 层自带 " +
+			"zlib-1.3.2-r0，CVE-2026-85091 拿不到修复版 1.3.2-r1")
+	}
+}
+
+// composeServiceBlock 从 compose 文本里截取缩进 2 空格的服务块（`  <name>:` 起，到下一个
+// 缩进 ≤2 的非空行为止）。行解析而非 YAML 解析：与包根其它基础设施门禁同口径（不引 YAML 依赖），
+// 且缩进是本仓库 compose 的稳定结构（services 下的键固定 2 空格）。
+func composeServiceBlock(t *testing.T, rel, name string) string {
+	t.Helper()
+	lines := strings.Split(readRepoFile(t, rel), "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "  "+name+":") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatalf("%s 未找到服务 %q（解析口径需同步）", rel, name)
+	}
+	var b strings.Builder
+	for _, line := range lines[start:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if indent < 2 || (indent == 2 && !strings.HasPrefix(strings.TrimSpace(line), name+":")) {
+			break
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// composeSelfBuiltNginxRe 匹配 compose 里的自建 nginx 镜像引用（`image: s3client/nginx:…`）。
+var composeSelfBuiltNginxRe = regexp.MustCompile(`(?m)^[ \t]*image:[ \t]*(s3client/nginx:\S+)`)
+
+// nginxBaseRefRe 匹配边缘镜像基座的完整 patch tag + digest（`nginx:<X.Y.Z>-alpine@sha256:<64hex>`）。
+var nginxBaseRefRe = regexp.MustCompile(`^nginx:(\d+)\.(\d+)\.(\d+)-alpine@sha256:[0-9a-f]{64}$`)
+
+// TestNginxEdgeImageIsConsistentAcrossCompose（P-4）：两个 compose 的 nginx 边缘镜像必须是
+// **同一个仓库内自建镜像**（同 dockerfile + 同 image），不再引用可被上游重新推送的外部 tag。
+//
+// 为什么需要它：P-4 的结构性根因是「digest 冻结吃不到补丁」——上游 nginx alpine 镜像
+// （实测 1.30.6 / stable / mainline）都还 ship zlib-1.3.2-r0。故改为 pin 基座 digest +
+// 构建期 `apk upgrade` 的自建镜像；本门禁钉住「两个 compose 不许各自漂移」。
+// 基座 digest 与 `apk upgrade` 的存在性由 TestNginxEdgeDockerfilePinsBaseAndAppliesPatches 覆盖。
+func TestNginxEdgeImageIsConsistentAcrossCompose(t *testing.T) {
+	const dockerfile = "deploy/nginx/Dockerfile"
+	var refs []string
+	for _, rel := range []string{"docker-compose.yml", "docker-compose.prod.yml"} {
+		block := composeServiceBlock(t, rel, "nginx")
+		matches := composeSelfBuiltNginxRe.FindAllStringSubmatch(block, -1)
+		if len(matches) != 1 {
+			t.Fatalf("%s 的 nginx 服务解析到 %d 个自建 image 行（期望恰好 1 个）：解析口径需同步", rel, len(matches))
+		}
+		refs = append(refs, matches[0][1])
+		if !strings.Contains(block, "dockerfile: "+dockerfile) {
+			t.Errorf("%s 的 nginx 未由 %s 构建（P-4：上游镜像不带 zlib-1.3.2-r1，必须构建期重打补丁）", rel, dockerfile)
+		}
+	}
+	if refs[0] != refs[1] {
+		t.Errorf("两个 compose 的 nginx 镜像不一致：docker-compose.yml=%q vs docker-compose.prod.yml=%q（P-4）", refs[0], refs[1])
+	}
+	if !strings.HasPrefix(refs[0], "s3client/nginx:") {
+		t.Errorf("nginx 镜像 %q 不是仓库内自建镜像（应形如 s3client/nginx:<tag>）", refs[0])
+	}
+}
+
+// TestNginxEdgeDockerfilePinsBaseAndAppliesPatches（P-4）：边缘镜像的基座必须 digest pin，
+// 且必须显式 `apk upgrade --no-cache`——两者缺一就会退回「digest 冻结、补丁吃不到」的原始缺陷。
+//
+// 变异验证：删掉 `@sha256:…` 或 `apk upgrade --no-cache` 任一即红；把基座换成 1.27.x 亦红。
+func TestNginxEdgeDockerfilePinsBaseAndAppliesPatches(t *testing.T) {
+	text := readRepoFile(t, filepath.Join("deploy", "nginx", "Dockerfile"))
+	matches := dockerfileFromRe.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		t.Fatalf("deploy/nginx/Dockerfile 未解析到 FROM 行（解析口径需同步）")
+	}
+	ref := matches[0][1]
+	m := nginxBaseRefRe.FindStringSubmatch(ref)
+	if m == nil {
+		t.Fatalf("基座 %q 不是 `nginx:<X.Y.Z>-alpine@sha256:<64hex>` 形态（P-4：tag 可被上游重新推送）", ref)
+	}
+	minor, _ := strconv.Atoi(m[2])
+	if minor < 28 {
+		t.Errorf("基座 %q 过低：1.27.x 的 alpine 镜像落在 Alpine 3.21（2026-11-01 EOL），"+
+			"叠加 Trivy `--ignore-unfixed` 会让漏洞门禁结构性失明（P-4）", ref)
+	}
+	if !strings.Contains(text, "apk upgrade --no-cache") {
+		t.Error("deploy/nginx/Dockerfile 缺少 `apk upgrade --no-cache`（P-4）：上游基座 ship 的 " +
+			"zlib-1.3.2-r0 命中 CVE-2026-85091，不重打补丁就拿不到 1.3.2-r1")
+	}
+}
+
+// composePlaintextCredentialRe 匹配 compose environment 里的明文凭据键
+// （`S3C_STORE_KEY:` / `S3C_TOKEN:`；`S3C_STORE_KEY_FILE:` 因 `_FILE:` 不匹配）。
+var composePlaintextCredentialRe = regexp.MustCompile(`(?m)^[ \t]*S3C_(?:STORE_KEY|TOKEN)[ \t]*:`)
+
+// TestComposeCredentialsAreFileBasedNotPlaintextEnv（P-8）：两个 compose 的 server 必须经
+// `S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE` 从 `secrets:` 文件读取凭据，且**不得**再有
+// 明文 `S3C_STORE_KEY:` / `S3C_TOKEN:` environment 注入。
+//
+// 为什么需要它：`environment:` 会被 `docker inspect` / `/proc/<pid>/environ` 读到（P-8 的
+// 原始发现），而这类回退没有任何机械门禁挡住——把 secrets 改回明文注入仍会全绿。
+//
+// 变异验证：把任一 compose 的 `S3C_STORE_KEY_FILE:` 换回 `S3C_STORE_KEY:` 即红。
+func TestComposeCredentialsAreFileBasedNotPlaintextEnv(t *testing.T) {
+	for _, rel := range []string{"docker-compose.yml", "docker-compose.prod.yml"} {
+		text := readRepoFile(t, rel)
+		if m := composePlaintextCredentialRe.FindAllString(text, -1); len(m) > 0 {
+			t.Errorf("%s 仍有明文凭据 environment：%v——`docker inspect` / /proc/<pid>/environ 可直接读到（P-8）",
+				rel, m)
+		}
+		block := composeServiceBlock(t, rel, "server")
+		for _, want := range []struct{ needle, why string }{
+			{`S3C_STORE_KEY_FILE: "/run/secrets/store_key"`, "store key 未走文件型 secret"},
+			{`S3C_TOKEN_FILE: "/run/secrets/api_token"`, "API token 未走文件型 secret"},
+			{"- store_key", "server 未挂载 store_key secret"},
+			{"- api_token", "server 未挂载 api_token secret"},
+		} {
+			if !strings.Contains(block, want.needle) {
+				t.Errorf("%s 的 server 服务缺少 %q——%s（P-8）", rel, want.needle, want.why)
+			}
+		}
+		// 顶层的 secret 定义必须指向这两份文件（与 .gitignore 的 /secrets/* 对应）。
+		for _, want := range []string{"file: ./secrets/store_key", "file: ./secrets/api_token"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s 缺少顶层 secret 定义 %q（P-8）", rel, want)
+			}
+		}
+	}
+}
+
+// TestComposeContainerHardeningDoesNotRegress（P-14）：两个 compose 的 server / nginx 都必须具备
+// 容器加固项。此前的缺口正是「配置里没有，而没有任何断言会发现」——门禁把口径固定下来。
+//
+// 变异验证：删掉任一 `read_only: true` / `no-new-privileges:true` 即红。
+func TestComposeContainerHardeningDoesNotRegress(t *testing.T) {
+	for _, rel := range []string{"docker-compose.yml", "docker-compose.prod.yml"} {
+		for _, svc := range []struct {
+			name string
+			want []string
+		}{
+			{"server", []string{
+				"read_only: true",
+				"no-new-privileges:true",
+				"cap_drop:",
+				"- ALL",
+				"/tmp", // tmpfs：只读根文件系统下仍需要可写临时目录
+				"s3c-data:/data",
+			}},
+			{"nginx", []string{
+				"read_only: true",
+				"no-new-privileges:true",
+				"cap_drop:",
+				"- ALL",
+				"/var/cache/nginx", // 临时目录
+				"/run",             // /var/run/nginx.pid
+				"- SETUID",         // 实测：只 cap_drop ALL 会让 nginx 因 chown setuid 失败而退出
+			}},
+		} {
+			block := composeServiceBlock(t, rel, svc.name)
+			for _, want := range svc.want {
+				if !strings.Contains(block, want) {
+					t.Errorf("%s 的 %s 服务缺少加固项 %q（P-14）", rel, svc.name, want)
+				}
+			}
+		}
+	}
+}
+
+// ciJobBlock 从 GitHub workflow 文本里截取缩进 2 空格的 job 块（`  <job>:` 起，到下一个
+// 缩进 ≤2 的非空行为止）。与 composeServiceBlock 同口径：行解析，不引 YAML 依赖。
+func ciJobBlock(t *testing.T, rel, job string) string {
+	t.Helper()
+	lines := strings.Split(readRepoFile(t, rel), "\n")
+	start := -1
+	for i, line := range lines {
+		if line == "  "+job+":" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatalf("%s 未找到 job %q（解析口径需同步）", rel, job)
+	}
+	var b strings.Builder
+	for i, line := range lines[start:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if i > 0 {
+			if indent := len(line) - len(strings.TrimLeft(line, " ")); indent <= 2 {
+				break
+			}
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// TestCIBuildsAndScansNginxEdgeImage（P-4）：CI 的 docker job 必须**构建** compose 声明的
+// 自建 nginx 边缘镜像，并用与 server 镜像同口径的 Trivy 失败门禁扫描它。
+//
+// 为什么需要它：P-4 的原始缺陷是「nginx 边缘镜像从不被扫描」；修复后若有人删掉该步骤、
+// 或把它降级成 `--exit-code 0`，本地全绿而 CI 静默失明。本门禁把口径钉死。
+//
+// 变异验证：删掉 `docker build -f "$dockerfile"`、或删掉 nginx 扫描里的 `--exit-code 1` 即红。
+func TestCIBuildsAndScansNginxEdgeImage(t *testing.T) {
+	rel := filepath.Join(".github", "workflows", "ci.yml")
+	block := ciJobBlock(t, rel, "docker")
+	// ① 扫描对象必须是**构建产物**：镜像名与 Dockerfile 都从 compose 解析后 build，
+	//    而不是 pull 上游 tag（上游 tag 今天一律带 zlib-1.3.2-r0，见 deploy/nginx/Dockerfile）。
+	for _, want := range []string{"read_nginx_field", `docker build -f "$dockerfile"`, "docker-compose.yml"} {
+		if !strings.Contains(block, want) {
+			t.Errorf("ci.yml 的 docker job 缺少 %q——nginx 扫描对象必须是从 compose 解析并构建的边缘镜像（P-4）", want)
+		}
+	}
+	// ② 扫描 nginx 镜像的那次 Trivy 调用必须带失败门禁与 DB 复用参数。
+	//
+	// 取「镜像引用之前的最后一次 Trivy 调用」而非全文子串匹配：同一个 job 里还有一次
+	// server 镜像的 Trivy 调用，全文匹配会把它的 `--exit-code 1` 误当成 nginx 步骤的
+	// （实测过的假阴性形态：删掉 nginx 步骤的该参数仍会全绿）。
+	const imageRef = "steps.nginx-edge.outputs.image"
+	idx := strings.Index(block, imageRef)
+	if idx < 0 {
+		t.Fatalf("ci.yml 的 docker job 没有以 %q 为对象的 Trivy 调用（P-4：nginx 边缘镜像未被扫描）", imageRef)
+	}
+	last := strings.LastIndex(block[:idx], "aquasec/trivy:")
+	if last < 0 {
+		t.Fatalf("在 %q 之前未找到 Trivy 调用（解析口径需同步）", imageRef)
+	}
+	call := block[last : idx+len(imageRef)]
+	for _, flag := range []string{
+		"--exit-code 1",
+		"--severity CRITICAL,HIGH",
+		"--ignore-unfixed",
+		"--skip-db-update",
+		"--pkg-types os,library",
+	} {
+		if !strings.Contains(call, flag) {
+			t.Errorf("nginx 边缘镜像的 Trivy 扫描缺少 %q（P-4：与 server 镜像同口径，不得静默降级）", flag)
+		}
 	}
 }
 
@@ -214,8 +506,8 @@ func TestCIBaseImagesAreDigestPinned(t *testing.T) {
 	}
 	for _, rel := range []string{"docker-compose.yml", "docker-compose.prod.yml", "docker-compose.tls.yml"} {
 		for _, m := range ciImageLineRe.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
-			if strings.HasPrefix(m[1], "s3client/server") {
-				continue // 本项目自建镜像，无上游 digest
+			if strings.HasPrefix(m[1], "s3client/") {
+				continue // 本项目自建镜像（server / nginx 边缘镜像），无上游 digest
 			}
 			check(rel+" image:", m[1])
 		}
@@ -390,6 +682,7 @@ func TestDockerignoreExcludesBuildArtifacts(t *testing.T) {
 		"*.tsbuildinfo",
 		"**/*.log",
 		".gitlab-ci-local",
+		"secrets/", // P-8：compose 文件型 secret 的真实密钥目录不得进构建上下文
 	} {
 		found := false
 		for _, line := range lines {

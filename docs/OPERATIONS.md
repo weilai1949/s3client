@@ -66,6 +66,13 @@ GET /api/health        # 免鉴权（withAuth 显式豁免），响应恒带 X-R
   间隔 30s / 超时 5s / 重试 3 次 / start-period 5s；compose 的 nginx 依赖 `condition: service_healthy`。
 - 恢复后**无需重启**：下一次探测成功即回到 200（[`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1）。
 - `/api/health` 是**免鉴权**探针端点（Docker 探针需要）；匿名响应不暴露 `version`。
+- **探针面限流（P-12）**：`/api/health`（连同 `/api/metrics` / `/api/openapi.json`）豁免主限流桶，但受
+  **独立探针令牌桶**约束（`S3C_PROBE_RATE_LIMIT_RPM` 默认 600 / `S3C_PROBE_RATE_LIMIT_BURST` 默认 100），
+  超限回 **429 + `Retry-After: 1`**（主限流桶是 `Retry-After: 5`），审计事件同为 `rate_limit.exceeded`——
+  外部黑盒探测拿到 429 时先降低探测频率，再查存储。
+- **`Ping` 结果短 TTL 缓存（默认 2 秒）**：`S3C_HEALTH_PING_CACHE_SECONDS`（默认 `2`，`0` = 不缓存）窗口内
+  复用同一结果，匿名与已认证**同一口径**；**失败结果同样缓存**，故 503 在窗口内稳定复现、恢复最多延迟一个
+  TTL 才转 200——§4.2 的外部探测告警 `for` 窗口要按此留余量。
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/api/health   # 200 / 503
@@ -400,6 +407,9 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | `msg="配置校验失败"` + `unknown store driver` | `S3C_STORE_DRIVER` 不在 `json` / `sqlite` / `encrypted` 内 | 改正取值（大小写与空白会先归一化再比较） |
 | `msg="配置校验失败"` + `unreadable explicit env file` | 显式 `S3C_ENV_FILE` 不存在 / 不可读 | 修路径与权限；该路径**不会**静默回退默认值（防止 `S3C_DATA_DIR` 静默丢失导致账号列表「凭空清空」） |
 | `msg="配置校验失败"` + `S3C_TOKEN required for non-loopback listen address` | 非回环监听未设 `S3C_TOKEN` | 设置 token（≥ 16 字符） |
+| `msg="配置校验失败"` + `unreadable secret file: S3C_STORE_KEY_FILE=… 不存在或不可读` / `S3C_TOKEN_FILE=… 不存在或不可读` | `*_FILE` 指向的文件不存在，或进程用户不可读（compose 文件型 secret 按宿主机权限挂载，而 server 容器是 `USER app` = uid 1000） | 确认文件存在且 uid 1000 可读：`chmod 600` 之后仍需 `chown 1000:1000`（或 `root:1000` + `640`），见 [`DEPLOYMENT.md`](DEPLOYMENT.md) §2.1.1；验证 `docker compose exec -T server sh -c 'test -r /run/secrets/store_key && echo READABLE'` |
+| `msg="配置校验失败"` + `unreadable secret file: S3C_STORE_KEY_FILE=… 内容为空（去掉首尾空白后无有效值）` / `S3C_TOKEN_FILE=…` 同 | 文件存在但内容为空 / 只有空白（`openssl rand … > file` 中途失败会留下空文件） | 重新生成：`openssl rand -hex 32 > secrets/store_key`；不要用空行或占位串（占位串另会触发最短长度校验） |
+| `msg="配置校验失败"` + `ambiguous secret configuration: S3C_STORE_KEY 与 S3C_STORE_KEY_FILE 不能同时设置` | 同名明文变量与 `*_FILE` **同时非空**（配置歧义）：fail-closed，不静默取其一；明文变量为空串不算「设置」 | 二选一——secrets 部署删掉明文 `S3C_STORE_KEY` / `S3C_TOKEN`；直接注入则清空对应的 `*_FILE` |
 | `level=WARN` + `S3C_STORE_KEY 为空：… secretKey 将明文落盘` | 显式开了 `S3C_ALLOW_PLAINTEXT_STORE=1` | **生产不应出现**：改为 `encrypted` 或设置 `S3C_STORE_KEY` |
 | 运行期 `encrypted secret_key found but S3C_STORE_KEY is not set`（`sqlite`） | 库中该列是密文，但本次进程未配 key（且显式放行了明文） | 补回 key；否则列表可见但该账号的密钥取不出、不可用 |
 
@@ -595,8 +605,10 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | `.s3client.lock` | unix 且进程运行过 | ❌ **不需要** | `flock` 锁文件，内容无意义；锁由内核在进程退出时释放，残留文件不影响下次启动 |
 | `accounts.json.tmp` 等 `*.tmp` | 写盘中途崩溃时可能残留 | ❌ 不需要 | 原子写临时残骸；下次写盘会先清理，不影响读取 |
 
-**另需单独保管**：`.env`（或部署平台的环境变量）里的 `S3C_TOKEN` 与 `S3C_STORE_KEY`——它们**不在数据目录内**，
-不会被文件级备份覆盖。
+**另需单独保管**：两枚密钥 `S3C_TOKEN` 与 `S3C_STORE_KEY`（或其 `*_FILE` 变体指向的文件）——它们**不在数据目录内**，
+不会被文件级备份覆盖。非 compose 部署在 `.env` / 部署平台的环境变量里；compose 部署已改为 **docker secrets**，
+对应宿主机文件 `secrets/store_key` 与 `secrets/api_token`（已 `chmod 600`、且需容器 uid 1000 可读；
+见 [`DEPLOYMENT.md`](DEPLOYMENT.md) §2.1.1）。`secrets/` 已在 `.gitignore` 中，**不要**把真实密钥提交入库。
 
 > **一致性（建议）**：`sqlite` 驱动请在**停止进程后**整目录打包；热备请用 SQLite 自身的备份机制
 > （`.backup` / `VACUUM INTO`，需宿主具备 `sqlite3` 工具）或卷快照，不要只 `cp accounts.db`。`json` / `encrypted`
@@ -606,7 +618,8 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 
 > ⚠️ **这是本手册最重要的一条数据安全约束**：`S3C_STORE_KEY` 是账号密钥落盘加密的**唯一凭据**（AES-256-GCM +
 > Argon2id，参数随文件头保存）。它既不能从密文反推，也不能从运行中的 API 取回——`AccountView` **不回传
-> `secretKey`**（只有 `secretSet` 布尔）。
+> `secretKey`**（只有 `secretSet` 布尔）。**经 `S3C_STORE_KEY_FILE` 注入时**，本节说的「key」就是
+> `secrets/store_key` 这个文件的内容——该文件本身同样要与备份介质分离保存。
 
 | 情形 | 后果 |
 |---|---|
@@ -769,7 +782,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 |---|---|---|
 | 升级前 | 按 §6 完成一次备份，并确认 key 可用；读 [`CHANGELOG.md`](../CHANGELOG.md) 的 `[Unreleased]` 段 | 本手册 §6；[`DEVELOPMENT.md`](DEVELOPMENT.md) §4 |
 | 升级前 | 确认数据格式兼容性：加密格式 `S3C3`，**兼容读取旧 `S3C2` 库**（升级路径存在，但降级回旧版本不一定能读新格式） | [`threat-model.md`](threat-model.md) 边界 C |
-| 升级中 | 停机窗口内替换镜像 / 二进制（prod compose 镜像 tag 由 `S3C_IMAGE_TAG` 控制）；容器宽限期见 R-9 | [`docker-compose.prod.yml`](../docker-compose.prod.yml) |
+| 升级中 | 停机窗口内替换镜像 / 二进制（prod compose 的 server tag 由 `S3C_IMAGE_TAG` 控制；**nginx 是仓库内构建的边缘镜像**，需 `docker compose build nginx` 或 `up -d --build`，`docker compose pull` 不覆盖它）；容器宽限期见 R-9 | [`docker-compose.prod.yml`](../docker-compose.prod.yml)、[`DEPLOYMENT.md`](DEPLOYMENT.md) §3 |
 | 升级后 | `/api/health` 200；`s3c_build_info{version=...}` 与预期 tag 一致；抽查一次流式下载与一次写操作 | §3.1、§3.2 |
 | 回滚 | `docker compose down` → 用旧 tag `up -d`；**回滚前先备份 `/data`**（旧版本可能读不了新格式）；`.s3client.lock` 不需要备份 | [`DEPLOYMENT.md`](DEPLOYMENT.md) §7 |
 | 桌面端 | 产物未签名（Windows SmartScreen / macOS 未公证）、**无自动更新通道**，用户需手动升级 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #25、[`ROADMAP.md`](ROADMAP.md) §五 5.1 R5 |

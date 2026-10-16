@@ -160,24 +160,35 @@ func rateLimitKey(ip string) string {
 	return parsed.Mask(net.CIDRMask(64, 128)).String()
 }
 
+// probePaths 是豁免**主**限流器的探针端点（精确匹配，不含子路径）：
+// K8s 探针 / Prometheus scrape / 契约抓取不能被业务限流打成失败，否则会误判服务不可用。
+// 但它们匿名且会被高频轮询，故改由独立的宽松令牌桶（S3C_PROBE_RATE_LIMIT_*）约束（P-12）。
+var probePaths = map[string]bool{
+	"/api/health":       true,
+	"/api/metrics":      true,
+	"/api/openapi.json": true,
+}
+
 func (h *Handler) withRateLimit(next http.Handler) http.Handler {
-	if h.limiter == nil {
+	if h.limiter == nil && h.probeLimiter == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/api/health" || p == "/api/metrics" || p == "/api/openapi.json" || !strings.HasPrefix(p, "/api/") {
+		if !strings.HasPrefix(p, "/api/") || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.Method == http.MethodOptions {
-			next.ServeHTTP(w, r)
-			return
+		// 探针端点走独立宽松桶；其余 /api/ 路径走主桶。两桶按同一 rateLimitKey
+		// （IPv6 /64 聚合）计桶，彼此不消耗对方额度。
+		lim, retryAfter := h.limiter, "5"
+		if probePaths[p] {
+			lim, retryAfter = h.probeLimiter, "1"
 		}
 		ip := h.clientIP(r)
-		if !h.limiter.allow(rateLimitKey(ip)) {
+		if lim != nil && !lim.allow(rateLimitKey(ip)) {
 			h.audit(r, auditRateLimited, "ip", ip)
-			w.Header().Set("Retry-After", "5")
+			w.Header().Set("Retry-After", retryAfter)
 			h.writeErr(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}

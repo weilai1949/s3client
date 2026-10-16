@@ -85,16 +85,16 @@ docker-compose.yml   一键起 server + RustFS
 所有配置通过环境变量注入，支持 `.env`（见 `apps/server/.env.example`）。  
 `.env` 查找顺序：`S3C_ENV_FILE` 指定的路径（若设置则为唯一来源，且路径不存在 / 不可读时**拒绝启动**，不静默回退默认值）→ 进程工作目录 `.env` → 可执行文件同目录 `.env`；真实环境变量始终优先于文件。
 
-**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 25 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
+**全量配置矩阵（SSOT）见 [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**——含全部 30 个 `S3C_*` 变量、启动期硬失败清单与客户端设置。最常用的几项：
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `S3C_ADDR` | `127.0.0.1:5000` | 监听地址；回环更安全，需远程改为 `0.0.0.0:5000`（此时**必须**设 `S3C_TOKEN`） |
 | `S3C_DATA_DIR` | `./data` | 数据目录（账号库与单写者锁文件 `.s3client.lock`） |
-| `S3C_TOKEN` | 空 | 非空时业务 `/api/*` 需要 `Authorization: Bearer <token>`；health 免鉴权但仅有效 token 可见版本号；**非回环监听时必填**（最低 16 字符） |
+| `S3C_TOKEN` | 空 | 非空时业务 `/api/*` 需要 `Authorization: Bearer <token>`；health 免鉴权但仅有效 token 可见版本号；**非回环监听时必填**（最低 16 字符）。**也可用 `S3C_TOKEN_FILE` 指向密钥文件（docker secrets），与 `S3C_TOKEN` 二选一**（同时非空 → 拒绝启动） |
 | `S3C_METRICS_TOKEN` | 空 | 设置后 `/api/metrics` 使用独立 Bearer；不设置则保持内网匿名 scrape 兼容（最低 16 字符） |
 | `S3C_STORE_DRIVER` | `json` | 账号存储：`json` / `sqlite` / `encrypted` |
-| `S3C_STORE_KEY` | 空 | 落盘加密口令（至少 16 字符）；`encrypted` 模式必填，`json`/`sqlite` 设置后启用加密。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`） |
+| `S3C_STORE_KEY` | 空 | 落盘加密口令（至少 16 字符）；`encrypted` 模式必填，`json`/`sqlite` 设置后启用加密。**`json`/`sqlite` 且未设本项时进程拒绝启动**（除非显式 `S3C_ALLOW_PLAINTEXT_STORE=1`）。**也可用 `S3C_STORE_KEY_FILE` 指向密钥文件（docker secrets），与 `S3C_STORE_KEY` 二选一**（同时非空 → 拒绝启动） |
 
 **安全默认值**：回环绑定 + CORS 白名单 + 短 token 拒绝启动 + **明文存储拒绝启动** + 指标与契约端点默认隐藏。非回环（如 `0.0.0.0`）未设 `S3C_TOKEN`、或 `json`/`sqlite` 未设 `S3C_STORE_KEY` 时进程**拒绝启动**（后者需显式 `S3C_ALLOW_PLAINTEXT_STORE=1` 放行，仅限本地联调）。生产推荐 `docker compose -f docker-compose.prod.yml`（强制 token + encrypted，无内置 RustFS）。
 
@@ -105,25 +105,37 @@ docker-compose.yml   一键起 server + RustFS
 后端提供多阶段 `apps/server/Dockerfile`，产出**非 root**、带健康检查、数据持久化的镜像。
 
 ```bash
-# 复制环境变量（必填 S3C_TOKEN / S3C_STORE_KEY / RUSTFS_*）
-cp .env.example .env
-# 生成 token 与存储密钥：openssl rand -hex 32
-# 二者都必须填入 .env：compose 对 S3C_TOKEN / S3C_STORE_KEY 均做了非空守卫，
-# 缺任一项 docker compose 会直接拒绝启动（避免以明文密钥或公开已知口令上线）。
+# 1) 生成两枚密钥文件（compose 经 docker secrets 注入，不再从 .env 读明文密钥）
+mkdir -p secrets
+openssl rand -hex 32 > secrets/store_key    # 落盘加密口令（S3C_STORE_KEY_FILE）
+openssl rand -hex 32 > secrets/api_token    # Bearer token（S3C_TOKEN_FILE）
+chmod 600 secrets/store_key secrets/api_token
+# ⚠️ 容器以 uid 1000（USER app）运行，文件属主必须是它可读的：chmod 600 之后还要
+#    sudo chown 1000:1000 secrets/store_key secrets/api_token   # 生成用户即 uid 1000 时可跳过
+#    否则启动 fail-closed：unreadable secret file: S3C_STORE_KEY_FILE=… 不存在或不可读
 
-# 一键起 server + nginx + RustFS（会自动构建镜像）
+# 2) 复制环境变量模板（只承载 compose 会用到的键：S3C_STORE_DRIVER / S3C_IMAGE_TAG /
+#    S3C_CORS_ORIGINS / 限流 / RUSTFS_* 等；两枚密钥不在这里填）
+cp .env.example .env
+
+# 3) 一键起 server + nginx + RustFS（会自动构建 server 与 nginx 边缘镜像）
 docker compose up -d --build
 
 # 生产（无 RustFS，强制 encrypted）
 docker compose -f docker-compose.prod.yml up -d --build
 
-# 仅运行服务端（外部 S3）
+# 仅运行服务端（外部 S3，直接注入环境变量，不经 compose secrets）
 docker build -f apps/server/Dockerfile -t s3client/server:v1.0.0 --build-arg GOPROXY=https://goproxy.io,direct .
 docker run -d --name s3client -p 127.0.0.1:5000:5000 \
   -e S3C_TOKEN="$(openssl rand -hex 32)" \
   -e S3C_STORE_KEY="$(openssl rand -hex 32)" \
   -v s3c-data:/data s3client/server:v1.0.0
 ```
+
+> 密钥经**文件**注入时（`S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE`，docker secrets / systemd
+> `LoadCredential`）读到的值照走长度与明文落盘闸；文件不可读 / 内容为空 / 与同名明文变量
+> **同时非空**都**拒绝启动**（配置歧义不静默取其一）。完整迁移与验证步骤见
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §2.1.1。
 
 > 本地仅联调、明确接受明文落盘时，可 `S3C_ALLOW_PLAINTEXT_STORE=1` 绕过存储密钥硬失败（进程会打 WARN）。
 

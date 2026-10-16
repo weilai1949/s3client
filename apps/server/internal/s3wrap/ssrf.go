@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/weilai1949/s3client/apps/server/internal/model"
 )
 
 var (
@@ -36,13 +38,23 @@ func ValidateEndpoint(endpoint string) error {
 	if strings.TrimSpace(endpoint) == "" {
 		return nil
 	}
+	// P-3（2026-10-15 渗透测试）：endpoint 里的 userinfo（`http://key:secret@host`）是用户误填的
+	// 凭据——SigV4 凭据来自账号的 accessKey / secretKey 独立字段，userinfo 没有任何正当用途，
+	// 只会经错误串（日志 / 400 响应体）与 BaseEndpoint（拨号 / 预签名 URL）泄漏，故 fail-closed
+	// 直接拒绝（建号 / 更新 → 400）。必须在 NormalizeEndpoint **之前**判定：归一化会剥离
+	// userinfo，剥离之后就查不到了。文案固定、不回显原始端点。
+	if endpointHasUserinfo(endpoint) {
+		return errors.New("invalid endpoint URL: endpoint must not contain userinfo credentials")
+	}
 	// 归一化后再解析：用户手填的 endpoint 可能带首尾空白或大小写 scheme，
 	// 直接用原串 url.Parse 会把合法地址误判为非法（FEATURES.md §K，KNOWN_ISSUES #10）。
 	raw := NormalizeEndpoint(endpoint, false)
 	if raw == "" {
 		// 非空输入却归一化为空（如 "http://"、"/"）：退化地址必须 fail-closed，
-		// 不能因归一化而静默放行。
-		return fmt.Errorf("invalid endpoint URL: %q", endpoint)
+		// 不能因归一化而静默放行。回显的是**脱敏后**的输入（见 model.RedactEndpointUserinfo）：
+		// 该分支在 userinfo 已被拒之后理论上拿不到凭据，但错误串会进日志与响应体，
+		// 不能再留一条「原始 endpoint 原样回显」的旁路。
+		return fmt.Errorf("invalid endpoint URL: %q", model.RedactEndpointUserinfo(endpoint))
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -52,7 +64,7 @@ func ValidateEndpoint(endpoint string) error {
 		// 解析成功但无主机名（如 "http://:5000"、"file:///..."）：此分支曾与解析失败共用
 		// 一个 %w 包装，err 为 nil 时产出 "invalid endpoint URL: %!w(<nil>)" 污染错误串
 		// （review Nit）。无主机名的端点必然连不上，fail-closed 拒绝。
-		return fmt.Errorf("invalid endpoint URL: %q (missing host)", endpoint)
+		return fmt.Errorf("invalid endpoint URL: %q (missing host)", model.RedactEndpointUserinfo(endpoint))
 	}
 	host := strings.ToLower(u.Hostname())
 	// 非 ASCII 主机名（IDN）必须在边界拒绝：Go 的 net.Resolver / http.Transport 都不
@@ -61,7 +73,7 @@ func ValidateEndpoint(endpoint string) error {
 	// 莫名其妙的网络错误，用户看不出是端点主机名非法。既然连不上，就在建号时明确拒绝。
 	// 不引入 golang.org/x/net/idna：完整映射表不值得为这一处加依赖，改填 punycode 即可。
 	if strings.IndexFunc(host, func(r rune) bool { return r > 127 }) >= 0 {
-		return fmt.Errorf("invalid endpoint URL: %q (non-ASCII host: use punycode xn-- instead)", endpoint)
+		return fmt.Errorf("invalid endpoint URL: %q (non-ASCII host: use punycode xn-- instead)", model.RedactEndpointUserinfo(endpoint))
 	}
 	if isBlockedHostname(host) {
 		return fmt.Errorf("%w: %s", errEndpointBlocked, host)
@@ -79,6 +91,25 @@ func ValidateEndpoint(endpoint string) error {
 		}
 	}
 	return nil
+}
+
+// endpointHasUserinfo 判定原始 endpoint 是否内嵌凭据（userinfo，P-3）。
+//
+// 必须在 `NormalizeEndpoint` **之前**判定——归一化会剥离 userinfo，剥离后就查不到了。
+// 裸端点（无 scheme，如 `key:secret@host:9000`）按 http 补全后再 url.Parse：否则 url.Parse
+// 会把 `key` 当成 scheme、把 userinfo 藏进 Opaque，User 恒为 nil 而漏判。
+// 解析失败的输入返回 false：它要么在后续分支 fail-closed，要么由归一化剥离凭据，
+// 两条路都不会把 userinfo 带出去。
+func endpointHasUserinfo(endpoint string) bool {
+	ep := strings.TrimSpace(endpoint)
+	if !strings.Contains(ep, "://") {
+		ep = "http://" + ep
+	}
+	u, err := url.Parse(ep)
+	if err != nil {
+		return false
+	}
+	return u.User != nil
 }
 
 func isBlockedHostname(host string) bool {

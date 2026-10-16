@@ -126,7 +126,7 @@ All configuration comes from environment variables (`S3C_*`), with `.env` suppor
 silently falling back) → `.env` in the working directory → `.env` next to the executable; real environment
 variables always win over files.
 
-**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 25
+**The full configuration matrix (SSOT) is [`docs/CONFIGURATION.md`](../CONFIGURATION.md)** (中文) — all 30
 `S3C_*` variables, the startup hard-failure list, and client settings. Most common:
 
 | Variable | Default | Meaning |

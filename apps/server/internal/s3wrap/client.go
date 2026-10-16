@@ -194,8 +194,8 @@ func newHTTPClient() *ssrfAwareClient {
 
 // NormalizeEndpoint 归一化 S3 端点，用于建 client 与端点比较。
 //
-// 规则：去首尾空白 → 去结尾斜杠 → scheme 大小写不敏感；无 scheme 时按 useSSL
-// 补全（http/https）。scheme 与 host 统一小写（DNS 不区分大小写），**路径部分保留
+// 规则：去首尾空白 → 去结尾斜杠 → 剥离 userinfo（P-3）→ scheme 大小写不敏感；无 scheme 时
+// 按 useSSL 补全（http/https）。scheme 与 host 统一小写（DNS 不区分大小写），**路径部分保留
 // 原样**（可能大小写敏感）。
 //
 // 此函数是端点归一化的唯一实现：`service.SameEndpoint` 与建 client 的 BaseEndpoint
@@ -229,6 +229,13 @@ func NormalizeEndpoint(endpoint string, useSSL bool) string {
 		host, path = rest[:i], rest[i:]
 	}
 	host = strings.TrimSpace(host)
+	// P-3（2026-10-15 渗透测试）：剥离 endpoint 的 userinfo（`http://key:secret@host`）。
+	// 本函数是端点归一化的唯一实现：BaseEndpoint（拨号 / 签名）、预签名 URL、PublicURL 与
+	// `service.SameEndpoint` 全部复用它——在此剥离后，这些下游一律拿不到内嵌凭据。
+	// userinfo 只可能出现在 authority，取最后一个 '@' 左侧切除（userinfo 自身可能含 ':'）。
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = strings.TrimSpace(host[i+1:])
+	}
 	path = strings.TrimRightFunc(path, func(r rune) bool { return r == '/' || unicode.IsSpace(r) })
 	if host == "" && path == "" {
 		return ""

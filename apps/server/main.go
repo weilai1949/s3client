@@ -101,6 +101,12 @@ func runServer(ctx context.Context) int {
 	h.SetTrustedProxies(cfg.TrustedProxies)
 	// 限流参数（S3C_RATE_LIMIT_*）：每 IP（IPv6 按 /64 聚合）速率与突发容量。
 	h.SetRateLimit(cfg.RateLimitRPM, cfg.RateLimitBurst)
+	// 探针端点（/api/health、/api/metrics、/api/openapi.json）独立宽松桶
+	// （S3C_PROBE_RATE_LIMIT_*）：豁免主限流但不完全不限（P-12）。
+	h.SetProbeRateLimit(cfg.ProbeRateLimitRPM, cfg.ProbeRateLimitBurst)
+	// store.Ping 结果 TTL 缓存（S3C_HEALTH_PING_CACHE_SECONDS，0 = 每次实打）：
+	// 抵御匿名探针把存储打满（P-12）。
+	h.SetHealthPingCacheSeconds(cfg.HealthPingCacheSec)
 	// 异步任务清单落盘：重启后未完成任务标记为 interrupted，便于对账
 	// 「复制成功但源未删除」的移动任务（KNOWN_ISSUES #19）。
 	h.SetJobPersister(service.NewFileJobPersister(filepath.Join(cfg.DataDir, "jobs.json")))

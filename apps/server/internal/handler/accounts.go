@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/weilai1949/s3client/apps/server/internal/model"
@@ -38,6 +37,11 @@ func (h *Handler) createAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	if a.Endpoint == "" || a.AccessKey == "" || a.SecretKey == "" {
 		h.writeErr(w, http.StatusBadRequest, "endpoint/accessKey/secretKey are required")
+		return
+	}
+	if err := validateAccountEndpoints(&a); err != nil {
+		h.log.Debug("account endpoint rejected", "err", err)
+		h.writeErr(w, http.StatusBadRequest, "invalid endpoint configuration")
 		return
 	}
 	created, err := h.store.Create(&a)
@@ -81,6 +85,11 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 		h.writeErr(w, http.StatusBadRequest, "endpoint/accessKey are required")
 		return
 	}
+	if err := validateAccountEndpoints(&a); err != nil {
+		h.log.Debug("account endpoint rejected", "err", err)
+		h.writeErr(w, http.StatusBadRequest, "invalid endpoint configuration")
+		return
+	}
 	updated, err := h.store.Update(id, &a)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -107,7 +116,7 @@ func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
 // 判定走 `s3wrap.NormalizeEndpoint`（端点归一化的**唯一**实现）：裸端点按 `useSSL` 补全
 // scheme，故「没写 scheme + 未勾 TLS」同样算明文。`publicEndpoint` 单独判——浏览器直传的
 // 预签名 PUT 走它，明文链路下同样无完整性保护。日志只记 id / name / 端点，且端点先经
-// `redactEndpoint` 去掉 userinfo——**不记任何密钥**。
+// `redactEndpoint` 去掉 userinfo（P-3）——**不记任何密钥**。
 func (h *Handler) warnPlaintextEndpoints(a *model.Account) {
 	var plain []string
 	if isPlaintextEndpoint(a.Endpoint, a.UseSSL) {
@@ -130,18 +139,24 @@ func isPlaintextEndpoint(endpoint string, useSSL bool) bool {
 	return strings.HasPrefix(s3wrap.NormalizeEndpoint(endpoint, useSSL), "http://")
 }
 
-// redactEndpoint 抹掉端点 URL 的 userinfo（`http://key:secret@host:9000` → `http://host:9000`）供
-// 日志使用：`s3wrap.NormalizeEndpoint` 与 `ValidateEndpoint` **都不剥离** userinfo，用户把凭据写进
-// 端点 URL 会建号成功，故必须在**落日志前**脱敏（根 AGENTS.md「SecretKey 不落日志」；
-// 评审 2026-10-10 N1 / KNOWN_ISSUES #84）。无 userinfo 或解析失败时原样返回。
-func redactEndpoint(endpoint string) string {
-	u, err := url.Parse(strings.TrimSpace(endpoint))
-	if err != nil || u.User == nil {
-		return endpoint
+// validateAccountEndpoints 校验账号写入（建号 / 更新）时的两个端点。
+//
+// P-3：带 userinfo 的端点必须 fail-closed（`s3wrap.ValidateEndpoint` 拒绝）——不落库、不回显；
+// 同一道闸顺带把云元数据 / 非 ASCII 主机等「建得成但永远连不上」的端点在写入侧就挡住
+// （此前只有 `preview-buckets` 走 `s3wrap.New` 时会校验）。调用方只回固定文案，不转发 error
+// 文本（响应体同样不得回显凭据）。`PublicEndpoint` 留空 = 与 endpoint 相同，空串合法豁免。
+func validateAccountEndpoints(a *model.Account) error {
+	if err := s3wrap.ValidateEndpoint(a.Endpoint); err != nil {
+		return err
 	}
-	u.User = nil
-	return u.String()
+	return s3wrap.ValidateEndpoint(a.PublicEndpoint)
 }
+
+// redactEndpoint 抹掉端点 URL 的 userinfo（`http://key:secret@host:9000` → `http://host:9000`）供
+// 日志使用。P-3 之后脱敏的**唯一实现**是 model.RedactEndpointUserinfo（handler 侧不再保留
+// 重复实现）：s3wrap 的归一化入口会在建 client / 预签名前剥离 userinfo，历史落盘数据则由
+// AccountView 脱敏，日志侧这一道是同一实现的第三个出口（评审 2026-10-10 N1 / KNOWN_ISSUES #84）。
+func redactEndpoint(endpoint string) string { return model.RedactEndpointUserinfo(endpoint) }
 
 // deleteAccount 删除账号。
 func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {

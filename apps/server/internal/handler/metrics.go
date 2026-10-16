@@ -122,8 +122,9 @@ func (h *Handler) metrics(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&buf, "s3c_build_info{version=%q} 1\n", h.version)
 	// 存储硬失败（ADR-002）的可观测面：健康检查之外再给一个可告警的 gauge，
 	// 让「store 掉线」不必等到业务 5xx 才被发现（roadmap §5.1 R8）。
+	// 与 /api/health 共用同一份 Ping 缓存（P-12）：scrape 高频时不再每次都打存储。
 	storeUp := 1
-	if err := h.store.Ping(); err != nil {
+	if err := h.pingStore(); err != nil {
 		storeUp = 0
 	}
 	fmt.Fprintf(&buf, "# HELP s3c_store_up Account store reachable (1) or failing (0); store failure is hard-fail, not degraded (ADR-002)\n")

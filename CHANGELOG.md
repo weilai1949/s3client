@@ -49,6 +49,25 @@
 
 ## [Unreleased]
 
+### 安全（2026-10-16 渗透测试 P-3..P-15 收口：端点凭据 / CSP / ZIP / CORS / 密钥注入 / 镜像与容器加固 / SAST 台账）
+
+> 来源：[`docs/archive/pentest-2026-10-15.md`](docs/archive/pentest-2026-10-15.md)（2026-10-15 全仓对抗性渗透测试快照，**同日归档**）。P-1 / P-2 两条 High 已在此前两条记录中闭环；本条收口其余 **13 条（P-3..P-15）**。逐条处置台账见 [`docs/FEATURES.md`](docs/FEATURES.md) §CX。
+
+- **P-3 端点 userinfo 凭据泄漏（中）**：`model.RedactEndpointUserinfo` 成为**唯一**脱敏实现，`s3wrap.NormalizeEndpoint` 在归一化入口剥离 URL userinfo（拨号 / 签名 / 预签名 URL 都拿不到内嵌凭据），`ValidateEndpoint` 对含 userinfo 的端点 **fail-closed**，`Account.View()` 回传脱敏端点。**外部可见行为变化**：`POST /api/accounts` / `PUT /api/accounts/{id}` 对 userinfo 端点（以及云元数据主机名、链路本地 / 元数据 IP、非 ASCII（IDN）主机名、退化端点）返回 **400 `invalid endpoint configuration`**（原 201 / 200）；DNS 解析失败仍按设计 fail-open。指纹测试：`internal/s3wrap/ssrf_userinfo_test.go` · `internal/model/account_test.go` · `internal/handler/accounts_plaintext_test.go`（8 条）。
+- **P-4 nginx 边缘镜像既有 HIGH 且从不被扫描（中）**：新增 [`deploy/nginx/Dockerfile`](deploy/nginx/Dockerfile)（`FROM nginx:1.30.6-alpine@sha256:97036422…` + `RUN apk upgrade --no-cache`），两个 compose 的 nginx 改为构建 `s3client/nginx:1.30.6-alpine`；CI 从 `docker-compose.yml` 解析镜像与 Dockerfile 路径（单一来源）并**扫描构建产物**，沿用 `--exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed`。实测**所有**上游 nginx alpine tag 仍 ship `zlib-1.3.2-r0`（而 `1.3.2-r1` 已发布）→ 构建产物拿到 r1、Trivy 0 条；维护期义务登记为 [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) **#91**（基座 digest 滚动 + Alpine 3.24 于 2028-06-01 EOL）。
+- **P-5 `S3C_CSP_CONNECT_SRC` 只校验控制字符（低）**：新增 CSP source-list 语法校验（拒 `;` 指令注入 / `,` / 允许集外字符，`ErrInvalidCSPValue`——字符串语法类，不再误报为数值非法）；服务端 CSP 补 `frame-ancestors 'none'`。
+- **P-6 「禁 `v-html`」无机械门禁（低）**：[`apps/web/eslint.config.js`](apps/web/eslint.config.js) 启用 `'vue/no-v-html': 'error'`；新增根门禁 [`apps/server/web_xss_gate_test.go`](apps/server/web_xss_gate_test.go)——对 `apps/web/src/**` 生产源码（排除测试文件、剥离注释后）断言 `v-html` / `innerHTML` / `outerHTML` / `insertAdjacentHTML` / `srcdoc` / `document.write` 命中 0。
+- **P-7 `Dockerfile` `FROM` 仅按 tag pin + zlib 高危（低）**：三个 `FROM` 改 `tag@sha256` digest pin；运行阶段 `apk upgrade --no-cache` 拿到 `zlib-1.3.2-r1`。
+- **P-8 密钥经 `environment:` 明文注入（低）**：新增 `S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE`（文件不可读 / 内容为空 → `ErrSecretFileUnreadable`；与明文变量同时非空 → `ErrSecretFileAmbiguous`）；两个 compose 用 `secrets:` 挂 `./secrets/{store_key,api_token}` → `/run/secrets/*` 并**删除**明文注入；`.gitignore` 忽略 `/secrets/*`（`*.example` 例外），示例为必失败占位串。**迁移注意**：容器以 uid 1000 运行，secret 文件除 `chmod 600` 外必须让 uid 1000 可读（`chown 1000:1000`），否则启动 fail-closed。
+- **P-9 GitLab CI cache key 无分支维度（低）**：`.gitlab-ci.yml` 全部 cache key 加分支维度，MR 不再写入 `main` 会复用的缓存。
+- **P-10 `curl … | bash -` 以 root 执行远端脚本（低）**：**复核关闭**——既有批次已消除该形态（Node 改「下载固定版本 + `sha256sum -c`」，门禁 `TestGitLabCIDoesNotPipeRemoteInstaller` 在）；本批把 `server` job 残留的免校验 `curl … | tar -xz` 管线一并收敛为「下载 + SHA256 校验 + 解包」。
+- **P-11 ZIP 条目名 NUL 绕过（低）**：`SanitizeZipName` 删除每个路径段里的 ASCII 控制字符（NUL / C0 / DEL），归一化后把 `.` / `..` 段替换为 `_`——`..\x00/evil` → `_/evil`，输出保证不含任何 ASCII 控制字符。
+- **P-12 探针端点无独立限流 + `store.Ping` 每次实打（信息）**：新增 `S3C_PROBE_RATE_LIMIT_RPM`（默认 600）/ `S3C_PROBE_RATE_LIMIT_BURST`（默认 100），覆盖**开启后**的 `/api/health` / `/api/metrics` / `/api/openapi.json`，超限 **429 + `Retry-After: 1`**；`store.Ping` 结果按 `S3C_HEALTH_PING_CACHE_SECONDS`（默认 2，`0` = 每次实打）缓存，匿名与已认证同一口径、**失败结果同样缓存**。
+- **P-13 默认 CORS 信任任意 `tauri://*`（信息）**：默认收紧为 http/https 的 `localhost` / `127.0.0.1` / `[::1]` / `tauri.localhost`（端口不限）+ `tauri://localhost`；`Origin: null` 仍不信任；`S3C_CORS_ORIGINS` 白名单语义不变。
+- **P-14 容器加固缺口（信息）**：两个 compose 的 server / nginx 加 `read_only: true` + `no-new-privileges` + `cap_drop: [ALL]`（nginx 另需 `cap_add: [CHOWN, SETGID, SETUID]` 与 `/var/cache/nginx`、`/run` 的 tmpfs；**`/var/log/nginx` 不挂 tmpfs**，官方镜像日志是指向 `/dev/stdout` `/dev/stderr` 的软链）。
+- **P-15 过期 SAST 产物 + triage 台账停在 10 条（信息）**：删除根目录 2026-09-29 的过期 `gl-sast-report.json`（未入库）；`make gcl GCL_JOBS=semgrep-sast` 于 2026-10-16 重跑（Semgrep 6.26.1，192 targets / 125 rules）得 **20 条（8 High + 12 Medium）**，[`docs/threat-model.md`](docs/threat-model.md) §7 重建为逐条 triage（原 10 条全部仍命中 + 新增 10 条；含 `volume_windows.go` **不排除**的理由与「运维配置输入 ≠ 用户输入」口径）；`.trivyignore` 仍 **0 忽略条目**。
+- **文档同步**：[`threat-model.md`](docs/threat-model.md)（§1/§2/§3/§4/§5/§5.1/§5.4/§6.2/§7）· [`CONFIGURATION.md`](docs/CONFIGURATION.md) · [`DEPLOYMENT.md`](docs/DEPLOYMENT.md) · [`OPERATIONS.md`](docs/OPERATIONS.md) · [`api.md`](docs/api.md) · [`KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md)（#91）· [`README.md`](README.md) · [`FEATURES.md`](docs/FEATURES.md) §CX；`pentest-2026-10-15.md` 已归档入 [`docs/archive/`](docs/archive/index.md)（2026-10-16，P-1..P-15 全部闭环）——文档与代码属**同一个 commit**（仓库硬约束 2）。
+
 ### 变更（2026-10-16 收口账号维度残留：声明 `prefixes` 必须同时声明 `accounts`）
 
 - **收紧（配置边界，fail-closed）**：`S3C_TOKEN_SCOPES` 中**声明了 `prefixes` 却没有 `accounts`** 的 token，现在**拒绝启动**（`ErrInvalidTokenScopes`，文案点出修法且不回显 token 明文）。原因：`prefixes` 只约束桶/键、**不含账号维度**，缺省 `accounts` 会让「只能碰某个桶前缀」实际变成「**任意账号的**那个桶前缀」——实测 prefixes-only token 调 `POST /api/accounts/{victim}/presign` 返回 `200`，且签发 URL 的 `X-Amz-Credential` 是**受害账号的 AccessKey**；该 token 还可对任意 `{id}` 执行界内桶/键的读/写/删。
@@ -61,7 +80,7 @@
 
 ### 修复（2026-10-16 对抗性渗透测试两条 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）
 
-> 缺陷来源与原始证据：[`docs/pentest-2026-10-15.md`](docs/pentest-2026-10-15.md)（P-1 / P-2，均经第三方对抗性复核确认；其中 P-1 的「服务端以受害者 SecretKey 对攻击者主机签名」为 SigV4 逐位重算实证）。
+> 缺陷来源与原始证据：[`docs/archive/pentest-2026-10-15.md`](docs/archive/pentest-2026-10-15.md)（P-1 / P-2，均经第三方对抗性复核确认；其中 P-1 的「服务端以受害者 SecretKey 对攻击者主机签名」为 SigV4 逐位重算实证）。
 
 - **修复（鉴权语义，P-1）**：`prefixes` 作用域下，**请求不携带任何可判定桶/键引用时一律 `403`**（`reason=unjudgeable`）。旧实现里 `requestScopeRefs` 返回空集时前缀校验循环一次都不执行 → 放行；而 handler 会回退到路径账号的**默认桶**执行真实操作，于是仅声明 `prefixes` 的 token 可读 / 改写 / 删除 / 新建任意账号，并越权改写任意账号默认桶的桶级配置。新增白名单 `scopeRefLessPaths` 仅豁免「与桶/键无关」的只读端点（`GET|HEAD /api/accounts`、`GET|HEAD /api/schedules`、`GET|HEAD /api/openapi.json`）。
 - **修复（鉴权语义，P-1）**：**账号写入面**（`POST /api/accounts`、`PUT|DELETE /api/accounts/{id}`）对**任何**资源受限 token 一律 `403`（`reason=account_write`，取代原 `accounts_create`）——创建账号凭空铸造凭据、改写账号把 endpoint/凭据指向他处、删除账号让凭据与配置全损，都不是「访问某个桶/键」而是凭据面。该闸**不看请求引用**，因此整桶授权的前缀 token 在 body 里写一个界内桶名不再能成为绕过前缀判定的跳板（旧实现实测可 201 建出指向攻击者的账号）。`readonly` 方法闸语义不变（仍先判 readonly）。
@@ -79,7 +98,7 @@
 
 ### 新增（2026-10-15 全仓对抗性渗透测试快照 + 2 条 High）
 
-- **新增** 时点性快照 [`docs/pentest-2026-10-15.md`](docs/pentest-2026-10-15.md)——**2026-10-15 全仓对抗性渗透测试**（第一性原理：资产 → 信任边界 → STRIDE → 逐条代码级核验，**并叠加真实实例红队实测**）。结论：**2 条 High**，均在 `S3C_TOKEN_SCOPES` 最小权限作用域这一条链上；**证伪**了同日 [`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md) 的 **Approve（未发现高危 / 中危）** 结论。
+- **新增** 时点性快照 [`docs/archive/pentest-2026-10-15.md`](docs/archive/pentest-2026-10-15.md)——**2026-10-15 全仓对抗性渗透测试**（第一性原理：资产 → 信任边界 → STRIDE → 逐条代码级核验，**并叠加真实实例红队实测**）。结论：**2 条 High**，均在 `S3C_TOKEN_SCOPES` 最小权限作用域这一条链上；**证伪**了同日 [`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md) 的 **Approve（未发现高危 / 中危）** 结论。
   - **High-1**：`prefixes` 作用域的 `refs` 为空时 fail-open（[`scope.go:130-145`](apps/server/internal/handler/scope.go#L130-L145)）→ 仅声明 `prefixes` 的受限 token 可**读 / 改写 / 删除 / 新建任意账号**，并可越权操作**任意账号默认桶**的桶级配置（策略 / 网站托管 / 版本控制 / lifecycle…）。第三方复核在 4 个自建实例 × 3 种 store 配置上复现，并以**捕获的原始请求 + 用受害者 SecretKey 独立重算 SigV4 逐位相等（`MATCH: True`）**证明服务端会以受害者密钥对攻击者主机签名。
   - **High-2**：授权解析器 ≠ 执行解析器（[`scope.go:281-301`](apps/server/internal/handler/scope.go#L281-L301) 的 `map[string]any` 精确键名 vs [`handler.go:239-263`](apps/server/internal/handler/handler.go#L239-L263) 的 struct 解码大小写不敏感、`null` 不覆盖）→ `{"Bucket":…}` / 重复键 + `null` 即可让作用域判定看到「零引用」而 handler 照常执行；**本轮未提交改动的 `requestAccountRefs` 只堵住精确大小写 + 单键，一行变体即打穿**。
   - 另含 2 中 / 7 低 / 4 信息（含「禁 `v-html` 无机械门禁」「`S3C_CSP_CONNECT_SRC` 未校验 source-list 语法（真实 Chrome 实测可注入 `frame-ancestors` 使 XFO 失效）」「Trivy 不扫 compose 的 nginx 镜像」「endpoint userinfo 凭据落日志」等）与 **60+ 项已排查无发现**（路径穿越 / 鉴权路径变体 / 日志与响应头注入 / 重定向跟随 / TLS 降级 / IMDS / SQL / 命令注入 / 前端 XSS sink / Tauri IPC / git 历史凭据）。

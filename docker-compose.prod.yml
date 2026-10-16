@@ -1,7 +1,13 @@
 # 生产示例：强制鉴权 + encrypted 存储，不含内置 RustFS。
 # 用法：
-#   cp .env.example .env   # 填入 S3C_TOKEN / S3C_STORE_KEY
+#   mkdir -p secrets
+#   openssl rand -hex 32 > secrets/store_key
+#   openssl rand -hex 32 > secrets/api_token
+#   chmod 600 secrets/store_key secrets/api_token
+#   sudo chown 1000:1000 secrets/store_key secrets/api_token   # server 容器以 uid 1000 读文件型 secret
 #   docker compose -f docker-compose.prod.yml up -d --build
+#   （凭据经 compose secrets 文件注入 → S3C_STORE_KEY_FILE / S3C_TOKEN_FILE，
+#    不再写进 .env 明文；完整迁移与验证见 docs/DEPLOYMENT.md）
 #
 # HTTP（回环 :5000）。启用 TLS 请叠加：
 #   docker compose -f docker-compose.prod.yml -f docker-compose.tls.yml up -d
@@ -31,16 +37,22 @@ services:
       S3C_METRICS_TOKEN: "${S3C_METRICS_TOKEN:-}"
       S3C_DATA_DIR: "/data"
       S3C_STORE_DRIVER: "encrypted"
-      S3C_STORE_KEY: "${S3C_STORE_KEY:?set S3C_STORE_KEY}"
       S3C_STATIC_DIR: "/web/dist"
       S3C_REGION: "${S3C_REGION:-us-east-1}"
-      S3C_TOKEN: "${S3C_TOKEN:?set S3C_TOKEN}"
+      # P-8：凭据经 secrets 文件注入（不再有明文 S3C_STORE_KEY / S3C_TOKEN environment）。
+      # 文件不可读/为空 → 服务端启动 fail-closed；文件缺失 → compose 直接失败。
+      S3C_STORE_KEY_FILE: "/run/secrets/store_key"
+      S3C_TOKEN_FILE: "/run/secrets/api_token"
       S3C_CORS_ORIGINS: "${S3C_CORS_ORIGINS:-}"
       S3C_LOG_LEVEL: "${S3C_LOG_LEVEL:-info}"
       # 结构化日志：生产默认开启，便于日志采集器按字段检索（KNOWN_ISSUES #21）。
       S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"
     volumes:
       - s3c-data:/data
+    # P-8：凭据以文件挂载（/run/secrets/<name>），不再进 environment。
+    secrets:
+      - store_key
+      - api_token
     deploy:
       resources:
         limits:
@@ -50,9 +62,25 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    # P-14 容器加固（与 docker-compose.yml 同口径）：只读根文件系统 + 禁提权 + 丢弃全部 capability。
+    # /data 是 named volume（read_only 下仍可写）；/tmp 用 tmpfs 提供可写临时目录。
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   nginx:
-    image: nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
+    # P-4：与 docker-compose.yml 完全一致（门禁 TestNginxEdgeImageIsConsistentAcrossCompose）。
+    # 上游 nginx alpine 镜像仍 ship zlib-1.3.2-r0（CVE-2026-85091 HIGH），故改为 pin 基座
+    # digest + 构建期 `apk upgrade` 的仓库内边缘镜像（deploy/nginx/Dockerfile，基座
+    # nginx 1.30.6 stable / Alpine 3.24.2）。
+    build:
+      context: .
+      dockerfile: deploy/nginx/Dockerfile
+    image: s3client/nginx:1.30.6-alpine
     container_name: s3client-nginx
     restart: unless-stopped
     stop_signal: SIGQUIT
@@ -75,6 +103,30 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    # P-14 容器加固：nginx master 需要 CAP_CHOWN/SETGID/SETUID 才能把 worker 降权并 chown
+    # /var/cache/nginx 下的临时目录；其余 capability 全丢。实测：只 cap_drop: [ALL] 时 nginx 以
+    # `chown("/var/cache/nginx/client_temp", 101) failed (1: Operation not permitted)` 退出。
+    # tmpfs 只需 /var/cache/nginx（临时目录）与 /run（/var/run/nginx.pid）；**不要**给
+    # /var/log/nginx 挂 tmpfs——官方镜像里 access.log/error.log 是指向 /dev/stdout、/dev/stderr
+    # 的符号链接，挂 tmpfs 会把日志从 json-file 采集里丢掉。
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /run:size=1m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
 
 volumes:
   s3c-data:
+
+secrets:
+  store_key:
+    file: ./secrets/store_key
+  api_token:
+    file: ./secrets/api_token

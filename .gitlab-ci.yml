@@ -102,6 +102,32 @@ variables:
 
 # ---------------------------------------------------------------- 基础模板 ----
 
+# P-9（2026-10-15 渗透测试快照）：**本文件全部 cache key 必须带分支维度**。
+# 此前 7 处 cache 的 key 只有锁文件哈希（或以 `.gitlab-ci.yml` 自身为哈希源），不含分支：
+# 所有分支（含 feature / MR）共用同一把 key，于是 MR 的 job 会**覆盖保护分支复用的缓存条目**
+# （缓存内容不再对应 main 的依赖集合），且无法按分支淘汰。
+# 现在统一用 `key.prefix: "$CI_COMMIT_REF_SLUG"`——最终 key = `<分支 slug>-<锁文件哈希>`：
+# 同分支同锁文件即命中（分支内可复用），跨分支互不可见。这是 GitLab 官方模板
+# `Jobs/SAST.gitlab-ci.yml` 的口径（见其 `key: "scan-metrics-$CI_COMMIT_REF_SLUG"`）。
+# MR 流水线里 `CI_COMMIT_REF_SLUG` 是**源分支**，故 MR 拿不到保护分支的键；
+# 不用 `fallback_keys` 回退到 `$CI_DEFAULT_BRANCH`：本文件缓存均由 `key.files` 计算哈希，
+# 字面量回退键无法复现该哈希（官方模板能用是因为它的 key 是纯字符串）。
+#
+# 7 处 cache 的用途（逐个都已加分支维度）：
+#   1. `.go-base`（server / rustfs-e2e 底座）：Go 模块 `.go/pkg/mod/` + 编译 `.gocache/`；
+#   2. `.web-base`（web / playwright-e2e 底座）：pnpm store `.pnpm-store/`；
+#   3. `server`：同时装 Go 与前端前置（C1），故缓存 mod + gocache + pnpm store 三者；
+#   4. `docker`：Trivy DB `.trivy-cache/`（R4：跨 job 复用，缺则每次现拉漏洞库）；
+#   5. `desktop`：cargo registry `.cargo/registry/` + `target/`（含 cargo-audit 产物）；
+#   6. `desktop-build`：同 desktop + pnpm store（手动触发的完整 Tauri 构建）；
+#   7. `e2e-real`：Go 与 Node 都要，故缓存 mod + gocache + pnpm store 三者。
+#
+# policy 复核结论：7 处**全部保持默认 `pull-push`**（都不写 `policy`），方向正确——
+# 受保护分支的 job 需要写自己的键供后续复用，MR 因分支维度只写自己的键、不会污染 main。
+# 反向写法（`policy: pull` 却依赖上传、或 `policy: push` 只写不读）一处都没有；且
+# `cache.policy` 无法按流水线来源条件化（`rules:variables` 不作用于 cache），故不需要
+# 逐 job 拆成 MR/非 MR 两份——分支维度已经把污染面消掉。
+
 # Go 后端各 job 的公共底座：镜像、缓存、before_script（还原依赖）。
 # 对应 GitHub ci.yml 的 actions/setup-go（go-version-file: apps/server/go.mod + 缓存）。
 #
@@ -118,11 +144,15 @@ variables:
     key:
       files:
         - apps/server/go.sum
+      # P-9：分支维度（见上方「基础模板」注释块第 1 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
       - .gocache/
   before_script:
-    - apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+    # curl / xz-utils：server job 装 Node 官方 tarball（.tar.xz + SHA256 校验）需要二者；
+    # 显式装而不是依赖基础镜像自带，避免基础镜像换代后以「命令不存在」的形式静默失败。
+    - apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl xz-utils
     - cd apps/server
     - go mod download
 
@@ -134,6 +164,8 @@ variables:
     key:
       files:
         - apps/web/pnpm-lock.yaml
+      # P-9：分支维度（见上方「基础模板」注释块第 2 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .pnpm-store/
   before_script:
@@ -236,6 +268,8 @@ server:
       files:
         - apps/server/go.sum
         - apps/web/pnpm-lock.yaml
+      # P-9：分支维度（见上方「基础模板」注释块第 3 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
       - .gocache/
@@ -247,7 +281,14 @@ server:
     # 官方 tarball pin 26.10.0（与 .web-base 的 node 镜像同版）；pnpm pin 9.15.0
     # （与 packageManager 及两套 CI 同版，repo_infra_gate 两道 pin 门禁钉住）。
     # before_script 结束时 cwd = apps/server，故 ../web 进前端目录装完再回来。
-    - curl -fsSL https://nodejs.org/dist/v26.10.0/node-v26.10.0-linux-x64.tar.gz | tar -xz -C /usr/local --strip-components=1
+    #
+    # P-10 收口（2026-10-16）：此前这里是 `curl … | tar -xz` 的**免校验**管线（虽非
+    # `| bash`，但同样把互联网内容直接解到 /usr/local，且版本 26.10.0 在本文件里硬编码了
+    # 第二处）。现与 desktop-build / e2e-real 同款：官方 tarball + SHA256 校验 + 解包，
+    # 版本与哈希取自全局 NODE_VERSION / NODE_SHA256（单一来源）。
+    - curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"
+    - echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c -
+    - tar -C /usr/local --strip-components=1 -xJf /tmp/node.tar.xz
     - npm install -g pnpm@9.15.0
     - cd ../web && pnpm config set store-dir "$PNPM_STORE_DIR" && pnpm install --frozen-lockfile && cd ../server
     # gofmt
@@ -326,6 +367,8 @@ docker:
     key:
       files:
         - .gitlab-ci.yml
+      # P-9：分支维度（见上方「基础模板」注释块第 4 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .trivy-cache/
   script:
@@ -388,6 +431,8 @@ desktop:
     key:
       files:
         - apps/desktop/src-tauri/Cargo.lock
+      # P-9：分支维度（见上方「基础模板」注释块第 5 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .cargo/registry/
       - apps/desktop/src-tauri/target/
@@ -420,6 +465,8 @@ desktop-build:
       files:
         - apps/desktop/src-tauri/Cargo.lock
         - apps/web/pnpm-lock.yaml
+      # P-9：分支维度（见上方「基础模板」注释块第 6 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .cargo/registry/
       - apps/desktop/src-tauri/target/
@@ -602,6 +649,8 @@ e2e-real:
       files:
         - apps/server/go.sum
         - apps/web/pnpm-lock.yaml
+      # P-9：分支维度（见上方「基础模板」注释块第 7 条）。
+      prefix: "$CI_COMMIT_REF_SLUG"
     paths:
       - .go/pkg/mod/
       - .gocache/

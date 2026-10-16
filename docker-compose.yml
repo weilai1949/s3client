@@ -33,18 +33,23 @@ services:
       S3C_EXPOSE_METRICS: "${S3C_EXPOSE_METRICS:-0}"
       S3C_METRICS_TOKEN: "${S3C_METRICS_TOKEN:-}"
       S3C_DATA_DIR: "/data"
-      # 生产推荐 encrypted（整文件加密，需 S3C_STORE_KEY）。默认 sqlite：
-      # 只要设置了 S3C_STORE_KEY，secret_key 列即以 AES-256-GCM 密文落盘（已闭环：见 docs/FEATURES.md §M；残留风险 docs/ROADMAP.md §5.1「已收敛」索引 R3）。
-      # 安全默认：S3C_STORE_KEY 必填（见下方 `${S3C_STORE_KEY:?...}`），compose 不再允许「无 key 起明文」。
-      # 仅本地联调确需明文时：把上方守卫改成可选，并在本 environment: 白名单里补
+      # 生产推荐 encrypted（整文件加密，需 store key）。默认 sqlite：
+      # 只要提供了 store key，secret_key 列即以 AES-256-GCM 密文落盘（已闭环：见 docs/FEATURES.md §M；残留风险 docs/ROADMAP.md §5.1「已收敛」索引 R3）。
+      # 安全默认（P-8）：store key / API token **不再经 environment 明文注入**——`environment:`
+      # 会被 `docker inspect` / `/proc/<pid>/environ` 读到。改由下方 `secrets:` 以文件挂载，
+      # 服务端从 `S3C_STORE_KEY_FILE` / `S3C_TOKEN_FILE` 读取（内容去首尾空白；文件不可读/为空 →
+      # 启动 fail-closed）。生成命令与属主要求见 docs/DEPLOYMENT.md「docker secrets 迁移」；
+      # secret 文件缺失时 `docker compose up` 直接失败（compose 不会创建不存在的 bind），
+      # 因此不存在「静默以明文/无 key 上线」的路径。
+      # 仅本地联调确需明文时：在本 environment: 白名单里补
       # `S3C_ALLOW_PLAINTEXT_STORE: "1"`（compose 只透传白名单内的变量，写进 .env 无效）；
       # 服务端会在启动日志打出「明文落盘」WARN。生产绝不要这么做。
       S3C_STORE_DRIVER: "${S3C_STORE_DRIVER:-sqlite}"
-      S3C_STORE_KEY: "${S3C_STORE_KEY:?set S3C_STORE_KEY in .env (openssl rand -hex 32)}"
       S3C_STATIC_DIR: "/web/dist"
       S3C_REGION: "${S3C_REGION:-us-east-1}"
-      # 非回环监听强制鉴权：未设置则 compose 启动失败
-      S3C_TOKEN: "${S3C_TOKEN:?set S3C_TOKEN in .env (openssl rand -hex 32)}"
+      # 非回环监听强制鉴权：token 经 secrets 文件注入（缺文件/空文件 → 启动 fail-closed）
+      S3C_STORE_KEY_FILE: "/run/secrets/store_key"
+      S3C_TOKEN_FILE: "/run/secrets/api_token"
       # 从外部访问需跨域时填写（留空 = 仅 localhost/tauri）
       S3C_CORS_ORIGINS: "${S3C_CORS_ORIGINS:-}"
       S3C_LOG_LEVEL: "${S3C_LOG_LEVEL:-info}"
@@ -53,6 +58,10 @@ services:
       S3C_LOG_JSON: "${S3C_LOG_JSON:-1}"
     volumes:
       - s3c-data:/data
+    # P-8：密钥以文件挂载（/run/secrets/<name>），不再进 environment。
+    secrets:
+      - store_key
+      - api_token
     depends_on:
       rustfs:
         condition: service_healthy
@@ -65,9 +74,29 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # P-14 容器加固：只读根文件系统 + 禁提权 + 丢弃全部 capability。
+    # 退出码/健康检查/卷不受影响：/data 是 named volume（read_only 下仍可写）；
+    # /tmp 用 tmpfs 提供可写临时目录（重启即失，符合临时文件语义）。
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
   nginx:
-    image: nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
+    # P-4：上游 nginx alpine 镜像（实测 1.30.6 / stable / mainline 都一样）仍 ship
+    # zlib-1.3.2-r0 ← CVE-2026-85091（HIGH），而 Alpine 3.24 分支已有修复版 1.3.2-r1。
+    # 结构性解法与 server 运行阶段一致：pin 上游 stable 基座 digest（不可变）+ 构建期
+    # `apk upgrade`。基座 = nginx 1.30.6 stable / Alpine 3.24.2（支持至 2028-06-01）。
+    # 两个 compose 的 nginx 必须同 dockerfile + 同 image
+    # （门禁 TestNginxEdgeImageIsConsistentAcrossCompose）；基座 digest 单独 pin 在
+    # deploy/nginx/Dockerfile（门禁 TestNginxEdgeDockerfilePinsBaseAndAppliesPatches）。
+    build:
+      context: .
+      dockerfile: deploy/nginx/Dockerfile
+    image: s3client/nginx:1.30.6-alpine
     container_name: s3client-nginx
     restart: unless-stopped
     stop_signal: SIGQUIT
@@ -91,6 +120,24 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # P-14 容器加固：nginx master 需要 CAP_CHOWN/SETGID/SETUID 才能把 worker 降权并 chown
+    # /var/cache/nginx 下的临时目录；其余 capability 全丢。实测：只 cap_drop: [ALL] 时 nginx 以
+    # `chown("/var/cache/nginx/client_temp", 101) failed (1: Operation not permitted)` 退出。
+    # tmpfs 只需 /var/cache/nginx（临时目录）与 /run（/var/run/nginx.pid）；**不要**给
+    # /var/log/nginx 挂 tmpfs——官方镜像里 access.log/error.log 是指向 /dev/stdout、/dev/stderr
+    # 的符号链接，挂 tmpfs 会把日志从 json-file 采集里丢掉。
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /run:size=1m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
 
   rustfs:
     # pin 版本避免 latest 漂移导致 E2E flaky
@@ -133,3 +180,12 @@ services:
 volumes:
   s3c-data:
   rustfs-data:
+
+# P-8：凭据文件（不入库，见 .gitignore）。生成与属主要求见 docs/DEPLOYMENT.md。
+# compose 的文件型 secret 按宿主机属主/权限原样 bind-mount，server 容器以 uid 1000 读取，
+# 故生成后需 `chmod 600` 且保证 uid 1000 可读（`chown 1000:1000` 或 root:1000 + 640）。
+secrets:
+  store_key:
+    file: ./secrets/store_key
+  api_token:
+    file: ./secrets/api_token

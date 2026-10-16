@@ -22,13 +22,14 @@ const defaultCSPConnectSrc = "'self' http://127.0.0.1:* http://localhost:*"
 // buildCSP 拼出整条 Content-Security-Policy：脚本仅允许同源（杜绝注入脚本执行）；
 // 内联样式只允许在元素 style 属性上（Vue :style），内联 <style> 块保持禁用；
 // connect-src 默认仅同源 + 本地 Tauri 后端（127.0.0.1/localhost），
-// 自定义后端 / 远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）。
+// 自定义后端 / 远程多后端需设置 S3C_CSP_CONNECT_SRC 显式放宽（S-9 收紧）；
+// frame-ancestors 'none' 与 X-Frame-Options: DENY 双保险防嵌套（桌面壳同值，P-5b）。
 //
 // 它是纯函数，且**只在启动期调用**（包初始化 / New / SetCSPConnectSrc）：结果预计算进
 // Handler.cspHeader，请求路径上不再做字符串拼接与分配（docs/archive/server-review-2026-10-12.md S4）。
 // connect 由调用方保证非空（New 传 defaultCSPConnectSrc，SetCSPConnectSrc 忽略空值）。
 func buildCSP(connect string) string {
-	return "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src " + connect + "; object-src 'none'; base-uri 'self'; form-action 'self'"
+	return "default-src 'self'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; connect-src " + connect + "; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 }
 
 // defaultCSPHeader 是默认策略的预计算整串；零值 Handler（未走 New）也用它，
@@ -121,7 +122,10 @@ func isTrustedDefaultOrigin(origin string) bool {
 	}
 	scheme := strings.ToLower(u.Scheme)
 	if scheme == "tauri" {
-		return true
+		// P-13：只信任桌面壳的生产 origin tauri://localhost。历史上放行任意
+		// tauri://* 会让本机任意应用 / 恶意页面用 tauri://evil 拿到 ACAO 回显，
+		// 进而跨域读写本服务；显式白名单（S3C_CORS_ORIGINS）仍可放行任意 origin。
+		return strings.EqualFold(u.Hostname(), "localhost")
 	}
 	if scheme != "http" && scheme != "https" {
 		return false

@@ -27,6 +27,10 @@ export default tseslint.config(
     },
     rules: {
       'vue/multi-word-component-names': 'off',
+      // P-6（2026-10-15 渗透测试快照）：硬约束「禁 v-html」此前只是文字约定——
+      // pluginVue 的 flat/essential 不含 vue/no-v-html，新增一处 v-html 不会让 lint 变红。
+      // 生产代码一律走文本插值（{{ }}）/ 文本绑定；根门禁 apps/server/web_xss_gate_test.go 钉住本行。
+      'vue/no-v-html': 'error',
       // 收紧为 error：当前 src 已 0 警告（新增 any 会直接失败）；
       // 新代码请用具体类型或 unknown + 收窄，不要用 any 掩盖不变量。
       '@typescript-eslint/no-explicit-any': 'error',

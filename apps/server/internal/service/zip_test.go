@@ -28,6 +28,39 @@ func TestSanitizeZipName(t *testing.T) {
 	}
 }
 
+// TestSanitizeZipNameRejectsNULAndControlChars —— P-11（2026-10-15 渗透测试，低危加固）：
+// `..\x00/evil` 的 NUL 既不被 FieldsFunc（只按 `/` `\` 切分）切开、也不被 TrimRight(". ")
+// 去掉，归一化后 `..\x00` 原样成为 ZIP 条目名——部分解压器按 C 串处理 NUL，等价于 `..`
+// ⇒ zip slip。合同：输出不得含 NUL 或任何 ASCII 控制字符；含 NUL 的 `.` / `..` 段归一为 `_`。
+func TestSanitizeZipNameRejectsNULAndControlChars(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"..\x00/evil", "_/evil"},
+		{"..\x00\\evil", "_/evil"},
+		{"..\x00", "_"},
+		{".\x00", "_"},
+		{"\x00", "_"},
+		{"\x7f", "_"},
+		{"a\x00b/c", "ab/c"},
+		{"a/\x01b", "a/b"},
+		{"a\x00../b", "a/b"},
+		// 既有行为不变：普通 key、点段、盘符冒号、反斜杠。
+		{"a/b.txt", "a/b.txt"},
+		{"../x", "_/x"},
+		{"a:..", "a_"},
+	}
+	for _, c := range cases {
+		got := SanitizeZipName(c.in)
+		if got != c.want {
+			t.Fatalf("SanitizeZipName(%q) = %q, want %q", c.in, got, c.want)
+		}
+		for _, r := range got {
+			if r < 0x20 || r == 0x7f {
+				t.Fatalf("SanitizeZipName(%q) = %q 含 ASCII 控制字符 %q", c.in, got, r)
+			}
+		}
+	}
+}
+
 func TestWriteObjectsZip(t *testing.T) {
 	var buf bytes.Buffer
 	get := func(_ context.Context, key string) (io.ReadCloser, string, error) {
