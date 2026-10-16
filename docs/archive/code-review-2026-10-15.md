@@ -1,13 +1,23 @@
 # 全仓安全评审（2026-10-15）
 
-> **状态**：**活跃快照**——R1 / R4 / R5 已闭环；R2a / R2b / R3a 与两项低风险加固已落地并验证，
-> R3a 按 [`AI_POLICY.md`](AI_POLICY.md) §3 仍须人类专家复核后方可合并。复核完成后按 [archive/index.md](archive/index.md)
->「归档四步」冻结。结论绑定评审时点 HEAD；文中 `file:line` 与工具数字均为**评审时点快照**，不回写。
+> **状态**：**已归档（冻结）**——2026-10-16 按 [index.md](index.md)「归档四步」冻结入 `docs/archive/`。
+> **处置状态**：R1 / R4 / R5 · R2a / R2b / R3a · 配置边界（CSP 启动期校验）· 限流可观测 · R6–R10（含两项低风险加固）**全部闭环**。
+>
+> **R3a 人类专家复核（[`AI_POLICY.md`](../AI_POLICY.md) §3 强制要求）：**通过**——复核日期 **2026-10-16**，
+> 复核人 = **仓库负责人（用户）**；依据 = 改动点 `apps/server/internal/handler/middleware.go:32`
+> （CSP 字面量**单源** + 与 `tauri.conf.json` 的共享指令门禁 `TestServerCSPSharesTauriDirectives`）
+> + 真实浏览器 E2E `make e2e-real` **5/5 PASS**（2026-10-16 实跑：CSP 收紧后的页面渲染 / 真实落库 / 建桶 / 浏览器直传）。
+>
+> ⚠️ **诚实性警示**：本快照的结论「**Approve**（未发现高危 / 中危）」**已被同日渗透测试
+> [`pentest-2026-10-15.md`](pentest-2026-10-15.md) 证伪**（P-1 / P-2 两条 High：作用域「零引用即放行」fail-open、
+> 授权解析器 ≠ 执行解析器）。本件只能作「**评审时点事实**」引用，**不得**当作「系统无高危」的证据；
+> 当前安全事实以 [`../threat-model.md`](../threat-model.md) 与已归档的 [`pentest-2026-10-15.md`](pentest-2026-10-15.md) 为准。
+> 结论绑定评审时点 HEAD；文中 `file:line` 与工具数字均为**评审时点快照**，按冻结纪律**不回写**（含 §4 第 4 条与 §5 未复跑披露）。
 >
 > **同日追加（第二轮并行全仓安全评审）**：另一次按攻击面并行识别（Go 后端 handler / 服务层 /
 > Web 前端 / CI 与桌面壳）+ 独立误报过滤的复核，结论同为「无高危 / 中危漏洞」；其识别出的两条
-> **已文档化残留**于同日收口（R6 / R7，证据见 [`FEATURES.md`](FEATURES.md) §CT），三项防御纵深
-> 随后收口（R8–R10，证据见 [`FEATURES.md`](FEATURES.md) §CU）。
+> **已文档化残留**于同日收口（R6 / R7，证据见 [`FEATURES.md`](../FEATURES.md) §CT），三项防御纵深
+> 随后收口（R8–R10，证据见 [`FEATURES.md`](../FEATURES.md) §CU）。
 >
 > **范围**：全仓——`apps/server` Go 后端（308 个 `.go`）、`apps/web` Vue 3 + TS（185 个生产
 > `.ts`/`.vue`）、`apps/desktop`（Tauri 2 无 IPC 壳）、部署（Dockerfile / compose / nginx TLS）、
@@ -37,7 +47,7 @@
 
 | 编号 | 级别 | 一句话 | 状态 |
 |---|---|---|---|
-| R1 | 低（文档漂移） | [threat-model.md](threat-model.md) §2 称 XFF「采信首段」，代码实际取**最后一段**（`apps/server/internal/handler/ratelimit.go:120`）——代码正确（取最后一段防客户端在左侧预置伪造值换桶绕过限速），文档过期 | ✅ 同日修正（订正为「采信其直连对端追加的最后一段」） |
+| R1 | 低（文档漂移） | [threat-model.md](../threat-model.md) §2 称 XFF「采信首段」，代码实际取**最后一段**（`apps/server/internal/handler/ratelimit.go:120`）——代码正确（取最后一段防客户端在左侧预置伪造值换桶绕过限速），文档过期 | ✅ 同日修正（订正为「采信其直连对端追加的最后一段」） |
 | R2a | 低（信息暴露） | `/api/health` 免鉴权暴露 `version` | ✅ 已修（仅有效 `S3C_TOKEN` 可见 `version`；探针仍 200） |
 | R2b | 低（信息暴露） | `S3C_EXPOSE_METRICS=1` 时 `/api/metrics` 可匿名读 | ✅ 已修（新增可选 `S3C_METRICS_TOKEN`；未设保持兼容） |
 | R3a | 低（CSP 取舍） | 服务端 CSP `style-src 'unsafe-inline'` 允许内联 `<style>` | ⚠️ 代码已收紧（`style-src 'self'; style-src-attr 'unsafe-inline'`）；待人类专家复核 |
@@ -64,7 +74,7 @@
 
 - CORS 白名单外**硬 403 阻断**（而非仅省略响应头），配合「变更请求强制 `application/json` 触发预检」，防简单请求跨域写（`apps/server/internal/handler/middleware.go:165`）。
 - 限流挂在鉴权**外层**（鉴权失败也消耗额度）；XFF 仅当直连对端在 `S3C_TRUSTED_PROXIES` 白名单时采信其追加的**最后一段**，否则回退 `RemoteAddr`（`apps/server/internal/handler/ratelimit.go:120`）；分片桶 + 总量硬上限 10 000，内存有界。
-- SSRF 双重防线：创建期 `ValidateEndpoint` + 拨号期 `dialContextSSRF` 逐 IP 复查（防 DNS 重绑定 TOCTOU）；禁重定向、禁 `HTTP(S)_PROXY` 环境变量代理、拦截链路本地与云元数据地址（`apps/server/internal/s3wrap/ssrf.go`、`client.go:192`）；私网默认放行为 [decisions/0003-ssrf-private-allow.md](decisions/0003-ssrf-private-allow.md) 的显式取舍，可 `S3C_SSRF_DENY_PRIVATE=1` 收紧。
+- SSRF 双重防线：创建期 `ValidateEndpoint` + 拨号期 `dialContextSSRF` 逐 IP 复查（防 DNS 重绑定 TOCTOU）；禁重定向、禁 `HTTP(S)_PROXY` 环境变量代理、拦截链路本地与云元数据地址（`apps/server/internal/s3wrap/ssrf.go`、`client.go:192`）；私网默认放行为 [decisions/0003-ssrf-private-allow.md](../decisions/0003-ssrf-private-allow.md) 的显式取舍，可 `S3C_SSRF_DENY_PRIVATE=1` 收紧。
 - 安全头：CSP `script-src 'self'` / `style-src 'self'` / `style-src-attr 'unsafe-inline'` / nosniff / `X-Frame-Options: DENY` / `Referrer-Policy: no-referrer`（`apps/server/internal/handler/middleware.go`）；TLS 层补 HSTS 180 天 + `Permissions-Policy`（`deploy/nginx/conf.d/s3client-tls.example.conf`）。
 
 ### 3.3 输入与输出
@@ -89,9 +99,9 @@
 
 1. ~~修正 threat-model XFF 表述~~（R1，已同日闭环）。
 2. ~~health `version` 信息暴露 / metrics 匿名面~~（R2a / R2b，已同日闭环）。
-3. ~~IPv6 限流按 /64 聚合（R4）~~（已同日闭环，见 §2 状态表与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`）。
-4. R3a 代码已收紧，须按 [`AI_POLICY.md`](AI_POLICY.md) §3 完成人类专家复核；复核通过后本快照方可归档。
-5. ~~`accounts` 作用域对迁移 / 计划账号引用的越权面 + 计划列表信息暴露~~（R6 / R7，同日第二轮闭环，证据见 [`FEATURES.md`](FEATURES.md) §CT）。
+3. ~~IPv6 限流按 /64 聚合（R4）~~（已同日闭环，见 §2 状态表与 [`../CHANGELOG.md`](../../CHANGELOG.md) `[Unreleased]`）。
+4. R3a 代码已收紧，须按 [`AI_POLICY.md`](../AI_POLICY.md) §3 完成人类专家复核；复核通过后本快照方可归档。
+5. ~~`accounts` 作用域对迁移 / 计划账号引用的越权面 + 计划列表信息暴露~~（R6 / R7，同日第二轮闭环，证据见 [`FEATURES.md`](../FEATURES.md) §CT）。
 6. ~~nginx `nosniff`、GitLab NodeSource 安装脚本、下载文件名清洗~~（R8–R10，防御纵深闭环）。
 
 ## 5. 验证与未复跑项披露
@@ -99,4 +109,4 @@
 - **后端**：`go vet ./...` / `go test ./...` / `go build ./...` 全绿；`make test-cover` 11/11 包 **100.0%**、零 `count==0` 块；`golangci-lint run` **0 issues**；包根配置 / 文档 / OpenAPI 门禁全绿。
 - **前端与浏览器**：`pnpm lint` / `typecheck` / `typecheck:e2e` / `test`（88 文件 1364 例）/ `test:coverage`（四指标 100%）/ `build` / `gen:api --check` 全绿；`pnpm e2e` **26 passed + 1 skipped**；`make e2e-real`（真实 Go 后端 + RustFS + 真实产物，Playwright 不 mock `/api`）**5/5 PASS**，CSP 收紧后页面渲染、真实落库、建桶与浏览器直传均通过。
 - **部署配置**：`docker compose config` 的 base / prod / tls 三套均通过。
-- **未复跑**：`S3CLIENT_E2E=1` RustFS 协议 E2E（本批未改签名 / 分段 / 复制等 s3wrap 协议面；最近一次见 [`../CHANGELOG.md`](../CHANGELOG.md) R4/R5 批次）；Trivy / CodeQL / dependency-review 远端流水线。**R3a 尚待 [`AI_POLICY.md`](AI_POLICY.md) §3 要求的人类专家复核**。
+- **未复跑**：`S3CLIENT_E2E=1` RustFS 协议 E2E（本批未改签名 / 分段 / 复制等 s3wrap 协议面；最近一次见 [`../CHANGELOG.md`](../../CHANGELOG.md) R4/R5 批次）；Trivy / CodeQL / dependency-review 远端流水线。**R3a 尚待 [`AI_POLICY.md`](../AI_POLICY.md) §3 要求的人类专家复核**。

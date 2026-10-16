@@ -2704,6 +2704,7 @@ functions 1095 / lines 3503）。
 | R3a | 服务端 CSP 改为 `style-src 'self'; style-src-attr 'unsafe-inline'` | 保留 Vue `:style`，禁止内联 `<style>`；`TestSecurityHeadersRestrictInlineStylesToAttributes` + 真实浏览器 E2E |
 | CSP 配置 | `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行 / 纯空白时拒绝启动 | `TestValidate` 边界用例 |
 | 限流可观测 | `/api/metrics` 输出 `s3c_rate_limit_rpm` / `s3c_rate_limit_burst` | `TestMetricsRateLimitGaugesReflectConfig` |
+| R3a 归档前置 | R3a 的人类专家复核（[`AI_POLICY.md`](AI_POLICY.md) §3 强制）**于 2026-10-16 通过**（复核人 = 仓库负责人（用户）；依据 = `handler/middleware.go:32` CSP 单源字面量 + `TestServerCSPSharesTauriDirectives` + `make e2e-real` 5/5 PASS），评审快照同日 `git mv` 归档入 [`archive/code-review-2026-10-15.md`](archive/code-review-2026-10-15.md) | 归档横幅如实记录复核结论 / 日期 / 复核人 / 依据，并写入「Approve 结论已被同日 [`archive/pentest-2026-10-15.md`](archive/pentest-2026-10-15.md) 证伪」的诚实性警示；正文按冻结纪律不回写 |
 
 ### CT. 2026-10-15 安全评审残留收口：作用域对迁移 / 计划的账号引用 + 计划列表裁剪
 
@@ -2712,7 +2713,7 @@ functions 1095 / lines 3503）。
 | accounts 账号引用 | [`handler/scope.go`](../apps/server/internal/handler/scope.go) `requestAccountRefs`：迁移 / 计划 body 的 `sourceAccountId` / `targetAccountId`，与 `run` / `DELETE` / `PUT` 按**已存计划**注入的两个账号 id，纳入 `accounts` 判定（body 无法解析 → `unparsable_body` fail-closed） | `accounts:[A]` 的 token 不再能让服务端用 B 的存储凭据执行迁移（越权读写）；`TestScopeAccountsConstrainMigrateAccountRefs`（migrate / async / sync 三端点）+ `TestScopeAccountsConstrainScheduleAccountRefs`（POST / PUT / run / DELETE）+ `TestScopeAccountsUnparsableBodyIsDenied` |
 | 计划列表裁剪 | `schedulesInScope`：声明 `prefixes` / `accounts` 的 token 调 `GET /api/schedules` 只返回**引用均在册**的计划（裁空仍 `[]`） | 越界计划的桶名 / 账号 id 不再可见；`readonly` 与未登记全权 token 不变；`TestSchedulesListHidesOutOfScopeSchedules` + `TestSchedulesScopePrefixes` 列表断言（由「200 即放行」改为「200 且不含越界计划」） |
 | 作用域下传 | `authorize` 判定通过后把 scope 挂请求上下文（`requestScope`），handler 侧据此过滤响应 | 未受限请求（未启用 / 未登记 token）原样返回，`TestScopeNotConfiguredKeepsFullAccess` / `TestScopeUnlistedTokenKeepsFullAccess` 回归通过 |
-| 文档 | [`threat-model.md`](threat-model.md) 边界A 两条「残留（有意）」收口 · [`api.md`](api.md) 最小权限口径与计划列表段 · [`code-review-2026-10-15.md`](code-review-2026-10-15.md) R6 / R7 | 包根文档门禁全绿 |
+| 文档 | [`threat-model.md`](threat-model.md) 边界A 两条「残留（有意）」收口 · [`api.md`](api.md) 最小权限口径与计划列表段 · [`code-review-2026-10-15.md`](archive/code-review-2026-10-15.md) R6 / R7 | 包根文档门禁全绿 |
 
 ### CU. 2026-10-15 安全评审防御纵深收口：nginx / GitLab Node / 下载名
 
