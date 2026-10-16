@@ -2705,6 +2705,23 @@ functions 1095 / lines 3503）。
 | CSP 配置 | `S3C_CSP_CONNECT_SRC` 含控制字符 / 换行 / 纯空白时拒绝启动 | `TestValidate` 边界用例 |
 | 限流可观测 | `/api/metrics` 输出 `s3c_rate_limit_rpm` / `s3c_rate_limit_burst` | `TestMetricsRateLimitGaugesReflectConfig` |
 
+### CT. 2026-10-15 安全评审残留收口：作用域对迁移 / 计划的账号引用 + 计划列表裁剪
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| accounts 账号引用 | [`handler/scope.go`](../apps/server/internal/handler/scope.go) `requestAccountRefs`：迁移 / 计划 body 的 `sourceAccountId` / `targetAccountId`，与 `run` / `DELETE` / `PUT` 按**已存计划**注入的两个账号 id，纳入 `accounts` 判定（body 无法解析 → `unparsable_body` fail-closed） | `accounts:[A]` 的 token 不再能让服务端用 B 的存储凭据执行迁移（越权读写）；`TestScopeAccountsConstrainMigrateAccountRefs`（migrate / async / sync 三端点）+ `TestScopeAccountsConstrainScheduleAccountRefs`（POST / PUT / run / DELETE）+ `TestScopeAccountsUnparsableBodyIsDenied` |
+| 计划列表裁剪 | `schedulesInScope`：声明 `prefixes` / `accounts` 的 token 调 `GET /api/schedules` 只返回**引用均在册**的计划（裁空仍 `[]`） | 越界计划的桶名 / 账号 id 不再可见；`readonly` 与未登记全权 token 不变；`TestSchedulesListHidesOutOfScopeSchedules` + `TestSchedulesScopePrefixes` 列表断言（由「200 即放行」改为「200 且不含越界计划」） |
+| 作用域下传 | `authorize` 判定通过后把 scope 挂请求上下文（`requestScope`），handler 侧据此过滤响应 | 未受限请求（未启用 / 未登记 token）原样返回，`TestScopeNotConfiguredKeepsFullAccess` / `TestScopeUnlistedTokenKeepsFullAccess` 回归通过 |
+| 文档 | [`threat-model.md`](threat-model.md) 边界A 两条「残留（有意）」收口 · [`api.md`](api.md) 最小权限口径与计划列表段 · [`code-review-2026-10-15.md`](code-review-2026-10-15.md) R6 / R7 | 包根文档门禁全绿 |
+
+### CU. 2026-10-15 安全评审防御纵深收口：nginx / GitLab Node / 下载名
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| nginx 兜底 | Docker 与 TLS 示例 vhost 设置 `X-Content-Type-Options: nosniff` | 后端中间件被绕过时仍有响应头防线；`TestNginxConfigSetsNosniffFallback` |
+| GitLab Node | 移除 NodeSource `curl ... \| bash`，下载 Node 26.10.0 官方压缩包并校验 SHA256 | 供应链不再无条件执行远端脚本；`TestGitLabCIDoesNotPipeRemoteInstaller` |
+| 下载名清洗 | `sanitizeDownloadFilename` 清洗控制字符、路径分隔符与跨平台非法字符，限长 255，空结果回退 | `downloadProxyObject` 单流/并行入口统一生效；`src/api/download.test.ts` + `src/proxy.test.ts` |
+
 ## 三、质量与覆盖率现状
 
 > 2026-09-15 本机实测；2026-09-16 P0 + P1 修复后复测：`go vet ./...` 干净、`go test -race ./...` 8/8 包通过

@@ -224,9 +224,11 @@ func (h *Handler) withAuth(next http.Handler) http.Handler {
 			h.writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		if token, ok := h.matchingToken(cred); ok {
-			// 常量时间比较命中后，再按该 token 的 S3C_TOKEN_SCOPES 声明判定最小权限。
-			if !h.authorize(w, r, token) {
+		if token, matched := h.matchingToken(cred); matched {
+			// 常量时间比较命中后，再按该 token 的 S3C_TOKEN_SCOPES 声明判定最小权限；
+			// 判定通过的请求带上作用域，供 handler 侧按最小权限过滤响应（计划列表）。
+			r, allowed := h.authorize(w, r, token)
+			if !allowed {
 				return
 			}
 			next.ServeHTTP(w, r)

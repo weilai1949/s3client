@@ -930,6 +930,34 @@ func TestNginxAccessLogCarriesRequestID(t *testing.T) {
 	}
 }
 
+// TestNginxConfigSetsNosniffFallback：后端中间件已为全量响应设置 nosniff，但 nginx
+// 是直连静态文件 / 新增 vhost 时的最后一道响应头防线，不能只依赖上游中间件。
+func TestNginxConfigSetsNosniffFallback(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join("deploy", "nginx", "conf.d", "s3client-docker.conf"),
+		filepath.Join("deploy", "nginx", "conf.d", "s3client-tls.example.conf"),
+	} {
+		if text := readRepoFile(t, rel); !strings.Contains(text, `add_header X-Content-Type-Options "nosniff" always;`) {
+			t.Errorf("%s 缺 `X-Content-Type-Options: nosniff` 兜底头", rel)
+		}
+	}
+}
+
+// TestGitLabCIDoesNotPipeRemoteInstaller：`curl ... | bash` 会无条件执行远端脚本。
+// 需要组合多个工具链的 GitLab job 改为下载固定版本 Node 压缩包并校验官方 SHA256。
+func TestGitLabCIDoesNotPipeRemoteInstaller(t *testing.T) {
+	text := readRepoFile(t, ".gitlab-ci.yml")
+	if strings.Contains(text, "deb.nodesource.com/setup_") || strings.Contains(text, "| bash -") {
+		t.Error(".gitlab-ci.yml 仍用 `curl ... | bash` 安装远端脚本；必须下载固定版本 Node 并校验 SHA256")
+	}
+	if !strings.Contains(text, `NODE_VERSION: "26.10.0"`) {
+		t.Error(".gitlab-ci.yml 缺 NODE_VERSION=26.10.0（必须显式 pin Node 版本）")
+	}
+	if !strings.Contains(text, `NODE_SHA256: "ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022"`) {
+		t.Error(".gitlab-ci.yml 缺 Node 26.10.0 linux-x64 SHA256（必须校验下载内容）")
+	}
+}
+
 // TestReleaseWorkflowProducesDesktopSBOM（P0 供应链，roadmap §三 #12 剩余项）：桌面发布必须产出
 // 并上传安装包的 SBOM。
 //

@@ -399,11 +399,12 @@ func TestScopeBodyEdgeCases(t *testing.T) {
 	e := newScopeEnv(t, map[string]config.TokenScope{
 		scopeTokReadonly: {Prefixes: []string{"default-bucket"}},
 	})
-	// body 为 JSON null：无桶/键引用 → 放行到 handler（handler 报 400，而非 403）。
-	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/"+e.acc.ID+"/presign", "null"); rr.Code != http.StatusBadRequest {
-		t.Errorf("body=null = %d, want 400（作用域放行、业务校验失败）", rr.Code)
+	// body 为 JSON null：按「无 body」解析，于是没有任何可判定引用 → 零引用兜底 403
+	//（2026-10-15 P-1 起：不可判定一律 fail-closed，不再放行到 handler）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts/"+e.acc.ID+"/presign", "null"); rr.Code != http.StatusForbidden {
+		t.Errorf("body=null = %d, want 403（零引用不可判定）", rr.Code)
 	}
-	// ContentLength=-1 且 body 为空（chunked 空体）：无引用 → 放行。
+	// ContentLength=-1 且 body 为空（chunked 空体）：同样零引用 → 403。
 	req := httptest.NewRequest(http.MethodPost, "/api/accounts/"+e.acc.ID+"/presign", nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+scopeTokReadonly)
@@ -411,8 +412,8 @@ func TestScopeBodyEdgeCases(t *testing.T) {
 	req.Body = http.NoBody
 	rr := httptest.NewRecorder()
 	e.http.ServeHTTP(rr, req)
-	if rr.Code != http.StatusBadRequest {
-		t.Errorf("空 chunked body = %d, want 400（作用域放行）", rr.Code)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("空 chunked body = %d, want 403（零引用不可判定）", rr.Code)
 	}
 	// r.Body == nil：读取不可判定但无 body 内容 → 按空处理；桶引用越界 → 403。
 	req2 := httptest.NewRequest(http.MethodGet, "/api/accounts/"+e.acc.ID+"/objects?bucket=bucket-x", nil)
@@ -462,9 +463,11 @@ func TestScopeBucketNameEndpoints(t *testing.T) {
 	if rr := e.request(scopeTokReadonly, http.MethodDelete, base+"/bucket?name=bucket-c", ""); rr.Code != http.StatusForbidden {
 		t.Errorf("越界删桶 = %d, want 403", rr.Code)
 	}
-	// 非 POST/DELETE 的 .../bucket 不按桶名解析（交回路由 405），不得误判越界。
-	if rr := e.request(scopeTokReadonly, http.MethodGet, base+"/bucket", ""); rr.Code == http.StatusForbidden {
-		t.Errorf("GET .../bucket 不应被作用域 403：%d", rr.Code)
+	// 非 POST/DELETE 的 .../bucket 不按桶名解析；该组合未注册路由，而零引用兜底先于
+	// 路由生效 → 403（2026-10-15 P-1 起：不可判定一律 fail-closed，未注册路径也不再
+	// 借 404/405 绕过判定）。
+	if rr := e.request(scopeTokReadonly, http.MethodGet, base+"/bucket", ""); rr.Code != http.StatusForbidden {
+		t.Errorf("GET .../bucket（零引用）= %d, want 403", rr.Code)
 	}
 }
 
@@ -627,5 +630,273 @@ func TestScopeDenialDoesNotLeakToken(t *testing.T) {
 	}
 	if reason == "" {
 		t.Fatalf("缺少 auth.scope_denied 审计事件：%v", e.auditEvents())
+	}
+}
+
+// ---- accounts 作用域：迁移 / 计划 body 的账号引用（2026-10-15）----
+
+// newScopedAccount 在作用域测试环境里再建一个账号（用于构造越界引用）。
+func newScopedAccount(t *testing.T, e *scopeEnv, name, bucket string) *model.Account {
+	t.Helper()
+	acc, err := e.h.store.Create(&model.Account{
+		Name: name, Endpoint: e.acc.Endpoint, Region: "us-east-1",
+		AccessKey: "ak", SecretKey: "sk", Bucket: bucket, PathStyle: true,
+	})
+	if err != nil {
+		t.Fatalf("create %s: %v", name, err)
+	}
+	return acc
+}
+
+// migrateAccountRefsBody 构造迁移请求体（三端点同名字段：sourceAccountId / targetAccountId）。
+func migrateAccountRefsBody(srcID, dstID string) string {
+	b, _ := json.Marshal(map[string]any{
+		"sourceAccountId": srcID, "sourceBucket": "src-bucket",
+		"sourceKeys":      []string{"a.txt"},
+		"targetAccountId": dstID, "targetBucket": "dst-bucket", "targetPrefix": "m/",
+	})
+	return string(b)
+}
+
+// TestScopeAccountsConstrainMigrateAccountRefs：`accounts` 作用域不只约束路径 {id}——
+// 迁移请求体里的 sourceAccountId / targetAccountId 同样必须落在许可集合内。否则
+// accounts:[A] 的 token 能让服务端用 B 的存储凭据把 B 的对象搬到 A 可读的位置（越权读）。
+func TestScopeAccountsConstrainMigrateAccountRefs(t *testing.T) {
+	e := newScopeEnv(t, nil)
+	other := newScopedAccount(t, e, "other-acc", "other-bucket")
+	e.h.SetTokenScopes(func(tok string) (config.TokenScope, bool) {
+		if tok == scopeTokReadonly {
+			return config.TokenScope{Accounts: []string{e.acc.ID}}, true
+		}
+		return config.TokenScope{}, false
+	})
+	// 目标账号越界 → 403。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate", migrateAccountRefsBody(e.acc.ID, other.ID)); rr.Code != http.StatusForbidden {
+		t.Errorf("目标账号越界 = %d, want 403; body=%s", rr.Code, rr.Body)
+	}
+	// 源账号越界 → 403（异步端点同一判定）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate/async", migrateAccountRefsBody(other.ID, e.acc.ID)); rr.Code != http.StatusForbidden {
+		t.Errorf("源账号越界 = %d, want 403; body=%s", rr.Code, rr.Body)
+	}
+	// 同步端点同一判定（该端点 DTO 无 sourceKeys 字段）。
+	syncBody := `{"sourceAccountId":"` + other.ID + `","sourceBucket":"src-bucket","targetAccountId":"` + other.ID + `","targetBucket":"dst-bucket"}`
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate/sync", syncBody); rr.Code != http.StatusForbidden {
+		t.Errorf("同步端点账号越界 = %d, want 403; body=%s", rr.Code, rr.Body)
+	}
+	// 两个账号都在册 → 过作用域闸（假 S3 复制成功）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate", migrateAccountRefsBody(e.acc.ID, e.acc.ID)); rr.Code != http.StatusOK {
+		t.Errorf("账号均在册 = %d, want 200; body=%s", rr.Code, rr.Body)
+	}
+}
+
+// TestScopeAccountsUnparsableBodyIsDenied：accounts 作用域也按 body 判定账号引用，
+// body 无法解析就无法判定 → fail-closed 403（与 prefixes 同口径）。
+func TestScopeAccountsUnparsableBodyIsDenied(t *testing.T) {
+	e := newScopeEnv(t, map[string]config.TokenScope{
+		scopeTokReadonly: {Accounts: []string{"acc-x"}},
+	})
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate", `{"sourceAccountId":`); rr.Code != http.StatusForbidden {
+		t.Errorf("非法 JSON body（accounts 作用域）= %d, want 403", rr.Code)
+	}
+	// body 里没有账号引用时不触发账号判定，必填校验仍由 handler 判 400。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules", `{}`); rr.Code != http.StatusBadRequest {
+		t.Errorf("无账号引用的计划创建 = %d, want 400（作用域放行后由 handler 判必填）", rr.Code)
+	}
+}
+
+// ---- 零引用 = 不可判定 = 拒绝（评审 2026-10-15 P-1）----
+
+// TestScopePrefixZeroRefsIsDenied：`prefixes` 作用域下，**请求不携带任何可判定桶/键
+// 引用**时一律 403——这类请求的作用域判定必然落空，放行等于把「最小权限」变成全权
+// （评审 2026-10-15 P-1：仅声明 prefixes 的 token 曾可读 / 改写 / 删除 / 新建任意账号，
+// 并越权操作任意账号**默认桶**的桶级配置）。
+//
+// 口径对照：请求**显式写出**越界桶时本来就是 403（那是既有闸在工作）；本用例针对
+// 「省略桶/键」这条更隐蔽的路径——handler 会回退到路径账号的默认桶，而作用域判定
+// 在这条链上原本完全缺席。
+func TestScopePrefixZeroRefsIsDenied(t *testing.T) {
+	// 每个子用例用**独立环境 + 独立受害者账号**：其中「删除账号」用例在修复前会真的
+	// 把账号删掉，共用账号会让后续用例看到 404（那是漏洞被触发的副产物，不是判定结果）。
+	newVictimEnv := func(t *testing.T) (*scopeEnv, string) {
+		t.Helper()
+		e := newScopeEnv(t, map[string]config.TokenScope{
+			scopeTokReadonly: {Prefixes: []string{"allowed-bucket/allowed-prefix"}},
+		})
+		victim := newScopedAccount(t, e, "victim", "victim-bucket")
+		return e, "/api/accounts/" + victim.ID
+	}
+
+	cases := []struct{ name, method, path, body string }{
+		{"读别账号配置", http.MethodGet, "", ""},
+		{"改写别账号（端点/凭据重定向）", http.MethodPut, "", `{"name":"x","endpoint":"http://127.0.0.1:9000","accessKey":"k","secretKey":"s"}`},
+		{"建账号（无 bucket 字段）", http.MethodPost, "/api/accounts", `{"name":"x","endpoint":"http://127.0.0.1:9000","accessKey":"k","secretKey":"s"}`},
+		{"别账号连通性测试（拨号）", http.MethodPost, "/test", ""},
+		{"别账号默认桶策略清空", http.MethodDelete, "/bucket/policy", ""},
+		{"别账号默认桶网站托管覆盖", http.MethodPut, "/bucket/website", `{"indexDocument":"evil.html"}`},
+		{"别账号默认桶版本控制改写", http.MethodPut, "/bucket-versioning", `{"status":"Suspended"}`},
+		{"别账号默认桶加密删除", http.MethodDelete, "/bucket/encryption", ""},
+		{"别账号桶清单", http.MethodGet, "/buckets", ""},
+		{"别账号对象清单（省略桶）", http.MethodGet, "/objects", ""},
+		{"别账号生命周期（省略桶）", http.MethodGet, "/lifecycle", ""},
+		{"存储报告（省略桶）", http.MethodGet, "/storage-report", ""},
+		{"回收站（省略桶）", http.MethodGet, "/trash", ""},
+		{"未注册路径（不得借 404 绕过判定）", http.MethodGet, "/nonexistent", ""},
+		{"删除别账号", http.MethodDelete, "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e, base := newVictimEnv(t)
+			if rr := e.request(scopeTokReadonly, c.method, base+c.path, c.body); rr.Code != http.StatusForbidden {
+				t.Errorf("%s %s（零引用）= %d, want 403", c.method, base+c.path, rr.Code)
+			}
+		})
+	}
+
+	// 对照：界内请求仍必须放行（防止「一律 403」式的过度收紧）。
+	e, base := newVictimEnv(t)
+	if rr := e.request(scopeTokReadonly, http.MethodPost, base+"/presign", `{"method":"put","bucket":"allowed-bucket","key":"allowed-prefix/x"}`); rr.Code != http.StatusOK {
+		t.Errorf("界内 presign = %d, want 200", rr.Code)
+	}
+	// 对照：显式写出越界桶 → 403（既有闸）。
+	if rr := e.request(scopeTokReadonly, http.MethodDelete, base+"/bucket/policy?bucket=victim-bucket", ""); rr.Code != http.StatusForbidden {
+		t.Errorf("显式越界桶 = %d, want 403", rr.Code)
+	}
+}
+
+// TestScopePrefixZeroRefsAllowlistedReads：零引用兜底**不得**误伤「与桶/键无关」的只读
+// 端点——账号列表（文档化残留语义）、计划列表（已按作用域裁剪）、openapi.json（静态契约）。
+func TestScopePrefixZeroRefsAllowlistedReads(t *testing.T) {
+	e := newScopeEnv(t, map[string]config.TokenScope{
+		scopeTokReadonly: {Prefixes: []string{"allowed-bucket/allowed-prefix"}},
+	})
+	for _, c := range []struct{ name, method, path string }{
+		{"账号列表 GET", http.MethodGet, "/api/accounts"},
+		{"账号列表 HEAD", http.MethodHead, "/api/accounts"},
+		{"计划列表 GET", http.MethodGet, "/api/schedules"},
+		{"openapi 契约 GET", http.MethodGet, "/api/openapi.json"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if rr := e.request(scopeTokReadonly, c.method, c.path, ""); rr.Code == http.StatusForbidden {
+				t.Errorf("%s %s = 403，豁免端點不应被零引用兜底误伤", c.method, c.path)
+			}
+		})
+	}
+	// 非安全方法打豁免端点：豁免只覆盖 GET/HEAD（如 POST /api/accounts 属账号写入面）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts", `{"name":"x","endpoint":"http://127.0.0.1:9000","accessKey":"k","secretKey":"s"}`); rr.Code != http.StatusForbidden {
+		t.Errorf("POST /api/accounts = %d, want 403", rr.Code)
+	}
+}
+
+// TestScopeAccountWriteDeniedForRestrictedTokens：账号**写入面**（铸造新账号 = 凭空
+// 产生凭据；改写账号 = 端点/凭据重定向；删除账号 = 凭据与配置全损）对**任何**资源受限
+// token 一律 403——它与 preview-buckets 同类：都不是「访问某个桶/键」，而是引入或
+// 重定向凭据面。缺这道闸时，整桶授权的前缀 token 只要在 body 里写一个**界内**桶名，
+// 就能让建号请求产生合法引用、从而通过前缀判定（评审 2026-10-15 P-1 的整桶变体）。
+func TestScopeAccountWriteDeniedForRestrictedTokens(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		scope config.TokenScope
+	}{
+		{"整桶 prefixes", config.TokenScope{Prefixes: []string{"allowed-bucket"}}},
+		{"子前缀 prefixes", config.TokenScope{Prefixes: []string{"allowed-bucket/allowed-prefix"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newScopeEnv(t, map[string]config.TokenScope{scopeTokReadonly: c.scope})
+			// 关键用例：body 带**界内**桶名（引用合法、前缀判定会放行）——必须仍被账号写入闸拦下。
+			body := `{"name":"evil","endpoint":"http://127.0.0.1:9000","accessKey":"k","secretKey":"s","bucket":"allowed-bucket"}`
+			if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/accounts", body); rr.Code != http.StatusForbidden {
+				t.Errorf("带界内桶名的建号 = %d, want 403", rr.Code)
+			}
+			if rr := e.request(scopeTokReadonly, http.MethodPut, "/api/accounts/"+e.acc.ID, `{"name":"y","endpoint":"http://127.0.0.1:9000","accessKey":"a","bucket":"allowed-bucket"}`); rr.Code != http.StatusForbidden {
+				t.Errorf("改写账号 = %d, want 403", rr.Code)
+			}
+			if rr := e.request(scopeTokReadonly, http.MethodDelete, "/api/accounts/"+e.acc.ID, ""); rr.Code != http.StatusForbidden {
+				t.Errorf("删除账号 = %d, want 403", rr.Code)
+			}
+		})
+	}
+
+	// accounts 作用域：即使 {id} 在册（账号判定会放行），写入面仍拒绝——「访问被授权
+	// 账号」不等于「可以改写它的端点与凭据」。
+	e := newScopeEnv(t, map[string]config.TokenScope{
+		scopeTokReadonly: {Accounts: []string{"self"}},
+	})
+	e.h.SetTokenScopes(func(tok string) (config.TokenScope, bool) {
+		if tok == scopeTokReadonly {
+			return config.TokenScope{Accounts: []string{e.acc.ID}}, true
+		}
+		return config.TokenScope{}, false
+	})
+	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/accounts/"+e.acc.ID, ""); rr.Code != http.StatusOK {
+		t.Errorf("在册账号只读 = %d, want 200（读语义保留）", rr.Code)
+	}
+	if rr := e.request(scopeTokReadonly, http.MethodPut, "/api/accounts/"+e.acc.ID, `{"name":"y","endpoint":"http://127.0.0.1:9000","accessKey":"a"}`); rr.Code != http.StatusForbidden {
+		t.Errorf("在册账号改写 = %d, want 403", rr.Code)
+	}
+	if rr := e.request(scopeTokReadonly, http.MethodDelete, "/api/accounts/"+e.acc.ID, ""); rr.Code != http.StatusForbidden {
+		t.Errorf("在册账号删除 = %d, want 403", rr.Code)
+	}
+}
+
+// ---- 授权解析器必须与 handler 的解析口径一致（评审 2026-10-15 P-2）----
+
+// TestScopeBodyKeyCaseAndDuplicatesDenied：作用域侧原先用 map[string]any 精确匹配键名，
+// 而 handler 用 encoding/json 解进 struct（字段名**大小写不敏感**、`null` 对已赋值的
+// 标量字段 no-op）。同一份 body 两侧结论不同 ⇒ 只改键名大小写即可让作用域看到「零引用」
+// 而 handler 照常执行（实测曾删掉越界桶）。现在归一化 + 拒绝重复键，两种形态都必须 403。
+func TestScopeBodyKeyCaseAndDuplicatesDenied(t *testing.T) {
+	e := newScopeEnv(t, map[string]config.TokenScope{
+		scopeTokReadonly: {Prefixes: []string{"allowed-bucket/allowed-prefix"}},
+	})
+	// 用**默认桶就在授权前缀内**的账号：这样「诱饵 / 重复键」的界内一侧能真正通过
+	// 作用域判定，从而证明被拦的原因是解析口径，而不是别的闸顺手拦下。
+	inScope := newScopedAccount(t, e, "in-scope", "allowed-bucket")
+	base := "/api/accounts/" + inScope.ID
+	cases := []struct{ name, body string }{
+		{"键名大小写变体", `{"method":"put","Bucket":"victim-bucket","Key":"pwn.txt"}`},
+		{"越界桶 + 界内诱饵（证明是解析器分歧而非空集）", `{"method":"put","bucket":"allowed-bucket","key":"allowed-prefix/x","Bucket":"victim-bucket","Key":"pwn.txt"}`},
+		{"重复键 null（标量 DTO：map 末值为 nil，struct null no-op 保留前值）", `{"method":"put","bucket":"victim-bucket","bucket":null,"key":"allowed-prefix/x"}`},
+		{"大小写 + null 组合", `{"method":"put","Bucket":"victim-bucket","bucket":null,"key":"allowed-prefix/x"}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if rr := e.request(scopeTokReadonly, http.MethodPost, base+"/presign", c.body); rr.Code != http.StatusForbidden {
+				t.Errorf("body=%s = %d, want 403", c.body, rr.Code)
+			}
+		})
+	}
+	// 对照：精确小写键名的界内请求仍须放行。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, base+"/presign", `{"method":"put","bucket":"allowed-bucket","key":"allowed-prefix/x"}`); rr.Code != http.StatusOK {
+		t.Errorf("精确键名界内 = %d, want 200", rr.Code)
+	}
+	// 对照：精确键名的越界请求 → 403（既有闸）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, base+"/presign", `{"method":"put","bucket":"victim-bucket","key":"x"}`); rr.Code != http.StatusForbidden {
+		t.Errorf("精确键名越界 = %d, want 403", rr.Code)
+	}
+	// 对照：省略桶时按账号默认桶判定（默认桶界内 → 放行，不被零引用兜底误伤）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, base+"/presign", `{"method":"put","key":"allowed-prefix/x"}`); rr.Code != http.StatusOK {
+		t.Errorf("省略桶但默认桶界内 = %d, want 200", rr.Code)
+	}
+}
+
+// TestScopeAccountsBodyKeyCaseDenied：accounts 维度的 body 账号引用同样按归一化键名判定——
+// `SourceAccountId` 变体不得让 accounts:[A] 的 token 用 B 的存储凭据发起迁移。
+func TestScopeAccountsBodyKeyCaseDenied(t *testing.T) {
+	e := newScopeEnv(t, nil)
+	other := newScopedAccount(t, e, "other-acc", "other-bucket")
+	e.h.SetTokenScopes(func(tok string) (config.TokenScope, bool) {
+		if tok == scopeTokReadonly {
+			return config.TokenScope{Accounts: []string{e.acc.ID}}, true
+		}
+		return config.TokenScope{}, false
+	})
+	variant := `{"SourceAccountId":"` + e.acc.ID + `","sourceBucket":"src","TargetAccountId":"` + other.ID + `","targetBucket":"dst"}`
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate/sync", variant); rr.Code != http.StatusForbidden {
+		t.Errorf("大小写变体的越界账号引用 = %d, want 403", rr.Code)
+	}
+	// 对照：精确键名、账号均在册 → 过作用域闸（假 S3 复制成功）。
+	ok := `{"sourceAccountId":"` + e.acc.ID + `","sourceBucket":"src","targetAccountId":"` + e.acc.ID + `","targetBucket":"dst"}`
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/migrate/sync", ok); rr.Code != http.StatusOK {
+		t.Errorf("精确键名界内账号 = %d, want 200；body=%s", rr.Code, rr.Body)
 	}
 }

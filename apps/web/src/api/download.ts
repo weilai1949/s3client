@@ -135,6 +135,15 @@ function saveBlobViaAnchor(blob: Blob, filename: string): void {
   }
 }
 
+/** 保存名最小清洗：S3 key 的最后一段不受调用方控制，不能直接交给浏览器。 */
+export function sanitizeDownloadFilename(name: string): string {
+  const safe = name
+    .replace(/[\p{C}<>:"/\\|?*]/gu, '_')
+    .trim()
+    .slice(0, 255)
+  return !safe || safe === '.' || safe === '..' ? 'download' : safe
+}
+
 /**
  * 单流下载：整对象流式落盘（Range 不可用 / 大小未知 / 小文件的路径，也是并行分支的回退）。
  * 非 2xx 一律抛错——绝不把错误 JSON 当文件静默存盘。

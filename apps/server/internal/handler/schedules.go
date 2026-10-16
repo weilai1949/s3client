@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/weilai1949/s3client/apps/server/internal/config"
 	"github.com/weilai1949/s3client/apps/server/internal/model"
 	"github.com/weilai1949/s3client/apps/server/internal/service"
 	"github.com/weilai1949/s3client/apps/server/internal/store"
@@ -120,9 +121,47 @@ func (h *Handler) parseSchedule(w http.ResponseWriter, r *http.Request) (service
 	}, true
 }
 
-// listSchedules 返回全部计划（最新在前）。
+// listSchedules 返回计划（最新在前）。受限 token（prefixes / accounts）只返回落在其
+// 作用域内的计划——越界计划的桶名 / 账号 id 是信息泄露面（threat-model 边界A）；
+// 未受限（全权 / readonly）保持历史行为：返回全部。
 func (h *Handler) listSchedules(w http.ResponseWriter, r *http.Request) {
-	h.writeJSON(w, http.StatusOK, map[string]any{"schedules": h.sched.List()})
+	h.writeJSON(w, http.StatusOK, map[string]any{"schedules": h.schedulesInScope(r)})
+}
+
+// schedulesInScope 按 token 作用域过滤计划。空结果是空切片而非 nil，保证 JSON 为
+// `[]`（前端直接 .length / map，见 TestSchedulesListEmptyIsArray）。
+func (h *Handler) schedulesInScope(r *http.Request) []service.Schedule {
+	all := h.sched.List()
+	scope, ok := requestScope(r)
+	if !ok || (len(scope.Accounts) == 0 && len(scope.Prefixes) == 0) {
+		return all
+	}
+	out := make([]service.Schedule, 0, len(all))
+	for _, s := range all {
+		if scheduleInScope(scope, s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// scheduleInScope 判定计划的全部引用（源 / 目标账号与桶前缀）是否都在作用域内，
+// 与写路径的判定（requestAccountRefs / requestScopeRefs）对称。
+func scheduleInScope(scope config.TokenScope, s service.Schedule) bool {
+	for _, id := range []string{s.SourceAccountID, s.TargetAccountID} {
+		if len(scope.Accounts) > 0 && !scopeContains(scope.Accounts, id) {
+			return false
+		}
+	}
+	for _, ref := range []scopeRef{
+		{bucket: s.SourceBucket, key: s.SourcePrefix},
+		{bucket: s.TargetBucket, key: s.TargetPrefix},
+	} {
+		if len(scope.Prefixes) > 0 && !scopeAllowsRef(scope, ref) {
+			return false
+		}
+	}
+	return true
 }
 
 // createSchedules 创建计划；校验失败回 400（cron/mode/账号/桶逐项点名字段）。

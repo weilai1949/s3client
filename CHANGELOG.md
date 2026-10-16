@@ -49,6 +49,31 @@
 
 ## [Unreleased]
 
+### 变更（2026-10-15 安全评审防御纵深收口：nginx / GitLab Node / 下载名）
+
+- **加固（R8，部署防线）**：nginx 的 Docker 与 TLS 示例 vhost 均设置 `X-Content-Type-Options: nosniff`，防绕过后端中间件的静态响应或未来新 vhost 缺头。
+- **加固（R9，供应链）**：GitLab `desktop-build` / `e2e-real` 不再执行 NodeSource `curl ... | bash`；改为下载固定版本 Node 26.10.0 官方 linux-x64 压缩包并校验 SHA256。
+- **加固（R10，前端）**：对象下载保存名在交给 `showSaveFilePicker` / anchor 前统一清洗控制字符、路径分隔符、跨平台非法文件名字符，限长 255；空结果回退 `download`。
+- **文档同步**：[`docs/user-guide.md`](docs/user-guide.md)（下载名清洗语义）、[`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md)（R8–R10 状态）、[`docs/FEATURES.md`](docs/FEATURES.md) §CU。
+
+### 新增（2026-10-15 全仓对抗性渗透测试快照 + 2 条 High）
+
+- **新增** 时点性快照 [`docs/pentest-2026-10-15.md`](docs/pentest-2026-10-15.md)——**2026-10-15 全仓对抗性渗透测试**（第一性原理：资产 → 信任边界 → STRIDE → 逐条代码级核验，**并叠加真实实例红队实测**）。结论：**2 条 High**，均在 `S3C_TOKEN_SCOPES` 最小权限作用域这一条链上；**证伪**了同日 [`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md) 的 **Approve（未发现高危 / 中危）** 结论。
+  - **High-1**：`prefixes` 作用域的 `refs` 为空时 fail-open（[`scope.go:130-145`](apps/server/internal/handler/scope.go#L130-L145)）→ 仅声明 `prefixes` 的受限 token 可**读 / 改写 / 删除 / 新建任意账号**，并可越权操作**任意账号默认桶**的桶级配置（策略 / 网站托管 / 版本控制 / lifecycle…）。第三方复核在 4 个自建实例 × 3 种 store 配置上复现，并以**捕获的原始请求 + 用受害者 SecretKey 独立重算 SigV4 逐位相等（`MATCH: True`）**证明服务端会以受害者密钥对攻击者主机签名。
+  - **High-2**：授权解析器 ≠ 执行解析器（[`scope.go:281-301`](apps/server/internal/handler/scope.go#L281-L301) 的 `map[string]any` 精确键名 vs [`handler.go:239-263`](apps/server/internal/handler/handler.go#L239-L263) 的 struct 解码大小写不敏感、`null` 不覆盖）→ `{"Bucket":…}` / 重复键 + `null` 即可让作用域判定看到「零引用」而 handler 照常执行；**本轮未提交改动的 `requestAccountRefs` 只堵住精确大小写 + 单键，一行变体即打穿**。
+  - 另含 2 中 / 7 低 / 4 信息（含「禁 `v-html` 无机械门禁」「`S3C_CSP_CONNECT_SRC` 未校验 source-list 语法（真实 Chrome 实测可注入 `frame-ancestors` 使 XFO 失效）」「Trivy 不扫 compose 的 nginx 镜像」「endpoint userinfo 凭据落日志」等）与 **60+ 项已排查无发现**（路径穿越 / 鉴权路径变体 / 日志与响应头注入 / 重定向跟随 / TLS 降级 / IMDS / SQL / 命令注入 / 前端 XSS sink / Tauri IPC / git 历史凭据）。
+- **文档同步**：三处命名清单（根 [`AGENTS.md`](AGENTS.md) / [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 / [`llms.txt`](llms.txt)）登记 `pentest-2026-10-15.md`（新增「渗透测试 / 对抗性验证快照」一类）；[`docs/README.md`](docs/README.md) 导航新增入口并在安全评审行标注其结论已被证伪；[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §4 文档登记表补活跃快照行。
+- **修复未闭环（本快照仅登记，未改代码）**：两条 High 与 §六 的 P1/P2 项**尚未修复**——按仓库 TDD 纪律须「先写失败测试再改实现」，且这两条共用同一段判定代码，建议同一个 PR 收口。相应地 [`docs/threat-model.md`](docs/threat-model.md) 边界 A 的「残留（有意）」与 §6.2 的端点脱敏声明**目前与实际行为不符**，须在修复 PR 中同步修正。
+- **验证**：快照为只读评估，**未改动任何生产 / 测试代码**；两条 High 依赖的源文件（`scope.go` / `middleware.go` / `scope_test.go`）在收尾时与验证者锚定的 sha256 逐位一致，故裁定对当前工作区有效。评估期间工作区存在**另一个写者**（18:26–18:32 的 3 个 OpenAPI 生成物、19:45–19:47 的下载名清洗 / nginx `nosniff` / GitLab Node 供应链加固批次）——收尾**未**回滚其工作、**未** reset 其 git 索引；本次自身产生的临时物（测试 canary、测试实例、证据底稿）已全部清净。因本次评估新增的仓库文件仅本快照与其 5 处登记项。
+
+### 变更（2026-10-15 安全评审残留收口：作用域对迁移 / 计划的账号引用 + 计划列表裁剪）
+
+- **收紧（鉴权语义）**：`accounts` 作用域不再只看路径 `{id}`——迁移 / 计划请求体的 `sourceAccountId` / `targetAccountId`，以及 `run` / `DELETE` / `PUT /api/schedules/{id}` 按**已存计划**注入的两个账号 id，越界即 `403`（审计 `reason=account`）。堵住「`accounts:[A]` 的 token 让服务端用 B 的存储凭据执行迁移」的越权读写面；body 无法解析时 fail-closed `403`（`reason=unparsable_body`，与 `prefixes` 同口径）。
+- **收紧（信息暴露）**：声明 `prefixes` / `accounts` 的 token 调 `GET /api/schedules` 只返回**引用均在册**的计划——越界计划的桶名 / 账号 id 不再可见。`readonly` 与未登记的全权 token 不受影响（向后兼容）。
+- **文档 / 契约同步**：[`docs/threat-model.md`](docs/threat-model.md)（边界A 两条「残留（有意）」收口）、[`docs/api.md`](docs/api.md)（最小权限口径 + 计划列表裁剪）、[`docs/FEATURES.md`](docs/FEATURES.md) §CT、[`docs/code-review-2026-10-15.md`](docs/code-review-2026-10-15.md)（R6 / R7 登记）、[`docs/api/openapi.json`](docs/api/openapi.json) + [`apps/web/src/api/schema.d.ts`](apps/web/src/api/schema.d.ts)（`GET /api/schedules` 200 描述补「受限 token 只见界内计划」语义，`gen:api` 同步）。
+- **门禁收口（预存在红灯）**：`docs/en/README.md` 的 `Source revision` 推进到 `e34116e`（2026-10-15）——上一批 `e34116e` 给中文导航源 `docs/README.md` 加了评审快照入口行，英文快照未同批推进，`TestEnDocsRevisionTracksSourceCommits` **提交后**转红（该门禁按「中文源最后一次提交日期」判定，未提交改动不进 `git log`，故提交前不可见；先例 `a8b9d9b` 与 [`docs/i18n.md`](docs/i18n.md) §7.4）。该页是导航适配页（非逐字翻译），中文源该批变更只涉及评审快照行，两张表无需改译文。
+- **验证**：新增用例先红后绿（`TestScopeAccountsConstrainMigrateAccountRefs` / `TestScopeAccountsConstrainScheduleAccountRefs` / `TestScopeAccountsUnparsableBodyIsDenied` / `TestSchedulesListHidesOutOfScopeSchedules`，并改写 `TestSchedulesScopePrefixes` 的列表断言为「裁剪后 200」）；`make check` **exit 0**（`govulncheck` · `golangci-lint` **0 issues** · Go 覆盖率 **100.0%**（11 包）· 前端 **1364** 例与四指标 **100%** · 类型检查与构建）；`make e2e-real`（真实后端 + RustFS + 真实产物，不 mock `/api`）**5/5 PASS**。
+
 ### 变更（2026-10-15 安全评审 R2a / R2b / R3a + 两项低风险加固）
 
 - **收紧（R2a，鉴权语义）**：`GET /api/health` 继续免鉴权供 Docker / 探针使用，但 `version` 仅在请求携带**有效** `S3C_TOKEN` 且 token 未过作用域有效期时返回；匿名 / 错 token / 过期 token 均只返回 `status` / `time` / `store`，不再免费暴露版本号。

@@ -4,6 +4,11 @@
 > R3a 按 [`AI_POLICY.md`](AI_POLICY.md) §3 仍须人类专家复核后方可合并。复核完成后按 [archive/index.md](archive/index.md)
 >「归档四步」冻结。结论绑定评审时点 HEAD；文中 `file:line` 与工具数字均为**评审时点快照**，不回写。
 >
+> **同日追加（第二轮并行全仓安全评审）**：另一次按攻击面并行识别（Go 后端 handler / 服务层 /
+> Web 前端 / CI 与桌面壳）+ 独立误报过滤的复核，结论同为「无高危 / 中危漏洞」；其识别出的两条
+> **已文档化残留**于同日收口（R6 / R7，证据见 [`FEATURES.md`](FEATURES.md) §CT），三项防御纵深
+> 随后收口（R8–R10，证据见 [`FEATURES.md`](FEATURES.md) §CU）。
+>
 > **范围**：全仓——`apps/server` Go 后端（308 个 `.go`）、`apps/web` Vue 3 + TS（185 个生产
 > `.ts`/`.vue`）、`apps/desktop`（Tauri 2 无 IPC 壳）、部署（Dockerfile / compose / nginx TLS）、
 > CI / 供应链（GitHub Actions + GitLab CI）、`.env` 与 Git 历史泄露面。
@@ -41,6 +46,11 @@
 | 限流可观测 | 信息（加固） | 限流参数无运行时指标 | ✅ 已修（新增 rpm / burst gauge） |
 | R4 | 低（限流残余面） | 限流固定 120 req/min · 突发 30 且按**单 IP** 计数（`apps/server/internal/handler/ratelimit.go:13`）——IPv6 攻击者可用 /64 内海量地址各自获桶 | ✅ 已修（同日：新增 `S3C_RATE_LIMIT_RPM` / `S3C_RATE_LIMIT_BURST` 可配置 + IPv6 按 /64 前缀聚合） |
 | R5 | 信息（行为惊讶） | `presign` 的 `expiresIn <= 0` 静默取 1h 而非 400（`apps/server/internal/handler/objects.go:428`）——非漏洞，仅行为惊讶 | ✅ 已修（同日：负数返回 400；`0` / 缺省仍默认 1h，`multipart/part` 同口径） |
+| R6 | 低（越权面） | `accounts` 作用域只按路径 `{id}` 判定，迁移 / 计划 body 与已存计划里的账号 id 落空——`accounts:[A]` 的 token 可让服务端用 B 的存储凭据执行迁移（越权读写） | ✅ 已修（同日第二轮：`requestAccountRefs` 纳入判定，越界 `403`） |
+| R7 | 低（信息暴露） | `GET /api/schedules` 对受限 token 返回全部计划，越界计划的桶名 / 账号 id 可见（不可触发 / 删除） | ✅ 已修（同日第二轮：`schedulesInScope` 按作用域裁剪） |
+| R8 | 低（防御纵深） | nginx 层未设 `X-Content-Type-Options: nosniff`；直连静态文件或未来新增 vhost 会绕过后端中间件兜底 | ✅ 已修（base / TLS nginx 配置补 `always` 头 + 门禁） |
+| R9 | 低（防御纵深） | GitLab CI 用 `curl ... | bash` 执行 NodeSource 安装脚本，远端脚本内容未被校验 | ✅ 已修（固定 Node 版本压缩包 + 官方 SHA256 校验 + 门禁） |
+| R10 | 低（防御纵深） | 下载文件名取自 S3 key 最后一段并直接交给 `showSaveFilePicker` / anchor `download` | ✅ 已修（保存前清洗控制字符、路径分隔符、非法文件名字符并限长） |
 
 ## 3. 第一性原理核验（资产 → 边界 → 控制）
 
@@ -73,7 +83,7 @@
 
 - Tauri 零 IPC：`main.rs` 无 `invoke_handler` / 自定义 command、capabilities 空权限、`withGlobalTauri: false`（`apps/desktop/src-tauri/src/main.rs`）——本地命令面不存在，权限完全取决于同源策略 + 服务端鉴权。
 - 容器非 root（`USER app`）、镜像按 digest pin、端口默认仅回环发布、`S3C_TOKEN` / `S3C_STORE_KEY` 缺失直接启动失败（`docker-compose.yml:43`）；`ReadHeaderTimeout 15s` 防慢速请求头。
-- CI 供应链：GitHub Actions 全部 `uses:` pin 完整 commit SHA；CodeQL（Go + TS）、govulncheck、gosec、dependency-review、Scorecard 均在流水线内。
+- CI 供应链：GitHub Actions 全部 `uses:` pin 完整 commit SHA；GitLab 需要 Node 的组合工具链 job 下载固定版本官方压缩包并校验 SHA256；CodeQL（Go + TS）、govulncheck、gosec、dependency-review、Scorecard 均在流水线内。
 
 ## 4. 残余风险与建议
 
@@ -81,6 +91,8 @@
 2. ~~health `version` 信息暴露 / metrics 匿名面~~（R2a / R2b，已同日闭环）。
 3. ~~IPv6 限流按 /64 聚合（R4）~~（已同日闭环，见 §2 状态表与 [`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]`）。
 4. R3a 代码已收紧，须按 [`AI_POLICY.md`](AI_POLICY.md) §3 完成人类专家复核；复核通过后本快照方可归档。
+5. ~~`accounts` 作用域对迁移 / 计划账号引用的越权面 + 计划列表信息暴露~~（R6 / R7，同日第二轮闭环，证据见 [`FEATURES.md`](FEATURES.md) §CT）。
+6. ~~nginx `nosniff`、GitLab NodeSource 安装脚本、下载文件名清洗~~（R8–R10，防御纵深闭环）。
 
 ## 5. 验证与未复跑项披露
 

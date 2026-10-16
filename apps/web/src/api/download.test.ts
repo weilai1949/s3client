@@ -3,10 +3,28 @@ import {
   DOWNLOAD_PART_SIZE,
   PARALLEL_DOWNLOAD_MIN_BYTES,
   downloadObjectToDisk,
+  sanitizeDownloadFilename,
 } from './download'
 
 // 并行分段的最小可测尺寸：恰好 4 段（16 MiB / 4 MiB）。
 const SIZE = PARALLEL_DOWNLOAD_MIN_BYTES
+
+describe('sanitizeDownloadFilename', () => {
+  it('清洗 S3 key 最后一段中的控制字符、路径分隔符与非法文件名字符', () => {
+    expect(sanitizeDownloadFilename(' bad/\u0007name\n')).toBe('bad__name_')
+    expect(sanitizeDownloadFilename('\u0007<a>:"|?*\\')).toBe('__a_______')
+  })
+
+  it('清洗后为空或点路径时使用安全回退名', () => {
+    expect(sanitizeDownloadFilename('')).toBe('download')
+    expect(sanitizeDownloadFilename('.')).toBe('download')
+    expect(sanitizeDownloadFilename('..')).toBe('download')
+  })
+
+  it('限制保存名长度为 255', () => {
+    expect(sanitizeDownloadFilename('x'.repeat(300))).toHaveLength(255)
+  })
+})
 
 const baseReq = {
   accountId: 'acc1',

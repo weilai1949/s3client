@@ -89,6 +89,10 @@ variables:
   # 本地亦可把上述键写入 .gitlab-ci-local-variables.yml（见同名 .example；已 gitignore）。
   GOPROXY: "https://proxy.golang.org,direct"
   NPM_REGISTRY: "https://registry.npmjs.org"
+  # Node 26 + pnpm 9.15.0（与 .web-base / GitHub 侧一致）。官方压缩包用固定版本 +
+  # SHA256 校验，取代 `curl ... | bash` 的远端安装脚本。
+  NODE_VERSION: "26.10.0"
+  NODE_SHA256: "ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022"
   PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
   # C2（评审 2026-10-09 §3）：默认 GIT_DEPTH=20 是浅克隆、不带旧 tag——根包
   # changelog_tag_gate 刻意不调 git 命令、直读 .git/refs/tags 与 .git/packed-refs，
@@ -424,12 +428,10 @@ desktop-build:
     PNPM_STORE_DIR: "$CI_PROJECT_DIR/.pnpm-store"
   before_script:
     - apt-get update
-    - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf curl
-    # Node 26 + pnpm 9.15.0（对应 actions/setup-node@v4 + pnpm/action-setup@v4）
-    # setup_26.x 只负责加 apt 仓库（该路径本身没有精确版本），安装必须显式 pin patch，
-    # 否则同一 commit 在不同日期会装出不同 Node。版本来自 NodeSource nodistro 仓库。
-    - curl -fsSL https://deb.nodesource.com/setup_26.x | bash -
-    - apt-get install -y nodejs=26.10.0-1nodesource1
+    - apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf curl xz-utils
+    - curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"
+    - echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c -
+    - tar -C /usr/local --strip-components=1 -xJf /tmp/node.tar.xz
     - corepack enable
     - corepack prepare pnpm@9.15.0 --activate
   script:
@@ -566,7 +568,7 @@ playwright-e2e:
 #     实测不可达（同 rustfs-e2e 的教训）；故用脚本的 `--no-rustfs` + `RUSTFS_ENDPOINT` 复用。
 #   - **必须**给 service 配 `RUSTFS_CORS_ALLOWED_ORIGINS`：浏览器直传是跨源请求，
 #     放行页面 Origin（http://127.0.0.1:5000）才不会被拦下。
-#   - 本 job 同时需要 Go 与 Node：用 golang bookworm 镜像 + NodeSource 装 Node（照搬 desktop-build）。
+#   - 本 job 同时需要 Go 与 Node：用 golang bookworm 镜像 + 官方 Node 压缩包（固定版本 + SHA256）。
 e2e-real:
   extends: .e2e-real-trigger
   stage: e2e
@@ -606,10 +608,10 @@ e2e-real:
       - .pnpm-store/
   before_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends git ca-certificates curl
-    # Node 26 + pnpm 9.15.0（与 .web-base / GitHub 侧一致，精确 patch pin）
-    - curl -fsSL https://deb.nodesource.com/setup_26.x | bash -
-    - apt-get install -y nodejs=26.10.0-1nodesource1
+    - apt-get install -y --no-install-recommends git ca-certificates curl xz-utils
+    - curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"
+    - echo "${NODE_SHA256}  /tmp/node.tar.xz" | sha256sum -c -
+    - tar -C /usr/local --strip-components=1 -xJf /tmp/node.tar.xz
     - corepack enable
     - corepack prepare pnpm@9.15.0 --activate
     - pnpm config set store-dir "$PNPM_STORE_DIR"

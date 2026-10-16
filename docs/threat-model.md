@@ -23,13 +23,14 @@
 
 - `readonly`：仅放行 GET / HEAD；写方法（含能铸造写 URL 的预签名 `POST`）一律 403；
 - `prefixes`：`"<bucket>"` 或 `"<bucket>/<key前缀>"`，请求涉及的桶/键（query 或 JSON body）与列表 `prefix` 必须落在许可内；桶级操作需该桶的整桶授权；body 无法解析/超限时 fail-closed；计划任务的 `run`/`DELETE` 无 body，按**已存计划的源/目标桶与前缀**注入引用判定（越界计划不可触发 / 删除）；
-- `accounts`：仅允许路径 `{id}` 命中的账号；`POST /api/accounts`（创建账号，无 `{id}` 可判）对 `accounts` 作用域 token 一律 403（`reason=accounts_create`，KNOWN_ISSUES #81）——创建新账号不属于「访问被授权账号」，会凭空铸造凭证面；
+- `accounts`：仅允许路径 `{id}` **以及请求引用的账号 id**（迁移 / 计划 body 的 `sourceAccountId` / `targetAccountId`，与 `run` / `DELETE` / `PUT` 按已存计划注入的两个账号 id）命中的账号；`POST /api/accounts`（创建账号，无 `{id}` 可判）对 `accounts` 作用域 token 一律 403（`reason=accounts_create`，KNOWN_ISSUES #81）——创建新账号不属于「访问被授权账号」，会凭空铸造凭证面；
 - 端点级闸（评审 2026-10-09 R1/R2，请求不携带可判定引用、通用判定落空的端点）：`POST /api/accounts/preview-buckets`（自带 endpoint/凭据由服务端拨号的 SSRF 拨号面）对声明了 `readonly` / `prefixes` / `accounts` 任一的 token 一律 403（`reason=preview_buckets`，仅 `expiresAt` 不受影响）；`/api/migrate/jobs*`（任务记录不带归属、无法按桶细判）对声明了 `prefixes` / `accounts` 的 token 一律 403（`reason=migrate_jobs`，`readonly` 读放行）；
 - `expiresAt`：过期后 401（审计 `reason=token_expired`）。
 
 未在表中登记的 token **仍是全权**（向后兼容）。非法配置（未知字段 / 未登记 token / 空元素 / 坏时间）**拒绝启动**，防止「以为限权、实际全权」。拒绝写审计事件 `auth.scope_denied`（`reason` = `readonly` / `prefix` / `account` / `unparsable_body` / `preview_buckets` / `migrate_jobs` / `accounts_create`），**审计与响应均不含 token 明文**。配置 SSOT 见 [`CONFIGURATION.md`](CONFIGURATION.md)。
 
-> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表、**计划列表（`GET /api/schedules`，可读到越界计划的桶名，但不可触发 / 删除）**不受其约束；`accounts` 作用域按路径 `{id}` 判定（列表 `GET /api/accounts` 仍放行，返回不含 `SecretKey` 的 `AccountView`，但创建账号 `POST /api/accounts` 已拒），迁移 / 计划 body 里的账号 id 不受其约束（与 `prefixes` 按 body 桶判定不同）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
+> 残留（有意）：作用域是「token 级粗粒度」而非 S3 IAM——`prefixes` 只约束请求显式给出的桶/键，桶列表（`GET /api/accounts/{id}/buckets`）、账号列表不受其约束；`accounts` 作用域约束路径 `{id}` 与请求引用的账号 id（列表 `GET /api/accounts` 仍放行，返回不含 `SecretKey` 的 `AccountView`，但创建账号 `POST /api/accounts` 已拒）；需要更细粒度授权时应在账号侧用 S3 策略收敛。
+> **2026-10-15 收口两条残留**：① 计划列表（`GET /api/schedules`）改为按作用域裁剪，越界计划的桶名 / 账号 id 不再可见（`readonly` 与全权 token 不变）；② 迁移 / 计划 body 与已存计划里的账号 id 纳入 `accounts` 判定（原「body 账号 id 不受约束」使 `accounts:[A]` 的 token 能让服务端用 B 的存储凭据执行迁移）。证据与用例见 [FEATURES.md](FEATURES.md) §CT。
 
 ### 边界 B：预签名 URL 直传
 

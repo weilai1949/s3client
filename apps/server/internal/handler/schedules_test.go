@@ -838,14 +838,22 @@ func TestSchedulesScopePrefixes(t *testing.T) {
 		t.Errorf("越界桶创建 = %d, want 403", rr.Code)
 	}
 	// 界内桶创建 → 放行。
-	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules",
+	rrIn := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules",
 		schedBody(e.acc.ID, e.acc.ID, func(m map[string]any) {
 			m["targetAccountId"] = e.acc.ID
 			m["sourceBucket"] = "in-bucket"
 			m["targetBucket"] = "in-bucket"
-		})); rr.Code != http.StatusCreated {
-		t.Errorf("界内桶创建 = %d, want 201; body=%s", rr.Code, rr.Body)
+		}))
+	if rrIn.Code != http.StatusCreated {
+		t.Fatalf("界内桶创建 = %d, want 201; body=%s", rrIn.Code, rrIn.Body)
 	}
+	var inScopeResp struct {
+		Schedule service.Schedule `json:"schedule"`
+	}
+	if err := json.Unmarshal(rrIn.Body.Bytes(), &inScopeResp); err != nil {
+		t.Fatalf("decode 界内计划: %v", err)
+	}
+	inScopeID := inScopeResp.Schedule.ID
 	// 运行越界计划 → 403（计划桶引用注入 scope 判定）。
 	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules/"+created.ID+"/run", ""); rr.Code != http.StatusForbidden {
 		t.Errorf("运行越界计划 = %d, want 403; body=%s", rr.Code, rr.Body)
@@ -854,9 +862,121 @@ func TestSchedulesScopePrefixes(t *testing.T) {
 	if rr := e.request(scopeTokReadonly, http.MethodDelete, "/api/schedules/"+created.ID, ""); rr.Code != http.StatusForbidden {
 		t.Errorf("删除越界计划 = %d, want 403", rr.Code)
 	}
-	// GET 列表：无桶引用 → 放行（与桶列表同类残留，见 threat-model）。
-	if rr := e.request(scopeTokReadonly, http.MethodGet, "/api/schedules", ""); rr.Code != http.StatusOK {
-		t.Errorf("GET 列表 = %d, want 200（残留已文档化）", rr.Code)
+	// GET 列表：仍 200，但**只返回界内计划**——越界计划的桶名属信息泄露面
+	// （threat-model 边界A，2026-10-15 收口）。
+	rr = e.request(scopeTokReadonly, http.MethodGet, "/api/schedules", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET 列表 = %d, want 200", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), created.ID) {
+		t.Errorf("受限 token 的计划列表泄露越界计划 %s：%s", created.ID, rr.Body)
+	}
+	if !strings.Contains(rr.Body.String(), inScopeID) {
+		t.Errorf("受限 token 的计划列表丢了界内计划 %s：%s", inScopeID, rr.Body)
+	}
+}
+
+// ---- accounts 作用域：计划 body 与已存计划的账号引用（2026-10-15）----
+
+// TestScopeAccountsConstrainScheduleAccountRefs：`accounts` 作用域对计划的约束与
+// `prefixes` 对称——请求体的 sourceAccountId / targetAccountId、以及 run / DELETE
+// （无 body）按**已存计划**注入的两个账号 id 都必须落在许可集合内。否则限权 token
+// 可建 / 触发引用越界账号的定时同步，服务端持续用越界账号的存储凭据搬数据（越权写）。
+func TestScopeAccountsConstrainScheduleAccountRefs(t *testing.T) {
+	e := newScopeEnv(t, nil)
+	other := newScopedAccount(t, e, "other-acc", "other-bucket")
+	e.h.SetTokenScopes(func(tok string) (config.TokenScope, bool) {
+		if tok == scopeTokReadonly {
+			return config.TokenScope{Accounts: []string{e.acc.ID}}, true
+		}
+		return config.TokenScope{}, false
+	})
+	// 全权 token 先建一个引用越界账号的计划（run / DELETE 无 body，靠已存计划判定）。
+	rr := e.request(scopeTokUnlisted, http.MethodPost, "/api/schedules", schedBody(e.acc.ID, other.ID, nil))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("全权创建越界计划 = %d; body=%s", rr.Code, rr.Body)
+	}
+	var created struct {
+		Schedule service.Schedule `json:"schedule"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// body 账号越界 → 403。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules", schedBody(e.acc.ID, other.ID, nil)); rr.Code != http.StatusForbidden {
+		t.Errorf("创建引用越界账号的计划 = %d, want 403", rr.Code)
+	}
+	// 界内创建 → 201。
+	inScope := schedBody(e.acc.ID, e.acc.ID, nil)
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules", inScope); rr.Code != http.StatusCreated {
+		t.Errorf("创建界内计划 = %d, want 201; body=%s", rr.Code, rr.Body)
+	}
+	// run / DELETE 越界计划 → 403（已存计划的账号注入）。
+	if rr := e.request(scopeTokReadonly, http.MethodPost, "/api/schedules/"+created.Schedule.ID+"/run", ""); rr.Code != http.StatusForbidden {
+		t.Errorf("运行越界计划 = %d, want 403", rr.Code)
+	}
+	if rr := e.request(scopeTokReadonly, http.MethodDelete, "/api/schedules/"+created.Schedule.ID, ""); rr.Code != http.StatusForbidden {
+		t.Errorf("删除越界计划 = %d, want 403", rr.Code)
+	}
+	// PUT：body 界内、但已存计划引用越界账号 → 403（同一注入逻辑）。
+	if rr := e.request(scopeTokReadonly, http.MethodPut, "/api/schedules/"+created.Schedule.ID, inScope); rr.Code != http.StatusForbidden {
+		t.Errorf("更新越界计划 = %d, want 403", rr.Code)
+	}
+}
+
+// TestSchedulesListHidesOutOfScopeSchedules：受限 token 的计划列表按作用域裁剪——
+// 越界计划的桶名 / 账号 id 是信息泄露面；全权 token 仍看到全部。
+func TestSchedulesListHidesOutOfScopeSchedules(t *testing.T) {
+	e := newScopeEnv(t, nil)
+	other := newScopedAccount(t, e, "other-acc", "other-bucket")
+	e.h.SetTokenScopes(func(tok string) (config.TokenScope, bool) {
+		if tok == scopeTokReadonly {
+			return config.TokenScope{Accounts: []string{e.acc.ID}}, true
+		}
+		return config.TokenScope{}, false
+	})
+	// 全权 token 建越界计划（引用 other）。
+	rr := e.request(scopeTokUnlisted, http.MethodPost, "/api/schedules", schedBody(other.ID, other.ID, nil))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("全权创建越界计划 = %d; body=%s", rr.Code, rr.Body)
+	}
+	var outScope struct {
+		Schedule service.Schedule `json:"schedule"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &outScope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// 受限 token 建界内计划。
+	rr = e.request(scopeTokReadonly, http.MethodPost, "/api/schedules", schedBody(e.acc.ID, e.acc.ID, nil))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("创建界内计划 = %d; body=%s", rr.Code, rr.Body)
+	}
+	var inScope struct {
+		Schedule service.Schedule `json:"schedule"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &inScope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// 受限 token：只见界内计划。
+	rr = e.request(scopeTokReadonly, http.MethodGet, "/api/schedules", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("受限 token 列计划 = %d, want 200", rr.Code)
+	}
+	if strings.Contains(rr.Body.String(), outScope.Schedule.ID) {
+		t.Errorf("受限 token 的计划列表泄露越界计划 %s：%s", outScope.Schedule.ID, rr.Body)
+	}
+	if !strings.Contains(rr.Body.String(), inScope.Schedule.ID) {
+		t.Errorf("受限 token 的计划列表丢了界内计划 %s：%s", inScope.Schedule.ID, rr.Body)
+	}
+	// 全权 token：两个都在（未登记 = 全权，向后兼容）。
+	rr = e.request(scopeTokUnlisted, http.MethodGet, "/api/schedules", "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("全权列计划 = %d, want 200", rr.Code)
+	}
+	for _, id := range []string{outScope.Schedule.ID, inScope.Schedule.ID} {
+		if !strings.Contains(rr.Body.String(), id) {
+			t.Errorf("全权计划列表缺 %s：%s", id, rr.Body)
+		}
 	}
 }
 

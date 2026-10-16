@@ -1,5 +1,5 @@
 import { opPath } from './api/http'
-import { downloadObjectToDisk, PARALLEL_DOWNLOAD_MIN_BYTES } from './api/download'
+import { downloadObjectToDisk, PARALLEL_DOWNLOAD_MIN_BYTES, sanitizeDownloadFilename } from './api/download'
 
 /** 共享的「服务端代理 / 下载 URL」构造器（安全预览与下载统一入口）。 */
 
@@ -70,6 +70,7 @@ export async function downloadProxyObject(
   filename: string,
   sizeBytes?: number,
 ): Promise<void> {
+  filename = sanitizeDownloadFilename(filename)
   if (sizeBytes !== undefined && sizeBytes >= PARALLEL_DOWNLOAD_MIN_BYTES) {
     await downloadObjectToDisk({ ...req, size: sizeBytes, filename })
     return

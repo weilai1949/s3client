@@ -110,6 +110,22 @@ describe('downloadProxyObject', () => {
     expect(saved).toEqual([])
   })
 
+  it('下载文件名清洗控制字符、路径分隔符并限制长度', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['x']) })
+
+    const malicious = `bad/${'\u0007'}name${'\n'}` + 'x'.repeat(300)
+    await downloadProxyObject({ ...baseReq, token: 'tok' }, malicious)
+
+    const got = saved[0]?.download ?? ''
+    expect(got).toBe('bad__name_' + 'x'.repeat(245))
+    for (const banned of ['\u0007', '\n', '/', '\\', '<', '>', ':', '"', '|', '?', '*']) {
+      expect(got).not.toContain(banned)
+    }
+    expect(got.length).toBeLessThanOrEqual(255)
+  })
+
   it('已知大小达到阈值 → 委托有界并发 Range 分段（ADR-009）', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
     fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
