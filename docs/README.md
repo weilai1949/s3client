@@ -62,7 +62,7 @@
 | 我想…… | 看哪里 | 一句话 |
 |---|---|---|
 | 看已经做了什么 | [`FEATURES.md`](FEATURES.md) | 产品能力总览 + 已完成修复 / 优化的证据台账（**单一事实来源**） |
-| 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，含编号台账与闭环凭证） |
+| 看还有哪些问题 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | 缺陷 / 外部阻塞 / 技术债（**唯一来源**，只收**未闭环**项；已闭环编号索引在文件头部，闭环证据在 [`FEATURES.md`](FEATURES.md) / [`../CHANGELOG.md`](../CHANGELOG.md)） |
 | 看下一步做什么 | [`ROADMAP.md`](ROADMAP.md) | 版本规划与里程碑；功能候选池在 §三 |
 | 看发版历史 | [`../CHANGELOG.md`](../CHANGELOG.md) | Keep a Changelog 格式的逐条发布记录 |
 | 看最近一次全仓安全评审 | [`code-review-2026-10-15.md`](code-review-2026-10-15.md) | **2026-10-15 全仓安全评审快照**（结论 **Approve**：未发现高危 / 中危；R1 威胁模型 XFF 表述漂移**同日修正**，R2–R5 为低危 / 观察项并登记处置口径）：第一性原理（资产 → 信任边界 → STRIDE）+ 逐条 `file:line` 代码级核验 + 工具实测（govulncheck / pnpm audit / cargo audit）+ 未复跑项披露。⚠️ **该 Approve 结论已被同日对抗性渗透测试证伪** → 见下一行 |
