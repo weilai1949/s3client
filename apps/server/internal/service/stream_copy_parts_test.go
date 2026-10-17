@@ -16,14 +16,14 @@ func TestMaxMultipartPartsIsProtocolLimit(t *testing.T) {
 	}
 }
 
-// TestMultipartStreamCopyPartSizeIs64MB 钉住 640GB 上限的**另一半**（KNOWN_ISSUES #63 的证据）：
-// 单对象流式复制上限 = 分段大小 × 段号上限，段数由上面的测试钉死，分段默认值在此钉死——
-// 两者共同构成 64MB × 10000 = 640GB 的刻意取舍。放大分段会按比例放大分段缓冲
-// （一块即 64MB，受 512MB 容器预算约束，见 stream_copy.go 的 maxIdlePartBufs 注释），
+// TestMultipartStreamCopyPartSizeIs105MB 钉住 1024GB 上限（原 640GB，KNOWN_ISSUES #63 已闭环）的
+// **另一半**：单对象流式复制上限 = 分段大小 × 段号上限，段数由上面的测试钉死，分段默认值在此钉死——
+// 两者共同构成 105MiB × 10000 段 = 1025GiB（≥1TiB，用户口径 1024GB）。放大分段会按比例放大
+// 分段缓冲（一块即 105MiB，受 1G 容器预算约束，见 stream_copy.go 的 maxIdlePartBufs 注释），
 // 因此改动本默认值必须先重新过内存预算这一关，不能顺手改。
-func TestMultipartStreamCopyPartSizeIs64MB(t *testing.T) {
-	if multipartPartSize != 64<<20 {
-		t.Fatalf("multipartPartSize = %d, want %d (64MB)", multipartPartSize, 64<<20)
+func TestMultipartStreamCopyPartSizeIs105MB(t *testing.T) {
+	if multipartPartSize != 105<<20 {
+		t.Fatalf("multipartPartSize = %d, want %d (105MiB)", multipartPartSize, 105<<20)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestMultipartStreamCopyRejectsPartOverLimit(t *testing.T) {
 }
 
 // TestMultipartStreamCopyByteCeiling 字节口径复刻生产边界（review Nit：
-// stream_copy 固定 64MB × 10000 段 = 640GB 上限）。用 4B/段 × 2 段精确验证：
+// stream_copy 固定 105MiB × 10000 段 = 1025GiB 上限）。用 4B/段 × 2 段精确验证：
 // 正好用满全部段的对象合法完成；多一个字节即在上传前拒绝并 abort，绝不静默截断。
 func TestMultipartStreamCopyByteCeiling(t *testing.T) {
 	oldLimit, oldSize := maxMultipartParts, multipartPartSize

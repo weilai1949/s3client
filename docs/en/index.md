@@ -378,14 +378,19 @@ The side-by-side table and executor differences (incl. Trivy DB mirror variables
 
 ## Known limitations
 
-- **640 GB per object on cross-endpoint migration** (`64 MB × 10 000 parts`): cross-endpoint copy streams
-  `GetObject` → `PutObject` (`service.StreamCopy`), and part numbers are capped by S3's 10 000-part limit —
-  **oversized objects are explicitly rejected and aborted before parts run out, never silently truncated**.
-  The buffer is not scaled up because that would break the container's 512 MB memory budget. Rationale in
-  the comments of [`apps/server/internal/service/stream_copy.go`](../../apps/server/internal/service/stream_copy.go);
-  registered as [docs/KNOWN_ISSUES.md](../KNOWN_ISSUES.md) **#63** (decided ➖, keep as is).
-- The **single source of truth for known limitations** is [docs/KNOWN_ISSUES.md](../KNOWN_ISSUES.md);
-  this section only mirrors the user-visible one above.
+- **1024 GB per object on cross-endpoint migration** (`105 MiB × 10 000 parts = 1025 GiB ≥ 1 TiB`, applies only
+  when the source object size is unknown): cross-endpoint copy streams `GetObject` → `PutObject`
+  (`service.StreamCopy`), and part numbers are capped by S3's 10 000-part limit — **oversized objects are
+  explicitly rejected and aborted before parts run out, never silently truncated**. With a known size the copy
+  goes unbuffered direct with parts scaled up to 5 GiB (S3's 5 TiB single-object cap), and same-endpoint large
+  objects go `UploadPartCopy` — neither is subject to this limit. The buffer is not scaled without bound because
+  each part must be resident in memory: part size is bound to the container's 1 GB memory budget (one part
+  buffer = 105 MiB; worst case in flight = 4 × 105 MiB = 420 MiB). Rationale in
+  the comments of [`apps/server/internal/service/stream_copy.go`](../../apps/server/internal/service/stream_copy.go)
+  and [ADR-014](../decisions/0014-stream-copy-no-part-buffer.md) `Update (2026-10-16)`; the former 640 GB cap
+  (KNOWN_ISSUES **#63**) is closed — evidence in CHANGELOG `[Unreleased]`.
+- The **single source of truth for defects / blockers / tech debt** is [docs/KNOWN_ISSUES.md](../KNOWN_ISSUES.md);
+  this section mirrors the user-visible behavior limits above (deliberate capacity caps point to ADR / CHANGELOG).
 
 ## Security notes
 

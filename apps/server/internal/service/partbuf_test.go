@@ -19,7 +19,7 @@ func drainPartBufPool() {
 }
 
 // TestPartBufReuse 归还后的分段缓冲应被复用（同一底层数组），
-// 避免每个大对象流式复制都新分配一份 64MB。
+// 避免每个大对象流式复制都新分配一份 105MiB。
 func TestPartBufReuse(t *testing.T) {
 	// 使用一个其它测试不会用到的独特尺寸，保证池中不会有更大/同尺寸的干扰项。
 	const size = int64(1<<20 + 12345)
@@ -101,7 +101,7 @@ func TestPartBufReleaseIsBounded(t *testing.T) {
 }
 
 // TestMultipartStreamCopyReleasesBufferOnAbort 出错/abort 返回路径也必须归还分段缓冲，
-// 否则「每失败一次大对象复制」就永久漏掉一块 64MB。
+// 否则「每失败一次大对象复制」就永久漏掉一块 105MiB。
 func TestMultipartStreamCopyReleasesBufferOnAbort(t *testing.T) {
 	drainPartBufPool()
 	old := multipartPartSize

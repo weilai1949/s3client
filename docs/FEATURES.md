@@ -6,7 +6,7 @@
 > - 已知问题：[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)（缺陷 / 阻塞 / 技术债） · 迭代方向：[`ROADMAP.md`](ROADMAP.md) §三 · 发版历史：[`CHANGELOG.md`](../CHANGELOG.md) · 综合评估：[`archive/assessment.md`](archive/assessment.md)
 > - 接口细节：[`api.md`](api.md) · 错误约定：[`errors.md`](errors.md) · 开发规范：[`DEVELOPMENT.md`](DEVELOPMENT.md) · 安全设计：[`threat-model.md`](threat-model.md) · Nginx 部署：[`deploy/nginx/README.md`](../deploy/nginx/README.md)
 >
-> 最后更新：2026-10-16（`v1.0.0` 之后的 Unreleased 区间）。**逐批次索引见下方[§二](#二已完成修复与优化)（8 个主题区块 · 103 行逐批索引）**，逐批明细证据表见 [`BATCHES.md`](BATCHES.md)（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CR（O1–O3 闭环 + 门禁全量实跑全绿 + `changelog_tag` 门禁克隆口径校准）· §CS（安全评审 R2a/R2b/R3a + CSP 配置校验 + 限流可观测收口）· §CT（作用域对迁移 / 计划的账号引用 + 计划列表裁剪）· §CU（防御纵深：nginx / GitLab Node / 下载名）· §CV（对抗性渗透测试 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）· §CW（`prefixes` 必须与 `accounts` 同时声明）· **§CX**（2026-10-16 渗透测试 **P-3..P-15** 收口 + SAST 台账刷新为 20 条）· **§CY**（2026-10-16 大对象迁移无段缓冲直传与同端点分段落拷 ADR-014：`UploadPart` 显式长度 + 段级 Range 重试 + `UploadPartCopy`，#63 收窄至「大小未知」路径）。
+> 最后更新：2026-10-16（`v1.0.0` 之后的 Unreleased 区间）。**逐批次索引见下方[§二](#二已完成修复与优化)（8 个主题区块 · 104 行逐批索引）**，逐批明细证据表见 [`BATCHES.md`](BATCHES.md)（本页头不再重复枚举，避免同一份清单两处维护）；最近批次：§CR（O1–O3 闭环 + 门禁全量实跑全绿 + `changelog_tag` 门禁克隆口径校准）· §CS（安全评审 R2a/R2b/R3a + CSP 配置校验 + 限流可观测收口）· §CT（作用域对迁移 / 计划的账号引用 + 计划列表裁剪）· §CU（防御纵深：nginx / GitLab Node / 下载名）· §CV（对抗性渗透测试 High 收口：作用域零引用 fail-closed + 账号写入面 + body 解析器归一）· §CW（`prefixes` 必须与 `accounts` 同时声明）· **§CX**（2026-10-16 渗透测试 **P-3..P-15** 收口 + SAST 台账刷新为 20 条）· **§CY**（2026-10-16 大对象迁移无段缓冲直传与同端点分段落拷 ADR-014：`UploadPart` 显式长度 + 段级 Range 重试 + `UploadPartCopy`，#63 收窄至「大小未知」路径）· **§CZ**（2026-10-16 未知大小路径单对象上限 640GB → 1024GB：段长 64MiB → 105MiB + 容器预算 512M → 1G，#63 闭环移除）。
 
 ## 目录
 
@@ -20,7 +20,7 @@
 - [二、已完成修复与优化](#二已完成修复与优化)
   - 1. 建档、评估与历史台账 · 2. 稳定版修复与 KNOWN_ISSUES 收口 · 3. 审查与全仓评审处置 · 4. ROADMAP 功能与能力收口
   - 5. 文档、导航与代理治理 · 6. 门禁与质量机械化 · 7. 安全、供应链与加固 · 8. 工具链与三端体验优化
-  - 逐批一行索引（§A–§CY 共 103 批），明细证据表见 [`BATCHES.md`](BATCHES.md)
+  - 逐批一行索引（§A–§CZ 共 104 批），明细证据表见 [`BATCHES.md`](BATCHES.md)
 - [三、质量与覆盖率现状](#三质量与覆盖率现状)
 
 ---
@@ -177,7 +177,7 @@
 
 > 状态图例：✅ 已完成 · ➖ 已评估 / 无需改动 · ⏳ 说明见备注。
 >
-> 本节是 **103 个批次（§A–§CY）的区块索引**：每批一行（批次 · 日期 · 要点）。逐批明细证据表（`file:line` 改动点、门禁实跑数字、测试与文档同步记录）已外移到 [`BATCHES.md`](BATCHES.md) 的**同字母**章节——历史引用「`FEATURES.md §X`」即指本节对应索引行，批次互引（如「见 §S」）在 [`BATCHES.md`](BATCHES.md) 内按字母解析。
+> 本节是 **104 个批次（§A–§CZ）的区块索引**：每批一行（批次 · 日期 · 要点）。逐批明细证据表（`file:line` 改动点、门禁实跑数字、测试与文档同步记录）已外移到 [`BATCHES.md`](BATCHES.md) 的**同字母**章节——历史引用「`FEATURES.md §X`」即指本节对应索引行，批次互引（如「见 §S」）在 [`BATCHES.md`](BATCHES.md) 内按字母解析。
 >
 > 历史批次头注中的「仍开放 / 仍未处置」均为**写作时点**状态、已带日期锚（2026-10-16 复核：见 §P / §Q / §CA 三行）。
 
@@ -323,6 +323,7 @@
 | [§CM](BATCHES.md#cm-2026-10-12-appsdesktop-优化评审批次d1--o1o6--g1) | 2026-10-12 | apps/desktop 优化评审批次（D1 + O1–O6 + G1） |
 | [§CN](BATCHES.md#cn-2026-10-12-appsserver-优化评审-s1s5-闭环批次) | 2026-10-12 | apps/server 优化评审 S1–S5 闭环批次 |
 | [§CY](BATCHES.md#cy-2026-10-16-大对象迁移无段缓冲直传与同端点分段落拷adr-014) | 2026-10-16 | 大对象迁移无段缓冲直传与同端点分段落拷（ADR-014）：`UploadPart` 显式长度 + 段级 Range 重试 + `UploadPartCopy`；#63 收窄至「大小未知」路径 |
+| [§CZ](BATCHES.md#cz-2026-10-16-未知大小路径大对象上限提升至-1024gb-与容器内存预算-512m-抬至-1g) | 2026-10-16 | 未知大小路径单对象上限 640GB → 1024GB（段长 64MiB → 105MiB）+ 容器预算 512M → 1G（告警阈值 410 → 820MB）；KNOWN_ISSUES #63 闭环移除 |
 
 ## 三、质量与覆盖率现状
 

@@ -145,16 +145,17 @@ groups:
             先取证再重启）。查容器退出码与 dmesg 中的 OOM 记录。
 
       - alert: S3ClientMemoryNearLimit
-        # 410MB ≈ compose 为 server 设置的 512M 上限的 80%（docker-compose*.yml 的
-        # deploy.resources.limits.memory）。自定义部署请按自己的上限调整本阈值。
-        expr: s3c_go_memstats_alloc_bytes > 410 * 1024 * 1024
+        # 820MB ≈ compose 为 server 设置的 1G 上限的 80%（docker-compose*.yml 的
+        # deploy.resources.limits.memory；2026-10-16 随段长 64MiB → 105MiB 由 512M 抬到 1G，
+        # 阈值同步从 410MB 抬到 820MB）。自定义部署请按自己的上限调整本阈值。
+        expr: s3c_go_memstats_alloc_bytes > 820 * 1024 * 1024
         for: 10m
         labels:
           severity: warning
         annotations:
           summary: "Go 堆占用逼近容器内存上限"
           description: >-
-            当前 {{ $value | humanize1024 }}B。注意分段上传的缓冲是有界的（64MB/段），
+            当前 {{ $value | humanize1024 }}B。注意分段上传的缓冲是有界的（105MiB/段），
             堆增长通常来自并发迁移 / ZIP 打包；查在册异步任务数 s3c_jobs_active（OPERATIONS.md §4.3）。
 
       # ---- ROADMAP #18 新增：五个观测缺口补齐后的告警（2026-09-30） ----

@@ -370,12 +370,12 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "description": "Go 堆占用。s3c_go_memstats_alloc_bytes > 410MiB（容器 512M 上限的 80%）持续 10 分钟触发 S3ClientMemoryNearLimit。",
+      "description": "Go 堆占用。s3c_go_memstats_alloc_bytes > 820MiB（容器 1G 上限的 80%）持续 10 分钟触发 S3ClientMemoryNearLimit。",
       "fieldConfig": {
         "defaults": {
           "custom": {},
           "unit": "bytes",
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 429916160 } ] }
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 859832320 } ] }
         },
         "overrides": []
       },
@@ -385,7 +385,7 @@
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "s3c_go_memstats_alloc_bytes", "legendFormat": "heap alloc", "refId": "A" }
       ],
-      "title": "Go 堆占用（红线 410MiB）",
+      "title": "Go 堆占用（红线 820MiB）",
       "type": "timeseries"
     },
     {

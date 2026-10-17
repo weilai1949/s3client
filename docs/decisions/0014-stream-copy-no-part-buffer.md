@@ -71,3 +71,16 @@ RustFS 安全公告（CVE-2026-45042）的处置不在此列：受影响区间�
   - `UploadPartCopy` 用**目标端**凭证签名，源桶私有时会 403：迁移里必须保留回退流式的分支，否则跨账号整批失败（与 review R10 同因）。
   - 载荷完整性依赖 `UNSIGNED-PAYLOAD`：对 `http://` endpoint，完整性依赖 TLS，残留风险已在 [`threat-model.md`](../threat-model.md) 与 ADR-003 记录。
 - **后续**：已同步 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #63（限定为「大小未知」路径）、根 `README.md` 的「已知限制」、[`user-guide.md`](../user-guide.md) 与 `stream_copy.go` 注释。5TiB 量级无法在 CI 中直接测试，边界以注入的小段长覆盖（`stream_copy_direct_test.go` / `copy_large_test.go`），真实对端由 `internal/s3wrap/e2e_multipart_copy_test.go` 覆盖（流式 `UploadPart` 与 `UploadPartCopy`）。大对象压测与内存实测仍未做，已登记为 [`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) **#92**（含闭环方式：补基准与内存实测 + 真实大对象跑一次迁移）。
+
+## Update（2026-10-16）
+
+**决策不变**（无段缓冲直传、段级 Range 重试、`UploadPartCopy` 同端点分支均维持）。本篇 Context / Decision / Consequences 中的 640GB / 640GiB / 64MiB / 512MB 均为**变更前原文**（不改写历史结论），现行口径以本节为准。本节记录同日的三项后续变更：
+
+1. **「大小未知」路径段长 64MiB → 105MiB，单对象上限 640GiB → 1025GiB**（105MiB × 10000 段 = 1,101,004,800,000 B ≥ 1TiB，用户口径「1024GB」）。105MiB 是**覆盖 1TiB 所需的最小整数 MiB 段长**（1TiB ÷ 10000 = 104.86MiB，向上取整到整 MiB），故实际能力是 1025GiB 而非恰好 1024GiB。`multipartPartSize` 同时是 `planParts` 的段长下限，已知大小路径的下限随之 64MiB → 105MiB（只影响「`ceil(size/10000)` 低于下限」的小分段，5TiB 上限不受影响）。
+2. **容器内存预算 512M → 1G**（`docker-compose.yml` / `docker-compose.prod.yml` 的 server `deploy.resources.limits.memory`）。段缓冲内存账重算：单块分段缓冲 105MiB ≈ 预算 1/10；迁移并发 4 路最坏在飞 4 × 105MiB = 420MiB + 进程基线 < 1G（原 512M 预算下 420MiB 占 82%，会逼近 OOM）；`maxIdlePartBufs = 1` 不变（池常驻 105MiB）。Prometheus `S3ClientMemoryNearLimit` 阈值随之 410MB → 820MB（仍为容器上限的 80%），Grafana 红线与 [`OPERATIONS.md`](../OPERATIONS.md) §4.2 同步；ADR-009「调整内存预算前必须先重算常量」的义务已按其 `Update（2026-10-16）` 逐条复核。
+3. **[`KNOWN_ISSUES.md`](../KNOWN_ISSUES.md) #63 闭环移除**：640GB 上限已提升至 1024GB 口径，#63 计入该文件页头「已闭环编号」（编号不回收）。钉值证据为 `TestMultipartStreamCopyPartSizeIs105MB`（段长）+ `TestMaxMultipartPartsIsProtocolLimit`（10000 段协议上限）；同步面：根 `README.md`「已知限制」、[`user-guide.md`](../user-guide.md)、`docs/en/index.md`、[`OPERATIONS.md`](../OPERATIONS.md) §4.2 / §10.2、迁移面板 `migrate.limitHint`（中英）、[`CHANGELOG.md`](../../CHANGELOG.md) `[Unreleased]`、[`BATCHES.md`](../BATCHES.md) §CZ。
+
+### 本轮备选
+
+- **只抬容器上限、段长维持 64MiB**：被否——单对象上限 = 段长 × 10000，抬预算不改变上限。
+- **段长取 256MiB（上限约 2500GiB）**：被否——最坏在飞 4 × 256MiB = 1GiB 顶满新预算，仍需再抬到 2G+，运维与告警面成本高于 105MiB 方案；105MiB 既覆盖 1TiB 又是内存增量最小的选择。
