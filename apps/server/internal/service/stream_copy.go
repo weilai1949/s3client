@@ -14,17 +14,18 @@ import (
 // MaxSinglePutBytes 为 S3 PutObject / CopyObject 真实上限。
 const MaxSinglePutBytes int64 = 5_000_000_000
 
-// multipartPartSize 是**大小未知**时的分段大小（64MB），也是段长下限；var 以便单测注入小值。
+// multipartPartSize 是**大小未知**时的分段大小（105MiB），也是段长下限；var 以便单测注入小值。
 //
 // 它只约束「源以 chunked 返回、拿不到 Content-Length」的对象：那条路径必须整段驻留内存
-// （见 MultipartStreamCopy），段长放大即按比例放大缓冲，峰值受 512MB 容器预算约束
-// （见 maxIdlePartBufs），故该路径的单对象上限 = 64MB × 10000 = 640GB 是刻意取舍，
-// 已登记为 KNOWN_ISSUES #63（已决策 ➖）。
+// （见 MultipartStreamCopy），段长放大即按比例放大缓冲，峰值受 1G 容器预算约束
+// （见 maxIdlePartBufs），故该路径的单对象上限 = 105MiB × 10000 段 = 1025GiB
+// （≥1TiB，用户口径 1024GB）——原 640GB 上限（KNOWN_ISSUES #63）已于 2026-10-16 闭环提升，
+// 内存账同步把容器预算抬到 1G（docker-compose*.yml 的 deploy.resources.limits.memory）。
 //
 // **已知大小**的对象不走这条路径：StreamCopy 走 directMultipartCopy（ADR-014），
 // 段体是限定长度的流、不缓冲，段长由 planParts 随对象放大到 5GiB，上限由 S3 单对象
 // 5TiB 决定。同端点大对象走 copyLargeSameEndpoint（UploadPartCopy），同样不受此约束。
-var multipartPartSize int64 = 64 << 20
+var multipartPartSize int64 = 105 << 20
 
 // maxMultipartParts 是 S3 分段上传的段号上限（段号 1..10000，第 10000 段合法）。
 // var 以便单测注入小值精确覆盖边界；默认值即协议上限（测试断言其未被改动）。
@@ -32,15 +33,17 @@ var maxMultipartParts int32 = 10_000
 
 // maxIdlePartBufs 是池中可驻留的空闲分段缓冲数量上限。
 //
-// 内存预算：server 容器上限 512M（docker-compose*.yml 的 deploy.resources.limits.memory），
-// 一块分段缓冲即 64MB。因此刻意只保留 **1** 块：最坏情况下池的常驻开销 = 64MB
-// （容器预算的 1/8），且 channel 池不会被 GC 提前回收，必须用固定小上限来保证可证明的有界性。
-// 复用的收益来自「先后复制多个大对象」时省掉每对象一次 64MB 分配；
-// 峰值内存仍由同时在飞的 MultipartStreamCopy 数量决定（RunBatch / 迁移有界并发），池不放大峰值。
+// 内存预算：server 容器上限 1G（docker-compose*.yml 的 deploy.resources.limits.memory，
+// 2026-10-16 随段长 64MiB → 105MiB 由 512M 抬升，见 ADR-014 Update），一块分段缓冲即 105MiB
+// （约预算的 1/10）。因此刻意只保留 **1** 块：最坏情况下池的常驻开销 = 105MiB，且 channel 池
+// 不会被 GC 提前回收，必须用固定小上限来保证可证明的有界性。复用的收益来自「先后复制多个
+// 大对象」时省掉每对象一次 105MiB 分配；峰值内存仍由同时在飞的 MultipartStreamCopy 数量决定
+// （RunBatch / 迁移有界并发 = 4，最坏 4 × 105MiB = 420MiB + 基线，1G 预算内仍有 >500MiB 余量），
+// 池不放大峰值。
 const maxIdlePartBufs = 1
 
 // partBufPool 是有界的分段缓冲池（channel 容量即上限）。
-// 选择 channel（而非 sync.Pool）是为了让「最多驻留 1 块 64MB」可证明、可断言。
+// 选择 channel（而非 sync.Pool）是为了让「最多驻留 1 块 105MiB」可证明、可断言。
 var partBufPool = make(chan []byte, maxIdlePartBufs)
 
 // acquirePartBuf 获取一块长度恰为 size 的缓冲：优先复用池中容量足够的块，
@@ -80,7 +83,7 @@ const copyBufSize = 256 << 10
 
 // maxIdleCopyBufs 是小缓冲池的驻留上限（与 maxIdlePartBufs 同款「可证明有界」口径，
 // 不用 sync.Pool 的无界语义）。池驻留是**常量**内存：2 × 256 KiB = 512 KiB，
-// 相对 512 MB 容器预算可忽略。
+// 相对 1 GB 容器预算可忽略。
 const maxIdleCopyBufs = 2
 
 // copyBufPool 是有界的小缓冲池；channel 容量即驻留上限。
@@ -125,7 +128,7 @@ var maxPartBytes int64 = 5 << 30
 // 因此重试必须由这里自己做。
 const maxPartAttempts = 3
 
-// planParts 依对象大小算出段长：段数不超过协议上限（10000），段长落在 [64MiB, 5GiB]。
+// planParts 依对象大小算出段长：段数不超过协议上限（10000），段长落在 [105MiB, 5GiB]。
 // 返回的段长乘上段数即为可复制的最大对象体积——上限由 S3 单对象 5TiB 决定，不再由内存约束决定
 // （直传不缓冲段，见 directMultipartCopy）。size <= 0（未知）时用默认段长。
 func planParts(size int64) (int64, error) {
@@ -251,7 +254,7 @@ func copyLargeSameEndpoint(ctx context.Context, src, dst *s3wrap.Client, srcBuck
 }
 
 // StreamCopy 跨客户端复制对象。已知大小走无缓冲直传（>5GiB 时分段，段长随对象放大）；
-// 未知大小走有缓冲的 multipart（段长固定 64MiB，受段数上限约束）。
+// 未知大小走有缓冲的 multipart（段长固定 105MiB，受段数上限约束）。
 func StreamCopy(ctx context.Context, src, dst *s3wrap.Client, srcBucket, srcKey, dstBucket, dstKey string) error {
 	stream, err := src.GetObjectStream(ctx, srcBucket, srcKey, "", "")
 	if err != nil {
@@ -266,8 +269,9 @@ func StreamCopy(ctx context.Context, src, dst *s3wrap.Client, srcBucket, srcKey,
 	if size > singlePutLimit {
 		return directMultipartCopy(ctx, src, dst, srcBucket, srcKey, dstBucket, dstKey, stream.ContentType, stream.Metadata, size, stream.Body)
 	}
-	// 未知大小（源以 chunked 返回、无 Content-Length）：走有缓冲分段（段长 64MiB），
-	// 单对象上限 640GiB 由段数上限约束，超限拒绝而非静默截断（KNOWN_ISSUES #63）。
+	// 未知大小（源以 chunked 返回、无 Content-Length）：走有缓冲分段（段长 105MiB），
+	// 单对象上限 1025GiB（105MiB × 10000 段，≥1TiB）由段数上限约束，超限拒绝而非静默截断
+	// （原 KNOWN_ISSUES #63，2026-10-16 已闭环提升至 1024GB 口径）。
 	if size >= 0 && size <= singlePutLimit {
 		return dst.PutObject(ctx, dstBucket, dstKey, stream.Body, stream.ContentType, stream.Metadata)
 	}
@@ -279,9 +283,9 @@ func errPartLimit(parts int32, partSize int64) error {
 	return fmt.Errorf("object exceeds multipart stream limit (%d parts x %d bytes)", parts, partSize)
 }
 
-// MultipartStreamCopy 大小未知时的有缓冲分段路径：段长固定 64MiB，必须整段读入内存，
-// 因此受容器内存预算约束（见 maxIdlePartBufs），单对象上限 = 64MiB × 10000。
-// 已知大小的对象不走这里（走 directMultipartCopy）。
+// MultipartStreamCopy 大小未知时的有缓冲分段路径：段长固定 105MiB，必须整段读入内存，
+// 因此受容器内存预算约束（见 maxIdlePartBufs），单对象上限 = 105MiB × 10000 段 = 1025GiB
+// （≥1TiB，用户口径 1024GB）。已知大小的对象不走这里（走 directMultipartCopy）。
 func MultipartStreamCopy(ctx context.Context, dst *s3wrap.Client, bucket, key, contentType string, metadata map[string]string, body io.Reader) error {
 	uploadID, err := dst.CreateMultipartUploadWithMeta(ctx, bucket, key, contentType, metadata)
 	if err != nil {

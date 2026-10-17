@@ -313,8 +313,8 @@ make gcl-docker        # docker job（.gitlab-ci-local-env 已挂 docker.sock）
 
 ## 已知限制
 
-- **跨 endpoint 迁移的单对象上限 640GB（仅当源对象大小未知时）**（`64MB × 10000 段`）：源对象大小已知时走无段缓冲直传，段长随对象放大到 5GiB，上限由 S3 单对象 5TiB 决定；同端点大对象走服务端分段落拷（`UploadPartCopy`），数据不经过本服务。只有源以 chunked 返回、拿不到 `Content-Length` 的对象才落回有缓冲分段并受 640GB 约束——**超限会被明确拒绝，绝不静默截断**。该路径不按比例放大的原因是内存账：段必须整段驻留，放大分段缓冲会突破容器 512MB 内存预算（`docker-compose*.yml` 的 `deploy.resources.limits.memory: 512M`，一块分段缓冲即 64MB）。口径见 [`apps/server/internal/service/stream_copy.go`](apps/server/internal/service/stream_copy.go) 注释与 [ADR-014](docs/decisions/0014-stream-copy-no-part-buffer.md)，登记见 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) **#63**（已决策 ➖）。
-- 已知限制的**唯一登记处**是 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)；本节只登用户可见的那一条，新增限制请先登记再在这里补一行。
+- **跨 endpoint 迁移的单对象上限 1024GB（仅当源对象大小未知时）**（`105MiB × 10000 段 = 1025GiB ≥ 1TiB`）：源对象大小已知时走无段缓冲直传，段长随对象放大到 5GiB，上限由 S3 单对象 5TiB 决定；同端点大对象走服务端分段落拷（`UploadPartCopy`），数据不经过本服务。只有源以 chunked 返回、拿不到 `Content-Length` 的对象才落回有缓冲分段并受 1024GB 约束——**超限会被明确拒绝，绝不静默截断**。该路径不无限放大的原因是内存账：段必须整段驻留，段长受容器 1GB 内存预算约束（`docker-compose*.yml` 的 `deploy.resources.limits.memory: 1G`，一块分段缓冲即 105MiB，迁移并发 4 路最坏在飞 420MiB）。口径见 [`apps/server/internal/service/stream_copy.go`](apps/server/internal/service/stream_copy.go) 注释与 [ADR-014](docs/decisions/0014-stream-copy-no-part-buffer.md) `Update（2026-10-16）`（原 640GB 上限对应 KNOWN_ISSUES **#63**，已闭环，见 [CHANGELOG](CHANGELOG.md) `[Unreleased]`）。
+- **缺陷 / 阻塞 / 技术债**的唯一登记处是 [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)；本节登**用户可见的行为限制**（含刻意取舍的容量上限，出处指向 ADR / CHANGELOG），新增限制请先在对应出处留档再在这里补一行。
 
 ## 安全说明
 

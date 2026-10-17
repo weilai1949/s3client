@@ -57,3 +57,11 @@ blob 兜底并设 500MB / 50 keys 上限。**
 - 拉取与写入解耦后，**取消路径必须继续消费 results 通道**，否则 worker 永久阻塞
   （`zip.go` 注释 [`../archive/review-2026-09-19.md`](../archive/review-2026-09-19.md) §B4）。
 - 包内失败清单 `_下载失败清单.txt` 成为跨语言可读的失败契约。
+
+## Update（2026-10-16）
+
+**决策不变**；仅更正事实陈述：容器内存限额已由 512MB 抬到 1G（[`docker-compose.yml`](../../docker-compose.yml) /
+[`docker-compose.prod.yml`](../../docker-compose.prod.yml)，见
+[ADR-014](0014-stream-copy-no-part-buffer.md) `Update（2026-10-16）`）。「服务端全部读入内存再打包」的
+结论**不变**——内存 O(总大小)，1G 预算同样装不下整包内存打包；ZIP 流式打包与 blob 兜底上限（500MB /
+50 keys）维持。

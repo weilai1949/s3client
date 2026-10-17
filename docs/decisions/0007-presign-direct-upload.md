@@ -56,3 +56,11 @@ Accepted
 - 新增失败面：CORS（分段需 `ExposeHeader: ETag`）、签名过期、分段会话残留——
   对应 Runbook R-7（[`OPERATIONS.md`](../OPERATIONS.md)）。
 - 密钥安全边界成形：前端只见签名 URL，不见密钥（[`threat-model.md`](../threat-model.md) 边界 B）。
+
+## Update（2026-10-16）
+
+**决策不变**；仅更正事实陈述：容器内存限额已由 512MB 抬到 1G（[`docker-compose.yml`](../../docker-compose.yml) /
+[`docker-compose.prod.yml`](../../docker-compose.prod.yml)，随未知大小流式复制段长 64MiB → 105MiB，见
+[ADR-014](0014-stream-copy-no-part-buffer.md) `Update（2026-10-16）`）。Context 与「服务端代理上传 / 下载」
+替代方案中与限额相关的结论**不变**——代理路径把带宽与内存集中到单进程，限额翻倍不改变该结构性问题，
+预签名直传仍是大文件的唯一出口。

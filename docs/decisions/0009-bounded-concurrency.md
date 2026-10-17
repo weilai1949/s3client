@@ -59,3 +59,20 @@ S3 连接被短时间内的大量请求拖垮。目标：**内存有界 + 过载
 - 常量值由单实例内存预算推导（compose 512MB 限额）；调整内存预算前必须先重算这些常量。
 - 无缓冲通道的纪律：消费端必须**始终消费** results，否则 worker 永久阻塞
   （`zip.go` 注释 [`../archive/review-2026-09-19.md`](../archive/review-2026-09-19.md) §B4 记录过该失败模式）。
+
+## Update（2026-10-16）
+
+**决策不变**（有界并发、固定上限、饱和 503 均维持）。Consequences 记有「常量值由单实例内存预算推导
+（compose 512MB 限额）；调整内存预算前必须先重算这些常量」——2026-10-16 内存预算由 512M 抬到 1G
+（随未知大小流式复制段长 64MiB → 105MiB，见 [ADR-014](0014-stream-copy-no-part-buffer.md)
+`Update（2026-10-16）`），按该规则逐条重算：
+
+- `RunBatch` 无缓冲通道 + 迁移并发 4（`migrate.go` 默认）：内存 O(workers)；「大小未知」路径每路
+  段缓冲 105MiB，最坏 4 × 105MiB = 420MiB + 基线 < 1G，**常量不调整**。
+- 流式全局 32（`maxConcurrentStreams`）与 `zipFetchWorkers = 4`：按每路 256 KiB 复制缓冲计，
+  与段长无关，1G 下余量更大，**不调整**。
+- 前端 `PART_CONCURRENCY = 4` / `UPLOAD_CONCURRENCY = 2` / `BATCH_META_CONCURRENCY = 4`
+  与任务在册上限 256（`defaultMaxJobs`）：同样不随段长放大，**不调整**。
+
+结论：预算翻倍后**没有**常量需要上调——上调并发是独立的性能决策、无需求支撑；未来段长或预算再变，
+仍按本节规则先重算再动配置。

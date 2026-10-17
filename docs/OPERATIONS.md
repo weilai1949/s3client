@@ -114,7 +114,7 @@ scrape_configs:
 | `s3c_go_goroutines` | gauge | goroutine 数 | 持续单调上升 = 疑似泄漏 |
 | `s3c_rate_limit_rpm` | gauge | 生效的每 IP 限流速率（IPv6 按 /64 聚合） | 与 `S3C_RATE_LIMIT_RPM` 对账 |
 | `s3c_rate_limit_burst` | gauge | 生效的令牌桶突发容量 | 与 `S3C_RATE_LIMIT_BURST` 对账 |
-| `s3c_go_memstats_alloc_bytes` | gauge | 当前堆占用字节 | 逼近容器内存上限（server 512M）即告警 |
+| `s3c_go_memstats_alloc_bytes` | gauge | 当前堆占用字节 | 逼近容器内存上限（server 1G）即告警 |
 | `s3c_build_info{version="..."}` | gauge | 构建版本（恒为 1，版本在标签里） | 升级后核对版本是否与预期 tag 一致 |
 | `s3c_store_up` | gauge | 账号存储可达性：1 / 0 | `== 0` 持续 1 分钟即告警（沿用 [`DEPLOYMENT.md`](DEPLOYMENT.md) §6.1 建议） |
 | `s3c_store_write_failures_total` | counter | **账号库写入失败次数**（落盘 / SQL 写入出错、写操作已回滚；重复 ID、NotFound 这类业务拒绝**不计数**） | 15 分钟内有增量即告警（critical，见 §4.2）——`json` / `encrypted` 驱动唯一的主动存储故障信号 |
@@ -276,7 +276,7 @@ gRPC 4317 与 HTTP 4318；本服务**只发 HTTP/JSON**，不发 protobuf / gRPC
 | 流式中断 `S3ClientStreamInterrupted` | `increase(s3c_stream_interrupted_total[15m]) > 0` | 立即 | 客户端主动断开不计入，故有增量即真实中断 |
 | ZIP 打包失败 `S3ClientZipPartialFailures` | `increase(s3c_zip_partial_failures_total[1h]) > 0 or increase(s3c_zip_failed_total[1h]) > 0` | 立即 | 部分失败意味着导出的压缩包**缺对象**（比整体失败更隐蔽），有增量即查 |
 | 进程重启 `S3ClientProcessRestarted` | `resets(s3c_uptime_seconds[15m]) > 0` | 立即 | 指标为进程级、重启清零；非计划重启需查因 |
-| 内存逼近上限 `S3ClientMemoryNearLimit` | `s3c_go_memstats_alloc_bytes` | > 容器上限的 80%（server 512M → 约 410M） | 容器内存上限由 compose 强制 |
+| 内存逼近上限 `S3ClientMemoryNearLimit` | `s3c_go_memstats_alloc_bytes` | > 容器上限的 80%（server 1G → 约 820M） | 容器内存上限由 compose 强制 |
 | 账号库写入失败 `S3ClientStoreWriteFailures` | `increase(s3c_store_write_failures_total[15m]) > 0` | 立即（critical） | `json` / `encrypted` 驱动的 `Ping` 恒 nil、`s3c_store_up` 对它们永远是 1——落盘失败计数是这两类驱动**唯一主动**的存储故障信号；重复 ID / NotFound 等业务拒绝不计数，故有增量即真实故障 |
 | 在册任务逼近上限 `S3ClientJobsNearCapacity` | `s3c_jobs_active >= 230` | `for: 10m` | 上限 256，满则异步迁移 / 复制全部 503；230 ≈ 90%，给 reap 回收终态任务留观察窗 |
 | 数据卷剩余空间 `S3ClientVolumeSpaceLow` | `s3c_volume_free_bytes / s3c_volume_size_bytes < 0.2` | `for: 10m` | 卷写满会直接导致账号库落盘失败（与上一行联动）；序列缺失的平台按 §4.3 外部采集 |
@@ -859,11 +859,11 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | 任务保留 | 已终结 30 分钟；`interrupted` 7 天；回收每 5 分钟 | `service/job.go` `JobTTL` / `JobInterruptedTTL` |
 | 请求体上限 | 16MB，超限 413 | `handler` `maxBody` |
 | 单次 PUT / 复制对象 | 5GB（超出明确报错并提示用分段） | [`errors.md`](errors.md) `ErrObjectTooLarge` |
-| 流式复制单对象 | 640GB（64MB × 10000 段），超限明确拒绝并 abort（不静默截断） | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #63 |
+| 流式复制单对象（源大小未知） | 1024GB（105MiB × 10000 段 = 1025GiB ≥ 1TiB），超限明确拒绝并 abort（不静默截断）；源大小已知路径上限为 S3 单对象 5TiB | [`stream_copy.go`](../apps/server/internal/service/stream_copy.go) · [ADR-014](decisions/0014-stream-copy-no-part-buffer.md) |
 | 批量 key 上限 | 删除 ≤1000 / 复制 ≤10000 / ZIP ≤1000 / 迁移 ≤10000 | [`threat-model.md`](threat-model.md) §4 |
 | 限速 | IP 令牌桶 120/min | [`threat-model.md`](threat-model.md) 边界 A |
 | 请求头读超时 / 读超时 / 空闲超时 | 15s / 60s / 120s（**不设 WriteTimeout**，避免截断大文件流） | `main.go` |
-| 容器内存 | server **512M**，nginx **128M** | [`docker-compose.yml`](../docker-compose.yml)、[`docker-compose.prod.yml`](../docker-compose.prod.yml) |
+| 容器内存 | server **1G**（2026-10-16 由 512M 抬升，见 [ADR-014](decisions/0014-stream-copy-no-part-buffer.md) `Update（2026-10-16）`），nginx **128M** | [`docker-compose.yml`](../docker-compose.yml)、[`docker-compose.prod.yml`](../docker-compose.prod.yml) |
 | 容器日志 | json-file，`max-size 10m` × `max-file 3`（base）/ `5`（prod） | 同上 |
 | nginx | 单 worker、`worker_connections 1024`、`client_max_body_size 5g` | `deploy/nginx/nginx.conf`、`deploy/nginx/conf.d/` |
 
@@ -875,7 +875,7 @@ ls -l "${S3C_DATA_DIR:-./data}"                                       # 本机�
 | 账号库写放大 | `json` / `encrypted` **每次写盘重写整个文件**（全量快照 + 原子替换）；`sqlite` 为行级更新 | 账号数达到数百时优先 `sqlite`（**建议**，代码未设阈值） |
 | `jobs.json` 增长 | 受 TTL 控制（30 分钟 / 7 天），但大批量任务期间会持续写入 | 无需清理；异常增长按 R-8 排查 |
 | 日志占用 | 由 compose 的 json-file 轮转限制硬上限；本机 `.run/*.log` **不轮转** | 本机部署建议外部 `logrotate`（**建议**） |
-| 内存 | 单块分段缓冲即 64MB（流式复制），容器上限 512M | 不要同时跑大量超大对象迁移；见 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) #63 |
+| 内存 | 单块分段缓冲即 105MiB（**未知大小**流式复制；迁移并发 4 路最坏在飞 420MiB + 基线），容器上限 1G | 不要同时跑大量**未知大小**的超大对象迁移；口径见 [`stream_copy.go`](../apps/server/internal/service/stream_copy.go) 与 [ADR-014](decisions/0014-stream-copy-no-part-buffer.md) |
 | 卷类型 | `sqlite` 依赖文件锁与 fsync 语义 | 使用本地块存储；NFS 等网络文件系统上的 `flock` / fsync 语义无法保证（**建议**） |
 
 ## 11. 相关文档

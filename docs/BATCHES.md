@@ -1,6 +1,6 @@
 # s3client 批次台账明细（Batches）
 
-> 最后更新：2026-10-16。本文件是 [`FEATURES.md`](FEATURES.md) §二 的**明细**：103 个批次（§A–§CY）的逐批证据表——`file:line` 改动点、门禁实跑数字、测试与文档同步记录。
+> 最后更新：2026-10-16。本文件是 [`FEATURES.md`](FEATURES.md) §二 的**明细**：104 个批次（§A–§CZ）的逐批证据表——`file:line` 改动点、门禁实跑数字、测试与文档同步记录。
 > **索引在 [`FEATURES.md`](FEATURES.md) §二**（8 个主题区块、逐批一行、字母一一对应）；本文件只放明细正文，随新批次**追加**（活台账，不冻结——归档纪律只约束 [`archive/`](archive/index.md) 下的时点性快照）。
 > **章节口径**：「`§` + 批次字母」（`§A` 起连续编号，如 `§CY`）指本文件各批次节（与索引行字母一一对应；跨批互引「见 §S」按本文件字母解析）；`§一` / `§三` / `§四` 等中文数字章节指 [`FEATURES.md`](FEATURES.md) 对应章节；`§N.N` 指被引文档自身的小节。
 > 状态图例：✅ 已完成 · ➖ 已评估 / 无需改动 · ⏳ 说明见备注。
@@ -2605,4 +2605,24 @@ functions 1095 / lines 3503）。
 | 网页可见 | `MigratePanel.vue` 迁移操作区新增 `migrate.limitHint` 说明（中英 i18n 同步） | 用户在发起迁移前即可看到限制与适用条件 |
 | 测试 | 新增 `stream_copy_direct_test.go`（直传 / Range 重试 / 放弃 / 上限前拒绝 / 短源 / 段长自适应 / 取消）、`copy_large_test.go`（`UploadPartCopy` 与 403 回退）、`s3wrap/e2e_multipart_copy_test.go`（真实 RustFS：流式 `UploadPart` 与 `UploadPartCopy`，含元数据保留与源缺失报错） | `service` 包 100.0% statements、零未覆盖块；RustFS `1.0.0-rc.3` 下 E2E 通过 |
 | 门禁实跑 | `gofmt -l` 干净 · `go vet ./...` 0 告警 · `go build ./...` OK · `go test ./...` 全绿 · `golangci-lint run` **0 issues** · 前端 `pnpm test` 1368 例全绿 + `pnpm build` OK · `S3CLIENT_E2E=1 … -run TestE2E` 全通过 | 2026-10-16 本机实跑 |
+
+### CZ. 2026-10-16 未知大小路径大对象上限提升至 1024GB 与容器内存预算 512M 抬至 1G
+
+> 承 §CY：#63 收窄后**未启用解除**——本轮把「源以 chunked 返回、无 `Content-Length`」路径的单对象上限本身
+> 从 640GB 抬到 1024GB 口径（段长 64MiB → 105MiB），随之把 server 容器预算 512M → 1G 并重算内存账，
+> `KNOWN_ISSUES.md` **#63 随之闭环移除**（编号进页头已闭环列表，不回收）。决策与复核见
+> [ADR-014](decisions/0014-stream-copy-no-part-buffer.md) / [ADR-009](decisions/0009-bounded-concurrency.md) /
+> [ADR-007](decisions/0007-presign-direct-upload.md) / [ADR-010](decisions/0010-zip-streaming.md) 各自的
+> `Update（2026-10-16）`。
+
+| 项 | 改动 | 行为 / 证据 |
+|---|---|---|
+| 段长 64MiB → 105MiB | [`stream_copy.go`](../apps/server/internal/service/stream_copy.go) 的 `multipartPartSize = 105 << 20`；`planParts` 段长下限同步 64MiB → 105MiB（5GiB 上限与 10000 段协议上限不变） | 未知大小路径单对象上限 640GiB → **1025GiB**（105MiB × 10000 段 = 1,101,004,800,000 B ≥ 1TiB，用户口径 1024GB；105MiB = 1TiB ÷ 10000 = 104.86MiB 向上取整的最小整 MiB 值）；超限仍由段号在**建立分段之前**判定拒绝并 abort（不静默截断）；已知大小路径上限仍为 S3 单对象 5TiB |
+| 容器预算 512M → 1G | [`docker-compose.yml`](../docker-compose.yml) / [`docker-compose.prod.yml`](../docker-compose.prod.yml) 的 server `deploy.resources.limits.memory` | 段缓冲必须整段驻留：单块 105MiB ≈ 预算 1/10；迁移并发 4 路最坏在飞 4 × 105MiB = 420MiB + 进程基线 < 1G（原 512M 预算下 420MiB 占 82%，会逼近 OOM）；`maxIdlePartBufs = 1` 不变，池常驻 105MiB |
+| 告警阈值 410MB → 820MB | [`deploy/prometheus/s3client.rules.yml`](../deploy/prometheus/s3client.rules.yml) `S3ClientMemoryNearLimit` 的 expr 与注释；[`deploy/grafana/s3client.dashboard.json`](../deploy/grafana/s3client.dashboard.json) 红线 429916160 → 859832320 | 阈值仍为容器上限的 80%（820MB ≈ 1G × 80%）；[`OPERATIONS.md`](OPERATIONS.md) §3.1 指标行 / §4.2 告警表 / §10.2 限制表 / §10.3 内存行同 PR 同步 |
+| `#63` 闭环移除 | [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 删除 #63 行；页头已闭环编号 `#60–#62` / `#64–#90` 合并为 **`#60–#90`**；底部「当前存量」行去掉 #63 并补记 #92 | 编号不回收（页头规则）；按编号到 [`CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` / [`FEATURES.md`](FEATURES.md) 检索证据 |
+| 钉值测试（TDD） | `stream_copy_parts_test.go` 的 `TestMultipartStreamCopyPartSizeIs64MB` → `TestMultipartStreamCopyPartSizeIs105MB`（断言 `multipartPartSize == 105<<20`） | 先红后绿：实现改前实跑 `multipartPartSize = 67108864, want 110100480 (105MiB)` → 改后全绿；10000 段上限仍由 `TestMaxMultipartPartsIsProtocolLimit` 钉住 |
+| 用户可见面 | 根 [`README.md`](../README.md)「已知限制」（1024GB + `105MiB × 10000 段 = 1025GiB ≥ 1TiB` + 1G 预算内存账）；[`user-guide.md`](user-guide.md)「超大对象」行；[`en/index.md`](en/index.md) Known limitations；`MigratePanel.vue` 的 `migrate.limitHint`（中英，**键集不变仅改值**，`i18n.md` 无需改） | 用户在发起迁移前看到的上限口径四处一致为 1024GB；README / en 的「唯一登记处」行改为「缺陷 / 阻塞 / 技术债」口径（#63 移除后容量上限以 ADR / CHANGELOG 为出处，避免自相矛盾） |
+| ADR 与索引 | ADR-014 记三项变更 + 本轮备选；ADR-009 按其 Consequences「调整内存预算前必须先重算常量」逐条复核（结论：**全部常量不调整**）；ADR-007 / ADR-010 各一行事实更正（512MB → 1G，结论不变）；[`decisions/index.md`](decisions/index.md) 四行「最新更新」列登记 `#update2026-10-16` 锚 | ADR 不改写历史结论、只追加 Update（索引页头格式约定）；`doc_link_gate` 校验四个锚点真实存在 |
+| 门禁实跑 | `gofmt -l` 干净 · `go vet ./...` 0 告警 · `go build ./...` OK · `go test ./...` 全绿（11 包）· `go test . -count=1` 根包文档门禁全绿 · `golangci-lint run` **0 issues** · 前端 `pnpm lint` 0 告警 + `pnpm typecheck` OK · `pnpm test` **88 文件 1368 例全绿** + `pnpm build` OK · `S3CLIENT_E2E=1 go test ./internal/s3wrap/ -run TestE2E` 全 **PASS**（真实 RustFS `1.0.0-rc.3` 自起自清）· `make e2e-real` **5/5 通过**（真实后端 + 真实 RustFS + Playwright，不 mock `/api`） | 2026-10-16 本机实跑 |
 

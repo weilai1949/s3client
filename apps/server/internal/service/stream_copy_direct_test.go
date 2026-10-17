@@ -114,7 +114,7 @@ func TestStreamCopyDirectRejectsOverCeilingBeforeCreate(t *testing.T) {
 	}
 }
 
-// TestStreamCopyDirectPartSizeAdaptsToSegmentCap 对象超过 64MiB×10000 时段长随之放大：
+// TestStreamCopyDirectPartSizeAdaptsToSegmentCap 对象超过 105MiB×10000 时段长随之放大：
 // 12B 对象、段数上限 2、段长下限 4B → 段长 = ceil(12/2) = 6B，恰好 2 段。
 func TestStreamCopyDirectPartSizeAdaptsToSegmentCap(t *testing.T) {
 	shrinkDirect(t, 4, 4, 2, 100)

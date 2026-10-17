@@ -67,6 +67,13 @@
 - **迁移面板新增限制说明**（`MigratePanel.vue` + i18n `migrate.limitHint`，中英同步）。
 - **测试**：新增 `stream_copy_direct_test.go`（直传/重试/放弃/上限/短源/段长自适应/取消）、`copy_large_test.go`（`UploadPartCopy` 与回退）、`s3wrap/e2e_multipart_copy_test.go`（真实 RustFS 验证流式 `UploadPart` 与 `UploadPartCopy`）。
 
+### 变更（2026-10-16 未知大小路径单对象上限 640GB → 1024GB：段长 64MiB → 105MiB + 容器内存预算 512M → 1G，ADR-014 `Update（2026-10-16）`）
+
+- **`multipartPartSize` 64MiB → 105MiB**：源以 chunked 返回、拿不到 `Content-Length` 的迁移路径，单对象上限 = 105MiB × 10000 段 = 1025GiB（≥1TiB，用户口径 1024GB；105MiB 是覆盖 1TiB 所需的**最小整数 MiB 段长**，1TiB ÷ 10000 = 104.86MiB 向上取整）。超限仍由段号在**建立分段之前**判定拒绝并 abort，不静默截断；`planParts` 段长下限同步 64MiB → 105MiB（已知大小路径的 5TiB 上限不受影响）。钉值测试 `TestMultipartStreamCopyPartSizeIs64MB` → [`TestMultipartStreamCopyPartSizeIs105MB`](apps/server/internal/service/stream_copy_parts_test.go)（TDD：先红后绿）。
+- **server 容器内存预算 512M → 1G**（[`docker-compose.yml`](docker-compose.yml) / [`docker-compose.prod.yml`](docker-compose.prod.yml) 的 `deploy.resources.limits.memory`）：段缓冲整段驻留，最坏在飞 = 迁移并发 4 × 105MiB = **420MiB** + 进程基线 < 1G（原 512M 预算下占 82%，会逼近 OOM）。Prometheus `S3ClientMemoryNearLimit` 阈值 410MB → **820MB**（仍为容器上限的 80%）、Grafana 红线（429916160 → 859832320）与 [`docs/OPERATIONS.md`](docs/OPERATIONS.md) §3.1 / §4.2 / §10.2 / §10.3 同步；[`ADR-009`](docs/decisions/0009-bounded-concurrency.md)「调整内存预算前必须先重算常量」的义务按其 `Update（2026-10-16）` 逐条复核，**全部常量不调整**。
+- **`KNOWN_ISSUES` #63 闭环移除**：640GB 上限已提升，该行从清单删除、编号进页头「已闭环编号」（`#60–#62` / `#64–#90` 合并为 `#60–#90`，编号不回收）；「当前存量」行同步（去掉 #63、补记 #92）。
+- **同步面**：根 [`README.md`](README.md)「已知限制」（1024GB / `105MiB × 10000 段 = 1025GiB ≥ 1TiB` / 1G 预算）与其「唯一登记处」行改为「缺陷 / 阻塞 / 技术债」口径；[`docs/user-guide.md`](docs/user-guide.md)「超大对象」、[`docs/en/index.md`](docs/en/index.md)、迁移面板 `migrate.limitHint`（中英，**键集不变仅改值**）；ADR-014 / ADR-009 / ADR-007 / ADR-010 各追加 `Update（2026-10-16）` 并在 [`docs/decisions/index.md`](docs/decisions/index.md) 登记；批次台账见 [`docs/BATCHES.md`](docs/BATCHES.md) **§CZ** 与 [`docs/FEATURES.md`](docs/FEATURES.md) §二索引行。
+
 ### 文档（2026-10-16 `FEATURES.md` 去「未完成」口气：只留完成项，5 处残留叙述改准或改指针）
 
 > 起因：FEATURES 是**已完成**台账，正文里却散着 5 处会被读成「还有活没干」的叙述。逐条复核后**没有一条是真正未完成的**，故**不新增任何待办条目**（[`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) 顶部规则是「只收录尚未闭环的项」，照搬会造假待办），只把叙述改准。
